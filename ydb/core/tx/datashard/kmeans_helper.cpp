@@ -5,7 +5,7 @@
 
 namespace NKikimr::NDataShard::NKMeans {
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, TCell& to) {
+TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to) {
     if (parent == 0) {
         return table.GetTableRange();
     }
@@ -28,42 +28,46 @@ NTable::TLead CreateLeadFrom(const TTableRange& range) {
     return lead;
 }
 
-void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
+void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row) {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row),
+        TSerializedCellVec{key});
 }
 
-void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                         ui32 dataPos)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row.Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
-void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
-}
-
-void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                         ui32 dataPos)
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+                       ui32 prefixColumns)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row),
+        TSerializedCellVec{key});
+}
+
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+                         ui32 dataPos, ui32 prefixColumns)
+{
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(row.Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
@@ -87,16 +91,17 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 }
 
 std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data)
+MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+                ui32 prefixColumns)
 {
     auto types = GetAllTypes(table);
 
     auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    uploadTypes->reserve(1 + 1 + std::min(table.KeyColumnTypes.size() + data.size(), types.size()));
+    uploadTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
-    type.set_type_id(Ydb::Type::UINT32);
+    type.set_type_id(NTableIndex::ClusterIdType);
     uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
@@ -107,16 +112,16 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
             types.erase(it);
         }
     };
-    for (const auto& column : table.KeyColumnIds) {
+    for (const auto& column : table.KeyColumnIds | std::views::drop(prefixColumns)) {
         addType(table.Columns.at(column).Name);
     }
     switch (uploadState) {
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD:
             addType(embedding);
             [[fallthrough]];
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING:
-        case NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING: {
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING:
+        case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING: {
             for (const auto& column : data) {
                 addType(column);
             }

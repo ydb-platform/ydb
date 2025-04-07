@@ -12,7 +12,7 @@ namespace NCompGen {
 
     class TGenCompactionParams final : public TCompactionParams {
     public:
-        void Describe(IOutputStream& out) const noexcept override;
+        void Describe(IOutputStream& out) const override;
 
     public:
         ui32 Generation = Max<ui32>();
@@ -195,10 +195,10 @@ namespace NCompGen {
             THashMap<ui64, TStats> StatsPerTablet;
             float OverloadFactor = 0.0;
 
-            TPartInfo& PushFront(TPartView partView) noexcept;
-            TPartInfo& PushBack(TPartView partView) noexcept;
-            void PopFront() noexcept;
-            void PopBack() noexcept;
+            TPartInfo& PushFront(TPartView partView);
+            TPartInfo& PushBack(TPartView partView);
+            void PopFront();
+            void PopBack();
         };
 
         struct TFinalState {

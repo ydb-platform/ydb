@@ -19,11 +19,12 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/concurrency/pollable_detail.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -88,7 +89,8 @@ public:
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker);
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        bool needRejectConnectionDueMemoryOvercommit);
 
     ~TTcpConnection();
 
@@ -99,7 +101,7 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    const TString& GetLoggingTag() const override;
+    const std::string& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
 
@@ -196,7 +198,7 @@ private:
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
@@ -279,10 +281,16 @@ private:
     const EVerificationMode VerificationMode_;
 
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const bool NeedRejectConnectionDueMemoryOvercommit_;
 
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
-    size_t MaxFragmentsPerWrite_ = 256;
+    int MaxFragmentsPerWrite_ = 256;
+
+    ILocalMessageHandlerPtr LocalBypassHandler_;
+    IBusPtr LocalBypassReplyBus_;
+    TCallback<void(const TError&)> LocalBypassTerminatedCallback_;
+    std::atomic<bool> LocalBypassActive_ = false;
 
     void Open(TGuard<NThreading::TSpinLock>& guard);
     void Close();
@@ -295,6 +303,10 @@ private:
     void InitBuffers();
 
     int GetSocketPort();
+
+    void InitLocalBypass(ILocalMessageHandlerPtr localBypassHandler, const NNet::TNetworkAddress& address);
+    void OnLocalBypassHandlerTerminated(const TError& error);
+    void FlushQueuedMessagesToLocalBypass();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
     void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
@@ -322,6 +334,9 @@ private:
     bool OnMessagePacketReceived();
     bool OnHandshakePacketReceived();
     bool OnSslAckPacketReceived();
+
+    TFuture<void> SendViaSocket(TSharedRefArray message, const TSendOptions& options);
+    TFuture<void> SendViaLocalBypass(TSharedRefArray message, const TSendOptions& options);
 
     TPacket* EnqueuePacket(
         EPacketType type,

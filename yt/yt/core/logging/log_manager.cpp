@@ -842,6 +842,9 @@ private:
                 writerFactory->ValidateConfig(writerConfig);
                 EmplaceOrCrash(typeNameToWriterFactory, typedWriterConfig->Type, writerFactory);
             }
+            for (const auto& [_, category] : NameToCategory_) {
+                category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
+            }
         }
 
         NameToWriter_.clear();
@@ -872,9 +875,6 @@ private:
                     NotificationWatches_.push_back(std::move(watch));
                 }
             }
-        }
-        for (const auto& [_, category] : NameToCategory_) {
-            category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
         }
 
         ConfiguredFromEnv_.store(fromEnv);
@@ -1377,18 +1377,18 @@ private:
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
-        auto isPrefixOf = [] (const TString& message, const std::vector<TString>& prefixes) {
+        auto isPrefixOf = [] (const std::string& message, const std::vector<std::string>& prefixes) {
             for (const auto& prefix : prefixes) {
-                if (message.StartsWith(prefix)) {
+                if (message.starts_with(prefix)) {
                     return true;
                 }
             }
             return false;
         };
 
-        auto findByPrefix = [] (const TString& message, const THashMap<TString, ELogLevel>& levelOverrides) -> std::optional<ELogLevel> {
+        auto findByPrefix = [] (const std::string& message, const THashMap<std::string, ELogLevel>& levelOverrides) -> std::optional<ELogLevel> {
             for (const auto& [prefix, level] : levelOverrides) {
-                if (message.StartsWith(prefix)) {
+                if (message.starts_with(prefix)) {
                     return level;
                 }
             }

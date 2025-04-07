@@ -52,6 +52,7 @@ public:
 
     void AddJoinExpression(TString table, TString alias, TString onExpression, ETableJoinType type);
 
+    void SetOffset(i64 offset);
     void SetLimit(i64 limit);
 
     TString Build();
@@ -87,6 +88,7 @@ private:
     EWithTotalsMode WithTotalsMode_ = EWithTotalsMode::None;
     std::vector<TString> HavingConjuncts_;
     std::vector<TJoinEntry> JoinEntries_;
+    std::optional<i64> Offset_;
     std::optional<i64> Limit_;
 
 private:

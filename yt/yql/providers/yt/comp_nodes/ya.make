@@ -3,7 +3,7 @@ LIBRARY()
 END()
 
 RECURSE(
-    llvm14
+    llvm16
     no_llvm
 )
 

@@ -9,6 +9,8 @@ protected:
     const ui32 ColumnId;
 public:
 
+    ui32 GetRecordsCount() const;
+
     TColumnPortionResult(const ui32 columnId)
         : ColumnId(columnId) {
 

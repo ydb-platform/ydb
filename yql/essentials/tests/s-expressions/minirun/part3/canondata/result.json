@@ -13,6 +13,20 @@
             "uri": "https://{canondata_backend}/1942671/2f56b3d0b7380c392cd083e01b7b35c665b9756b/resource.tar.gz#test.test_Aggregation-InMemAggregate-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Builtins-CostsOf-default.txt-Debug]": [
+        {
+            "checksum": "7b0f8dfefe93e5868f2b767db28bed0f",
+            "size": 134,
+            "uri": "https://{canondata_backend}/1031349/e7658b63fd263f48af7de070f33f878e3e25afbc/resource.tar.gz#test.test_Builtins-CostsOf-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Builtins-CostsOf-default.txt-Results]": [
+        {
+            "checksum": "fc79b37f461a250b5ba684d571027002",
+            "size": 208,
+            "uri": "https://{canondata_backend}/1031349/e7658b63fd263f48af7de070f33f878e3e25afbc/resource.tar.gz#test.test_Builtins-CostsOf-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Builtins-FlattenMembersOptional2-default.txt-Debug]": [
         {
             "checksum": "88b6f9b45da96b0e57f26338eb01b668",
@@ -25,6 +39,34 @@
             "checksum": "f49e0a84cec2ce8d58fd3ea5727d65c8",
             "size": 4510,
             "uri": "https://{canondata_backend}/1031349/0f0797c477ee3637f2371dfb4f180178d8214f43/resource.tar.gz#test.test_Builtins-FlattenMembersOptional2-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Builtins-OrderedSqlRename-default.txt-Debug]": [
+        {
+            "checksum": "8849514989146cd45ee1b6af2f1f4f24",
+            "size": 286,
+            "uri": "https://{canondata_backend}/1936997/75b5416c3e517c1e872fb7dec8fd5e2f4d97d68e/resource.tar.gz#test.test_Builtins-OrderedSqlRename-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Builtins-OrderedSqlRename-default.txt-Results]": [
+        {
+            "checksum": "e968e5019fc4944be3736add4f0386a0",
+            "size": 949,
+            "uri": "https://{canondata_backend}/1936997/75b5416c3e517c1e872fb7dec8fd5e2f4d97d68e/resource.tar.gz#test.test_Builtins-OrderedSqlRename-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Builtins-SqlRename-default.txt-Debug]": [
+        {
+            "checksum": "8849514989146cd45ee1b6af2f1f4f24",
+            "size": 286,
+            "uri": "https://{canondata_backend}/1936997/75b5416c3e517c1e872fb7dec8fd5e2f4d97d68e/resource.tar.gz#test.test_Builtins-SqlRename-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Builtins-SqlRename-default.txt-Results]": [
+        {
+            "checksum": "e968e5019fc4944be3736add4f0386a0",
+            "size": 949,
+            "uri": "https://{canondata_backend}/1936997/75b5416c3e517c1e872fb7dec8fd5e2f4d97d68e/resource.tar.gz#test.test_Builtins-SqlRename-default.txt-Results_/results.txt"
         }
     ],
     "test.test[Casts-AlterToOverNull-default.txt-Debug]": [

@@ -11,7 +11,7 @@ from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQu
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 
 
-def safety_warden_factory(cluster, ssh_username):
+def safety_warden_factory(cluster, ssh_username, lines_after=5, cut=True, modification_days=1):
     list_of_host_names = [node.host for node in cluster.nodes.values()]
     wardens = [AllPDisksAreInValidStateSafetyWarden(cluster)]
     wardens.extend(kikimr_grep_dmesg_safety_warden_factory(list_of_host_names, ssh_username))
@@ -24,7 +24,7 @@ def safety_warden_factory(cluster, ssh_username):
     for directory, list_of_host_names in by_directory.items():
         wardens.extend(
             kikimr_start_logs_safety_warden_factory(
-                list_of_host_names, ssh_username, directory
+                list_of_host_names, ssh_username, directory, lines_after, cut, modification_days
             )
         )
 

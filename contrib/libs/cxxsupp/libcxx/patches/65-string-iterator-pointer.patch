@@ -1,10 +1,10 @@
 diff --git a/include/string b/include/string
-index cb7bac6..bc76545 100644
+index da86723..74c0690 100644
 --- a/include/string
 +++ b/include/string
-@@ -737,9 +737,14 @@ public:
-                 "[allocator.requirements] states that rebinding an allocator to the same type should result in the "
-                 "original allocator");
+@@ -783,9 +783,14 @@ public:
+                 "Allocator::value_type must be same type as value_type");
+   static_assert(__check_valid_allocator<allocator_type>::value, "");
  
 +#if _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
 +  typedef pointer iterator;
@@ -17,15 +17,15 @@ index cb7bac6..bc76545 100644
    typedef std::reverse_iterator<iterator> reverse_iterator;
    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
  
-@@ -1144,6 +1149,7 @@ public:
+@@ -1180,6 +1185,7 @@ public:
  #endif
-   _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_STRING_INTERNAL_MEMORY_ACCESS basic_string& operator=(value_type __c);
+   _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
  
 +#ifndef _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 iterator begin() _NOEXCEPT {
      return __make_iterator(__get_pointer());
    }
-@@ -1156,6 +1162,20 @@ public:
+@@ -1192,6 +1198,20 @@ public:
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 const_iterator end() const _NOEXCEPT {
      return __make_const_iterator(__get_pointer() + size());
    }

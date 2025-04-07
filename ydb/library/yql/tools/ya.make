@@ -1,6 +1,6 @@
 RECURSE(
     dq
     dqrun
-    mrrun
     solomon_emulator
+    solomon_emulator_grpc
 )

@@ -24,6 +24,7 @@ EYdbComputeAuth GetIamAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::SERVICE_ACCOUNT;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -37,6 +38,7 @@ EYdbComputeAuth GetBasicAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::MDB_BASIC;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -49,7 +51,7 @@ public:
         : DatabasePath(databasePath) {}
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
-        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
         auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
         newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
         for (auto issue : issue.GetSubIssues()) {
@@ -253,6 +255,31 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().logging().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
+    }
+}
+
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting) {
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        return setting.mutable_object_storage()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        return setting.mutable_ydb_database()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        return setting.mutable_clickhouse_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        return setting.mutable_data_streams()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        return setting.mutable_monitoring()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        return setting.mutable_postgresql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        return setting.mutable_greenplum_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        return setting.mutable_mysql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kLogging:
+        return setting.mutable_logging()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        return nullptr;
     }
 }
 

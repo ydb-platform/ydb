@@ -17,7 +17,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
@@ -755,8 +756,8 @@ public:
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind);
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind, const TString &zone);
 
-    TTenant::TPtr GetTenant(const TString &name);
-    TTenant::TPtr GetTenant(const TDomainId &domainId);
+    TTenant::TPtr GetTenant(const TString &name) const;
+    TTenant::TPtr GetTenant(const TDomainId &domainId) const;
     void AddTenant(TTenant::TPtr tenant);
     void RemoveTenant(TTenant::TPtr tenant);
     void RemoveTenantFailed(TTenant::TPtr tenant,
@@ -1005,6 +1006,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
     void Detach();
+    bool HasTenant(const TString& path) const {
+        return Tenants.contains(path);
+    }
+
+    TString GetDomainName() const {
+        return Domain->Name;
+    }
 
 private:
     TConsole &Self;

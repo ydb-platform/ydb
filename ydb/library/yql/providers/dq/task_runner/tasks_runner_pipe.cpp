@@ -549,6 +549,11 @@ void LoadFromProto(TDqAsyncStats& stats, const NYql::NDqProto::TDqAsyncBufferSta
     stats.LastMessageTs = TInstant::MilliSeconds(f.GetLastMessageMs());
     stats.WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
     stats.WaitPeriods = f.GetWaitPeriods();
+
+    stats.FilteredBytes = f.GetFilteredBytes();
+    stats.FilteredRows = f.GetFilteredRows();
+    stats.QueuedBytes = f.GetQueuedBytes();
+    stats.QueuedRows = f.GetQueuedRows();
 }
 
 /*______________________________________________________________________________________________*/
@@ -1126,6 +1131,10 @@ public:
         } catch (...) {
             TaskRunner->RaiseException();
         }
+    }
+
+    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+        Y_UNUSED(settings);
     }
 
     template<typename T>

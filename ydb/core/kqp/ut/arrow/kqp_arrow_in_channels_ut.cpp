@@ -63,26 +63,26 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
     UNIT_ASSERT_C(columns.size() == 19, "Wrong columns count");
     NYdb::TResultSetParser parser(resultSet);
     UNIT_ASSERT_C(parser.TryNextRow(), "Row is missing");
-    UNIT_ASSERT(*parser.ColumnParser(0).GetOptionalUint64().Get() == 42);
-    UNIT_ASSERT(*parser.ColumnParser(1).GetOptionalBool().Get() == true);
-    UNIT_ASSERT(*parser.ColumnParser(2).GetOptionalInt32().Get() == -1);
-    UNIT_ASSERT(*parser.ColumnParser(3).GetOptionalUint32().Get() == 1);
-    UNIT_ASSERT(*parser.ColumnParser(4).GetOptionalInt64().Get() == -2);
-    UNIT_ASSERT(*parser.ColumnParser(5).GetOptionalUint64().Get() == 2);
-    UNIT_ASSERT(*parser.ColumnParser(6).GetOptionalFloat().Get() == 3.0);
-    UNIT_ASSERT(*parser.ColumnParser(7).GetOptionalDouble().Get() == 4.0);
-    UNIT_ASSERT(*parser.ColumnParser(8).GetOptionalString().Get() == TString("five"));
-    UNIT_ASSERT(*parser.ColumnParser(9).GetOptionalUtf8().Get() == TString("six"));
-    UNIT_ASSERT(*parser.ColumnParser(10).GetOptionalDate().Get() == TInstant::ParseIso8601("2007-07-07"));
-    UNIT_ASSERT(*parser.ColumnParser(11).GetOptionalDatetime().Get() == TInstant::ParseIso8601("2008-08-08T08:08:08Z"));
-    UNIT_ASSERT(*parser.ColumnParser(12).GetOptionalTimestamp().Get() == TInstant::ParseIso8601("2009-09-09T09:09:09.09Z"));
+    UNIT_ASSERT(parser.ColumnParser(0).GetOptionalUint64().value() == 42);
+    UNIT_ASSERT(parser.ColumnParser(1).GetOptionalBool().value() == true);
+    UNIT_ASSERT(parser.ColumnParser(2).GetOptionalInt32().value() == -1);
+    UNIT_ASSERT(parser.ColumnParser(3).GetOptionalUint32().value() == 1);
+    UNIT_ASSERT(parser.ColumnParser(4).GetOptionalInt64().value() == -2);
+    UNIT_ASSERT(parser.ColumnParser(5).GetOptionalUint64().value() == 2);
+    UNIT_ASSERT(parser.ColumnParser(6).GetOptionalFloat().value() == 3.0);
+    UNIT_ASSERT(parser.ColumnParser(7).GetOptionalDouble().value() == 4.0);
+    UNIT_ASSERT(parser.ColumnParser(8).GetOptionalString().value() == "five");
+    UNIT_ASSERT(parser.ColumnParser(9).GetOptionalUtf8().value() == "six");
+    UNIT_ASSERT(parser.ColumnParser(10).GetOptionalDate().value() == TInstant::ParseIso8601("2007-07-07"));
+    UNIT_ASSERT(parser.ColumnParser(11).GetOptionalDatetime().value() == TInstant::ParseIso8601("2008-08-08T08:08:08Z"));
+    UNIT_ASSERT(parser.ColumnParser(12).GetOptionalTimestamp().value() == TInstant::ParseIso8601("2009-09-09T09:09:09.09Z"));
     Cerr << TInstant::Days(10).MicroSeconds() << Endl;
-    UNIT_ASSERT(*parser.ColumnParser(13).GetOptionalInterval().Get() == TInstant::Days(10).MicroSeconds());
-    UNIT_ASSERT(parser.ColumnParser(14).GetOptionalDecimal().Get()->ToString() == TString("11.11"));
-    UNIT_ASSERT(*parser.ColumnParser(15).GetOptionalJson().Get() == TString("[12]"));
-    UNIT_ASSERT(*parser.ColumnParser(16).GetOptionalYson().Get() == TString("[13]"));
-    UNIT_ASSERT(*parser.ColumnParser(17).GetOptionalJsonDocument().Get() == TString("[14]"));
-    UNIT_ASSERT(*parser.ColumnParser(18).GetOptionalDyNumber().Get() == TString(".1515e2"));
+    UNIT_ASSERT(parser.ColumnParser(13).GetOptionalInterval().value() == TInstant::Days(10).MicroSeconds());
+    UNIT_ASSERT(parser.ColumnParser(14).GetOptionalDecimal().value().ToString() == "11.11");
+    UNIT_ASSERT(parser.ColumnParser(15).GetOptionalJson().value() == "[12]");
+    UNIT_ASSERT(parser.ColumnParser(16).GetOptionalYson().value() == "[13]");
+    UNIT_ASSERT(parser.ColumnParser(17).GetOptionalJsonDocument().value() == "[14]");
+    UNIT_ASSERT(parser.ColumnParser(18).GetOptionalDyNumber().value() == ".1515e2");
 }
 
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -11,7 +13,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TDriver;
 class TGRpcConnectionsImpl;
@@ -48,7 +50,7 @@ public:
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
     //! Enable Ssl.
-    //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
+    //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const TStringType& caCerts = TStringType());
     TDriverConfig& UseClientCertificate(const TStringType& clientCert, const TStringType& clientPrivateKey);

@@ -5,7 +5,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 36u
 Y_UNIT_TEST_SUITE(TMiniKQLWideStreamTest) {
 
 Y_UNIT_TEST_LLVM(TestSimple) {
@@ -51,8 +50,6 @@ Y_UNIT_TEST_LLVM(TestSimple) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 }
-
-#endif
 
 }
 }

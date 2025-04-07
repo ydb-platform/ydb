@@ -1,6 +1,6 @@
 #include "kqp_script_executions.h"
 
-#include <ydb/public/lib/operation_id/protos/operation_id.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -17,7 +17,7 @@ TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId) {
 }
 
 TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId) {
-    if (operationId.GetKind() != Ydb::TOperationId::SCRIPT_EXECUTION) {
+    if (operationId.GetKind() != NOperationId::TOperationId::SCRIPT_EXECUTION) {
         return Nothing();
     }
 
@@ -25,7 +25,7 @@ TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId&
     if (values.empty() || !values[0]) {
         return Nothing();
     }
-    return *values[0];
+    return TString{*values[0]};
 }
 
 } // namespace NKikimr::NKqp

@@ -16,7 +16,7 @@ TSerializableAccessControlEntry::TSerializableAccessControlEntry() = default;
 
 TSerializableAccessControlEntry::TSerializableAccessControlEntry(
     ESecurityAction action,
-    std::vector<TString> subjects,
+    std::vector<std::string> subjects,
     EPermissionSet permissions,
     EAceInheritanceMode inheritanceMode)
     : Action(action)

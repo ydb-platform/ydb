@@ -240,8 +240,14 @@ public:
                     data.Stat->ModifyTime = statNode["ModifyTime"].AsUint64();
                     data.Stat->Revision = statNode["Revision"].AsUint64();
                     data.Stat->TableRevision = statNode["TableRevision"].AsUint64();
+                    if (statNode.HasKey("SecurityTags")) {
+                        data.Stat->SecurityTags.clear();
+                        for (auto &e: statNode["SecurityTags"].AsList()) {
+                            data.Stat->SecurityTags.emplace(e.AsString());
+                        }
+                    }
                 }
-                data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
+                data.WriteLock = valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
 
@@ -283,14 +289,23 @@ public:
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
                         ("Attrs",attrsNode) : NYT::TNode();
 
+
+                    NYT::TNode securityTags = NYT::TNode::CreateList();
+                    if (data.Stat) {
+                        for (const auto& c : data.Stat->SecurityTags) {
+                            securityTags.Add(NYT::TNode(c));
+                        }
+                    }
+
                     auto statNode = data.Stat ? NYT::TNode()
-                        ("Id",data.Stat->Id)
-                        ("RecordsCount",data.Stat->RecordsCount)
-                        ("DataSize",data.Stat->DataSize)
-                        ("ChunkCount",data.Stat->ChunkCount)
-                        ("ModifyTime",data.Stat->ModifyTime)
-                        ("Revision",data.Stat->Revision)
-                        ("TableRevision",data.Stat->TableRevision) : NYT::TNode();
+                        ("Id", data.Stat->Id)
+                        ("RecordsCount", data.Stat->RecordsCount)
+                        ("DataSize", data.Stat->DataSize)
+                        ("ChunkCount", data.Stat->ChunkCount)
+                        ("ModifyTime", data.Stat->ModifyTime)
+                        ("Revision", data.Stat->Revision)
+                        ("TableRevision", data.Stat->TableRevision)
+                        ("SecurityTags", securityTags) : NYT::TNode();
 
                     auto valueNode = NYT::TNode::CreateMap();
                     if (data.Meta) {
@@ -894,8 +909,8 @@ public:
         return Inner_->GetClusterServer(cluster);
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
-        return Inner_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder);
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
+        return Inner_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
     }
 
     NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
@@ -944,6 +959,10 @@ public:
 
     void AddCluster(const TYtClusterConfig& cluster) final {
         return Inner_->AddCluster(cluster);
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        return Inner_->GetClusterConnection(std::move(options));
     }
 
 private:

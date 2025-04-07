@@ -1,8 +1,10 @@
 #pragma once
-#include <ydb/library/formats/arrow/splitter/stats.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -66,13 +68,19 @@ private:
     YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
     YDB_READONLY(ui32, BatchIdx, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
+    const NColumnShard::TIndexationCounters& Counters;
 
 public:
-    TChunkMergeContext(const ui32 portionRowsCountLimit, const ui32 batchIdx, const ui32 recordsCount)
+    const NColumnShard::TIndexationCounters& GetCounters() const {
+        return Counters;
+    }
+
+    TChunkMergeContext(
+        const ui32 portionRowsCountLimit, const ui32 batchIdx, const ui32 recordsCount, const NColumnShard::TIndexationCounters& counters)
         : PortionRowsCountLimit(portionRowsCountLimit)
         , BatchIdx(batchIdx)
         , RecordsCount(recordsCount)
-    {
+        , Counters(counters) {
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(PortionRowsCountLimit);
     }

@@ -678,14 +678,26 @@ TCoLambda FallbackLambdaOutput(TCoLambda lambda, TExprContext& ctx) {
     return lambda;
 }
 
-TYtDSink GetDataSink(TExprBase input, TExprContext& ctx) {
-    if (auto read = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
-        return TYtDSink(ctx.RenameNode(read.Cast().DataSource().Ref(), "DataSink"));
-    } else if (auto out = input.Maybe<TYtOutput>()) {
-        return GetOutputOp(out.Cast()).DataSink();
-    } else {
-        YQL_ENSURE(false, "Unknown operation input");
-    }
+TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSink>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
+}
+
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSource>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
 }
 
 TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ctx) {
@@ -920,8 +932,9 @@ TVector<TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnot
     for (auto tupleItemType: tupleType->GetItems()) {
         TYtOutTableInfo outTableInfo(tupleItemType->Cast<TStructExprType>(), nativeTypeFlags);
         const TConstraintSet* constraints = multi ? multi->GetItem(ndx) : nullptr;
-        if (constraints)
+        if (constraints) {
             outTableInfo.RowSpec->SetConstraints(*constraints);
+        }
         outTables.push_back(outTableInfo.SetUnique(constraints ? constraints->GetConstraint<TDistinctConstraintNode>() : nullptr, pos, ctx).ToExprNode(ctx, pos).Cast<TYtOutTable>());
         ++ndx;
     }
@@ -935,8 +948,9 @@ TVector<TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotation
     }
 
     TYtOutTableInfo outTableInfo(outItemType->Cast<TStructExprType>(), state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-    if (constraint)
+    if (constraint) {
         outTableInfo.RowSpec->SetConstraints(*constraint);
+    }
     return TVector<TYtOutTable>{outTableInfo.SetUnique(constraint ? constraint->GetConstraint<TDistinctConstraintNode>() : nullptr, pos, ctx).ToExprNode(ctx, pos).Cast<TYtOutTable>()};
 }
 
@@ -995,8 +1009,9 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
                 .Done());
             switchArgs.push_back(Build<TCoLambda>(ctx, pos).Args({"stream"}).Body("stream").Done());
         }
-        if (itemConstraints)
+        if (itemConstraints) {
             outTable.RowSpec->SetConstraints(*itemConstraints);
+        }
         outTables.push_back(outTable
             .SetUnique(itemConstraints ? itemConstraints->GetConstraint<TDistinctConstraintNode>() : nullptr, pos, ctx)
             .ToExprNode(ctx, pos).Cast<TYtOutTable>()
@@ -1066,6 +1081,28 @@ TVector<TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool
     }
 
     return TVector<TYtOutTable>{ConvertSingleOutTableWithSortAware(lambda, ordered, pos, outItemType, ctx, state, constraints)};
+}
+
+bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state) {
+    if (!state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)) {
+        return true;
+    }
+    if (type.GetKind() == ETypeAnnotationKind::Variant) {
+        for (auto tupleItemType: type.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems()) {
+            if (tupleItemType->HasBareYson() && 0 != NYql::GetNativeYtTypeFlags(*tupleItemType->Cast<TStructExprType>())) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
+                            << *tupleItemType));
+                return false;
+            }
+        }
+
+    } else if (type.HasBareYson() && 0 != NYql::GetNativeYtTypeFlags(*type.Cast<TStructExprType>())) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
+                    << type));
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace NYql

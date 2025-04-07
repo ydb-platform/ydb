@@ -1,4 +1,74 @@
 {
+    "test.test[BlockFind]": [
+        {
+            "uri": "file://test.test_BlockFind_/results.txt"
+        }
+    ],
+    "test.test[BlockIsCategory]": [
+        {
+            "uri": "file://test.test_BlockIsCategory_/results.txt"
+        }
+    ],
+    "test.test[BlockNormalize]": [
+        {
+            "uri": "file://test.test_BlockNormalize_/results.txt"
+        }
+    ],
+    "test.test[BlockRemove]": [
+        {
+            "uri": "file://test.test_BlockRemove_/results.txt"
+        }
+    ],
+    "test.test[BlockReplace]": [
+        {
+            "uri": "file://test.test_BlockReplace_/results.txt"
+        }
+    ],
+    "test.test[BlockStrip]": [
+        {
+            "uri": "file://test.test_BlockStrip_/results.txt"
+        }
+    ],
+    "test.test[BlockToUint64F0]": [
+        {
+            "uri": "file://test.test_BlockToUint64F0_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F1]": [
+        {
+            "uri": "file://test.test_BlockToUint64F1_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F2]": [
+        {
+            "uri": "file://test.test_BlockToUint64F2_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64F3]": [
+        {
+            "uri": "file://test.test_BlockToUint64F3_/extracted"
+        }
+    ],
+    "test.test[BlockToUint64]": [
+        {
+            "uri": "file://test.test_BlockToUint64_/results.txt"
+        }
+    ],
+    "test.test[BlockTo]": [
+        {
+            "uri": "file://test.test_BlockTo_/results.txt"
+        }
+    ],
+    "test.test[BlockTryToUint64]": [
+        {
+            "uri": "file://test.test_BlockTryToUint64_/results.txt"
+        }
+    ],
+    "test.test[BlockUnicode]": [
+        {
+            "uri": "file://test.test_BlockUnicode_/results.txt"
+        }
+    ],
     "test.test[Find]": [
         {
             "uri": "file://test.test_Find_/results.txt"
@@ -9,9 +79,19 @@
             "uri": "file://test.test_IsCategory_/results.txt"
         }
     ],
+    "test.test[LevensteinDistanceCodePoints]": [
+        {
+            "uri": "file://test.test_LevensteinDistanceCodePoints_/results.txt"
+        }
+    ],
     "test.test[List]": [
         {
             "uri": "file://test.test_List_/results.txt"
+        }
+    ],
+    "test.test[Normalize]": [
+        {
+            "uri": "file://test.test_Normalize_/results.txt"
         }
     ],
     "test.test[Remove]": [
@@ -22,6 +102,11 @@
     "test.test[Replace]": [
         {
             "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[SplitToListNoCrash]": [
+        {
+            "uri": "file://test.test_SplitToListNoCrash_/results.txt"
         }
     ],
     "test.test[Strip]": [
@@ -62,6 +147,11 @@
     "test.test[TryToUint64]": [
         {
             "uri": "file://test.test_TryToUint64_/results.txt"
+        }
+    ],
+    "test.test[UnicodeCodePoint]": [
+        {
+            "uri": "file://test.test_UnicodeCodePoint_/results.txt"
         }
     ],
     "test.test[Unicode]": [

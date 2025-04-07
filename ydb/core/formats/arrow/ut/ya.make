@@ -6,12 +6,15 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
+    ydb/core/formats/arrow/program
     ydb/core/base
+    ydb/library/formats/arrow
 
     # for NYql::NUdf alloc stuff used in binary_json
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+
 )
 
 ADDINCL(

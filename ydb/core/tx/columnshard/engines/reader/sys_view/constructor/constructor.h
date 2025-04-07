@@ -21,7 +21,7 @@ private:
 
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override {
         THashSet<ui32> readColumnIds(read.ColumnIds.begin(), read.ColumnIds.end());
-        for (auto& [id, name] : read.GetProgram().GetSourceColumns()) {
+        for (auto& id : read.GetProgram().GetSourceColumns()) {
             readColumnIds.insert(id);
         }
 

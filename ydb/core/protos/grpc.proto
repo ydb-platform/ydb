@@ -15,10 +15,6 @@ service TGRpcServer {
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // KIKIMR CLIENT INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // MiniKQL request (DML)
-    rpc Request(TRequest) returns (TResponse);
-
     // DML transactions
     rpc SchemeOperation(TSchemeOperation) returns (TResponse);
     // status polling for scheme transactions
@@ -53,8 +49,8 @@ service TGRpcServer {
     // KV-TABLET INTERNAL INTERFACE
     /////////////////////////////////////////////////////////////////////////////////////////////////
     rpc HiveCreateTablet(THiveCreateTablet) returns (TResponse);
-    rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
-    rpc KeyValue(TKeyValueRequest) returns (TResponse);
+    //rpc LocalEnumerateTablets(TLocalEnumerateTablets) returns (TResponse);
+    //rpc KeyValue(TKeyValueRequest) returns (TResponse);
     rpc TestShardControl(TTestShardControlRequest) returns (TResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -77,9 +73,6 @@ service TGRpcServer {
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // INTROSPECTION
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    rpc LocalMKQL(TLocalMKQL) returns (TResponse);
-    rpc LocalSchemeTx(TLocalSchemeTx) returns (TResponse);
-    rpc TabletKillRequest(TTabletKillRequest) returns (TResponse);
     rpc InterconnectDebug(TInterconnectDebug) returns (TResponse);
 
     // [DEPRECATED]

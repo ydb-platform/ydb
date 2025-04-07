@@ -46,8 +46,8 @@ public:
             return ColumnIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnFilterStarted() override {
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFiterFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Failed to compile purecalc program subissue: { <main>: Error: Compile issues: generated.sql:2:36: Error: Unexpected token '.' : cannot match to any predicted input... } subissue: { <main>: Error: Final yql:"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",
@@ -422,7 +422,8 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterSetFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Failed to compile client filter subissue: { <main>: Error: Failed to compile purecalc program subissue: { <main>: Error: Compile issues: generated.sql:2:36: Error: Unexpected token '.' : cannot match to any predicted input... } subissue: { <main>: Error: Final yql:"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
+        
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",

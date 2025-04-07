@@ -503,9 +503,13 @@ public:
                     .IsValidLeafName()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(shardsToCreate)
-                    .PathShardsLimit(shardsToCreate)
                     .IsValidACL(acl);
+
+                if (!Transaction.GetInternal()) {
+                    checks
+                        .ShardsLimit(shardsToCreate)
+                        .PathShardsLimit(shardsToCreate);
+                }
             }
 
             if (!checks) {
@@ -672,8 +676,8 @@ public:
             newTable->SetAsyncReplica(true);
         }
 
-        if (tableInfo->IsRestoreTable()) {
-            newTable->SetRestoreTable();
+        if (tableInfo->IsIncrementalRestoreTable()) {
+            newTable->SetIncrementalRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;
@@ -724,8 +728,8 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop

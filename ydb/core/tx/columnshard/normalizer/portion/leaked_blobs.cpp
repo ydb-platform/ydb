@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "leaked_blobs.h"
 
 #include <ydb/core/keyvalue/keyvalue_const.h>
@@ -182,7 +183,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     }
 
     NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
-        std::make_shared<TSchemaObjectsCache>(), TabletId);
+        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), TabletId);
 
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
@@ -233,7 +234,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     }
     if (Indexes.empty()) {
         THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesLocal;
-        if (!wrapper.LoadIndexes(std::nullopt, [&](const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
+        if (!wrapper.LoadIndexes(std::nullopt, [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
                 const ui64 portionId = indexChunk.GetPortionId();
                 indexesLocal[portionId].emplace_back(std::move(indexChunk));
             })) {

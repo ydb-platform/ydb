@@ -9,9 +9,15 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
     static const char* alias = "/lib/ut.yql";
 
     static bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
         THashMap<TString, TLibraryCohesion> compiled;
         for (const auto& lib : libs)
-            if (!CompileLibrary(alias, lib.second, ctx, compiled[lib.first]))
+            if (!CompileLibrary(translators, alias, lib.second, ctx, compiled[lib.first]))
                 return false;
 
         return LinkLibraries(compiled, ctx, ctx);
@@ -25,9 +31,15 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
             "(export X)\n"
             ")\n";
 
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
         TExprContext ctx;
         TLibraryCohesion cohesion;
-        UNIT_ASSERT(CompileLibrary(alias, s, ctx, cohesion));
+        UNIT_ASSERT(CompileLibrary(translators, alias, s, ctx, cohesion));
         UNIT_ASSERT_VALUES_EQUAL(2, cohesion.Exports.Symbols().size());
         UNIT_ASSERT(cohesion.Imports.empty());
     }
@@ -41,9 +53,15 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
             "(export ex)\n"
             ")\n";
 
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            nullptr,
+            nullptr
+        );
+
         TExprContext ctx;
         TLibraryCohesion cohesion;
-        UNIT_ASSERT(CompileLibrary(alias, s, ctx, cohesion));
+        UNIT_ASSERT(CompileLibrary(translators, alias, s, ctx, cohesion));
         UNIT_ASSERT_VALUES_EQUAL(1, cohesion.Exports.Symbols().size());
         UNIT_ASSERT_VALUES_EQUAL(2, cohesion.Imports.size());
     }

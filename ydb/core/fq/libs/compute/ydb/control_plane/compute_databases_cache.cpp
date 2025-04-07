@@ -55,7 +55,7 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
         }
 
         static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-            return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+            return ::NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
         }
     };
 

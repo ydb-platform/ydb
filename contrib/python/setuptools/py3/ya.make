@@ -2,16 +2,16 @@
 
 PY3_LIBRARY()
 
-VERSION(71.1.0)
+VERSION(75.8.2)
 
 LICENSE(MIT)
 
 PEERDIR(
+    contrib/python/jaraco.collections
     contrib/python/jaraco.context
     contrib/python/jaraco.functools
     contrib/python/jaraco.text
     contrib/python/more-itertools
-    contrib/python/ordered-set
     contrib/python/packaging
     contrib/python/platformdirs
     contrib/python/typeguard
@@ -36,30 +36,11 @@ PY_SRCS(
     setuptools/__init__.py
     setuptools/_core_metadata.py
     setuptools/_distutils/__init__.py
-    setuptools/_distutils/_collections.py
-    setuptools/_distutils/_functools.py
-    setuptools/_distutils/_itertools.py
     setuptools/_distutils/_log.py
     setuptools/_distutils/_macos_compat.py
     setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
-    setuptools/_distutils/_vendor/__init__.py
-    setuptools/_distutils/_vendor/packaging/__init__.py
-    setuptools/_distutils/_vendor/packaging/_elffile.py
-    setuptools/_distutils/_vendor/packaging/_manylinux.py
-    setuptools/_distutils/_vendor/packaging/_musllinux.py
-    setuptools/_distutils/_vendor/packaging/_parser.py
-    setuptools/_distutils/_vendor/packaging/_structures.py
-    setuptools/_distutils/_vendor/packaging/_tokenizer.py
-    setuptools/_distutils/_vendor/packaging/markers.py
-    setuptools/_distutils/_vendor/packaging/metadata.py
-    setuptools/_distutils/_vendor/packaging/requirements.py
-    setuptools/_distutils/_vendor/packaging/specifiers.py
-    setuptools/_distutils/_vendor/packaging/tags.py
-    setuptools/_distutils/_vendor/packaging/utils.py
-    setuptools/_distutils/_vendor/packaging/version.py
     setuptools/_distutils/archive_util.py
-    setuptools/_distutils/bcppcompiler.py
     setuptools/_distutils/ccompiler.py
     setuptools/_distutils/cmd.py
     setuptools/_distutils/command/__init__.py
@@ -81,13 +62,9 @@ PY_SRCS(
     setuptools/_distutils/command/install_headers.py
     setuptools/_distutils/command/install_lib.py
     setuptools/_distutils/command/install_scripts.py
-    setuptools/_distutils/command/register.py
     setuptools/_distutils/command/sdist.py
-    setuptools/_distutils/command/upload.py
     setuptools/_distutils/compat/__init__.py
-    setuptools/_distutils/compat/py38.py
     setuptools/_distutils/compat/py39.py
-    setuptools/_distutils/config.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py
     setuptools/_distutils/debug.py
@@ -100,8 +77,6 @@ PY_SRCS(
     setuptools/_distutils/file_util.py
     setuptools/_distutils/filelist.py
     setuptools/_distutils/log.py
-    setuptools/_distutils/msvc9compiler.py
-    setuptools/_distutils/msvccompiler.py
     setuptools/_distutils/spawn.py
     setuptools/_distutils/sysconfig.py
     setuptools/_distutils/text_file.py
@@ -117,6 +92,8 @@ PY_SRCS(
     setuptools/_normalization.py
     setuptools/_path.py
     setuptools/_reqs.py
+    setuptools/_shutil.py
+    setuptools/_static.py
     setuptools/archive_util.py
     setuptools/build_meta.py
     setuptools/command/__init__.py
@@ -138,17 +115,15 @@ PY_SRCS(
     setuptools/command/install_egg_info.py
     setuptools/command/install_lib.py
     setuptools/command/install_scripts.py
-    setuptools/command/register.py
     setuptools/command/rotate.py
     setuptools/command/saveopts.py
     setuptools/command/sdist.py
     setuptools/command/setopt.py
     setuptools/command/test.py
-    setuptools/command/upload.py
-    setuptools/command/upload_docs.py
     setuptools/compat/__init__.py
     setuptools/compat/py310.py
     setuptools/compat/py311.py
+    setuptools/compat/py312.py
     setuptools/compat/py39.py
     setuptools/config/__init__.py
     setuptools/config/_apply_pyprojecttoml.py
@@ -190,7 +165,10 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
     pkg_resources/api_tests.txt
     pkg_resources/py.typed
-    setuptools/_distutils/_vendor/packaging/py.typed
+    setuptools/config/NOTICE
+    setuptools/config/_validate_pyproject/NOTICE
+    setuptools/config/distutils.schema.json
+    setuptools/config/setuptools.schema.json
     setuptools/script.tmpl
 )
 

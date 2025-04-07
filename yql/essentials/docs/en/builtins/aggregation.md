@@ -6,7 +6,7 @@ Counting the number of rows in the table (if `*` or constant is specified as the
 
 Like other aggregate functions, it can be combined with [GROUP BY](../syntax/group_by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. Use the modifier [DISTINCT](../syntax/group_by.md#distinct) to count distinct values.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -26,7 +26,7 @@ Minimum or maximum value.
 
 As an argument, you may use an arbitrary computable expression with a numeric result.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -52,7 +52,7 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integer values and time intervals are automatically converted to Double.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -66,7 +66,7 @@ The value `NULL` is equated to `false` (if the argument type is `Bool?`).
 
 The function *does not* do the implicit type casting to Boolean for strings and numbers.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -85,7 +85,7 @@ Sum or arithmetic average, but only for the rows that satisfy the condition pass
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -112,7 +112,7 @@ Get the value for an expression specified as an argument, for one of the table r
 
 Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -141,7 +141,7 @@ By selecting accuracy, you can trade added resource and RAM consumption for decr
 
 All the three functions are aliases at the moment, but `CountDistinctEstimate` may start using a different algorithm in the future.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -169,7 +169,7 @@ To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/group_by.md).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -219,7 +219,7 @@ If the second argument is always `NULL`, the aggregation result is `NULL`.
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -244,7 +244,7 @@ FROM my_table;
 
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -269,7 +269,7 @@ Return a list of values of the first argument for the rows containing the maximu
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -304,7 +304,7 @@ Optional arguments:
 1. For `TOPFREQ`, the desired number of items in the result. `MODE` is an alias to `TOPFREQ` with this argument set to 1. For `TOPFREQ`, this argument is also 1 by default.
 2. The number of items in the buffer used: lets you trade memory consumption for accuracy. Default: 100.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -328,7 +328,7 @@ Several abbreviated aliases are also defined, for example, `VARPOP` or `STDDEVSA
 
 If all the values passed are `NULL`, it returns `NULL`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -349,7 +349,7 @@ Unlike most other aggregate functions, they don't skip `NULL`, but accept it as 
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing two values is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -458,7 +458,7 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -498,7 +498,7 @@ The format of the result is totally similar to [adaptive histograms](#histogram)
 
 If the spread of input values is uncontrollably large, we recommend that you specify the minimum and maximum values to prevent potential failures due to high memory consumption.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -510,7 +510,7 @@ FROM my_table;
 
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
-### Signature
+#### Signature
 
 ```yql
 BOOL_AND(Bool?)->Bool?
@@ -543,7 +543,7 @@ Examples of such behavior can be found below.
 
 To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR` functions.
 
-### Examples
+#### Examples
 
 ```yql
 $data = [
@@ -572,7 +572,7 @@ FROM AS_TABLE($data);
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -594,7 +594,7 @@ Applying an [aggregation factory](basic.md#aggregationfactory) to all values of 
 1. Column, `DISTINCT` column or expression.
 2. Factory.
 
-### Examples
+#### Examples
 
 ```yql
 $count_factory = AggregationFactory("COUNT");

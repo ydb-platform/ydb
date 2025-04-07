@@ -13,8 +13,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -88,6 +88,10 @@ struct TEvPrivate {
     struct TEvPqEventsReady : public TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
 };
 
+TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
+    return TStringBuilder() << "[Checkpoint " << checkpoint.GetGeneration() << "." << checkpoint.GetId() << "] ";
+}
+
 } // namespace
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput {
@@ -155,6 +159,7 @@ public:
         , LogPrefix(TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << taskId << ", PQ sink. ")
         , FreeSpace(freeSpace)
         , PqGateway(pqGateway)
+        , TaskId(taskId)
     { 
         EgressStats.Level = statsLevel;
     }
@@ -215,11 +220,11 @@ public:
 
         if (checkpoint) {
             if (Buffer.empty() && WaitingAcks.empty()) {
-                SINK_LOG_D("Send checkpoint state immediately");
+                SINK_LOG_D(MakeStringForLog(*checkpoint) << "Send checkpoint state immediately");
                 Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint), OutputIndex, *checkpoint);
             } else {
                 ui64 seqNo = NextSeqNo + Buffer.size() - 1;
-                SINK_LOG_D("Defer sending the checkpoint, seqNo: " << seqNo);
+                SINK_LOG_D(MakeStringForLog(*checkpoint) << "Defer sending the checkpoint, seqNo: " << seqNo);
                 Metrics.InFlyCheckpoints->Inc();
                 DeferredCheckpoints.emplace(seqNo, *checkpoint);
             }
@@ -275,8 +280,16 @@ private:
     )
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
+        if (!Inited) {
+            Init();
+            Inited = true;
+        }
         while (HandleNewPQEvents()) { }
         SubscribeOnNextEvent();
+    }
+
+    void Init() {
+        LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", TaskId: " << TaskId << ", PQ sink. ";
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -297,6 +310,7 @@ private:
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
         return NYdb::NTopic::TWriteSessionSettings(SinkParams.GetTopicPath(), GetSourceId(), GetSourceId())
+            .TraceId(LogPrefix)
             .MaxMemoryUsage(FreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
@@ -311,7 +325,7 @@ private:
     }
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() {
-        return NYdb::NTopic::TTopicClientSettings()
+        return PqGateway->GetTopicClientSettings()
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
@@ -432,7 +446,7 @@ private:
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
                     Self.ConfirmedSeqNo = it->SeqNo;
                     const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
-                    LOG_D(Self.LogPrefix << "Send a deferred checkpoint, seqNo: " << it->SeqNo);
+                    LOG_D(Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << it->SeqNo);
                     Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
                     Self.DeferredCheckpoints.pop();
                     Self.Metrics.InFlyCheckpoints->Dec();
@@ -478,7 +492,7 @@ private:
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
-    const TString LogPrefix;
+    TString LogPrefix;
     i64 FreeSpace = 0;
     bool Finished = false;
 
@@ -494,6 +508,8 @@ private:
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
     IPqGateway::TPtr PqGateway;
+    ui64 TaskId;
+    bool Inited = false;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(

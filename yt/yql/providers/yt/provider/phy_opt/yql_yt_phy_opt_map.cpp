@@ -60,15 +60,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
         return node;
     }
 
-    auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+    if (!cluster || !IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
     auto outItemType = SilentGetSequenceItemType(flatMap.Lambda().Body().Ref(), true);
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
+    }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
     }
 
     auto cleanup = CleanupWorld(flatMap.Lambda(), ctx);
@@ -115,7 +120,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     auto ytMap = Build<TYtMap>(ctx, node.Pos())
         .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
         .Input(ConvertInputTable(input, ctx))
         .Output()
             .Add(outTables)
@@ -147,10 +152,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
     }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
+    }
 
-    auto cluster = TString{GetClusterName(lmap.Input())};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(lmap.Input(), selectionMode);
+    if (!cluster || !IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -187,7 +197,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
 
     auto map = Build<TYtMap>(ctx, lmap.Pos())
         .World(ApplySyncListToWorld(NPrivate::GetWorld(lmap.Input(), {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(NPrivate::GetDataSink(lmap.Input(), ctx))
+        .DataSink(MakeDataSink(lmap.Pos(), *cluster, ctx))
         .Input(NPrivate::ConvertInputTable(lmap.Input(), ctx))
         .Output()
             .Add(outTables)
@@ -225,22 +235,30 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
     } else {
         return node;
     }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
+    }
 
-    auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+    if (!cluster) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
+        return node;
+    }
+    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -379,7 +397,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
     return Build<TYtOutput>(ctx, combineByKey.Pos())
         .Operation<TYtMap>()
             .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-            .DataSink(GetDataSink(input, ctx))
+            .DataSink(MakeDataSink(combineByKey.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx))
             .Output()
                 .Add(combineOut.ToExprNode(ctx, combineByKey.Pos()).Cast<TYtOutTable>())

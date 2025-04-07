@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -99,8 +99,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
                 continue;
 
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-                [](const NYql::TIssue& issue){
-                    return issue.GetMessage().Contains("has no snapshot at");
+                [](const auto& issue){
+                    return issue.GetMessage().contains("has no snapshot at");
                 }), result.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
@@ -114,7 +114,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadOnlyTxCommitsOnConcurrentWrite, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         TKikimrRunner kikimr(TKikimrSettings()
             .SetAppConfig(appConfig)
         );
@@ -333,7 +332,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadWriteTxFailsOnConcurrentWrite3, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
         TKikimrRunner kikimr(
             TKikimrSettings()
                 .SetAppConfig(appConfig)

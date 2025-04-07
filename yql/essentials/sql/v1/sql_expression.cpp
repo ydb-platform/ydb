@@ -2,12 +2,11 @@
 #include "sql_call_expr.h"
 #include "sql_select.h"
 #include "sql_values.h"
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/utils/utf8.h>
 #include <util/charset/wide.h>
 #include <util/string/ascii.h>
 #include <util/string/hex.h>
+#include "antlr_token.h"
 
 namespace NSQLTranslationV1 {
 
@@ -30,6 +29,31 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
                 return TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1());
             }
             case TRule_expr::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+    }
+
+TNodePtr TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
+        // lambda_or_parameter:
+        //    lambda
+        //  | bind_parameter
+        switch (node.Alt_case()) {
+            case TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+                return LambdaRule(node.alt_lambda_or_parameter1().GetRule_lambda1());
+            }
+            case TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+                TString named;
+                if (!NamedNodeImpl(node.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1(), named, *this)) {
+                    return nullptr;
+                }
+                auto namedNode = GetNamedNode(named);
+                if (!namedNode) {
+                    return nullptr;
+                }
+
+                return namedNode;
+            }
+            case TRule_lambda_or_parameter::ALT_NOT_SET:
                 Y_ABORT("You should change implementation according to grammar changes");
         }
     }
@@ -835,24 +859,7 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
     return result;
 }
 
-TNodePtr MatchRecognizeVarAccess(TTranslation& ctx, const TString& var, const TRule_an_id_or_type& suffix, bool theSameVar) {
-    switch (suffix.GetAltCase()) {
-        case TRule_an_id_or_type::kAltAnIdOrType1:
-            break;
-        case TRule_an_id_or_type::kAltAnIdOrType2:
-            break;
-        case TRule_an_id_or_type::ALT_NOT_SET:
-            break;
-    }
-    const auto& column = Id(
-            suffix.GetAlt_an_id_or_type1()
-                .GetRule_id_or_type1().GetAlt_id_or_type1().GetRule_id1(),
-            ctx
-    );
-    return BuildMatchRecognizeVarAccess(TPosition{}, var, column, theSameVar);
-}
-
-TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
+TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block) {
     switch (block.GetAltCase()) {
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1:
             break;
@@ -863,13 +870,10 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                 case TRule_an_id_or_type::kAltAnIdOrType1: {
                     const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
                     switch(idOrType.GetAltCase()) {
-                        case TRule_id_or_type::kAltIdOrType1:
-                            return BuildMatchRecognizeVarAccess(
-                                    Ctx.Pos(),
-                                    alias,
-                                    Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this),
-                                    Ctx.GetMatchRecognizeDefineVar() == alias
-                            );
+                        case TRule_id_or_type::kAltIdOrType1: {
+                            const auto column = Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this);
+                            return BuildMatchRecognizeColumnAccess(Ctx.Pos(), std::move(var), std::move(column));
+                        }
                         case TRule_id_or_type::kAltIdOrType2:
                             break;
                         case TRule_id_or_type::ALT_NOT_SET:
@@ -886,7 +890,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
-    return TNodePtr{};
+    return {};
 }
 
 template<typename TUnaryCasualExprRule>
@@ -966,13 +970,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
             // In case of MATCH_RECOGNIZE lambdas
             // X.Y is treated as Var.Column access
-            if (isColumnRef && EColumnRefState::MatchRecognize == Ctx.GetColumnReferenceState()) {
-                if (auto rowPatternVarAccess = RowPatternVarAccess(
-                    name,
-                    b.GetAlt3().GetBlock2())
-                ) {
-                    return rowPatternVarAccess;
+            if (isColumnRef && (
+                EColumnRefState::MatchRecognizeMeasures == Ctx.GetColumnReferenceState() ||
+                EColumnRefState::MatchRecognizeDefine == Ctx.GetColumnReferenceState() ||
+                EColumnRefState::MatchRecognizeDefineAggregate == Ctx.GetColumnReferenceState()
+            )) {
+                if (suffix.GetBlock1().size() != 1) {
+                    Ctx.Error() << "Expected Var.Column, but got chain of " << suffix.GetBlock1().size() << " column accesses";
+                    return nullptr;
                 }
+                return RowPatternVarAccess(std::move(name), b.GetAlt3().GetBlock2());
             }
             break;
         }
@@ -1283,7 +1290,8 @@ TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
         return nullptr;
     }
     const bool checkExist = true;
-    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {BuildSourceNode(pos, std::move(source), checkExist)});
+    auto select = BuildSourceNode(Ctx.Pos(), source, checkExist, Ctx.Settings.EmitReadsForExists);
+    return BuildBuiltinFunc(Ctx, Ctx.Pos(), "ListHasItems", {select});
 }
 
 TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
@@ -1652,13 +1660,13 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             Token(token);
             TPosition pos(Ctx.Pos());
             auto tokenId = token.GetId();
-            if (IS_TOKEN(tokenId, NOT)) {
+            if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, NOT)) {
                 opName = "Not";
-            } else if (IS_TOKEN(tokenId, PLUS)) {
+            } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, PLUS)) {
                 opName = "Plus";
-            } else if (IS_TOKEN(tokenId, MINUS)) {
+            } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, MINUS)) {
                 opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus";
-            } else if (IS_TOKEN(tokenId, TILDA)) {
+            } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, TILDA)) {
                 opName = "BitNot";
             } else {
                 Ctx.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
@@ -1930,7 +1938,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() && IS_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
+                const bool symmetric = alt.HasBlock3() && IS_TOKEN(Ctx.Settings.Antlr4Parser, alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
                 const bool negation = alt.HasBlock1();
                 TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
                 TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
@@ -2056,28 +2064,28 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         TPosition pos(Ctx.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        if (IS_TOKEN(tokenId, LESS)) {
+        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, LESS)) {
             opName = "<";
             Ctx.IncrementMonCounter("sql_binary_operations", "Less");
-        } else if (IS_TOKEN(tokenId, LESS_OR_EQ)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, LESS_OR_EQ)) {
             opName = "<=";
             Ctx.IncrementMonCounter("sql_binary_operations", "LessOrEq");
-        } else if (IS_TOKEN(tokenId, GREATER)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, GREATER)) {
             opName = ">";
             Ctx.IncrementMonCounter("sql_binary_operations", "Greater");
-        } else if (IS_TOKEN(tokenId, GREATER_OR_EQ)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, GREATER_OR_EQ)) {
             opName = ">=";
             Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
-        } else if (IS_TOKEN(tokenId, PLUS)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, PLUS)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
-        } else if (IS_TOKEN(tokenId, MINUS)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, MINUS)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
-        } else if (IS_TOKEN(tokenId, ASTERISK)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASTERISK)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
-        } else if (IS_TOKEN(tokenId, SLASH)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, SLASH)) {
             opName = "/MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
             if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
@@ -2085,7 +2093,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
             } else if (Ctx.Scoped->PragmaCheckedOps) {
                 opName = "CheckedDiv";
             }
-        } else if (IS_TOKEN(tokenId, PERCENT)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, PERCENT)) {
             opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
             Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
         } else {
@@ -2112,7 +2120,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, SHIFT_LEFT)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, SHIFT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2128,7 +2136,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, ROT_LEFT)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ROT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2144,7 +2152,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, AMPERSAND)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, AMPERSAND)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2155,7 +2163,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, PIPE)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, PIPE)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2166,7 +2174,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, CARET)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, CARET)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2196,7 +2204,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, EQUALS)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2207,7 +2215,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, EQUALS2)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2218,7 +2226,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, NOT_EQUALS)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, NOT_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }
@@ -2229,7 +2237,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if (!IS_TOKEN(tokenId, NOT_EQUALS2)) {
+                if (!IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, NOT_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return {};
                 }

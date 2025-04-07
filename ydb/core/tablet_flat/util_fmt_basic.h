@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util_fmt_desc.h"
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NFmt {
@@ -8,7 +9,7 @@ namespace NFmt {
     struct TDelay {
         TDelay(TDuration val): Val(val) { }
 
-        TOut& Do(TOut &out) const noexcept
+        TOut& Do(TOut &out) const
         {
             const ui64 grid[] =  {
                     60ull,          /* minute                   */
@@ -35,7 +36,7 @@ namespace NFmt {
         }
 
     protected:
-        inline TOut& Small(TOut &out, ui64 secs) const noexcept
+        inline TOut& Small(TOut &out, ui64 secs) const
         {
             char ln_[8];
 

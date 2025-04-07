@@ -6,7 +6,7 @@
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <util/datetime/base.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 namespace NKikimr {
     namespace NGRpcProxy {
@@ -93,9 +93,6 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // INTROSPECTION
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            void LocalMKQL(const NKikimrClient::TLocalMKQL& request, TResponseCallback callback);
-            void LocalSchemeTx(const NKikimrClient::TLocalSchemeTx& request, TResponseCallback callback);
-            void TabletKillRequest(const NKikimrClient::TTabletKillRequest& request, TResponseCallback callback);
             void InterconnectDebug(const NKikimrClient::TInterconnectDebug& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////

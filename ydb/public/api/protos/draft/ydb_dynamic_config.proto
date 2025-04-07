@@ -9,8 +9,12 @@ import "ydb/public/api/protos/ydb_operation.proto";
 message ConfigIdentity {
     // Current main config version
     uint64 version = 1;
-    // Cluster name (should be set on node with console tablet, unknown by default)
-    string cluster = 2;
+    oneof type {
+        // Cluster name (should be set on node with console tablet, unknown by default)
+        string cluster = 2;
+        // database name
+        string database = 3;
+    }
 }
 
 message SetConfigRequest {
@@ -19,6 +23,7 @@ message SetConfigRequest {
     string config = 2;
     bool dry_run = 3;
     bool allow_unknown_fields = 4;
+    bool allow_absent_database = 5;
 }
 
 message SetConfigResponse {
@@ -31,6 +36,7 @@ message ReplaceConfigRequest {
     string config = 2;
     bool dry_run = 3;
     bool allow_unknown_fields = 4;
+    bool allow_absent_database = 5;
 }
 
 message ReplaceConfigResponse {
@@ -74,12 +80,12 @@ message GetConfigResponse {
 }
 
 message GetConfigResult {
-    // Main dynamic config with metadata in YAML format
-    string config = 1;
+    // Main/database dynamic config with metadata in YAML format
+    repeated string config = 1;
     // All volatile configs
     repeated VolatileConfig volatile_configs = 2;
 
-    ConfigIdentity identity = 3;
+    repeated ConfigIdentity identity = 3;
 }
 
 message VolatileConfigMetadata {
@@ -221,4 +227,18 @@ message ResolveAllConfigResult {
     string config = 1;
     // Verbose resolved configs
     repeated ResolvedConfig configs = 2;
+}
+
+message FetchStartupConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message FetchStartupConfigResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message FetchStartupConfigResult {
+    // YAML document with generated dynamic config
+    string config = 1;
 }

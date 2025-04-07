@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/maybe.h>
 #include <util/folder/path.h>
@@ -11,12 +11,14 @@ class TRegExMatch;
 
 namespace NYdb {
 
+inline namespace Dev {
 class TDriver;
 class TResultSetParser;
 class TValue;
 
 namespace NTable {
     class TTableDescription;
+}
 }
 
 namespace NBackup {
@@ -43,6 +45,9 @@ void BackupFolder(
     bool savePartialResult = false,
     bool preservePoolKinds = false,
     bool ordered = false);
+
+void BackupCluster(const TDriver& driver, TFsPath folderPath);
+void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath);
 
 // For unit-tests only
 TMaybe<TValue> ProcessResultSet(

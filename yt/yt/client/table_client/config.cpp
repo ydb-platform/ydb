@@ -153,6 +153,9 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .InRange(0.0, 0.001)
         .Default(0.0001);
 
+    registrar.Parameter("use_original_data_weight_in_samples", &TThis::UseOriginalDataWeightInSamples)
+        .Default(false);
+
     registrar.Parameter("chunk_indexes", &TThis::ChunkIndexes)
         .DefaultNew();
 
@@ -288,6 +291,10 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_acceptable_compression_ratio", &TThis::MaxAcceptableCompressionRatio)
         .Default(0.7)
         .InRange(0, 1);
+
+    registrar.Parameter("elect_random_policy", &TThis::ElectRandomPolicy)
+        .Default(false)
+        .DontSerializeDefault();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
@@ -473,6 +480,11 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("max_heavy_columns", &TThis::MaxHeavyColumns)
         .Default(0);
+
+    registrar.Parameter("block_size", &TThis::BlockSize)
+        .Default();
+    registrar.Parameter("buffer_size", &TThis::BufferSize)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ValidateUniqueKeys && !config->ValidateSorted) {

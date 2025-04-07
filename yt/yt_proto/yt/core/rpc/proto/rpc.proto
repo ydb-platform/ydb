@@ -83,6 +83,8 @@ message TRequestHeader
      * suppress_expiration_timeout_renewal  113
      * workload_descriptor                  114
      * custom_metadata                      115
+     * allow_resolve_from_sequoia_object    118
+     * resolve_depth                        119
      * ssl_credentials_ext                  120
      * req_execute_ext                      200
      * req_multiread_ext                    201

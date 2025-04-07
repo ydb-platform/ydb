@@ -1,6 +1,6 @@
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 using namespace NYdb;
@@ -42,10 +42,20 @@ public:
         Server->AnnoyingClient->CreateTopicNoLegacy(
                 "/Root/LbCommunal/account/topic2", 1, true, true, {}, {}, "account"
         );
-
         Server->AnnoyingClient->CreateTopicNoLegacy(
                 "/Root/LbCommunal/account/topic2-mirrored-from-dc2", 1, true, false, {}, {}, "account"
         );
+
+        Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
+        Server->AnnoyingClient->MkDir("/Root/LbCommunal", "account2");
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+                "/Root/LbCommunal/account2/topic3", 1, true, true, {}, {}, "account2"
+        );
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+                "/Root/LbCommunal/account2/topic3-mirrored-from-dc2", 1, true, false, {}, {}, "account2"
+        );
+
+
         Server->AnnoyingClient->CreateConsumer("test-consumer");
         InitPQLib();
     }
@@ -106,7 +116,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
         THashMap<TString, THashSet<TString>> clustersFound;
         for (auto i = 0u; i < paths.size() * 2; i++) {
             auto ev = readSession->GetEvent(true);
-            Y_ABORT_UNLESS(ev.Defined());
+            Y_ABORT_UNLESS(ev.has_value());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
             if (!lockEvent) {
                 if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
@@ -124,7 +134,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             UNIT_ASSERT(paths.contains(path));
             auto& clusters = clustersFound[path];
             UNIT_ASSERT(!clusters.contains(cluster));
-            clusters.insert(cluster);
+            clusters.insert(TString{cluster});
             //lockEvent->Confirm();
         }
         UNIT_ASSERT_VALUES_EQUAL(clustersFound.size(), paths.size());
@@ -153,6 +163,12 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             GetLocks({"account/topic1", "account/topic2"}, rs);
             rs->Close();
         }
+        {
+            auto rs = testServer.CreateReadSession({"account/topic1", "account/topic2", "account2/topic3"});
+            GetLocks({"account/topic1", "account/topic2", "account2/topic3"}, rs);
+            rs->Close();
+        }
+
     }
 
     Y_UNIT_TEST(BadTopics) {

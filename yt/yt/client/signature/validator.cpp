@@ -2,18 +2,44 @@
 
 #include "signature.h"
 
+#include <yt/yt/core/actions/future.h>
+
 namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NYson::TYsonString& ISignatureValidator::GetHeader(const TSignaturePtr& signature)
+namespace {
+
+struct TDummySignatureValidator
+    : public ISignatureValidator
 {
-    return signature->Header_;
+    TFuture<bool> Validate(const TSignaturePtr& /*signature*/) const final
+    {
+        return TrueFuture;
+    }
+};
+
+struct TAlwaysThrowingSignatureValidator
+    : public ISignatureValidator
+{
+    TFuture<bool> Validate(const TSignaturePtr& /*signature*/) const final
+    {
+        THROW_ERROR_EXCEPTION("Signature validation is unsupported");
+    }
+};
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISignatureValidatorPtr CreateDummySignatureValidator()
+{
+    return New<TDummySignatureValidator>();
 }
 
-const std::vector<std::byte>& ISignatureValidator::GetSignature(const TSignaturePtr& signature)
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator()
 {
-    return signature->Signature_;
+    return New<TAlwaysThrowingSignatureValidator>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

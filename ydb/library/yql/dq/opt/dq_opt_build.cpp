@@ -645,12 +645,7 @@ TDqPhyStage DqEnableWideChannelsInputForStage(const TDqPhyStage& stage, TExprCon
 }
 
 bool CanPullReplicateScalars(const TDqPhyStage& stage) {
-    auto maybeFromFlow = stage.Program().Body().Maybe<TCoFromFlow>();
-    if (!maybeFromFlow) {
-        return false;
-    }
-
-    return bool(maybeFromFlow.Cast().Input().Maybe<TCoReplicateScalars>());
+    return bool(stage.Program().Body().Maybe<TCoReplicateScalars>());
 }
 
 bool CanPullReplicateScalars(const TDqOutput& output) {
@@ -694,14 +689,14 @@ TDqPhyStage DqPullReplicateScalarsFromInputs(const TDqPhyStage& stage, TExprCont
             TDqPhyStage childStage = conn.Output().Stage().Cast<TDqPhyStage>();
             TCoLambda childProgram(ctx.DeepCopyLambda(childStage.Program().Ref()));
 
-            TCoReplicateScalars childReplicateScalars = childProgram.Body().Cast<TCoFromFlow>().Input().Cast<TCoReplicateScalars>();
+            TCoReplicateScalars childReplicateScalars = childProgram.Body().Cast<TCoReplicateScalars>();
 
-            // replace FromFlow(ReplicateScalars(x, ...)) with FromFlow(x)
+            // replace (ReplicateScalars(x, ...)) with (x)
             auto newChildStage = Build<TDqPhyStage>(ctx, childStage.Pos())
                 .InitFrom(childStage)
                 .Program()
                     .Args(childProgram.Args())
-                    .Body(ctx.ChangeChild(childProgram.Body().Ref(), TCoFromFlow::idx_Input, childReplicateScalars.Input().Ptr()))
+                    .Body(childReplicateScalars.Input())
                 .Build()
                 .Done();
             auto newOutput = Build<TDqOutput>(ctx, conn.Output().Pos())
@@ -711,13 +706,9 @@ TDqPhyStage DqPullReplicateScalarsFromInputs(const TDqPhyStage& stage, TExprCont
             newInputs.push_back(ctx.ChangeChild(conn.Ref(), TDqConnection::idx_Output, newOutput.Ptr()));
 
             TExprNode::TPtr newArgNode = newArg.Ptr();
-            TExprNode::TPtr argReplace = Build<TCoFromFlow>(ctx, arg.Pos())
-                .Input<TCoReplicateScalars>()
-                    .Input<TCoToFlow>()
-                        .Input(newArgNode)
-                    .Build()
-                    .Indexes(childReplicateScalars.Indexes())
-                .Build()
+            TExprNode::TPtr argReplace = Build<TCoReplicateScalars>(ctx, arg.Pos())
+                .Input(newArgNode)
+                .Indexes(childReplicateScalars.Indexes())
                 .Done()
                 .Ptr();
             argsMap.emplace(arg.Raw(), argReplace);
@@ -767,17 +758,10 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqPhyStage& st
     }
 
     if (!forceBlocks) {
-        // ensure that stage has blocks on top level (i.e. FromFlow(WideFromBlocks(...)))
-        if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
-            if (!stage.Program().Body().Maybe<TCoFromFlow>() ||
-                !stage.Program().Body().Cast<TCoFromFlow>().Input().Maybe<TCoWideFromBlocks>())
-            {
-                return false;
-            }
-        } else {
-            if (!stage.Program().Body().Maybe<TCoWideFromBlocks>()) {
-                return false;
-            }
+        // Ensure that stage has blocks on top level (i.e.
+        // (WideFromBlocks(...))).
+        if (!stage.Program().Body().Maybe<TCoWideFromBlocks>()) {
+            return false;
         }
     }
 
@@ -800,12 +784,8 @@ TDqPhyStage RebuildStageOutputAsWideBlock(const TDqPhyStage& stage, TExprContext
         .InitFrom(stage)
         .Program()
             .Args(stage.Program().Args())
-            .Body<TCoFromFlow>()
-                .Input<TCoWideToBlocks>()
-                    .Input<TCoToFlow>()
-                        .Input(stage.Program().Body())
-                    .Build()
-                .Build()
+            .Body<TCoWideToBlocks>()
+                .Input(stage.Program().Body())
             .Build()
         .Build()
         .Done();
@@ -832,24 +812,11 @@ TDqPhyStage RebuildStageInputsAsWideBlock(bool forceBlocks, const TDqPhyStage& s
         if (maybeConn && IsSupportedForWideBlocks(maybeConn.Cast()) && CanRebuildForWideBlockChannelOutput(forceBlocks, maybeConn.Cast().Output(), ctx, typesCtx)) {
             ++blockInputs;
             // input will actually be wide block stream - convert it to wide stream first
-            TExprNode::TPtr newArgNode;
-            if constexpr (!NYql::NBlockStreamIO::WideFromBlocks) {
-                newArgNode = ctx.Builder(arg.Pos())
-                    .Callable("FromFlow")
-                        .Callable(0, "WideFromBlocks")
-                            .Callable(0, "ToFlow")
-                                .Add(0, newArg.Ptr())
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
-            } else {
-                newArgNode = ctx.Builder(arg.Pos())
-                    .Callable("WideFromBlocks")
-                        .Add(0, newArg.Ptr())
-                    .Seal()
-                    .Build();
-            }
+            TExprNode::TPtr newArgNode = ctx.Builder(arg.Pos())
+                .Callable("WideFromBlocks")
+                    .Add(0, newArg.Ptr())
+                .Seal()
+                .Build();
             argsMap.emplace(arg.Raw(), newArgNode);
 
             const TDqConnection& conn = maybeConn.Cast();

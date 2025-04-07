@@ -9,8 +9,6 @@
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,7 +29,6 @@ TClientWriter::TClientWriter(
         RawWriter_.Reset(new TRetrylessWriter(
             context,
             transactionId,
-            GetWriteTableCommand(context.Config->ApiVersion),
             format,
             path,
             BufferSize_,

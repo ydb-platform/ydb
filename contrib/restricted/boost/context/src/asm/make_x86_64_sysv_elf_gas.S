@@ -77,7 +77,7 @@ make_fcontext:
 #if defined(BOOST_CONTEXT_TLS_STACK_PROTECTOR)
     /* save stack guard */
     movq  %fs:0x28, %rcx    /* read stack guard from TLS record */
-    movq  %rcx, 0x8(%rsp)   /* save stack guard */
+    movq  %rcx, 0x8(%rax)   /* save stack guard */
 #endif
 
     /* compute abs address of label trampoline */

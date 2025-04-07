@@ -102,7 +102,7 @@ bool TCommandWithFormat::HasOutput() {
     return false;
 }
 
-void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config, 
+void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
                                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
@@ -224,17 +224,17 @@ void TCommandWithInput::AddInputFileOption(TClientCommand::TConfig& config, bool
 
 // Deprecated
 void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
-    config.Opts->AddLongOption("json", description).NoArgument()
+    config.Opts->GetOpts().AddLongOption("json", description).NoArgument()
         .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
         .Hidden();
 }
 
-void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
+void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
@@ -518,7 +518,7 @@ TString ReplaceAll(TString str, const TString& from, const TString& to) {
     if (!from) {
         return str;
     }
-        
+
     size_t startPos = 0;
     while ((startPos = str.find(from, startPos)) != TString::npos) {
         str.replace(startPos, from.length(), to);
@@ -546,7 +546,7 @@ TString FormatPrettyTableDouble(TString stringValue) {
 
 
     stream << std::fixed << std::setprecision(3) << std::scientific << value;
-    return ToString(stream.str());   
+    return ToString(stream.str());
 }
 
 void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
@@ -557,7 +557,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
     NColorizer::TColors colors = NColorizer::AutoColors(Output);
     TStringBuf color;
     switch(offset.size() % 3) {
-        case 0: 
+        case 0:
             color = colors.LightRed();
             break;
         case 1:
@@ -753,11 +753,11 @@ void TResultSetPrinter::EndLineBeforeNextResult() {
 }
 
 void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     TVector<TString> columnNames;
     for (const auto& column : columns) {
-        columnNames.push_back(column.Name);
+        columnNames.push_back(TString{column.Name});
     }
 
     TPrettyTableConfig tableConfig;
@@ -802,7 +802,7 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 }
 
 void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     if (Settings.IsCsvWithHeader()) {
         for (ui32 i = 0; i < columns.size(); ++i) {

@@ -65,14 +65,16 @@ public:
     TProgramPtr Create(
             const TFile& file,
             const TString& sessionId = TString(),
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     TProgramPtr Create(
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
             EHiddenMode hiddenMode = EHiddenMode::Disable,
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     void UnrepeatableRandom();
 private:
@@ -349,12 +351,14 @@ private:
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext);
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
     bool CollectUsedClusters();
+    bool CheckParameters();
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
@@ -377,7 +381,7 @@ private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode(TString& sourceCode);
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-        const NSQLTranslation::TTranslationSettings*& currentSettings);
+        NSQLTranslation::TTranslationSettings*& currentSettings);
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -443,7 +447,9 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
+    TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
+    TMaybe<TIssue> ParametersIssue_;
 };
 
 void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);

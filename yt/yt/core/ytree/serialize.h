@@ -11,12 +11,18 @@
 #include <yt/yt/core/yson/writer.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
 #include <optional>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Infers value format (microseconds/nanoseconds) and returns unix time.
+TInstant ConvertRawValueToUnixTime(ui64 value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -150,9 +156,13 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// For any associative container.
+// Any associative container (except TCompactFlatMap).
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
+
+// TCompactFlatMap.
+template <class K, class V, size_t N>
+void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
@@ -167,6 +177,8 @@ void Serialize(
 
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
+
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
 
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
@@ -241,6 +253,14 @@ void Deserialize(std::deque<T, A>& value, INodePtr node);
 template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node);
 
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& items, INodePtr node);
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& items, INodePtr node);
+
 // TErrorOr
 template <class T>
 void Deserialize(TErrorOr<T>& error, INodePtr node);
@@ -275,6 +295,8 @@ void Deserialize(
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
 
+void Deserialize(TSize& value, INodePtr node);
+
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -284,6 +306,15 @@ concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* cons
 {
     { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
 };
+
+template <class T>
+concept CYsonDeserializable = requires (T& value, INodePtr node)
+{
+    { Deserialize(value, node) } -> std::same_as<void>;
+};
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializableDeserializable = CYsonSerializable<T, TExtraArgs...> && CYsonDeserializable<T>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

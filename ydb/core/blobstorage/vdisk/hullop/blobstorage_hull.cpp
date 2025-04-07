@@ -201,7 +201,9 @@ namespace NKikimr {
             }
         }
 
-        ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        if (writtenBeyondBarrier) {
+            ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        }
         return {NKikimrProto::OK, "", false};
     }
 
@@ -356,10 +358,11 @@ namespace NKikimr {
         // ensure that keys are coming in strictly ascending order
         if (IsFromSameSequence(newKey, it)) {
             // check that existing key is really greater that the new one -- this is internal consistency check
-            // so we can do it in Y_ABORT_UNLESS
+            // so we can do it in Y_VERIFY_S
             const TKeyBarrier& key = it.GetCurKey();
-            Y_ABORT_UNLESS(std::make_tuple(key.Gen, key.GenCounter) > std::make_tuple(newKey.Gen, newKey.GenCounter) &&
-                    key.TabletId == newKey.TabletId && key.Channel == newKey.Channel && key.Hard == newKey.Hard);
+            Y_VERIFY_S(std::make_tuple(key.Gen, key.GenCounter) > std::make_tuple(newKey.Gen, newKey.GenCounter) &&
+                    key.TabletId == newKey.TabletId && key.Channel == newKey.Channel && key.Hard == newKey.Hard,
+                    HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
             // we have the key from the same Tablet/Channel, but which is greater than the new one; this
             // means that keys came out-of-order, this key is from the past -- error condition
@@ -378,8 +381,9 @@ namespace NKikimr {
         if (IsFromSameSequence(newKey, backIt)) {
             // check that existing key is strictly less than the new one -- this is also internal consistency check
             const TKeyBarrier& key = backIt.GetCurKey();
-            Y_ABORT_UNLESS(std::make_tuple(key.Gen, key.GenCounter) < std::make_tuple(newKey.Gen, newKey.GenCounter) &&
-                    key.TabletId == newKey.TabletId && key.Channel == newKey.Channel && key.Hard == newKey.Hard);
+            Y_VERIFY_S(std::make_tuple(key.Gen, key.GenCounter) < std::make_tuple(newKey.Gen, newKey.GenCounter) &&
+                    key.TabletId == newKey.TabletId && key.Channel == newKey.Channel && key.Hard == newKey.Hard,
+                    HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
             // we have some records in the same tablet id/channel as the new one, so we have to check the order
             const TMemRecBarrier& memRec = backIt.GetMemRec();
@@ -466,7 +470,7 @@ namespace NKikimr {
         // records, one for every KeepFlag, one for every DoNotKeepFlag, and one for the barrier. For this purpose
         // we reserve a diapason of LSNs.
         ui64 lsnAdvance = !!collect + record.KeepSize() + record.DoNotKeepSize();
-        Y_ABORT_UNLESS(lsnAdvance > 0);
+        Y_VERIFY_S(lsnAdvance > 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
         *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog(lsnAdvance);
         return {NKikimrProto::OK, {}};
     }
@@ -497,12 +501,12 @@ namespace NKikimr {
             HullDs->LogoBlobs->PutToFresh(idLsn, TKeyLogoBlob(id), TMemRecLogoBlob(ingress));
             ++idLsn;
         }
-        Y_ABORT_UNLESS(idLsn == seg.Last + 1);
+        Y_VERIFY_S(idLsn == seg.Last + 1, HullDs->HullCtx->VCtx->VDiskLogPrefix);
     }
 
     TLsnSeg THull::AllocateLsnForPhantoms(const TDeque<TLogoBlobID>& phantoms) {
         ui64 lsnAdvance = phantoms.size();
-        Y_ABORT_UNLESS(lsnAdvance > 0);
+        Y_VERIFY_S(lsnAdvance > 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
         return Fields->LsnMngr->AllocLsnForHullAndSyncLog(lsnAdvance);
     }
 
@@ -530,7 +534,7 @@ namespace NKikimr {
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
         std::vector<const NSyncLog::TRecordHdr*> records = fragment.ListRecords();
         ui64 lsnAdvance = records.size();
-        Y_ABORT_UNLESS(lsnAdvance > 0);
+        Y_VERIFY_S(lsnAdvance > 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
         auto seg = Fields->LsnMngr->AllocLsnForHull(lsnAdvance);
 
         // update blocks cache by blocks that are in flight
@@ -561,7 +565,7 @@ namespace NKikimr {
         const ui64 lsnAdvance = logoBlobsCount + blocksCount + barriersCount;
 
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
-        Y_ABORT_UNLESS(lsnAdvance > 0);
+        Y_VERIFY_S(lsnAdvance > 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
         auto seg = Fields->LsnMngr->AllocLsnForHull(lsnAdvance);
 
         if (freshBatch.Blocks) {
@@ -692,7 +696,7 @@ namespace NKikimr {
             CompactFreshIfRequired<TKeyBarrier, TMemRecBarrier>(ctx, HullDs,
                 Fields->BarriersRunTimeCtx, *HullDs->Barriers, Fields->AllowGarbageCollection);
         }
-        Y_ABORT_UNLESS(curLsn == seg.Last + 1);
+        Y_VERIFY_S(curLsn == seg.Last + 1, HullDs->HullCtx->VCtx->VDiskLogPrefix);
     }
 
     ///////////////// GET SNAPSHOT //////////////////////////////////////////////

@@ -61,4 +61,23 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
 }
 
+TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
+    if (!PredOptimization) {
+        return TInstant::Max();
+    }
+    return *PredOptimization + DurationToDrop;
+}
+
+TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
+    const TLevelCounters& levelCounters, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable)
+    : TBase(levelIdx, nextLevel)
+    , LevelCounters(levelCounters)
+    , DurationToDrop(durationToDrop)
+    , ExpectedBlobsSize(expectedBlobsSize)
+    , PortionsCountAvailable(portionsCountAvailable) {
+    if (DurationToDrop != TDuration::Max() && PredOptimization) {
+        *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
+    }
+}
+
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

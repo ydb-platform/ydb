@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/sys.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/folder/path.h>
 #include <util/generic/deque.h>
@@ -40,6 +40,18 @@ private:
     TString TraverseRoot;
     TDeque<TSchemeEntryWithPath> NextNodes;
 
+    static const TVector<NScheme::ESchemeEntryType>& SupportedEntryTypes() {
+        static const TVector<NScheme::ESchemeEntryType> values = {
+            NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
+            NScheme::ESchemeEntryType::CoordinationNode,
+            NScheme::ESchemeEntryType::Replication,
+        };
+
+        return values;
+    }
+
 public:
     TDbIterator(TDriver driver, const TString& fullPath)
       : Client(driver)
@@ -48,7 +60,7 @@ public:
         Y_ENSURE(listResult.IsSuccess(), "Can't list directory, maybe it doesn't exist, dbPath# "
                 << fullPath.Quote());
 
-        if (IsIn({NScheme::ESchemeEntryType::Table, NScheme::ESchemeEntryType::View}, listResult.GetEntry().Type)) {
+        if (IsIn(SupportedEntryTypes(), listResult.GetEntry().Type)) {
             TPathSplitUnix parentPath(fullPath);
             parentPath.pop_back();
             TraverseRoot = parentPath.Reconstruct();
@@ -76,7 +88,7 @@ public:
                     NextNodes.front().IsListed = true;
 
                     const auto& children = childList.GetChildren();
-                    if (!children) {
+                    if (children.empty()) {
                         break;
                     }
                     const auto& currRelPath = GetRelPath();
@@ -133,8 +145,28 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::View;
     }
 
+    bool IsTopic() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Topic;
+    }
+
+    bool IsCoordinationNode() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::CoordinationNode;
+    }
+
     bool IsDir() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
+    }
+
+    bool IsReplication() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Replication;
+    }
+
+    bool IsExternalDataSource() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalDataSource;
+    }
+
+    bool IsExternalTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalTable;
     }
 
     bool IsListed() const {

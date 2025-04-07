@@ -565,6 +565,8 @@ message TEvStartKqpTasksRequest {
     optional double ResourceWeight = 18;
 
     optional NKikimrDataEvents.ELockMode LockMode = 19;
+
+    optional string UserToken = 20;
 }
 
 message TEvStartKqpTasksResponse {
@@ -637,13 +639,17 @@ message TEvScanInitActor {
     optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
     optional uint64 TabletId = 4;
-};
+    optional bool AllowPings = 5;
+}
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint32 Generation = 3;
     optional uint64 TabletId = 4;
+}
+
+message TEvScanPing {
 }
 
 message TEvKqpScanCursor {
@@ -653,9 +659,14 @@ message TEvKqpScanCursor {
         optional uint64 SourceId = 1;
         optional uint32 StartRecordIndex = 2;
     }
+    message TColumnShardScanNotSortedSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
         TColumnShardScanSimple ColumnShardSimple = 11;
+        TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 12;
     }
 }
 
@@ -740,6 +751,8 @@ message TKqpTableSinkSettings {
     repeated uint32 WriteIndexes = 13;
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
     optional NKikimrDataEvents.ELockMode LockMode = 15;
+    optional bool EnableStreamWrite = 16;
+    optional bool IsBatch = 17;
 }
 
 message TKqpStreamLookupSettings {

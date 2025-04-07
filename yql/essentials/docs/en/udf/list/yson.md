@@ -98,7 +98,7 @@ Yson::From(T) -> Resource<'Yson2.Node'>
 
 `Yson::From` is a polymorphic function that converts most primitive data types and containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource. The source object type must be Yson-compatible. For example, in dictionary keys, you can only use the `String` or `Utf8` data types, but not `String?` or `Utf8?` .
 
-### Example
+#### Example
 
 ```yql
 SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
@@ -182,7 +182,7 @@ These functions do not do implicit type casting by default, that is, the value i
 
 `Yson::ConvertTo` is a polymorphic function that converts the data type that is specified in the second argument and supports containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource.
 
-### Example
+#### Example
 
 ```yql
 $data = Yson(@@{
@@ -284,7 +284,7 @@ It's passed in the last optional argument (omitted for brevity) to the methods `
 * **AutoConvert**: If the value passed to Yson doesn't match the result data type exactly, the value is converted where possible. For example, `Yson::ConvertToInt64` in this mode will convert even Double numbers to Int64.
 * **Strict**: By default, all functions from the Yson library return an error in case of issues during query execution (for example, an attempt to parse a string that is not Yson/Json, or an attempt to search by a key in a scalar type, or when a conversion to an incompatible data type has been requested, and so on). If you disable the strict mode, `NULL` is returned instead of an error in most cases. When converting to a dictionary or list (`ConvertTo<Type>Dict` or `ConvertTo<Type>List`), improper items are excluded from the resulting collection.
 
-### Example
+#### Example
 
 ```yql
 $yson = @@{y = true; x = 5.5}@@y;

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 class TCollector: public IGranuleDataAccessor {
@@ -13,7 +14,7 @@ private:
         const std::vector<ui64>& remove) override;
 
 public:
-    TCollector(const ui64 pathId)
+    TCollector(const TInternalPathId pathId)
         : TBase(pathId) {
     }
 };

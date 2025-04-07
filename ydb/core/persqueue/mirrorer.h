@@ -11,8 +11,8 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 
 namespace NKikimr {
@@ -91,7 +91,7 @@ private:
 private:
     template<class TEvent>
     void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
-        ctx.ExecutorThread.ActorSystem->Schedule(timeout, new IEventHandle(recipient, SelfId(), new TEvent()));
+        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent()));
         timeout = Min(timeout * 2, maxTimeout);
     }
 
@@ -146,7 +146,7 @@ public:
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
     void AddMessagesToQueue(
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 

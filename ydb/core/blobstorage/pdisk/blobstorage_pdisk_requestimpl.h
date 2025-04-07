@@ -317,7 +317,7 @@ public:
     }
 
     virtual ~TLogWrite() {
-        Y_DEBUG_ABORT_UNLESS(Replied);
+        Y_VERIFY_DEBUG(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
@@ -333,8 +333,8 @@ public:
     }
 
     void AddToBatch(TLogWrite *req) {
-        Y_ABORT_UNLESS(BatchTail->NextInBatch == nullptr);
-        Y_ABORT_UNLESS(req->NextInBatch == nullptr);
+        Y_VERIFY(BatchTail->NextInBatch == nullptr);
+        Y_VERIFY(req->NextInBatch == nullptr);
         BatchTail->NextInBatch = req;
         BatchTail = req;
     }
@@ -350,7 +350,8 @@ public:
     }
 
     void Abort(TActorSystem* actorSystem) override {
-        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, "TLogWrite is being aborted");
+        auto *result = new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED,
+            0, "TLogWrite is being aborted", 0);
         result->Results.emplace_back(Lsn, Cookie);
         actorSystem->Send(Sender, result);
         Replied = true;
@@ -413,11 +414,11 @@ public:
     }
 
     virtual ~TChunkRead() {
-        Y_ABORT_UNLESS(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
+        Y_VERIFY(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
         // Set DoubleFreeCanary to 0 and make sure compiler will not eliminate that action
         SecureWipeBuffer((ui8*)&DoubleFreeCanary, sizeof(DoubleFreeCanary));
-        Y_ABORT_UNLESS(!SelfPointer);
-        Y_ABORT_UNLESS(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
+        Y_VERIFY(!SelfPointer);
+        Y_VERIFY(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
             " CurrentSector# %" PRIu32 " RemainingSize# %" PRIu32,
             (ui32)ChunkIdx, (ui32)Offset, (ui32)Size, (ui32)CurrentSector, (ui32)RemainingSize);
     }
@@ -467,7 +468,7 @@ public:
     TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, bool isTheLastPiece, NWilson::TSpan span);
 
     virtual ~TChunkReadPiece() {
-        Y_ABORT_UNLESS(!SelfPointer);
+        Y_VERIFY(!SelfPointer);
     }
 
     void OnSuccessfulDestroy(TActorSystem* actorSystem);
@@ -1017,6 +1018,36 @@ public:
     }
 };
 
+//
+// TChunkShredResult
+//
+class TChunkShredResult : public TRequestBase {
+public:
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    ui64 ShredSize;
+
+    TChunkShredResult(TChunkIdx chunk, ui32 sectorIdx, ui64 shredSize, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ChunkShredResult, reqIdx), OwnerSystem, 0, NPriInternal::Other, {})
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
+        , ShredSize(shredSize)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkShredResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TChunkShredResult { Chunk# " << Chunk
+        << " SectorIdx# " << SectorIdx
+        << " ShredSize# " << ShredSize << "}";
+        return str.Str();
+    }
+};
+
+
 class TStopDevice : public TRequestBase {
 public:
     TStopDevice(TAtomicBase reqIdx)
@@ -1137,6 +1168,111 @@ public:
 
     void Abort(TActorSystem *actorSystem) override {
         Callback(false, actorSystem);
+    }
+};
+
+class TShredPDisk : public TRequestBase {
+public:
+    ui64 ShredGeneration;
+    ui64 Cookie;
+
+    TShredPDisk(NPDisk::TEvShredPDisk& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+        , ShredGeneration(ev.ShredGeneration)
+    {}
+    
+    ERequestType GetType() const override {
+        return ERequestType::RequestShredPDisk;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TShredPDisk {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TPreShredCompactVDiskResult : public TRequestBase {
+public:
+    NKikimrProto::EReplyStatus Status;
+    ui64 ShredGeneration;
+    TString ErrorReason;
+
+    TPreShredCompactVDiskResult(NPDisk::TEvPreShredCompactVDiskResult& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::PreShredCompactVDiskResult, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Status(ev.Status)
+        , ShredGeneration(ev.ShredGeneration)
+        , ErrorReason(ev.ErrorReason)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestPreShredCompactVDiskResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TPreShredCompactVDiskResult {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " Status# " << Status;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << " ErrorReason# " << ErrorReason;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TShredVDiskResult : public TRequestBase {
+public:
+    NKikimrProto::EReplyStatus Status;
+    ui64 ShredGeneration;
+    TString ErrorReason;
+
+    TShredVDiskResult(NPDisk::TEvShredVDiskResult& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ShredVDiskResult, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , Status(ev.Status)
+        , ShredGeneration(ev.ShredGeneration)
+        , ErrorReason(ev.ErrorReason)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestShredVDiskResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TShredVDiskResult {";
+        str << " Owner# " << Owner;
+        str << " OwnerRound# " << OwnerRound;
+        str << " Status# " << Status;
+        str << " ShredGeneration# " << ShredGeneration;
+        str << " ErrorReason# " << ErrorReason;
+        str << "}";
+        return str.Str();
+    }
+};
+
+class TContinueShred : public TRequestBase {
+public:
+    TContinueShred(NPDisk::TEvContinueShred& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ContinueShred, reqIdx), OwnerUnallocated, 0, NPriInternal::Other)
+    {
+        Y_UNUSED(ev);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestContinueShred;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TContinueShred {";
+        str << "}";
+        return str.Str();
     }
 };
 

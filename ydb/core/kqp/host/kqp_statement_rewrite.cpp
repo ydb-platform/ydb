@@ -278,7 +278,9 @@ namespace {
             create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
         }
 
-        const auto topLevelRead = NYql::FindTopLevelRead(insertData.Ptr());
+        NYql::TNodeOnNodeOwnedMap deepClones;
+        auto insertDataCopy = exprCtx.DeepCopy(insertData.Ref(), exprCtx, deepClones, false, false);
+        const auto topLevelRead = NYql::FindTopLevelRead(insertDataCopy);
 
         NYql::TExprNode::TListType insertSettings;
         insertSettings.push_back(
@@ -305,7 +307,7 @@ namespace {
                     }),
                 }),
             }),
-            insertData.Ptr(),
+            insertDataCopy,
             exprCtx.NewList(pos, std::move(insertSettings)),
         });
 

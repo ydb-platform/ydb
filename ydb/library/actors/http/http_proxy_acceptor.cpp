@@ -99,7 +99,7 @@ protected:
             }
         }
         ALOG_WARN(HttpLog, "Failed to init - retrying...");
-        NActors::TlsActivationContext->ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
+        NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 
     void PassAway() override {

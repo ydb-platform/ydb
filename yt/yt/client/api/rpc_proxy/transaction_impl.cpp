@@ -81,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }
@@ -552,6 +555,7 @@ TFuture<TPushQueueProducerResult> TTransaction::PushQueueProducer(
     if (options.SequenceNumber) {
         req->set_sequence_number(options.SequenceNumber->Underlying());
     }
+    req->set_require_sync_replica(options.RequireSyncReplica);
 
     if (NTracing::IsCurrentTraceContextRecorded()) {
         req->TracingTags().emplace_back("yt.producer_path", ToString(producerPath));
@@ -656,7 +660,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows
 }
 
 TFuture<TSelectRowsResult> TTransaction::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     ValidateActive();
@@ -666,7 +670,7 @@ TFuture<TSelectRowsResult> TTransaction::SelectRows(
 }
 
 TFuture<NYson::TYsonString> TTransaction::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     ValidateActive();

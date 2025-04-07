@@ -30,6 +30,7 @@ SRCS(
     GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
+    bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
     bus/tcp/ssl_helpers.cpp
@@ -114,7 +115,6 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
-    GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -125,7 +125,7 @@ SRCS(
     misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
-    misc/crash_handler.cpp
+    GLOBAL misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
     misc/fs.cpp
@@ -137,8 +137,8 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
-    misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
@@ -268,6 +268,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
@@ -287,6 +288,7 @@ SRCS(
     ytree/request_complexity_limiter.cpp
     ytree/request_complexity_limits.cpp
     ytree/serialize.cpp
+    ytree/size.cpp
     ytree/static_service_dispatcher.cpp
     ytree/system_attribute_provider.cpp
     ytree/tree_builder.cpp
@@ -373,6 +375,7 @@ PEERDIR(
     yt/yt/library/profiling
     yt/yt/library/profiling/resource_tracker
     yt/yt/library/tracing
+    yt/yt/library/numeric
 )
 
 IF (OS_WINDOWS)

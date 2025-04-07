@@ -4,7 +4,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -86,8 +86,8 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Data, "message-1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-1");
         }
 
         // trigger commit, write new data & kill reader
@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
-            UNIT_ASSERT_VALUES_EQUAL(record.Offset, 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.Data, "message-2");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-2");
         }
     }
 }

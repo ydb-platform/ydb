@@ -662,16 +662,15 @@ std::optional<std::string> TRichYPath::GetCluster() const
 
 void TRichYPath::SetCluster(const std::string& value)
 {
-    // TODO(babenko): switch to std::string
-    Attributes().Set("cluster", TString(value));
+    Attributes().Set("cluster", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetClusters() const
+std::optional<std::vector<std::string>> TRichYPath::GetClusters() const
 {
-    return FindAttribute<std::vector<TString>>(*this, "clusters");
+    return FindAttribute<std::vector<std::string>>(*this, "clusters");
 }
 
-void TRichYPath::SetClusters(const std::vector<TString>& value)
+void TRichYPath::SetClusters(const std::vector<std::string>& value)
 {
     Attributes().Set("clusters", value);
 }
@@ -689,6 +688,11 @@ TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const
 TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
 {
     return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
+}
+
+std::optional<TString> TRichYPath::GetAccessMethod() const
+{
+    return FindAttribute<TString>(*this, "access_method");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

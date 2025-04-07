@@ -1,26 +1,26 @@
-diff --git a/include/__config b/include/__config
-index adff13e..51463fc 100644
---- a/include/__config
-+++ b/include/__config
-@@ -127,7 +127,12 @@
+diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
+index 513da6e..c31fbba 100644
+--- a/include/__configuration/abi.h
++++ b/include/__configuration/abi.h
+@@ -47,7 +47,12 @@
  // Previously libc++ used "unsigned int" exclusively.
- #    define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
+ #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
--#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    ifdef __EMSCRIPTEN__
+-#  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  ifdef __EMSCRIPTEN__
 +// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
-+// #    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    else
-+#      define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#    endif
++// #  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  else
++#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  endif
  // All the regex constants must be distinct and nonzero.
- #    define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
+ #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 39a9067..ed89a4f 100644
+index d1c0de3..8b75ced 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -98,7 +98,13 @@ public:
+@@ -96,7 +96,13 @@ public:
  
    size_t hash_code() const _NOEXCEPT;
  
@@ -36,7 +36,7 @@ index 39a9067..ed89a4f 100644
      // from different translation units, so it is sufficient to compare their addresses.
      if (__libcpp_is_constant_evaluated()) {
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
-index 6bee340..1b9f260 100644
+index a83c1ae..fd770e1 100644
 --- a/src/filesystem/operations.cpp
 +++ b/src/filesystem/operations.cpp
 @@ -37,7 +37,7 @@
@@ -49,26 +49,24 @@ index 6bee340..1b9f260 100644
  #  define _LIBCPP_FILESYSTEM_USE_SENDFILE
  #elif defined(__APPLE__) || __has_include(<copyfile.h>)
 diff --git a/src/new.cpp b/src/new.cpp
-index 033bba5..e9a4adc 100644
+index b0c7316..7f1cc67 100644
 --- a/src/new.cpp
 +++ b/src/new.cpp
-@@ -41,6 +41,16 @@ _LIBCPP_WEAK void* operator new(std::size_t size) _THROW_BAD_ALLOC {
- #  ifndef _LIBCPP_HAS_NO_EXCEPTIONS
-   if (p == nullptr)
-     throw std::bad_alloc();
-+#  else
-+#    ifdef __EMSCRIPTEN__
-+  if (p == nullptr)
-+    // Abort here so that when exceptions are disabled, we do not just
-+    // return 0 when malloc returns 0.
-+    // We could also do this with set_new_handler, but that adds a
-+    // global constructor and a table entry, overhead that we can avoid
-+    // by doing it this way.
-+    abort();
-+#    endif
- #  endif
-   return p;
- }
+@@ -18,7 +18,13 @@
+ // The code below is copied as-is into libc++abi's libcxxabi/src/stdlib_new_delete.cpp
+ // file. The version in this file is the canonical one.
+ 
+-inline void __throw_bad_alloc_shim() { std::__throw_bad_alloc(); }
++inline void __throw_bad_alloc_shim() {
++# ifdef __EMSCRIPTEN__
++  abort();
++#else
++  std::__throw_bad_alloc();
++#endif
++}
+ 
+ #  define _LIBCPP_ASSERT_SHIM(expr, str) _LIBCPP_ASSERT(expr, str)
+ 
 diff --git a/src/support/runtime/exception_fallback.ipp b/src/support/runtime/exception_fallback.ipp
 index 18ff4b8..d54a9a5 100644
 --- a/src/support/runtime/exception_fallback.ipp

@@ -20,7 +20,8 @@
 
 #include <yt/yt/core/misc/blob_output.h>
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/range.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <vector>
 
@@ -147,6 +148,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Utf8:
+        case ESimpleLogicalValueType::Json:
             return std::tuple(
                 org::apache::arrow::flatbuf::Type_Utf8,
                 org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)

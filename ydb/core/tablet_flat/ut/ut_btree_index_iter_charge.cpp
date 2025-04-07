@@ -6,6 +6,7 @@
 #include "test/libs/table/test_writer.h"
 #include "test/libs/table/wrap_part.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTable::NPage {
@@ -116,7 +117,7 @@ namespace {
             conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
             break;
         default:
-            Y_Fail("Unknown levels");
+            Y_TABLET_ERROR("Unknown levels");
         }
 
         if (params.Groups) {

@@ -1,7 +1,7 @@
 #include "ydb_object_storage.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
@@ -9,8 +9,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 namespace NYdb {
 namespace NObjectStorage {
@@ -82,8 +82,8 @@ public:
                 Ydb::ResultSet contents;
                 if (response) {
                     Ydb::StatusIds::StatusCode msgStatus = response->status();
-                    NYql::TIssues issues;
-                    NYql::IssuesFromMessage(response->issues(), issues);
+                    NYdb::NIssue::TIssues issues;
+                    NYdb::NIssue::IssuesFromMessage(response->issues(), issues);
                     status = TPlainStatus(static_cast<EStatus>(msgStatus), std::move(issues));    
                     
                     for (auto commonPrefix : response->Getcommon_prefixes()) {

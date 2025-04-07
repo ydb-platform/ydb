@@ -99,7 +99,7 @@ public:
         ApplyGroupInfo(*std::exchange(Info, nullptr));
         QLOG_INFO_S("BSQ01", "starting parent# " << parent);
         InitCounters();
-        RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ExecutorThread.ActorSystem);
+        RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ActorSystem());
         Y_ABORT_UNLESS(!BlobStorageProxy);
         BlobStorageProxy = parent;
         RequestReadiness(nullptr, ctx);
@@ -462,9 +462,7 @@ private:
                 QLOG_INFO_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
                 ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, nullptr));
-                Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
-                DrainStatus(status, ctx);
-                DrainAssimilate(status, errorReason, ctx);
+                Drain(ctx, status, errorReason);
                 break;
         }
         State = EState::INITIAL;
@@ -474,6 +472,12 @@ private:
         } else {
             RequestReadiness(nullptr, ctx);
         }
+    }
+
+    void Drain(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason) {
+        Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
+        DrainStatus(status, ctx);
+        DrainAssimilate(status, errorReason, ctx);
     }
 
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& ctx) {
@@ -788,14 +792,15 @@ private:
     void Die(const TActorContext& ctx) override {
         QLOG_DEBUG_S("BSQ99", "terminating queue actor");
         if (RegisteredInUniversalScheduler) {
-            RegisterActorInUniversalScheduler(SelfId(), nullptr, ctx.ExecutorThread.ActorSystem);
+            RegisterActorInUniversalScheduler(SelfId(), nullptr, ctx.ActorSystem());
         }
         Unsubscribe(RemoteVDisk.NodeId(), ctx);
+        Drain(ctx, NKikimrProto::ERROR, "BS_QUEUE terminated");
         return TActor::Die(ctx);
     }
 
     void Unsubscribe(const ui32 nodeId, const TActorContext& ctx) {
-        ctx.Send(ctx.ExecutorThread.ActorSystem->InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        ctx.Send(ctx.ActorSystem()->InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         SessionId = {};
     }
 

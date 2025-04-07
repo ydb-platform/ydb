@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -63,13 +64,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
             }
             rec.SetSeed(1337);
 
-            rec.SetState(NKikimrTxDataShard::TEvLocalKMeansRequest::SAMPLE);
-            rec.SetUpload(NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING);
+            rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING);
 
-            rec.SetDoneRounds(0);
             rec.SetNeedsRounds(3);
 
-            rec.SetParent(0);
+            rec.SetParentFrom(0);
+            rec.SetParentTo(0);
             rec.SetChild(1);
 
             if (rec.HasEmbeddingColumn()) {
@@ -90,8 +90,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     }
 
     static std::tuple<TString, TString> DoLocalKMeans(
-        Tests::TServer::TPtr server, TActorId sender, ui32 parent, ui64 seed, ui64 k,
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type,
+        Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent, ui64 seed, ui64 k,
+        NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -127,13 +127,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 rec.SetK(k);
                 rec.SetSeed(seed);
 
-                rec.SetState(NKikimrTxDataShard::TEvLocalKMeansRequest::SAMPLE);
                 rec.SetUpload(upload);
 
-                rec.SetDoneRounds(0);
                 rec.SetNeedsRounds(300);
 
-                rec.SetParent(parent);
+                rec.SetParentFrom(parent);
+                rec.SetParentTo(parent);
                 rec.SetChild(parent + 1);
 
                 rec.SetEmbeddingColumn("embedding");
@@ -183,8 +182,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
-            {IdColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {IdColumn, NTableIndex::ClusterIdTypeName, true, true},
             {CentroidColumn, "String", false, true},
         });
         CreateShardedTable(server, sender, "/Root", "table-level", options);
@@ -194,7 +193,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -206,7 +205,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -348,7 +347,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
@@ -363,7 +362,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
@@ -379,7 +378,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
@@ -438,7 +437,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
@@ -453,7 +452,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
@@ -469,7 +468,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoLocalKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
@@ -530,7 +529,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
@@ -545,7 +544,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
@@ -561,7 +560,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
@@ -622,7 +621,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
@@ -637,7 +636,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
@@ -653,7 +652,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoLocalKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"

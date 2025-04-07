@@ -40,17 +40,36 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 }
 
 inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
-    if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
-        if (AppData()->AuthConfig.GetUseAccessService()
-            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
-            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-            };
-            return entries;
-        }
+    const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
+    const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
+    const bool hasClusterAccessResourceId = !AppData()->AuthConfig.GetClusterAccessResourceId().empty();
+    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
+
+    if (!isBearerToken || !useAccessService || !hasClusterAccessResourceId || !needClusterAccessResourceCheck) {
+        static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+        return emptyEntries;
     }
-    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
-    return emptyEntries;
+
+    auto makeEntries = []() -> TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> {
+        const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
+        TVector<TString> permissions;
+        if (accessServiceType == "Yandex_v2") {
+            permissions = {"ydb.developerApi.get", "ydb.developerApi.update"};
+        } else if (accessServiceType == "Nebius_v1") {
+            permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+        } else {
+            return {};
+        }
+        const TString& clusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId();
+        TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", clusterAccessResourceId}}}
+        };
+        return entries;
+    };
+
+    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = makeEntries();
+    return entries;
 }
 
 template <typename TEvent>
@@ -520,15 +539,6 @@ private:
             return {false, std::nullopt};
         }
 
-        if (TBase::IsUserAdmin()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, user is a admin"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
         if (!TBase::GetSecurityToken()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
@@ -549,8 +559,23 @@ private:
             return {false, std::nullopt};
         }
 
-        const ui32 access = NACLib::ConnectDatabase;
         const auto& parsedToken = TBase::GetParsedToken();
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+
+        // admins can connect to databases without having connect rights:
+        // - cluster admin -- to any database
+        // - database admin -- to their database
+        const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
+        if (isAdmin) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "Skip check permission connect db, user is a admin"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            return {false, std::nullopt};
+        }
+
+        const ui32 access = NACLib::ConnectDatabase;
         if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
         }
@@ -562,7 +587,7 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, 
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER,
             error
             << ": " << CheckedDatabaseName_
             << ", user: " << TBase::GetUserSID()

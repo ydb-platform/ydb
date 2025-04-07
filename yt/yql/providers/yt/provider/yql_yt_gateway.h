@@ -250,6 +250,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -358,6 +359,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -383,6 +385,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
@@ -428,6 +431,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TCalcResult : public NCommon::TOperationResult {
@@ -613,6 +617,24 @@ public:
     struct TUploadTableResult: public NCommon::TOperationResult {
     };
 
+    struct TClusterConnectionOptions: public TCommonOptions {
+        using TSelf = TClusterConnectionOptions;
+
+        TClusterConnectionOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TClusterConnectionResult: public NCommon::TOperationResult {
+        TString TransactionId;
+        TString YtServerName;
+        TMaybe<TString> Token;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -658,7 +680,7 @@ public:
 
     virtual TString GetDefaultClusterName() const = 0;
     virtual TString GetClusterServer(const TString& cluster) const = 0;
-    virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const = 0;
+    virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
 
     virtual NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) = 0;
@@ -673,6 +695,8 @@ public:
     virtual TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) = 0;
 
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
+
+    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
 };
 
 }

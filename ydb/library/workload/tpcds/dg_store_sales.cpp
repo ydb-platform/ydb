@@ -20,11 +20,9 @@ namespace NYdbWorkload {
 class TStoreSalesGenerator {
 public:
     void MakeMaster(ds_key_t index) {
-        static bool init = false;
-        if (!init) {
+        if (!ItemPermutation) {
             Date = skipDays(STORE_SALES, &NewDateIndex);
             ItemPermutation = makePermutation(NULL, ItemCount = (int)getIDCount(ITEM), SS_PERMUTATION);
-            init = true;
         }
 
         while (index > NewDateIndex) {
@@ -65,10 +63,15 @@ public:
         writerSales.RegisterRow();
     }
 
+    ~TStoreSalesGenerator() {
+        if (ItemPermutation) {
+            free(ItemPermutation);
+        }
+    }
 private:
     int ItemCount;
     int ItemIndex;
-    int* ItemPermutation;
+    int* ItemPermutation = nullptr;
     ds_key_t NewDateIndex = 0;
     ds_key_t Date;
 };

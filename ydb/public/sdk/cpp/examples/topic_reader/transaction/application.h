@@ -2,12 +2,13 @@
 
 #include "options.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <memory>
 #include <optional>
+#include <random>
 
 class TApplication {
 public:
@@ -20,10 +21,10 @@ public:
 private:
     struct TRow {
         TRow() = default;
-        TRow(ui64 key, const TString& value);
+        TRow(uint64_t key, const std::string& value);
 
-        ui64 Key = 0;
-        TString Value;
+        uint64_t Key = 0;
+        std::string Value;
     };
 
     void CreateTopicReadSession(const TOptions& options);
@@ -45,5 +46,8 @@ private:
     std::optional<NYdb::NTable::TTransaction> Transaction;
     std::vector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> PendingStopEvents;
     std::vector<TRow> Rows;
-    TString TablePath;
+    std::string TablePath;
+
+    std::mt19937_64 MersenneEngine;
+    std::uniform_int_distribution<uint64_t> Dist;
 };

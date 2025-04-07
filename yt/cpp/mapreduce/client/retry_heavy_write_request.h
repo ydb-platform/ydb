@@ -7,8 +7,6 @@
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,17 +53,6 @@ private:
 
     TStreamFactory StreamFactory_;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-void RetryHeavyWriteRequest(
-    const IRawClientPtr& rawClient,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
-    const ITransactionPingerPtr& transactionPinger,
-    const TClientContext& context,
-    const TTransactionId& parentId,
-    THttpHeader& header,
-    std::function<std::unique_ptr<IInputStream>()> streamMaker);
 
 ////////////////////////////////////////////////////////////////////////////////
 

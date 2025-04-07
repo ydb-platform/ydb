@@ -12,6 +12,7 @@ namespace NKikimr::NBlobDepot {
             ConnectToBlobDepot();
         } else {
             PipeServerId = msg.ServerId;
+            SwitchMode(EMode::Registering);
         }
     }
 
@@ -32,6 +33,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (AgentId, LogId), (PipeId, PipeId), (RequestId, id));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
         RegisterRequest(id, this, nullptr, {}, true);
+        SwitchMode(EMode::ConnectPending);
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
@@ -86,6 +88,19 @@ namespace NKikimr::NBlobDepot {
         SpaceColor = msg.GetSpaceColor();
         ApproximateFreeSpaceShare = msg.GetApproximateFreeSpaceShare();
 
+        S3BackendSettings = msg.HasS3BackendSettings()
+            ? std::make_optional(msg.GetS3BackendSettings())
+            : std::nullopt;
+
+        if (S3WrapperId) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, S3WrapperId, SelfId(), nullptr, 0));
+            S3WrapperId = {};
+        }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+        InitS3(msg.GetName());
+#endif
+
         OnConnect();
     }
 
@@ -127,10 +142,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::OnConnect() {
         IsConnected = true;
+        SwitchMode(EMode::Connected);
+
         HandlePendingEvent();
     }
 
     void TBlobDepotAgent::OnDisconnect() {
+        ++ConnectionInstance;
+
         while (!TabletRequestInFlight.empty()) {
             auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
             auto& requestInFlight = node.value();
@@ -143,6 +162,7 @@ namespace NKikimr::NBlobDepot {
 
         ClearPendingEventQueue("BlobDepot tablet disconnected");
 
+        SwitchMode(EMode::None);
         IsConnected = false;
     }
 
@@ -171,6 +191,7 @@ namespace NKikimr::NBlobDepot {
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
     template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
+    template ui64 TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvPrepareWriteS3 msg, TRequestSender *sender, TRequestContext::TPtr context);
 
     ui64 TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextTabletRequestId++;

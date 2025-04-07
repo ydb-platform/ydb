@@ -3,50 +3,86 @@
   "args":
     [
       {
-        "op_name":"CrossJoin",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"CrossJoin",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_sales"
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/store"
+                    "op_name":"CrossJoin",
+                    "args":
+                      [
+                        {
+                          "op_name":"CrossJoin",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"test\/ds\/catalog_sales"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"test\/ds\/store"
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/item"
+                        }
+                      ]
                   }
                 ]
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"test\/ds\/item"
             }
           ]
       },
       {
-        "op_name":"CrossJoin",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"CrossJoin",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_sales"
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/store"
+                    "op_name":"CrossJoin",
+                    "args":
+                      [
+                        {
+                          "op_name":"CrossJoin",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"test\/ds\/catalog_sales"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"test\/ds\/store"
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/item"
+                        }
+                      ]
                   }
                 ]
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"test\/ds\/item"
             }
           ]
       }

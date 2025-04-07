@@ -3,7 +3,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -24,14 +24,14 @@ TString DyNumberToString(TStringBuf data) {
     TStringBuilder err;
 
     bool success = DyNumberToStream(data, out, err);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
 
     return result;
 }
 
 TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
-    Y_ABORT_UNLESS(pgResult.Error.Empty());
+    Y_ENSURE(pgResult.Error.Empty());
     return pgResult.Str;
 }
 

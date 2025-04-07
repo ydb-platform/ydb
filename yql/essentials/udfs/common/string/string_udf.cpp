@@ -2,7 +2,6 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
-#include <library/cpp/charset/codepage.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/string_utils/base32/base32.h>

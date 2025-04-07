@@ -250,10 +250,10 @@ DEFINE_ENUM(ETableToIndexCorrespondence,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
 DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
 

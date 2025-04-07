@@ -40,6 +40,7 @@ class PublicMessage(ICommittable, ISessionAlive):
     written_at: datetime.datetime
     producer_id: str
     data: Union[bytes, Any]  # set as original decompressed bytes or deserialized object if deserializer set in reader
+    metadata_items: Dict[str, bytes]
     _partition_session: PartitionSession
     _commit_start_offset: int
     _commit_end_offset: int
@@ -120,6 +121,16 @@ class PartitionSession:
     def closed(self):
         return self.state == PartitionSession.State.Stopped
 
+    def end(self):
+        if self.closed:
+            return
+
+        self.state = PartitionSession.State.Ended
+
+    @property
+    def ended(self):
+        return self.state == PartitionSession.State.Ended
+
     def _ensure_not_closed(self):
         if self.state == PartitionSession.State.Stopped:
             raise topic_reader_asyncio.PublicTopicReaderPartitionExpiredError()
@@ -128,6 +139,7 @@ class PartitionSession:
         Active = 1
         GracefulShutdown = 2
         Stopped = 3
+        Ended = 4
 
     @dataclass(order=True)
     class CommitAckWaiter:

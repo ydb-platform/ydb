@@ -10,6 +10,10 @@ private:
     std::shared_ptr<arrow::UInt32Array> RecordIdxArray;
 
 public:
+    ui32 GetRecordsCount() const {
+        return IdxArray->length();
+    }
+
     const arrow::UInt16Array& GetIdxArray() const {
         return *IdxArray;
     }
@@ -136,6 +140,8 @@ public:
     void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext);
 
     std::vector<TColumnPortionResult> Execute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
+        const auto& chunk = mergeContext.GetChunk(context.GetBatchIdx());
+        AFL_VERIFY(context.GetRecordsCount() == chunk.GetIdxArray().length());
         return DoExecute(context, mergeContext);
     }
 };

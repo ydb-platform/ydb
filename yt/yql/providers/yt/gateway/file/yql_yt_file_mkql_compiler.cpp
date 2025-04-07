@@ -357,6 +357,29 @@ TRuntimeNode ApplyPathRangesAndSampling(TRuntimeNode inputList, TType* itemType,
     return inputList;
 }
 
+TRuntimeNode ApplyQLFilter(TRuntimeNode inputList, const TYtTransientOpBase& ytOp, NCommon::TMkqlBuildContext& ctx) {
+    if (!ytOp.Maybe<TYtMap>() && !ytOp.Maybe<TYtMapReduce>() && !ytOp.Maybe<TYtMerge>()) {
+        return inputList;
+    }
+
+    const auto qlFilterSetting = NYql::GetSetting(ytOp.Settings().Ref(), EYtSettingType::QLFilter);
+    if (!qlFilterSetting) {
+        return inputList;
+    }
+
+    const auto qlFilterNode = qlFilterSetting->Child(1);
+    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
+    const TYtQLFilter qlFilter(qlFilterNode);
+    const auto arg = qlFilter.Predicate().Args().Arg(0).Raw();
+    const auto body = qlFilter.Predicate().Body().Raw();
+    const auto lambdaId = qlFilter.Predicate().Ref().UniqueId();
+
+    return ctx.ProgramBuilder.OrderedFilter(inputList, [&] (TRuntimeNode item) -> TRuntimeNode {
+        NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, item}}, lambdaId);
+        return NCommon::MkqlBuildExpr(*body, innerCtx);
+    });
+}
+
 TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
     const auto listType = list.GetStaticType();
     if (listType->IsOptional()) {
@@ -432,10 +455,10 @@ TRuntimeNode NarrowFlow(TRuntimeNode flow, TYtOutputOpBase op, NCommon::TMkqlBui
     return NarrowFlowOutput(op.Pos(), flow, type, ctx);
 }
 
-TRuntimeNode BuildTableInput(TType* outItemType, TStringBuf clusterName, const TExprNode& input, NCommon::TMkqlBuildContext& ctx,
+TRuntimeNode BuildTableInput(TType* outItemType, const TExprNode& input, NCommon::TMkqlBuildContext& ctx,
     const THashSet<TString>& extraSysColumns, bool forceKeyColumns)
 {
-    return BuildTableContentCall("YtTableInput", outItemType, clusterName, input, Nothing(), ctx, false, extraSysColumns, forceKeyColumns);
+    return BuildTableContentCall("YtTableInput", outItemType, input, Nothing(), ctx, false, extraSysColumns, forceKeyColumns);
 }
 
 } // unnamed
@@ -513,12 +536,14 @@ TRuntimeNode BuildRuntimeTableInput(TStringBuf callName,
     TType* const listTypeGroup = ctx.ProgramBuilder.NewListType(tupleTypeTables);
 
     TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outListType);
-    call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(clusterName)); // cluster name
 
     TVector<TRuntimeNode> groups;
+    NYT::TRichYPath richPath(TString{tableName});
+    YQL_ENSURE(clusterName);
+    richPath.Cluster(TString{clusterName});
     groups.push_back(
         ctx.ProgramBuilder.NewList(tupleTypeTables, {ctx.ProgramBuilder.NewTuple(tupleTypeTables, {
-            ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(NYT::TRichYPath(TString{tableName})))),
+            ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(richPath))),
             ctx.ProgramBuilder.NewDataLiteral(isTemp),
             ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(spec),
             ctx.ProgramBuilder.NewDataLiteral(ui64(1)),
@@ -560,17 +585,61 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 values = BuildTableContentCall(
                     TYtTableContent::CallableName(),
                     itemType,
-                    read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
+                    read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, itemType, read.Input().Ref(), ctx);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 values = BuildTableContentCall(
                     TYtTableContent::CallableName(),
                     itemType,
-                    GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
+                    output.Ref(), itemsCount, ctx, true);
             }
 
             return values;
+        });
+
+    compiler.OverrideCallable(TYtBlockTableContent::CallableName(),
+        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            TYtBlockTableContent tableContent(&node);
+
+            auto origItemStructType = (
+                tableContent.Input().Maybe<TYtOutput>()
+                    ? tableContent.Input().Ref().GetTypeAnn()
+                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
+            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            TMaybe<ui64> itemsCount;
+            if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
+                itemsCount = FromString<ui64>(setting->Child(1)->Content());
+            }
+            const auto itemType = NCommon::BuildType(node, *origItemStructType, ctx.ProgramBuilder);
+            TRuntimeNode values;
+            if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
+                auto read = maybeRead.Cast();
+
+                const bool hasRangesOrSampling = AnyOf(read.Input(), [](const TYtSection& s) {
+                    return NYql::HasSetting(s.Settings().Ref(), EYtSettingType::Sample)
+                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>(); });
+                });
+                if (hasRangesOrSampling) {
+                    itemsCount.Clear();
+                }
+
+                const bool forceKeyColumns = HasRangesWithKeyColumns(read.Input().Ref());
+                values = BuildTableContentCall(
+                    TYtTableContent::CallableName(),
+                    itemType,
+                    read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
+                values = ApplyPathRangesAndSampling(values, itemType, read.Input().Ref(), ctx);
+            } else {
+                auto output = tableContent.Input().Cast<TYtOutput>();
+                values = BuildTableContentCall(
+                    TYtTableContent::CallableName(),
+                    itemType,
+                    output.Ref(), itemsCount, ctx, true);
+            }
+
+            return ctx.ProgramBuilder.ListToBlocks(values);
         });
 
     compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName()},
@@ -595,9 +664,10 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
             const bool forceKeyColumns = HasRangesWithKeyColumns(ytOp.Input().Ref());
             TRuntimeNode values = BuildTableInput(mkqlInputType,
-                ytOp.DataSink().Cluster().Value(), ytOp.Input().Ref(), ctx, THashSet<TString>{"num", "index"}, forceKeyColumns);
+                ytOp.Input().Ref(), ctx, THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, mkqlInputType, ytOp.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytOp, ctx);
 
             if ((ytOp.Maybe<TYtMerge>() && outTableInfo.RowSpec->IsSorted() && ytOp.Input().Item(0).Paths().Size() > 1)
                 || ytOp.Maybe<TYtSort>())
@@ -620,13 +690,14 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             const bool forceKeyColumns = HasRangesWithKeyColumns(ytMap.Input().Ref());
             TRuntimeNode values = BuildTableInput(
                 itemType,
-                ytMap.DataSink().Cluster().Value(), ytMap.Input().Ref(), ctx,
+                ytMap.Input().Ref(), ctx,
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             const auto arg = ytMap.Mapper().Args().Arg(0).Raw();
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMap, ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
             auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
@@ -636,14 +707,18 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             }
 
             if (IsWideBlockType(lambdaInputType)) {
-                values = ctx.ProgramBuilder.WideToBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideToBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);
 
             if (IsWideBlockType(lambdaOutputType)) {
-                values = ctx.ProgramBuilder.WideFromBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideFromBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             if (ETypeAnnotationKind::Multi == lambdaOutputType.GetKind())
@@ -663,7 +738,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
             const bool forceKeyColumns = HasRangesWithKeyColumns(ytReduce.Input().Ref());
             TRuntimeNode values = BuildTableInput(itemType,
-                ytReduce.DataSink().Cluster().Value(), ytReduce.Input().Ref(), ctx,
+                ytReduce.Input().Ref(), ctx,
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, itemType, ytReduce.Input().Ref(), ctx);
@@ -820,10 +895,11 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             const auto itemType = BuildInputType(ytMapReduce.Input(), ctx);
             const bool forceKeyColumns = HasRangesWithKeyColumns(ytMapReduce.Input().Ref());
             TRuntimeNode values = BuildTableInput(itemType,
-                ytMapReduce.DataSink().Cluster().Value(), ytMapReduce.Input().Ref(), ctx,
+                ytMapReduce.Input().Ref(), ctx,
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
             values = ApplyPathRangesAndSampling(values, itemType, ytMapReduce.Input().Ref(), ctx);
+            values = ApplyQLFilter(values, ytMapReduce, ctx);
 
             const auto outputItemType = BuildOutputType(ytMapReduce.Output(), ctx);
             const size_t outputsCount = ytMapReduce.Output().Ref().ChildrenSize();
@@ -836,8 +912,16 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
                     ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
 
-                if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
+                auto& lambdaInputType = GetSeqItemType(*ytMapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0).Ref().GetTypeAnn());
+                if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
                     values = ExpandFlow(values, ctx);
+                }
+
+                if (IsWideBlockType(lambdaInputType)) {
+                    values = ctx.ProgramBuilder.ToFlow(
+                        ctx.ProgramBuilder.WideToBlocks(
+                            ctx.ProgramBuilder.FromFlow(values)));
+                }
 
                 NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMapReduce.Mapper().Ref().UniqueId());
 
@@ -1025,13 +1109,12 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
     compiler.AddCallable("Pull",
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TPull pull(&node);
-            auto clusterName = GetClusterName(pull.Input());
             const auto itemType = NCommon::BuildType(pull.Input().Ref(), *pull.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
             if (auto out = pull.Input().Maybe<TYtOutput>()) {
 
                 return BuildTableInput(
                     itemType,
-                    clusterName, pull.Input().Ref(), ctx, THashSet<TString>{}, false);
+                    pull.Input().Ref(), ctx, THashSet<TString>{}, false);
 
             } else {
                 auto read = pull.Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>();
@@ -1040,7 +1123,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 const bool forceKeyColumns = HasRangesWithKeyColumns(read.Cast().Input().Ref());
                 TRuntimeNode values = BuildTableInput(
                     itemType,
-                    clusterName, read.Cast().Input().Ref(), ctx,
+                    read.Cast().Input().Ref(), ctx,
                     THashSet<TString>{"num", "index"}, forceKeyColumns);
 
                 values = ApplyPathRangesAndSampling(values, itemType, read.Cast().Input().Ref(), ctx);
@@ -1057,12 +1140,11 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
             const auto wrapper = TDqReadWrapBase(&node);
             if (wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
                 auto ytRead = wrapper.Input().Cast<TYtReadTable>();
-                auto cluster = TString{ytRead.DataSource().Cluster().Value()};
                 const auto outputType = NCommon::BuildType(wrapper.Ref(),
                     *ytRead.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
 
                 const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
-                auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
+                auto values = BuildTableContentCall("YtTableInputFile", outputType,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
 
@@ -1077,15 +1159,15 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
             const auto wrapper = TDqReadWrapBase(&node);
             if (wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
                 auto ytRead = wrapper.Input().Cast<TYtReadTable>();
-                auto cluster = TString{ytRead.DataSource().Cluster().Value()};
                 const auto outputType = NCommon::BuildType(wrapper.Ref(),
                     *ytRead.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder);
 
                 const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
-                auto values = BuildTableContentCall("YtTableInputFile", outputType, cluster,
+                auto values = BuildTableContentCall("YtTableInputFile", outputType,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
-                return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+
+                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }
 
             return TRuntimeNode();

@@ -123,9 +123,10 @@ namespace NKikimr {
             }
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s",
+                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s RemovedHugeBlobs# %s",
                             Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
+                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data(),
+                            Metadata.RemovedHugeBlobs.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }
@@ -166,6 +167,10 @@ namespace NKikimr {
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;
 
+            if (CommitRecord.DeleteChunks) {
+                ctx.Send(Ctx->SkeletonId, new TEvNotifyChunksDeleted(LsnSeg.Last, CommitRecord.DeleteChunks));
+            }
+
             Finish(ctx);
         }
 
@@ -191,17 +196,19 @@ namespace NKikimr {
             std::sort(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end());
 
             // verify that chunk ids do not repeat in both of arrays
-            Y_ABORT_UNLESS(std::adjacent_find(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end()) ==
-                    commitRecord.CommitChunks.end());
-            Y_ABORT_UNLESS(std::adjacent_find(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end()) ==
-                    commitRecord.DeleteChunks.end());
+            Y_VERIFY_S(std::adjacent_find(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end()) ==
+                    commitRecord.CommitChunks.end(),
+                    HullLogCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(std::adjacent_find(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end()) ==
+                    commitRecord.DeleteChunks.end(),
+                    HullLogCtx->VCtx->VDiskLogPrefix);
 
             // ensure that there are no intersections between chunks being committed and deleted
             TVector<TChunkIdx> isect;
             std::set_intersection(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end(),
                     commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end(),
                     std::back_inserter(isect));
-            Y_ABORT_UNLESS(isect.empty());
+            Y_VERIFY_S(isect.empty(), HullLogCtx->VCtx->VDiskLogPrefix);
         }
 
         void VerifyRemovedHugeBlobs(TDiskPartVec& v) {
@@ -216,8 +223,8 @@ namespace NKikimr {
             auto it = std::adjacent_find(v.Vec.begin(), v.Vec.end(), pred);
             if (it != v.end()) {
                 auto second = std::next(it);
-                Y_ABORT("%s", VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "duplicate removed huge slots: x# %s y# %s",
-                    it->ToString().data(), second->ToString().data()).data());
+                Y_ABORT_S(HullLogCtx->VCtx->VDiskLogPrefix
+                    << "duplicate removed huge slots: x#" << it->ToString() << " y# " << second->ToString());
             }
         }
 
@@ -237,6 +244,13 @@ namespace NKikimr {
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
             CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
 
+            // notify PDisk about dirty chunks (the ones from which huge slots are being freed right now)
+            THashSet<TChunkIdx> chunkIds;
+            for (const TDiskPart& p : Metadata.RemovedHugeBlobs) {
+                chunkIds.insert(p.ChunkIdx);
+            }
+            CommitRecord.DirtyChunks = {chunkIds.begin(), chunkIds.end()};
+
             // validate its contents
             VerifyCommitRecord(CommitRecord);
             VerifyRemovedHugeBlobs(Metadata.RemovedHugeBlobs);
@@ -246,7 +260,7 @@ namespace NKikimr {
                 // for replicated SST -- generate LSN range; do it now, because in serialization we need actual data
                 // generate range of LSN's covering newly generated blobs
                 const ui64 lsnAdvance = Metadata.NumRecoveredBlobs;
-                Y_ABORT_UNLESS(lsnAdvance > 0);
+                Y_VERIFY_S(lsnAdvance > 0, HullLogCtx->VCtx->VDiskLogPrefix);
                 LsnSeg = Ctx->LsnMngr->AllocLsnForHull(lsnAdvance);
                 // store first/last LSN into level segment
                 Metadata.ReplSst->Info.FirstLsn = LsnSeg.First;
@@ -300,7 +314,7 @@ namespace NKikimr {
             , CallerInfo(callerInfo)
             , WId(wId)
         {
-            Y_ABORT_UNLESS(!WId == Metadata.RemovedHugeBlobs.Empty());
+            Y_VERIFY_S(!WId == Metadata.RemovedHugeBlobs.Empty(), HullLogCtx->VCtx->VDiskLogPrefix);
             // we create commit message in the constructor to avoid race condition
             GenerateCommitMessage();
         }

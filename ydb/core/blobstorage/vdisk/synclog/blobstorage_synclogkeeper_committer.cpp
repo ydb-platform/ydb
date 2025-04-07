@@ -146,7 +146,7 @@ namespace NKikimr {
 
             void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
-                Y_ABORT_UNLESS(ev->Get()->Results.size() == 1);
+                Y_VERIFY_S(ev->Get()->Results.size() == 1, SlCtx->VCtx->VDiskLogPrefix);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
                 TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
                 ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,

@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    auth.h
+    auth.cpp
     actor_activity_names.cpp
     appdata.h
     appdata.cpp
@@ -28,6 +30,8 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
+    local_user_token.cpp
+    local_user_token.h
     localdb.cpp
     localdb.h
     location.h
@@ -82,6 +86,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/actors/protos
     ydb/library/actors/wilson
+    ydb/library/aclib
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace
@@ -122,5 +127,6 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_auth
     ut_board_subscriber
 )

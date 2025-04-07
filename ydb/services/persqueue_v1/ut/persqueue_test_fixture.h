@@ -7,16 +7,16 @@
 #include <ydb/library/aclib/aclib.h>
 
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 #include <util/system/env.h>
 
 namespace NKikimr::NPersQueueTests {
 
-static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
 
     NYdb::NScheme::TSchemeClient schemeClient(*driver);
     auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
@@ -114,7 +114,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
             Cerr << "=== PersQueueClient" << Endl;
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release())).SetDatabase("/Root");
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 
@@ -176,11 +176,11 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
             return TenantMode;
         }
 
-        void ModifyTopicACL(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+        void ModifyTopicACL(const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
             ::ModifyTopicACL(YdbDriver.get(), topic, acl);
         }
 
-        void ModifyTopicACLAndWait(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+        void ModifyTopicACLAndWait(const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
             auto driver = YdbDriver.get();
             auto schemeClient = NYdb::NScheme::TSchemeClient(*driver);
             auto desc = schemeClient.DescribePath(topic).ExtractValueSync();

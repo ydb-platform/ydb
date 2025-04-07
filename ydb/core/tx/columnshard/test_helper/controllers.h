@@ -2,6 +2,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/address.h>
 
 namespace NKikimr::NOlap {
 
@@ -70,6 +71,24 @@ public:
     THashMap<TString, NColumnShard::NTiers::TTierConfig> GetOverrideTierConfigs() const override {
         return OverrideTiers;
     }
+};
+
+class TFailingBSController: public NKikimr::NYDBTest::NColumnShard::TController {
+    void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) override {
+        NBlobOperations::NBlobStorage::TBlobAddress group(result->Cookie, result->Get()->Channel);
+        if (!FailingGroup.has_value()) {
+            FailingGroup = group;
+        }
+        if (group == FailingGroup.value() && FailsCount < 15) {
+            Cerr << "Dropped EvCollectGarbageResult" << Endl;
+            result->Get()->Status = NKikimrProto::ERROR;
+            FailsCount++;
+        }
+    }
+
+private:
+    std::optional<NBlobOperations::NBlobStorage::TBlobAddress> FailingGroup = std::nullopt;
+    size_t FailsCount = 0;
 };
 
 }

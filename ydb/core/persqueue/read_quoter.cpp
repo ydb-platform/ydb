@@ -35,7 +35,6 @@ void TPartitionQuoterBase::StartQuoting(TRequestContext&& context) {
     auto& request = context.Request;
     auto* accountQuotaTracker = GetAccountQuotaTracker(request);
     if (accountQuotaTracker) {
-
         Send(accountQuotaTracker->Actor, new NAccountQuoterEvents::TEvRequest(request->Cookie, request->Request.Release()));
         PendingAccountQuotaRequests[request->Cookie] = std::move(context);
     } else {
@@ -115,6 +114,7 @@ void TPartitionQuoterBase::ProcessInflightQueue() {
 
 void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
     PQTabletConfig = ev->Get()->Config;
+    TopicConverter = ev->Get()->TopicConverter;
     bool totalQuotaUpdated = false;
     if (PartitionTotalQuotaTracker.Defined()) {
         totalQuotaUpdated = PartitionTotalQuotaTracker->UpdateConfigIfChanged(
@@ -150,6 +150,8 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
+    if (!TopicConverter)
+        return nullptr;
     auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
     return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
 }
@@ -283,6 +285,7 @@ ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& 
 THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
+    Y_ENSURE(TopicConverter);
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
         if(quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::Register(

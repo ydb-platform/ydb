@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TPortionWriteController: public NColumnShard::IWriteController,
-                               public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+                               public NColumnShard::TMonitoringObjectsCounter<TPortionWriteController, true> {
 public:
     class TInsertPortion {
     private:
@@ -72,11 +72,11 @@ class TSliceToMerge {
 private:
     YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow::RecordBatch>>, Batches);
     std::vector<ui64> SequentialWriteId;
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
 
 public:
-    TSliceToMerge(const ui64 pathId, const NEvWrite::EModificationType modificationType)
+    TSliceToMerge(const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType) {
     }
@@ -89,13 +89,14 @@ public:
         SequentialWriteId.emplace_back(data->GetWriteMeta().GetWriteId());
     }
 
-    [[nodiscard]] TConclusionStatus Finalize(const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
+    [[nodiscard]] TConclusionStatus Finalize(
+        const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
         if (Batches.size() == 0) {
             return TConclusionStatus::Success();
         }
         if (Batches.size() == 1) {
-            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front().GetContainer(),
-                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
+                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         } else {
             ui32 idx = 0;
@@ -121,10 +122,12 @@ public:
                             if (defaultColumn.IsFail()) {
                                 return defaultColumn;
                             }
-                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult()).Validate();
+                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult())
+                                .Validate();
                         } else {
                             AFL_VERIFY(*itAllIndexes == *itBatchIndexes);
-                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
+                            gContainer
+                                ->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
                                     i->column(itBatchIndexes - i.GetColumnIndexes().begin()))
                                 .Validate();
                             ++itBatchIndexes;
@@ -175,14 +178,14 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     for (auto&& unit : WriteUnits) {
         const auto& originalBatch = unit.GetBatch();
         if (originalBatch->num_rows() == 0) {
-            writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), nullptr, true, 0);
+            writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
         std::shared_ptr<arrow::RecordBatch> pkBatch =
             NArrow::TColumnOperator().Extract(originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
-        writeResults.emplace_back(unit.GetData()->GetWriteMeta(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
+        writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
         ui32 idx = 0;
         for (auto&& batch : batches) {
             if (!!batch) {
@@ -193,7 +196,10 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     }
     std::vector<TPortionWriteController::TInsertPortion> portionsToWrite;
     for (auto&& i : slicesToMerge) {
-        i.Finalize(Context, portionsToWrite).Validate();
+        auto conclusion = i.Finalize(Context, portionsToWrite);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
     }
     auto actions = WriteUnits.front().GetData()->GetBlobsAction();
     auto writeController =

@@ -15,6 +15,14 @@
 
 namespace NYT {
 
+////////////////////////////////////////////////////////////////////////////////
+
+extern const TString DefaultHosts;
+extern const TString DefaultRemoteTempTablesDirectory;
+extern const TString DefaultRemoteTempFilesDirectory;
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum EEncoding : int
 {
     E_IDENTITY  /* "identity" */,
@@ -80,6 +88,15 @@ struct TConfig
     TString ApiVersion;
     TString LogLevel;
     TString LogPath;
+    THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
+
+    /// @brief Represents the role involved in HTTP proxy configuration.
+    ///
+    /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.
+    TString HttpProxyRole;
+
+    /// @brief Represents the role involved in RPC proxy configuration.
+    TString RpcProxyRole;
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.

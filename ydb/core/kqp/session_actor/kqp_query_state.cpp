@@ -143,9 +143,6 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
         return false;
     }
     Orbit = std::move(ev->Orbit);
-    if (ev->ReplayMessage) {
-        ReplayMessage = *ev->ReplayMessage;
-    }
 
     return true;
 }
@@ -158,6 +155,10 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
 
     if (CompileResult->Status != Ydb::StatusIds::SUCCESS) {
         return false;
+    }
+
+    if (compileResult->ReplayMessageUserView && GetCollectDiagnostics()) {
+        ReplayMessage = *compileResult->ReplayMessageUserView;
     }
 
     YQL_ENSURE(CompileResult->PreparedQuery);
@@ -443,8 +444,7 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     TopicOperations = NTopic::TTopicOperations();
 
     for (auto& topic : operations.GetTopics()) {
-        auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
-            GetDatabase(), topic.path()));
+        auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), topic.path()));
 
         for (auto& partition : topic.partitions()) {
             if (partition.partition_offsets().empty()) {

@@ -206,7 +206,7 @@ TEST(TErrorTest, TraceContext)
 TEST(TErrorTest, NativeHostName)
 {
     auto hostName = "TestHost";
-    NNet::WriteLocalHostName(hostName);
+    NNet::SetLocalHostName(hostName);
 
     auto error = TError("NativeHostTest");
 
@@ -226,6 +226,20 @@ TEST(TErrorTest, NativeFiberId)
         EXPECT_EQ(GetFid(error), fiberId);
     }).AsyncVia(actionQueue->GetInvoker()).Run())
         .ThrowOnError();
+}
+
+TEST(TErrorTest, ErrorCodicils)
+{
+    EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
+    {
+        auto guard = TErrorCodicils::Guard("test_attribute", [] () -> std::string {
+            return "test_value";
+        });
+        EXPECT_EQ("test_value",
+            TError("ErrorCodicils").Attributes().Get<std::string>("test_attribute"));
+        EXPECT_FALSE(TError().Attributes().Contains("test_attribute"));
+    }
+    EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

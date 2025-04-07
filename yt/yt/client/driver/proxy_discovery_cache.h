@@ -14,7 +14,7 @@ namespace NYT::NDriver {
 
 struct TProxyDiscoveryRequest
 {
-    NApi::EProxyType Type;
+    NApi::EProxyKind Kind = NApi::EProxyKind::Rpc;
     std::string Role = NApi::DefaultRpcProxyRole;
     NApi::NRpcProxy::EAddressType AddressType = NApi::NRpcProxy::DefaultAddressType;
     std::string NetworkName = NApi::NRpcProxy::DefaultNetworkName;

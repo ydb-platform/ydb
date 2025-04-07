@@ -89,6 +89,7 @@ public:
 
     void RunTableRequest() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetDatabaseName(Database);
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *request->Record.MutableTransaction()->MutableModifyScheme();
         auto pathComponents = SplitPath(Database);
         for (size_t i = 0; i < PathComponents.size() - 1; ++i) {
@@ -207,7 +208,7 @@ public:
                 // In the process of creating a database, errors of the form may occur -
                 // database doesn't have storage pools at all to create tablet
                 // channels to storage pool binding by profile id
-                // Also, this status is returned when column types mismatch - 
+                // Also, this status is returned when column types mismatch -
                 // need to fallback to rebuild column diff
                 } else if (ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
                     FallBack(true /* long delay */);
@@ -380,11 +381,13 @@ private:
     }
 
     static TTableCreatorRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TTableCreatorRetryPolicy::GetFixedIntervalPolicy(
+        return TTableCreatorRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(300)
-                , 100
+                , TDuration::Seconds(1)
+                , std::numeric_limits<size_t>::max()
+                , TDuration::Seconds(10)
             )->CreateRetryState();
     }
 

@@ -45,6 +45,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
 
@@ -163,7 +164,9 @@ public:
             case TReplication::ETargetKind::Table:
                 return AllocateTxId();
             case TReplication::ETargetKind::IndexTable:
+            case TReplication::ETargetKind::Transfer:
                 // indexed table will be removed along with its indexes
+                // transfer works with an existing table and removing isn`t required
                 return Success();
             }
         }

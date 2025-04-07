@@ -96,6 +96,11 @@ setSCDKeys(int nColumnID, ds_key_t kIndex, char *szBKey, ds_key_t *pkBeginDateKe
     }
     
     nTableID = getTableFromColumn(nColumnID);
+    // Prevent array overflow. Fixing coverity issue OVERRUN
+    if (nTableID < 0 || nTableID >= MAX_TABLE) {
+        INTERNAL("Array arBKeys overflow");
+        exit(EXIT_FAILURE);
+    }
     nModulo = (int)(kIndex % 6);
     switch(nModulo)
     {

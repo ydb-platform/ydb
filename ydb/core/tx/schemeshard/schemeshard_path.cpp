@@ -578,6 +578,19 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsRtmrVolume()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a run time map-reduce volume"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, EStatus status) const {
     if (Failed) {
         return *this;
@@ -920,6 +933,26 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
 
     return Fail(status, TStringBuilder() << "path is not a backup collection"
         << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    // Warning: scheme objects using YQL backups should only be allowed to be exported
+    // when we can be certain that the database will never be downgraded to a version
+    // which does not support the YQL export process. Otherwise, they will be considered as tables,
+    // and we might cause the process to be aborted.
+    if (Path.Base()->IsTable()
+        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+    )  {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path type is not supported in exports"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {

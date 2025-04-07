@@ -7,10 +7,13 @@
 #include <yt/cpp/mapreduce/common/fwd.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
+
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <util/system/condvar.h>
 

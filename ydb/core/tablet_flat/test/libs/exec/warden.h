@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <util/system/type_name.h>
 
@@ -30,10 +31,11 @@ namespace NFake {
         TWarden(ui32 groups)
             : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TWarden::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
         {
-             Y_ABORT_UNLESS(groups < State.size(), "Too many groups requested");
+            Y_ENSURE(groups < State.size(), "Too many groups requested");
 
-             for (auto group: xrange(groups))
+            for (auto group: xrange(groups)) {
                 State[group] = EState::Allow;
+            }
         }
 
     private:
@@ -62,7 +64,7 @@ namespace NFake {
                 } else if (State[group] == EState::Allow) {
                     State[group] = EState::Fired;
 
-                    Y_ABORT_UNLESS(++Alive <= State.size(), "Out of group states");
+                    Y_ENSURE(++Alive <= State.size(), "Out of group states");
 
                     StartGroup(group);
 
@@ -84,7 +86,7 @@ namespace NFake {
 
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (std::exchange(Shutting, true)) {
-                    Y_ABORT("Got double BS storage shut order");
+                    Y_TABLET_ERROR("Got double BS storage shut order");
                 } else if (auto logl = Logger->Log(ELnLev::Info))
                     logl << "Shut order, stopping " << Alive << " BS groups";
 
@@ -106,9 +108,9 @@ namespace NFake {
                 const auto group = eh->Cookie;
 
                 if (group >= State.size() || State[group] < EState::Fired) {
-                    Y_ABORT("Got an TEvGone event form unknown BS group");
+                    Y_TABLET_ERROR("Got an TEvGone event form unknown BS group");
                 } else if (!Shutting || State[group] != EState::Shut) {
-                    Y_ABORT("Got unexpected TEvGone from BS group mock");
+                    Y_TABLET_ERROR("Got unexpected TEvGone from BS group mock");
                 }
 
                 --Alive, State[group] = EState::Gone;
@@ -118,11 +120,11 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvTerm>()) {
 
             } else {
-                Y_ABORT("Got unexpected message");
+                Y_TABLET_ERROR("Got unexpected message");
             }
         }
 
-        void StartGroup(ui32 group) noexcept
+        void StartGroup(ui32 group)
         {
             if (auto logl = Logger->Log(ELnLev::Info))
                 logl << "Starting storage for BS group " << group;
@@ -132,7 +134,7 @@ namespace NFake {
             Sys->RegisterLocalService(MakeBlobStorageProxyID(group), actor);
         }
 
-        void TryToDie() noexcept
+        void TryToDie()
         {
             if (Shutting && Alive == 0) {
                 if (auto logl = Logger->Log(ELnLev::Info))
@@ -152,7 +154,9 @@ namespace NFake {
                 || ev == TEvBlobStorage::EvDiscover
                 || ev == TEvBlobStorage::EvRange
                 || ev == TEvBlobStorage::EvCollectGarbage
-                || ev == TEvBlobStorage::EvStatus;
+                || ev == TEvBlobStorage::EvStatus
+                || ev == NFake::EvBlobStorageContainsRequest
+                || ev == NFake::EvBlobStorageDeferGC;
         }
 
     public:

@@ -17,8 +17,6 @@ struct TResultFormatSettings {
     TMaybe<ui64> RowsLimit;
 };
 
-TMaybe<TString> SqlToSExpr(const TString& query);
-
 TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);
 TString GetSerializedResultType(const TString& program);
 

@@ -13,7 +13,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
@@ -83,7 +83,7 @@ public:
         }
 
         auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto clientLostCb = [selfId, actorSystem]() {
             actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
         };

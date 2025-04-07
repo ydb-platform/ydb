@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <fmt/format.h>
 
@@ -75,7 +75,7 @@ void PrepareTables(TSession session) {
             (1, "Value1"),
             (2, "Value2"),
             (3, "Value3"),
-            (4, "Value4");    
+            (4, "Value4");
 
         REPLACE INTO `/Root/LaunchByProcessIdAndPinned` (idx_processId, idx_pinned, idx_launchNumber) VALUES
             ("eProcess", false, 4),
@@ -133,7 +133,7 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
                 UNIT_ASSERT_VALUES_EQUAL(tableStat.reads().rows(), rightTableReads);
             }
         }
-    } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+    } else {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
@@ -143,18 +143,6 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Right");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), rightTableReads);
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
-
-        UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/Right");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).reads().rows(), rightTableReads);
     }
 }
 
@@ -575,7 +563,7 @@ Y_UNIT_TEST_TWIN(LeftSemiJoinWithLeftFilter, StreamLookup) {
             FROM `/Root/Left` AS l
             LEFT SEMI JOIN `/Root/Right` AS r
                 ON l.Fk = r.Key
-            WHERE l.Value != 'Value1'  
+            WHERE l.Value != 'Value1'
             ORDER BY l.Value
         )",
         R"([
@@ -651,10 +639,8 @@ void TestKeyCastForAllJoinTypes(TSession session, const TString& leftTable, cons
 
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-        } else if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
         }
     }
 }
@@ -728,8 +714,7 @@ void TestKeyCast(const TKikimrSettings& settings, TSession session, const TStrin
     const TString query = GetQuery(joinType, leftTable, rightTable);
     auto result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
 
-    ui32 index = settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 
-        : (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup() ? 1 : 2);
+    ui32 index = settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin() ? 0 : 1;
 
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
@@ -764,7 +749,7 @@ Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
                 (-32769, "Value12");
             REPLACE INTO `/Root/{rightTable}` (Key, Value) VALUES
                 (1, "Value21"),
-                (32767, "Value22"); 
+                (32767, "Value22");
         )",
         "leftTable"_a = leftKeyColumnType,
         "rightTable"_a = rightTableName
@@ -777,7 +762,7 @@ Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
         [[1];["Value11"];[1];["Value21"]]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);        
+    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
@@ -816,7 +801,7 @@ Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
         [[4294967295u];["Value12"];#;#]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);        
+    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
@@ -857,7 +842,7 @@ Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
         [[18446744073709551615u];["Value11"];#;#]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);        
+    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
 }
 
 Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
@@ -896,7 +881,7 @@ Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
         [[1];["Value11"];[1u];["Value22"]]
     ])";
 
-    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);        
+    TestKeyCast(settings, session, "LEFT", leftKeyColumnType, rightTableName, answer, StreamLookupJoin ? 1 : 2);
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUtf8ToString, StreamLookupJoin, NotNull) {
@@ -971,7 +956,7 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
                 (1, "one", "value1"),
                 (2, NULL, "value2"),
                 (NULL, "three", "value3");
-        
+
             REPLACE INTO `/Root/Right` (Key1, Key2, Value) VALUES
                 (1, "one", "value1"),
                 (2, NULL, "value2"),
@@ -1216,7 +1201,7 @@ Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
                 (1, 10, "value1"),
                 (2, 20, "value2"),
                 (3, 30, "value3");
-        
+
             REPLACE INTO `/Root/Right` (Key1, Key2, Value) VALUES
                 (10, 100, "value1"),
                 (10, 101, "value1"),

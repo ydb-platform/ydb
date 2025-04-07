@@ -961,3 +961,18 @@ void Out<NYql::TOperationProgress::EState>(class IOutputStream &o, NYql::TOperat
         return;
     }
 }
+
+template<>
+void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &o, NYql::TOperationProgress::EOpBlockStatus x) {
+#define YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL(name, ...) \
+    case NYql::TOperationProgress::EOpBlockStatus::name: \
+        o << #name; \
+        return;
+
+    switch (x) {
+        YQL_OPERATION_BLOCK_STATUS_MAP(YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL)
+    default:
+        o << static_cast<int>(x);
+        return;
+    }
+}

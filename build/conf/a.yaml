@@ -7,7 +7,7 @@ arcanum:
         requirements:
           - system: arcanum
             type: merge_time_fits
-            alias: Merge is forbidden from 11:00 to 20:00 MSK (YMAKE-1194)
+            alias: build/conf commits invalidate autocheck dependency caches for ALL and thus are forbidden from 11:00 to 20:00 MSK
             data:
                 merge_intervals_utc:
                   # 20:00..11:00 MSK

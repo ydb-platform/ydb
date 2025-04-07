@@ -13,7 +13,7 @@
 #include <tuple>
 #include <vector>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NPQ::NClusterTracker {
 

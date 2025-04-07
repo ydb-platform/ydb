@@ -38,6 +38,12 @@ inline size_t GetLowestSetBit(TNodeSet nodeSet) {
     return nodeSet.size();
 }
 
+template <>
+inline size_t GetLowestSetBit<std::bitset<64>>(std::bitset<64> nodeSet) {
+    Y_ASSERT(nodeSet.any());
+    return std::countr_zero(nodeSet.to_ullong());
+}
+
 /* Iterates the indecies of the set bits in the TNodeSet. */
 template <typename TNodeSet>
 class TSetBitsIt {

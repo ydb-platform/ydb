@@ -1,6 +1,6 @@
 #include "query_actor.h"
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -233,8 +233,8 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.ColumnsCount(), 1, "Invalid number of columns");
 
                 while (result.TryNextRow()) {
-                    const TString& row = result.ColumnParser(0).GetUtf8();
-                    UNIT_ASSERT_VALUES_EQUAL_C(row, Value, "Ivalid row value");
+                    const std::string& row = result.ColumnParser(0).GetUtf8();
+                    UNIT_ASSERT_VALUES_EQUAL_C(TString{row}, Value, "Ivalid row value");
 
                     if (ReadedRows >= RowsToRead) {
                         CancelStreamQuery();

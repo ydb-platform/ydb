@@ -60,13 +60,13 @@ public:
     EResult Validate() {
         if (KeyValidator.GetInfo().Loaded)
             return EResult::Ok;
-        Y_ABORT_UNLESS(Engine);
+        Y_ENSURE(Engine);
         return Engine->Validate(KeyValidator.GetInfo());
     }
 
     EResult ReValidateKeys() {
-        Y_ABORT_UNLESS(KeyValidator.GetInfo().Loaded);
-        Y_ABORT_UNLESS(Engine);
+        Y_ENSURE(KeyValidator.GetInfo().Loaded);
+        Y_ENSURE(Engine);
         return Engine->ValidateKeys(KeyValidator.GetInfo());
     }
 

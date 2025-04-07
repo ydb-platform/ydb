@@ -66,7 +66,7 @@ static int test_fallocate_rlimit(struct io_uring *ring)
 		goto err;
 	}
 
-	if (cqe->res == -EINVAL) {
+	if (cqe->res == -EINVAL || cqe->res == -EOPNOTSUPP) {
 		fprintf(stdout, "Fallocate not supported, skipping\n");
 		no_fallocate = 1;
 		goto skip;

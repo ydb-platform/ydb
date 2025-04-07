@@ -102,8 +102,6 @@ abseil_cpp = CMakeNinjaNixProject(
     arcdir="contrib/restricted/abseil-cpp",
     nixattr="abseil-cpp",
     disable_includes=[
-        "emscripten.h",
-        "emscripten/*.h",
         # if defined(__myriad2__)
         "rtems.h",
         # if defined(__Fuchsia__)
@@ -162,6 +160,7 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_spinlock_wait",
             "absl_strerror",
             "absl_throw_delegate",
+            "absl_tracing_internal",
         ],
         "absl_debugging_internal": [
             "absl_decode_rust_punycode",
@@ -204,6 +203,7 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_log_internal_message",
             "absl_log_internal_nullguard",
             "absl_log_internal_proto",
+            "absl_log_internal_structured_proto",
             "absl_log_sink",
             "absl_vlog_config_internal",
         ],

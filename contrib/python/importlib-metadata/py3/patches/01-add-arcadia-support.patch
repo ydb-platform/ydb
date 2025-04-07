@@ -1,7 +1,7 @@
 --- contrib/python/importlib-metadata/py3/.dist-info/METADATA	(index)
 +++ contrib/python/importlib-metadata/py3/.dist-info/METADATA	(working tree)
 @@ -15,1 +15,0 @@ Classifier: License :: OSI Approved :: Apache Software License
--Requires-Dist: zipp >=3.20
+-Requires-Dist: zipp>=3.20
 --- contrib/python/importlib-metadata/py3/importlib_metadata/__init__.py	(index)
 +++ contrib/python/importlib-metadata/py3/importlib_metadata/__init__.py	(working tree)
 @@ -796,6 +795,59 @@ class PathDistribution(Distribution):

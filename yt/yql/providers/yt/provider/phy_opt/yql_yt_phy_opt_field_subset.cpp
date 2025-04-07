@@ -8,6 +8,20 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+    void InsertQLFilterColumns(const TYtWithUserJobsOpBase& op, TSet<TStringBuf>& memberSet) {
+        const auto qlFilterSetting = GetSetting(op.Settings().Ref(), EYtSettingType::QLFilter);
+        if (qlFilterSetting) {
+            const auto qlFilter = qlFilterSetting->Child(1);
+            YQL_ENSURE(qlFilter->IsCallable("YtQLFilter"));
+            const TStructExprType* qlFilterType = qlFilter->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (const auto& item : qlFilterType->GetItems()) {
+                memberSet.insert(item->GetName());
+            }
+        }
+    }
+} // empty namespace
+
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaFieldsSubset(TYtWithUserJobsOpBase op, size_t lambdaIdx, TExprContext& ctx, const TGetParents& getParents) const {
     auto lambda = TCoLambda(op.Ref().ChildPtr(lambdaIdx));
 
@@ -20,14 +34,27 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaFieldsSubset(TYtW
         // Argument is not used in lambda body
         return op;
     }
-    if (parents->second.size() == 1 && TCoExtractMembers::Match(*parents->second.begin())) {
-        auto members = TCoExtractMembers(*parents->second.begin()).Members();
+    const TExprNode* extract = nullptr;
+    for (auto p: parents->second) {
+        if (TCoExtractMembers::Match(p)) {
+            if (extract != nullptr) {
+                // Several ExtractMembers
+                return op;
+            }
+            extract = p;
+        } else if (!TCoDependsOn::Match(p)) {
+            return op;
+        }
+    }
+    if (extract) {
+        auto members = TCoExtractMembers(extract).Members();
         TSet<TStringBuf> memberSet;
         std::for_each(members.begin(), members.end(), [&memberSet](const auto& m) { memberSet.insert(m.Value()); });
         auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
         memberSet.insert(reduceBy.cbegin(), reduceBy.cend());
         auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
         memberSet.insert(sortBy.cbegin(), sortBy.cend());
+        InsertQLFilterColumns(op, memberSet);
 
         auto itemType = GetSeqItemType(lambda.Args().Arg(0).Ref().GetTypeAnn())->Cast<TStructExprType>();
         if (memberSet.size() < itemType->GetSize()) {
@@ -84,14 +111,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaVisitFieldsSubset
                 auto itemType = visitLambda->Head().Head().GetTypeAnn()->Cast<TStructExprType>();
                 auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
                 for (auto& col: reduceBy) {
-                    if (auto type = itemType->FindItemType(col)) {
-                        memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                    if (itemType->FindItem(col)) {
+                        memberSet.insert(col);
                     }
                 }
                 auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
                 for (auto& col: sortBy) {
-                    if (auto type = itemType->FindItemType(col)) {
-                        memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                    if (itemType->FindItem(col)) {
+                        memberSet.insert(col);
                     }
                 }
 

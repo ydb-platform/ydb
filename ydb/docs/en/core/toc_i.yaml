@@ -29,6 +29,7 @@ items:
     mode: link
     path: contributor/toc_p.yaml
 - name: Reference
+  href: reference/index.md
   include:
     mode: link
     path: reference/toc_p.yaml
@@ -37,6 +38,11 @@ items:
   include:
     mode: link
     path: recipes/toc_p.yaml
+- name: Troubleshooting
+  href: troubleshooting/index.md
+  include:
+    mode: link
+    path: troubleshooting/toc_p.yaml
 - name: Questions and answers
   href: faq/index.md
   include:

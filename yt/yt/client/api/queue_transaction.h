@@ -30,6 +30,10 @@ struct TPushQueueProducerOptions
      * what data should be written after fail of the user process.
      */
     NYTree::INodePtr UserMeta;
+
+    //! If this happens to be a push into a replicated table queue,
+    //! controls if at least one sync replica is required.
+    bool RequireSyncReplica = true;
 };
 
 struct TPushQueueProducerResult
@@ -107,4 +111,3 @@ struct IQueueTransaction
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

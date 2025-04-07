@@ -71,8 +71,8 @@ TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, con
     , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
     , Data(SizeToRead)
 {
-    Y_ABORT_UNLESS(actorSystem == PCtx->ActorSystem);
-    Y_ABORT_UNLESS(replyTo == PCtx->PDiskActor);
+    Y_VERIFY_S(actorSystem == PCtx->ActorSystem, PCtx->PDiskLogPrefix);
+    Y_VERIFY_S(replyTo == PCtx->PDiskActor, PCtx->PDiskLogPrefix);
     Cypher.SetKey(PDisk->Format.SysLogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
@@ -95,7 +95,7 @@ void TSysLogReader::Start() {
     finalCompletion->CostNs = PDisk->DriveModel.TimeForSizeNs(SizeToRead, 0, TDriveModel::EOperationType::OP_TYPE_READ);
     const ui32 bufferSize = PDisk->BufferPool->GetBufferSize();
     const ui32 partsToRead = (SizeToRead + bufferSize - 1) / bufferSize;
-    Y_ABORT_UNLESS(partsToRead > 0);
+    Y_VERIFY_S(partsToRead > 0, PCtx->PDiskLogPrefix);
     TVector<TCompletionAction *> completionParts;
     TVector<TBuffer *> bufferParts;
     completionParts.reserve(partsToRead);
@@ -416,8 +416,8 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
 
 void TSysLogReader::DumpDebugInfo(TStringStream &str, bool isSingleLine) {
     const char *nl = (isSingleLine ? "; " : "\n(B) ");
-    str << "PDiskId# " << PCtx->PDiskId;
-    str << " SysLog";
+    str << PCtx->PDiskLogPrefix;
+    str << "SysLog";
     str << " BeginSectorIdx# " << BeginSectorIdx;
     str << " EndSectorIdx# " << EndSectorIdx;
     str << " LoopOffset# " << LoopOffset;

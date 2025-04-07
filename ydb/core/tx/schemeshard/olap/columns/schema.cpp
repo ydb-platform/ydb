@@ -56,7 +56,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
-        if (!newColumn.GetSerializer().has_value() && !columnFamilies.GetColumnFamilies().empty() &&
+        if (!newColumn.GetSerializer().HasObject() && !columnFamilies.GetColumnFamilies().empty() &&
             !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
             return false;
         }
@@ -165,7 +165,7 @@ void TOlapColumnsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
     ui32 lastColumnId = 0;

@@ -225,6 +225,12 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->ColumnOrder.push_back(column);
     }
 
+    if (entry.ColumnTableInfo) {
+        for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
+            tableMeta->PartitionedByColumns.push_back(column);
+        }
+    }
+
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
     return result;
@@ -401,15 +407,14 @@ TString GetDebugString(const std::pair<NKikimr::TIndexId, TString>& id) {
     return TStringBuilder() << " Path: " << id.second  << " TableId: " << id.first;
 }
 
-void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr& implTable, TTableMetadataResult& value) {
+void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr* implTable, TTableMetadataResult& value) {
+    YQL_ENSURE(implTable);
     YQL_ENSURE(value.Success());
-    if (!implTable) {
-        implTable = std::move(value.Metadata);
-        return;
+    while (*implTable) {
+        YQL_ENSURE((*implTable)->Name < value.Metadata->Name);
+        implTable = &(*implTable)->Next;
     }
-    YQL_ENSURE(!implTable->Next);
-    YQL_ENSURE(implTable->Name < value.Metadata->Name);
-    implTable->Next = std::move(value.Metadata);
+    *implTable = std::move(value.Metadata);
 }
 
 void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& error) {
@@ -568,6 +573,20 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
     }
 }
 
+NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
+    const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
+) {
+    TNavigate::TEntry entry;
+
+    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
+    entry.Kind = TNavigate::KindTable;
+    entry.Columns = std::move(schema->Columns);
+    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
+
+    auto result = GetTableMetadataResult(entry, cluster, table);
+
+    return MakeFuture(result);
+}
 
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadata(const TString& cluster, const TString& table,
     const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
@@ -577,7 +596,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     auto ptr = weak_from_base();
     try {
-        auto tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
+        NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
+
+        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
+        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(sysViewPath, cluster, table);
+        } else {
+            tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
+        }
         return tableMetaFuture.Apply([ptr, database, userToken](const TFuture<TTableMetadataResult>& future) mutable {
             try {
                 auto result = future.GetValue();
@@ -630,7 +656,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index.Type, index.Name);
+        const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index);
         for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
                 LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
@@ -664,13 +690,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
             result.Metadata->ImplTables.resize(indexesCount);
             auto it = children.begin();
             for (size_t i = 0; i < indexesCount; i++) {
-                for (const auto& _ : NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(
-                        result.Metadata->Indexes[i].Type))) {
+                for (const auto& _ : result.Metadata->Indexes[i].GetImplTables()) {
                     YQL_ENSURE(it != children.end());
                     auto value = it++->ExtractValue();
                     result.AddIssues(value.Issues());
                     if (loadOk && (loadOk = value.Success())) {
-                        UpdateMetadataIfSuccess(result.Metadata->ImplTables[i], value);
+                        UpdateMetadataIfSuccess(&result.Metadata->ImplTables[i], value);
                     }
                 }
             }
@@ -865,7 +890,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
-                                externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                try {
+                                    externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                } catch (const std::exception& exception) {
+                                    TTableMetadataResult wrapper;
+                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
+                                    promise.SetValue(wrapper);
+                                    return;
+                                }
                             }
 
                             if (externalSource && externalSource->CanLoadDynamicMetadata()) {
@@ -936,7 +968,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             catch (yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-        });
+        }
+    );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
     // This method will only run if cost based optimization is enabled

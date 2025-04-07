@@ -228,6 +228,10 @@ private:
             DUMP_PREFIXED(prefix, asyncStats, Rows);
             DUMP_PREFIXED(prefix, asyncStats, Chunks);
             DUMP_PREFIXED(prefix, asyncStats, Splits);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredBytes);
+            DUMP_PREFIXED(prefix, asyncStats, FilteredRows);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedBytes);
+            DUMP_PREFIXED(prefix, asyncStats, QueuedRows);
             DUMP_PREFIXED(prefix, asyncStats, FirstMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, PauseMessageTs, .ToString());
             DUMP_PREFIXED(prefix, asyncStats, ResumeMessageTs, .ToString());
@@ -480,6 +484,7 @@ private:
         if (ev->Get()->Stats) {
             CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
+            TaskRunnerActorElapsedTicks = TaskRunnerStats.GetActorElapsedTicks();
         }
         ComputeActorState = NDqProto::TEvComputeActorState();
         ComputeActorState.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
@@ -691,7 +696,20 @@ private:
     }
 
     void DoExecuteImpl() override {
-        PollAsyncInput();
+        LastPollResult = PollAsyncInput();
+
+        if (LastPollResult && *LastPollResult != EResumeSource::CAPollAsyncNoSpace) {
+            // When (some) source buffers was not full, and (some) was successfully polled,
+            // initiate next DoExecute run immediately;
+            // If only reason for continuing was lack on space on all source
+            // buffers, only continue execution after run completed,
+            // (some) sources was consumed and compute waits for input
+            // (Otherwise we enter busy-poll, and there are especially bad scenario
+            // when compute is delayed by rate-limiter, we enter busy-poll here,
+            // this spends cpu, ratelimiter delays compute execution even more))
+            ContinueExecute(*std::exchange(LastPollResult, {}));
+        }
+
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);
@@ -794,10 +812,17 @@ private:
         }
 
         if (UseCpuQuota()) {
-            CpuTimeSpent += ev->Get()->ComputeTime;
+            CpuTimeSpent += TakeCpuTimeDelta();
             AskCpuQuota();
             ProcessContinueRun();
         }
+    }
+
+    TDuration TakeCpuTimeDelta() {
+        auto newTicks = ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks;
+        auto result = newTicks - LastQuotaElapsedTicks;
+        LastQuotaElapsedTicks = newTicks;
+        return TDuration::MicroSeconds(NHPTimer::GetSeconds(result) * 1'000'000ull);
     }
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState& state) const override {
@@ -835,6 +860,15 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
+        // This condition was already checked in ProcessOutputsImpl, but since then
+        // RetryState could've been changed. Recheck it once again:
+        if (!Channels->ShouldSkipData(outputChannel.ChannelId) && !Channels->CanSendChannelData(outputChannel.ChannelId)) {
+            // Once RetryState will be reset, channel will trigger either ResumeExecution or PeerFinished; either way execution will re-reach this function
+            CA_LOG_D("OnOutputChannelData return because Channel can't send channel data, channel: " << outputChannel.ChannelId);
+            outputChannel.PopStarted = false;
+            ProcessOutputsState.Inflight--;
+            return;
+        }
         if (outputChannel.AsyncData) {
             CA_LOG_E("Data was not sent to the output channel in the previous step. Channel: " << outputChannel.ChannelId
             << " Finished: " << outputChannel.Finished
@@ -1173,6 +1207,9 @@ private:
             CA_LOG_T("AsyncCheckRunStatus: TakeInputChannelDataRequests: " << TakeInputChannelDataRequests.size());
             return;
         }
+        if (ProcessOutputsState.LastRunStatus == ERunStatus::PendingInput && LastPollResult) {
+            ContinueExecute(*LastPollResult);
+        }
         TBase::CheckRunStatus();
     }
 
@@ -1213,6 +1250,7 @@ private:
     // Cpu quota
     TActorId QuoterServiceActorId;
     TInstant CpuTimeQuotaAsked;
+    ui64 LastQuotaElapsedTicks = 0;
     std::unique_ptr<NTaskRunnerActor::TEvContinueRun> ContinueRunEvent;
     TInstant ContinueRunStartWaitTime;
     bool ContinueRunInflight = false;
@@ -1220,6 +1258,7 @@ private:
     NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
     NDqProto::TEvComputeActorState ComputeActorState;
+    TMaybe<EResumeSource> LastPollResult;
 };
 
 

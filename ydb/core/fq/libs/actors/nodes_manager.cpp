@@ -8,8 +8,8 @@
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/library/actors/core/log.h>
@@ -147,7 +147,7 @@ private:
             if (!Peers.empty()) {
                 auto firstPeer = NextPeer;
                 while (true) {
-                    Y_ABORT_UNLESS(NextPeer < Peers.size());
+                    Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
                     auto& nextNode = Peers[NextPeer];
 
                     if (++NextPeer >= Peers.size()) {
@@ -217,7 +217,7 @@ private:
 
         TVector<TPeer> nodes;
         for (ui32 i = 0; i < count; ++i) {
-            Y_ABORT_UNLESS(NextPeer < Peers.size());
+            Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
             nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
         }
         if (++NextPeer >= Peers.size()) {

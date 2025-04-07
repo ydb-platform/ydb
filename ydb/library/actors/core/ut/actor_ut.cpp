@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(WithOnlyOneSharedExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, true);
 
@@ -134,7 +133,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithOnlyOneSharedAndOneCommonExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 2, true, true);
 
@@ -176,7 +174,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithSharedExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, false);
          TActorBenchmark::AddBasicPool(setup, 2, 1, true);
@@ -497,9 +494,9 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
 
         ui64 ts = GetCycleCountFast();
-        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts));
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.Get());
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
             harmonizer->AddPool(setup->Executors[i].Get());
         }
         setup->Scheduler = new TBasicSchedulerThread;
@@ -629,9 +626,9 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
 
         ui64 ts = GetCycleCountFast();
-        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts));
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.Get());
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
             harmonizer->AddPool(setup->Executors[i].Get());
         }
         setup->Scheduler = new TBasicSchedulerThread;

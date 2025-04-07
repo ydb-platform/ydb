@@ -67,10 +67,15 @@ private:
 
         switch (record.GetStatus()) {
             case NKikimrScheme::StatusSuccess:
-                if (desc.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
-                    auto issue = NYql::TIssue("Is not a replication");
-                    Request_->RaiseIssue(issue);
-                    return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                switch (desc.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeReplication:
+                    case NKikimrSchemeOp::EPathTypeTransfer:
+                        break;
+                    default: {
+                        auto issue = NYql::TIssue("Is not a replication");
+                        Request_->RaiseIssue(issue);
+                        return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                    }
                 }
 
                 ConvertDirectoryEntry(desc.GetSelf(), Result.mutable_self(), true);
@@ -227,6 +232,9 @@ private:
         case NKikimrReplication::TReplicationState::kDone:
             to.mutable_done();
             break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            to.mutable_paused();
+            break;
         default:
             break;
         }
@@ -239,6 +247,13 @@ private:
 
 void DoDescribeReplication(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDescribeReplicationRPC(p.release()));
+}
+
+using TEvDescribeReplicationRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeReplicationRequest, Ydb::Replication::DescribeReplicationResponse>;
+
+template<>
+IActor* TEvDescribeReplicationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeReplicationRPC(msg);
 }
 
 }

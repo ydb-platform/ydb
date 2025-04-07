@@ -442,18 +442,6 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-TArrayRef<TType *const> GetWideComponents(TType* type) {
-    if (type->IsFlow()) {
-        const auto outputFlowType = AS_TYPE(TFlowType, type);
-        return GetWideComponents(outputFlowType);
-    }
-    if (type->IsStream()) {
-        const auto outputStreamType = AS_TYPE(TStreamType, type);
-        return GetWideComponents(outputStreamType);
-    }
-    MKQL_ENSURE(false, "Expect either flow or stream");
-}
-
 size_t CalcMaxBlockLenForOutput(TType* out) {
     const auto wideComponents = GetWideComponents(out);
     MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");
@@ -754,8 +742,8 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         return DoGenGetValuesImpl(ctx, statePtr, block, Flow_, Width_, AggsParams_.size(),
-            GetMethodPtr(&TState::Get), GetMethodPtr(&TBlockCombineAllWrapperFromFlow::MakeState),
-            GetMethodPtr(&TState::ProcessInput), GetMethodPtr(&TState::MakeOutput));
+            GetMethodPtr<&TState::Get>(), GetMethodPtr<&TBlockCombineAllWrapperFromFlow::MakeState>(),
+            GetMethodPtr<&TState::ProcessInput>(), GetMethodPtr<&TState::MakeOutput>());
     }
 #endif
 private:
@@ -1731,9 +1719,9 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         return DoGenGetValuesImpl(ctx, statePtr, block, Flow_, Width_, OutputWidth_,
-            GetMethodPtr(&TState::Get), GetMethodPtr(&THashedWrapperBaseFromFlow::MakeState),
-            GetMethodPtr(&TState::ProcessInput), GetMethodPtr(&TState::Finish),
-            GetMethodPtr(&TState::FillOutput), GetMethodPtr(&TState::Slice));
+            GetMethodPtr<&TState::Get>(), GetMethodPtr<&THashedWrapperBaseFromFlow::MakeState>(),
+            GetMethodPtr<&TState::ProcessInput>(), GetMethodPtr<&TState::Finish>(),
+            GetMethodPtr<&TState::FillOutput>(), GetMethodPtr<&TState::Slice>());
     }
 #endif
 private:

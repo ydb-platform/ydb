@@ -19,6 +19,7 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/services/metadata/service.h>
 
 
@@ -165,7 +166,7 @@ private:
 
     void SetupBytesWrittenByUserAgentCounter(const TString& topicPath);
     void SetupCounters();
-    void SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
+    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 

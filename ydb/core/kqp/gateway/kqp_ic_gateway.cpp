@@ -26,7 +26,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
@@ -722,9 +722,6 @@ namespace {
 }
 
 class TKikimrIcGateway : public IKqpGateway {
-private:
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-
 public:
     TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
@@ -771,21 +768,6 @@ public:
 
     void SetClientAddress(const TString& clientAddress) override {
         ClientAddress = clientAddress;
-    }
-
-    bool GetDomainLoginOnly() override {
-        TAppData* appData = AppData(ActorSystem);
-        return appData && appData->AuthConfig.GetDomainLoginOnly();
-    }
-
-    TMaybe<TString> GetDomainName() override {
-        TAppData* appData = AppData(ActorSystem);
-        if (GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
-                return appData->DomainsInfo->GetDomain()->Name;
-            }
-        }
-        return {};
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
@@ -912,6 +894,48 @@ public:
             });
 
         return tablePromise.GetFuture();
+    }
+
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            auto alterDatabasePromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+
+            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+            NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+            modifyScheme->SetWorkingDir(dirname);
+            modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
+            modifyScheme->MutableModifyACL()->SetName(basename);
+
+            auto condition = modifyScheme->AddApplyIf();
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
+                    alterDatabasePromise.SetValue(future.GetValue());
+                }
+            );
+
+            return alterDatabasePromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,
@@ -1091,6 +1115,18 @@ public:
     }
 
     TFuture<TGenericResult> DropReplication(const TString&, const NYql::TDropReplicationSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> CreateTransfer(const TString&, const NYql::TCreateTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterTransfer(const TString&, const NYql::TAlterTransferSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropTransfer(const TString&, const NYql::TDropTransferSettings&) override {
         return NotImplemented<TGenericResult>();
     }
 
@@ -1349,8 +1385,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1369,7 +1405,10 @@ public:
             createUser.SetUser(settings.UserName);
             if (settings.Password) {
                 createUser.SetPassword(settings.Password);
+                createUser.SetIsHashedPassword(settings.IsHashedPassword);
             }
+
+            createUser.SetCanLogin(settings.CanLogin);
 
             SendSchemeRequest(ev.Release()).Apply(
                 [createUserPromise](const TFuture<TGenericResult>& future) mutable {
@@ -1392,8 +1431,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1410,14 +1449,20 @@ public:
             auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
 
             alterUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                alterUser.SetPassword(settings.Password);
+
+            if (settings.Password.has_value()) {
+                alterUser.SetPassword(settings.Password.value());
+                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
+            }
+
+            if (settings.CanLogin.has_value()) {
+                alterUser.SetCanLogin(settings.CanLogin.value());
             }
 
             SendSchemeRequest(ev.Release()).Apply(
                 [alterUserPromise](const TFuture<TGenericResult>& future) mutable {
-                alterUserPromise.SetValue(future.GetValue());
-            }
+                    alterUserPromise.SetValue(future.GetValue());
+                }
             );
 
             return alterUserPromise.GetFuture();
@@ -1435,8 +1480,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1511,8 +1556,8 @@ public:
                 if (!Owner.CheckCluster(cluster)) {
                     return InvalidCluster<TGenericResult>(cluster);
                 }
-                TString database;
-                if (!Owner.GetDatabaseForLoginOperation(database)) {
+                const auto appData = AppData(Owner.ActorSystem);
+                if (!(appData && appData->DomainsInfo && appData->DomainsInfo->Domain)) {
                     return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
                 }
                 NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(settings.GetTypeId()));
@@ -1630,8 +1675,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1670,8 +1715,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1762,8 +1807,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -1803,8 +1848,8 @@ public:
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
-            TString database;
-            if (!GetDatabaseForLoginOperation(database)) {
+            TString database = NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(ActorSystem), Database);
+            if (database.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
             }
 
@@ -2308,10 +2353,6 @@ private:
 
     bool CheckCluster(const TString& cluster) {
         return cluster == Cluster;
-    }
-
-    bool GetDatabaseForLoginOperation(TString& database) {
-        return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,

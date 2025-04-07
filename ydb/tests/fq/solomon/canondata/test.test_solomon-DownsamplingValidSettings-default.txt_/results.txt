@@ -1,0 +1,262 @@
+columns {
+  name: "labels"
+  type {
+    dict_type {
+      key {
+        type_id: STRING
+      }
+      payload {
+        type_id: STRING
+      }
+    }
+  }
+}
+columns {
+  name: "ts"
+  type {
+    type_id: DATETIME
+  }
+}
+columns {
+  name: "type"
+  type {
+    type_id: STRING
+  }
+}
+columns {
+  name: "value"
+  type {
+    type_id: DOUBLE
+  }
+}
+rows {
+  items {
+    pairs {
+      key {
+        bytes_value: "downsampling.aggregation"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.fill"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.gridMillis"
+      }
+      payload {
+        bytes_value: "int 15000"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "program"
+      }
+      payload {
+        bytes_value: "program length 2"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "project"
+      }
+      payload {
+        bytes_value: "my_project"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
+      }
+    }
+  }
+  items {
+    uint32_value: 0
+  }
+  items {
+    bytes_value: "RATE"
+  }
+  items {
+    double_value: 100
+  }
+}
+rows {
+  items {
+    pairs {
+      key {
+        bytes_value: "downsampling.aggregation"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.fill"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.gridMillis"
+      }
+      payload {
+        bytes_value: "int 15000"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "program"
+      }
+      payload {
+        bytes_value: "program length 2"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "project"
+      }
+      payload {
+        bytes_value: "my_project"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
+      }
+    }
+  }
+  items {
+    uint32_value: 0
+  }
+  items {
+    bytes_value: "RATE"
+  }
+  items {
+    double_value: 200
+  }
+}
+rows {
+  items {
+    pairs {
+      key {
+        bytes_value: "downsampling.aggregation"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.fill"
+      }
+      payload {
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.gridMillis"
+      }
+      payload {
+        bytes_value: "int 15000"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "program"
+      }
+      payload {
+        bytes_value: "program length 2"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "project"
+      }
+      payload {
+        bytes_value: "my_project"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
+      }
+    }
+  }
+  items {
+    uint32_value: 0
+  }
+  items {
+    bytes_value: "RATE"
+  }
+  items {
+    double_value: 300
+  }
+}

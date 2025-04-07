@@ -80,7 +80,7 @@ namespace NKikimr::NAutoConfigInitializer {
 
     TMap<TString, ui32> GetServicePools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig);
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config);
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode);
 
     void ApplyAutoConfig(NKikimrConfig::TGRpcConfig *config, const NKikimrConfig::TActorSystemConfig &asConfig);
 

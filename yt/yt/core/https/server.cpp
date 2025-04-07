@@ -112,7 +112,8 @@ IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
     const IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker)
+    const IInvokerPtr& controlInvoker,
+    const IMemoryUsageTrackerPtr& memoryTracker)
 {
     auto sslContext =  New<TSslContext>();
     ApplySslConfig(sslContext, config->Credentials);
@@ -164,7 +165,8 @@ IServerPtr CreateServer(
         configCopy,
         tlsListener,
         poller,
-        acceptor);
+        acceptor,
+        memoryTracker);
 
     return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
 }

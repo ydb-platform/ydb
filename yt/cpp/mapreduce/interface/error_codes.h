@@ -39,6 +39,8 @@ namespace NRpc {
     constexpr int InvalidCsrfToken              = 110;
     constexpr int InvalidCredentials            = 111;
     constexpr int StreamingNotSupported         = 112;
+    constexpr int TransientFailure              = 116;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -3,7 +3,7 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <ydb/library/grpc/common/constants.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -103,6 +103,8 @@ struct TServerOptions {
     //! Default compression level. Used when no compression options provided by client.
     //  Mapping to particular compression algorithm depends on client.
     DECLARE_FIELD(DefaultCompressionLevel, grpc_compression_level, GRPC_COMPRESS_LEVEL_NONE);
+
+    DECLARE_FIELD(DefaultCompressionAlgorithm, grpc_compression_algorithm, GRPC_COMPRESS_NONE);
 
     //! Custom configurator for ServerBuilder.
     DECLARE_FIELD(ServerBuilderMutator, std::function<void(grpc::ServerBuilder&)>, [](grpc::ServerBuilder&){});

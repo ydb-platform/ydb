@@ -462,6 +462,9 @@ class RetryFilter::CallData {
     grpc_transport_stream_op_batch_payload batch_payload_;
     // For send_initial_metadata.
     grpc_metadata_batch send_initial_metadata_{calld_->arena_};
+
+    SliceBuffer send_message_;
+
     // For send_trailing_metadata.
     grpc_metadata_batch send_trailing_metadata_{calld_->arena_};
     // For intercepting recv_initial_metadata.
@@ -1262,28 +1265,30 @@ void RetryFilter::CallData::CallAttempt::OnPerAttemptRecvTimerLocked(
             call_attempt->per_attempt_recv_timer_handle_.has_value());
   }
   CallCombinerClosureList closures;
-  call_attempt->per_attempt_recv_timer_handle_.reset();
-  // Cancel this attempt.
-  // TODO(roth): When implementing hedging, we should not cancel the
-  // current attempt.
-  call_attempt->MaybeAddBatchForCancelOp(
-      grpc_error_set_int(
-          GRPC_ERROR_CREATE("retry perAttemptRecvTimeout exceeded"),
-          StatusIntProperty::kRpcStatus, GRPC_STATUS_CANCELLED),
-      &closures);
-  // Check whether we should retry.
-  if (call_attempt->ShouldRetry(/*status=*/y_absl::nullopt,
-                                /*server_pushback_ms=*/y_absl::nullopt)) {
-    // Mark current attempt as abandoned.
-    call_attempt->Abandon();
-    // We are retrying.  Start backoff timer.
-    calld->StartRetryTimer(/*server_pushback=*/y_absl::nullopt);
-  } else {
-    // Not retrying, so commit the call.
-    calld->RetryCommit(call_attempt);
-    // If retry state is no longer needed, switch to fast path for
-    // subsequent batches.
-    call_attempt->MaybeSwitchToFastPath();
+  if (call_attempt->per_attempt_recv_timer_handle_.has_value()) {
+    call_attempt->per_attempt_recv_timer_handle_.reset();
+    // Cancel this attempt.
+    // TODO(roth): When implementing hedging, we should not cancel the
+    // current attempt.
+    call_attempt->MaybeAddBatchForCancelOp(
+        grpc_error_set_int(
+            GRPC_ERROR_CREATE("retry perAttemptRecvTimeout exceeded"),
+            StatusIntProperty::kRpcStatus, GRPC_STATUS_CANCELLED),
+        &closures);
+    // Check whether we should retry.
+    if (call_attempt->ShouldRetry(/*status=*/y_absl::nullopt,
+                                  /*server_pushback_ms=*/y_absl::nullopt)) {
+        // Mark current attempt as abandoned.
+        call_attempt->Abandon();
+        // We are retrying.  Start backoff timer.
+        calld->StartRetryTimer(/*server_pushback=*/y_absl::nullopt);
+    } else {
+        // Not retrying, so commit the call.
+        calld->RetryCommit(call_attempt);
+        // If retry state is no longer needed, switch to fast path for
+        // subsequent batches.
+        call_attempt->MaybeSwitchToFastPath();
+    }
   }
   closures.RunClosures(calld->call_combiner_);
   call_attempt->Unref(DEBUG_LOCATION, "OnPerAttemptRecvTimer");
@@ -1911,6 +1916,7 @@ void RetryFilter::CallData::CallAttempt::BatchData::OnComplete(
   }
   if (batch_data->batch_.send_message) {
     ++call_attempt->completed_send_message_count_;
+    call_attempt->send_message_.Clear();
   }
   if (batch_data->batch_.send_trailing_metadata) {
     call_attempt->completed_send_trailing_metadata_ = true;
@@ -1999,7 +2005,8 @@ void RetryFilter::CallData::CallAttempt::BatchData::
       calld->send_messages_[call_attempt_->started_send_message_count_];
   ++call_attempt_->started_send_message_count_;
   batch_.send_message = true;
-  batch_.payload->send_message.send_message = cache.slices;
+  call_attempt_->send_message_ = cache.slices->Copy();
+  batch_.payload->send_message.send_message = &call_attempt_->send_message_;
   batch_.payload->send_message.flags = cache.flags;
 }
 

@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/tests/tpch/lib/tpch_runner.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.cpp>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -218,7 +218,7 @@ void TCommandRunBenchmark::Config(TConfig& config) {
     }
     config.Opts->AddLongOption('i', "include", "Run only specified queries (ex.: 1,2,3,5-10,20)")
         .Optional()
-        .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
+        .Handler([this, fillTestCases](const TString& line) {
             TestCases.clear();
             fillTestCases(line, [this](ui32 q) {
                 TestCases.insert(q);
@@ -226,7 +226,7 @@ void TCommandRunBenchmark::Config(TConfig& config) {
         });
     config.Opts->AddLongOption('e', "exclude", "Run all queries except given onces (ex.: 1,2,3,5-10,20)")
         .Optional()
-        .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
+        .Handler([this, fillTestCases](const TString& line) {
             fillTestCases(line, [this](ui32 q) {
                 TestCases.erase(q);
             });

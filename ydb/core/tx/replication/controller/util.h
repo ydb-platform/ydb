@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
@@ -25,6 +25,7 @@ inline auto DefaultRetryableErrors() {
         EStatus::ABORTED,
         EStatus::UNAVAILABLE,
         EStatus::OVERLOADED,
+        EStatus::GENERIC_ERROR,
         EStatus::TIMEOUT,
         EStatus::BAD_SESSION,
         EStatus::SESSION_EXPIRED,

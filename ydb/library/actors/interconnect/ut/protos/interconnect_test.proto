@@ -2,7 +2,11 @@ package NInterconnectTest;
 
 message TEvTest {
     optional uint64 SequenceNumber = 1;
-    optional bytes Payload = 2;
+    optional uint64 DataCrc = 2;
+    oneof Data {
+        bytes Payload = 3;
+        uint32 PayloadId = 4;
+    }
 }
 
 message TEvTestChan {

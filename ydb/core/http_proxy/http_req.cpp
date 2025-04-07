@@ -37,8 +37,8 @@
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/impl/common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>
@@ -65,6 +65,8 @@
 #include <ydb/core/ymq/actor/serviceid.h>
 
 #include <ydb/library/http_proxy/error/error.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/services/ymq/rpc_params.h>
 #include <ydb/services/ymq/utils.h>
@@ -306,7 +308,7 @@ namespace NKikimr::NHttpProxy {
                         NYql::IssuesFromMessage(response.operation().issues(), issues);
                         result->Status = MakeHolder<NYdb::TStatus>(
                             NYdb::EStatus(response.operation().status()),
-                            std::move(issues)
+                            NYdb::NAdapters::ToSdkIssues(std::move(issues))
                         );
                         Ydb::Ymq::V1::QueueTags queueTags;
                         response.operation().metadata().UnpackTo(&queueTags);
@@ -428,7 +430,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             get<1>(errorAndCode),
                             get<0>(errorAndCode),
-                            issues.begin()->GetMessage()
+                            TString{issues.begin()->GetMessage()}
                         );
                     }
                 }
@@ -486,7 +488,7 @@ namespace NKikimr::NHttpProxy {
                         }
                         CloudId = cloudIdAndResourceId.first;
                         HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
-                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
+                        HttpContext.ResponseData.YmqIsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -690,7 +692,7 @@ namespace NKikimr::NHttpProxy {
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(response.operation().issues(), issues);
                     result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
-                                                               std::move(issues));
+                                                               NYdb::NAdapters::ToSdkIssues(std::move(issues)));
                     actorSystem->Send(actorId, result.Release());
                 });
                 return;
@@ -1456,6 +1458,7 @@ namespace NKikimr::NHttpProxy {
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.SyncVersion = false;
             schemeCacheRequest->ResultSet.emplace_back(entry);
+            schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
             ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
         }
 
@@ -1490,7 +1493,7 @@ namespace NKikimr::NHttpProxy {
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
 
             if (ev->Get()->Error) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
+                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 

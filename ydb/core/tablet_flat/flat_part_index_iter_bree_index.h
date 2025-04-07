@@ -35,15 +35,15 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
         {
         }
 
-        bool IsLastPos() const noexcept {
-            Y_ABORT_UNLESS(Node);
-            Y_ABORT_UNLESS(Pos);
+        bool IsLastPos() const {
+            Y_ENSURE(Node);
+            Y_ENSURE(Pos);
             return *Pos == Node->GetKeysCount();
         }
 
-        bool IsFirstPos() const noexcept {
-            Y_ABORT_UNLESS(Node);
-            Y_ABORT_UNLESS(Pos);
+        bool IsFirstPos() const {
+            Y_ENSURE(Node);
+            Y_ENSURE(Pos);
             return *Pos == 0;
         }
     };
@@ -57,7 +57,7 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             return TBtreeIndexNode::Has(RowId, state.BeginRowId, state.EndRowId);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->Seek(RowId, state.Pos);
         }
 
@@ -72,11 +72,11 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             , KeyDefaults(keyDefaults)
         {}
 
-        bool BelongsTo(const TNodeState& state) const noexcept {
+        bool BelongsTo(const TNodeState& state) const {
             return TBtreeIndexNode::Has(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->Seek(Seek, Key, Columns, KeyDefaults);
         }
 
@@ -94,11 +94,11 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             , KeyDefaults(keyDefaults)
         {}
 
-        bool BelongsTo(const TNodeState& state) const noexcept {
+        bool BelongsTo(const TNodeState& state) const {
             return TBtreeIndexNode::HasReverse(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->SeekReverse(Seek, Key, Columns, KeyDefaults);
         }
 
@@ -178,7 +178,7 @@ public:
     }
 
     EReady Next() override {
-        Y_ABORT_UNLESS(!IsExhausted());
+        Y_ENSURE(!IsExhausted());
 
         if (Meta.LevelCount == 0) {
             return Exhaust();
@@ -204,12 +204,12 @@ public:
         }
 
         // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return EReady::Data;
     }
 
     EReady Prev() override {
-        Y_ABORT_UNLESS(!IsExhausted());
+        Y_ENSURE(!IsExhausted());
 
         if (Meta.LevelCount == 0) {
             return Exhaust();
@@ -235,7 +235,7 @@ public:
         }
 
         // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return EReady::Data;
     }
 
@@ -250,34 +250,34 @@ public:
     }
 
     TPageId GetPageId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return State.back().PageId;
     }
 
     TRowId GetRowId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return State.back().BeginRowId;
     }
 
     TRowId GetNextRowId() const override {
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return State.back().EndRowId;
     }
 
     TPos GetKeyCellsCount() const override {
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return State.back().BeginKey.Count();
     }
 
     TCell GetKeyCell(TPos index) const override {
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         return State.back().BeginKey.Iter().At(index);
     }
 
     void GetKeyCells(TSmallVec<TCell>& keyCells) const override {
         keyCells.clear();
 
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
 
         auto iter = State.back().BeginKey.Iter();
         for (TPos pos : xrange(iter.Count())) {
@@ -312,7 +312,7 @@ private:
         }
 
         // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
+        Y_ENSURE(IsLeaf());
         Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(State.back()));
         return EReady::Data;
     }
@@ -341,7 +341,7 @@ private:
 
     void PushNextState(TRecIdx pos) {
         TNodeState& current = State.back();
-        Y_ABORT_UNLESS(pos < current.Node->GetChildrenCount(), "Should point to some child");
+        Y_ENSURE(pos < current.Node->GetChildrenCount(), "Should point to some child");
         current.Pos.emplace(pos);
 
         auto& child = current.Node->GetShortChild(pos);

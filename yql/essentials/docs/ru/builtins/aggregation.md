@@ -2,7 +2,7 @@
 
 ## COUNT {#count}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 COUNT(*)->Uint64
@@ -14,7 +14,7 @@ COUNT(T?)->Uint64
 
 Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. А модификатор [DISTINCT](../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -30,7 +30,7 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ## MIN и MAX {#min-max}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MIN(T?)->T?
@@ -43,7 +43,7 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -51,7 +51,7 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 ## SUM {#sum}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM(Unsigned?)->Uint64?
@@ -72,7 +72,7 @@ SELECT SUM(value) FROM my_table;
 
 ## AVG {#avg}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AVG(Double?)->Double?
@@ -86,7 +86,7 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -94,7 +94,7 @@ SELECT AVG(value) FROM my_table;
 
 ## COUNT_IF {#count-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 COUNT_IF(Bool?)->Uint64?
@@ -106,7 +106,7 @@ COUNT_IF(Bool?)->Uint64?
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -121,7 +121,7 @@ SELECT
 
 ## SUM_IF и AVG_IF {#sum-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
@@ -135,7 +135,7 @@ AVG_IF(Double?, Bool?)->Double?
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -158,7 +158,7 @@ FROM my_table;
 
 ## SOME {#some}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SOME(T?)->T?
@@ -169,7 +169,7 @@ SOME(T)->T?
 
 Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -185,7 +185,7 @@ FROM my_table;
 
 ## CountDistinctEstimate, HyperLogLog и HLL {#countdistinctestimate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CountDistinctEstimate(T)->Uint64?
@@ -204,7 +204,7 @@ HLL(T)->Uint64?
 
 На данный момент все три функции являются алиасами, но в будущем `CountDistinctEstimate` может начать использовать другой алгоритм.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -222,7 +222,7 @@ FROM my_table;
 
 ## AGGREGATE_LIST {#agg-list}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
@@ -241,7 +241,7 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/group_by.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -271,7 +271,7 @@ FROM users
 
 ## MAX_BY и MIN_BY {#max-min-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MAX_BY(T1?, T2)->T1?
@@ -302,7 +302,7 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -324,7 +324,7 @@ FROM my_table;
 
 ## TOP и BOTTOM {#top-bottom}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP(T?, limit:Uint32)->List<T>
@@ -335,7 +335,7 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 Вернуть список максимальных/минимальных значений выражения. Первый аргумент - выражение, второй - ограничение на количество элементов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -356,7 +356,7 @@ FROM my_table;
 
 ## TOP_BY и BOTTOM_BY {#top-bottom-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
@@ -367,7 +367,7 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа. Ограничение на количество элементов в этом случае передаётся вторым аргументом при создании фабрики.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -389,7 +389,7 @@ FROM my_table;
 
 ## TOPFREQ и MODE {#topfreq-mode}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
@@ -408,7 +408,7 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 1. Для `TOPFREQ` — желаемое число элементов в результате. `MODE` является алиасом к `TOPFREQ` с 1 в этом аргументе. У `TOPFREQ` по умолчанию тоже 1.
 2. Число элементов в используемом буфере, что позволяет разменивать потребление памяти на точность. По умолчанию 100.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -420,7 +420,7 @@ FROM my_table;
 
 ## STDDEV и VARIANCE {#stddev-variance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 STDDEV(Double?)->Double?
@@ -447,7 +447,7 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 Если все переданные значения — `NULL`, возвращает `NULL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -459,7 +459,7 @@ FROM my_table;
 
 ## CORRELATION и COVARIANCE {#correlation-covariance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CORRELATION(Double?, Double?)->Double?
@@ -476,7 +476,7 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из двух значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -495,7 +495,7 @@ FROM my_table;
 
 ## PERCENTILE и MEDIAN {#percentile-median}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 PERCENTILE(T, Double)->T
@@ -518,7 +518,7 @@ MEDIAN(T, [ List<Double> ])->List<T>
 
 Значения прецентиля должны лежать в диапазоне от 0.0 до 1.0 включительно.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -534,7 +534,7 @@ FROM my_table;
 
 ## HISTOGRAM {#histogram}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 HISTOGRAM(Double?)->HistogramStruct?
@@ -615,7 +615,7 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и веса.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -644,7 +644,7 @@ FROM my_table;
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 LinearHistogram(Double?)->HistogramStruct?
@@ -667,7 +667,7 @@ LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->Histogra
 
 Если разброс входных значений неконтролируемо велик, рекомендуется указывать минимальное и максимальное значение для предотвращения потенциальных падений из-за высокого потребления памяти.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -697,7 +697,7 @@ FROM my_table;
 
 ## BOOL_AND, BOOL_OR и BOOL_XOR {#bool-and-or-xor}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 BOOL_AND(Bool?)->Bool?
@@ -730,7 +730,7 @@ BOOL_XOR(Bool?)->Bool?
 
 Для агрегации с пропуском `NULL`-ов можно использовать функции `MIN`/`MAX` или `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
-### Примеры
+#### Примеры
 
 ```yql
 $data = [
@@ -759,7 +759,7 @@ FROM AS_TABLE($data);
 
 Применение соответствующей битовой операции ко всем значениям числовой колонки или выражения.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -782,7 +782,7 @@ FROM my_table;
 1. Колонка, `DISTINCT` колонка или выражение;
 2. Фабрика.
 
-### Примеры
+#### Примеры
 
 ```yql
 $count_factory = AggregationFactory("COUNT");

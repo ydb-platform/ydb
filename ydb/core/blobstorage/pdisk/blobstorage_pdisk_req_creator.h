@@ -156,6 +156,8 @@ private:
         CASE_COUNT_REQUEST(ChunkReserve);
         CASE_COUNT_REQUEST(YardControl);
         CASE_COUNT_REQUEST(LogRead);
+        CASE_COUNT_REQUEST(ShredPDisk);
+        CASE_COUNT_REQUEST(ShredVDiskResult);
         default: break;
         }
     }
@@ -168,7 +170,7 @@ private:
 
     template<typename TEv>
     static TString ToString(const TAutoPtr<NActors::TEventHandle<TEv>> &ev) {
-        Y_ABORT_UNLESS(ev && ev->Get());
+        Y_VERIFY(ev && ev->Get());
         return ev->Get()->ToString();
     }
 

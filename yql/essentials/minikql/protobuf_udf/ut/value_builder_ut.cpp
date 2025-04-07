@@ -5,6 +5,7 @@
 
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/codec/yql_codec_buf.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -58,12 +59,12 @@ struct TSetup {
 template <typename TProto>
 TString YsonToProtoText(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf yson) {
     TStringStream err;
-    auto val = NCommon::ParseYsonValue(
+    auto val = ParseYsonValueInTableFormat(
         setup.HolderFactory,
         NYT::NodeToYsonString(NYT::NodeFromYsonString(yson), ::NYson::EYsonFormat::Binary),
         static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType),
         0,
-        &err, true);
+        &err);
     if (!val) {
         throw yexception() << err.Str();
     }
@@ -120,7 +121,7 @@ TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoT
     auto value = FillValueFromProto(proto, &setup.ValueBuilder, info);
     TTestWriter out;
     NCommon::TOutputBuf buf(out, nullptr);
-    NCommon::WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), 0, value, true);
+    WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), 0, value, true);
     buf.Finish();
 
     return NYT::NodeToYsonString(NYT::NodeFromYsonString(out.Str()), ::NYson::EYsonFormat::Text);

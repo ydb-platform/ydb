@@ -8,6 +8,46 @@
 
 namespace NFq {
 
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev) const
+{
+    NYql::TIssues issues = ValidateBinding(ev);
+
+    const auto& event = *ev->Get();
+    const auto& permissions = GetCreateBindingPerimssions(event);
+    if (event.Request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a binding with these parameters. Please receive a permission yq.resources.managePublic"));
+    }
+
+    return issues;
+}
+
+TPermissions TControlPlaneStorageBase::GetCreateBindingPerimssions(const TEvControlPlaneStorage::TEvCreateBindingRequest& event) const
+{
+    TPermissions permissions = Config->Proto.GetEnablePermissions()
+                        ? event.Permissions
+                        : TPermissions{TPermissions::MANAGE_PUBLIC};
+    if (IsSuperUser(event.User)) {
+        permissions.SetAll();
+    }
+    return permissions;
+}
+
+std::pair<FederatedQuery::Binding, FederatedQuery::Internal::BindingInternal> TControlPlaneStorageBase::GetCreateBindingProtos(
+    const FederatedQuery::CreateBindingRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const
+{
+    const TString& bindingId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::BINDING);
+
+    FederatedQuery::Binding binding;
+    FederatedQuery::BindingContent& content = *binding.mutable_content();
+    content = request.content();
+    *binding.mutable_meta() = CreateCommonMeta(bindingId, user, startTime, InitialRevision);
+
+    FederatedQuery::Internal::BindingInternal bindingInternal;
+    bindingInternal.set_cloud_id(cloudId);
+
+    return {binding, bindingInternal};
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -19,28 +59,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                        ? event.Permissions
-                        : TPermissions{TPermissions::MANAGE_PUBLIC};
-    if (IsSuperUser(user)) {
-        permissions.SetAll();
-    }
     const FederatedQuery::CreateBindingRequest& request = event.Request;
-    const TString bindingId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::BINDING);
     int byteSize = request.ByteSize();
     const TString connectionId = request.content().connection_id();
     const TString idempotencyKey = request.idempotency_key();
+
+    const auto [binding, bindingInternal] = GetCreateBindingProtos(request, cloudId, user, startTime);
+    const auto& content = binding.content();
+    const TString& bindingId = binding.meta().id();
 
     CPS_LOG_T(MakeLogPrefix(scope, user, bindingId)
         << "CreateBindingRequest: "
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateBinding(ev);
-    if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a binding with these parameters. Please receive a permission yq.resources.managePublic"));
-    }
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, bindingId)
             << "CreateBindingRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
@@ -51,14 +84,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         LWPROBE(CreateBindingRequest, scope, user, delta, byteSize, false);
         return;
     }
-
-    FederatedQuery::Binding binding;
-    FederatedQuery::BindingContent& content = *binding.mutable_content();
-    content = request.content();
-    *binding.mutable_meta() = CreateCommonMeta(bindingId, user, startTime, InitialRevision);
-
-    FederatedQuery::Internal::BindingInternal bindingInternal;
-    bindingInternal.set_cloud_id(cloudId);
 
     std::shared_ptr<std::pair<FederatedQuery::CreateBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::CreateBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
     response->first.set_binding_id(bindingId);
@@ -111,7 +136,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         scope,
         connectionId,
         "Connection " + connectionId + " does not exist or permission denied. Please check the id connection or your access rights",
-        permissions,
+        GetCreateBindingPerimssions(event),
         user,
         content.acl().visibility(),
         YdbConnection->TablePathPrefix);
@@ -121,7 +146,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         connectionId,
         user,
         YdbConnection->TablePathPrefix);
-
 
     TVector<TValidationQuery> validators;
     if (idempotencyKey) {
@@ -446,7 +470,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -471,7 +495,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
                 ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the connectin id or your access rights";
             }
 
-            connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+            connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         }
 
         const FederatedQuery::Acl::Visibility requestBindingVisibility = request.content().acl().visibility();

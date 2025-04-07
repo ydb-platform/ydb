@@ -128,9 +128,9 @@ A source ID is an arbitrary string up to 2048 characters long. This is usually t
 
 #### Sample source IDs {#source-id-examples}
 
-| Type | ID | Description |
---- | --- | ---
-| File | Server ID | Files are used to store application logs. In this case, it's convenient to use the server ID as a source ID. |
+| Type         | ID | Description                                                                                                                                                                                                                                 |
+|--------------| --- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| File         | Server ID | Files are used to store application logs. In this case, it's convenient to use the server ID as a source ID.                                                                                                                                |
 | User actions | ID of the class of user actions, such as "viewing a page", "making a purchase", and so on. | It's important to handle user actions in the order they were performed by the user. At the same time, there is no need to handle every single user action in one application. In this case, it's convenient to group user actions by class. |
 
 ### Message group ID {#group-id}
@@ -139,9 +139,9 @@ A message group ID is an arbitrary string up to 2048 characters long. This is us
 
 #### Sample message group IDs {#group-id-examples}
 
-| Type | ID | Description |
---- | --- | ---
-| File | Full file path | All data from the server and the file it hosts will be sent to the same partition. |
+| Type         | ID | Description                                                                                                                              |
+|--------------| --- |------------------------------------------------------------------------------------------------------------------------------------------|
+| File         | Full file path | All data from the server and the file it hosts will be sent to the same partition.                                                       |
 | User actions | User ID | It's important to handle user actions in the order they were performed. In this case, it's convenient to use the user ID as a source ID. |
 
 ## Message sequence numbers {#seqno}
@@ -152,9 +152,9 @@ Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
 
 ### Sample message sequence numbers {#seqno-examples}
 
-| Type | Example | Description |
---- | --- | ---
-| File | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
+| Type     | Example | Description                                                                                                                        |
+|----------| --- |------------------------------------------------------------------------------------------------------------------------------------|
+| File     | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
 | DB table | Auto-increment record ID |
 
 ## Message retention period {#retention-time}
@@ -167,9 +167,9 @@ When transferring data, the producer app indicates that a message can be compres
 
 Supported codecs are explicitly listed in each topic. When making an attempt to write data to a topic with a codec that is not supported, a write error occurs.
 
-| Codec | Description |
---- | ---
-| `raw` | No compression. |
+| Codec  | Description                                             |
+|--------|---------------------------------------------------------|
+| `raw`  | No compression.                                         |
 | `gzip` | [Gzip](https://en.wikipedia.org/wiki/Gzip) compression. |
 {% if audience != "external" %}
 `lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression.
@@ -193,3 +193,27 @@ A consumer may be flagged as "important". This flag indicates that messages in a
 As a long timeout of an important consumer may result in full use of all available free space by unread messages, be sure to monitor important consumers' data read lags.
 
 {% endnote %}
+
+## Topic protocols {#topic-protocols}
+
+To work with topics, the {{ ydb-short-name }} SDK is used (see also [Reference](../reference/ydb-sdk/topic.md)).
+
+Kafka API version 3.4.0 is also supported with some restrictions (see [Work with Kafka API](../reference/kafka-api/index.md)).
+
+## Transactions with topics {#topic-transactions}
+
+{{ ydb-short-name }} supports working with topics within [transactions](./transactions.md).
+
+### Read from a topic within a transaction {#topic-transactions-read}
+
+Topic data does not change during a read operation. Therefore, within transactional reads from a topic, only the offset commit is a true transactional operation. The postponed offset commit occurs automatically at the transaction commit, and the SDK handles this transparently for the user.
+
+### Write into a topic within a transaction {#topic-transactions-write}
+
+During transactional writes to a topic, data is stored outside the partition until the transaction is committed. At the transaction commit, the data is published to the partition and appended to the end of the partition with sequential offsets. Changes made within the transaction are not visible in transactions with topics in {{ ydb-short-name }}.
+
+### Topic transaction constraints {#topic-transactions-constraints}
+
+There are no additional constraints when working with topics within a transaction. It is possible to write large amounts of data to a topic, write to multiple partitions, and read with multiple consumers.
+
+However, it is recommended to consider that data is published only at transaction commit. Therefore, if a transaction is long-running, the data will become visible only after a significant delay.

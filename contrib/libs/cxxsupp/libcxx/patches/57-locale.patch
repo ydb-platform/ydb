@@ -1,8 +1,8 @@
 diff --git a/src/locale.cpp b/src/locale.cpp
-index 73b24db..433394d 100644
+index 4efdc63..219575b 100644
 --- a/src/locale.cpp
 +++ b/src/locale.cpp
-@@ -40,8 +40,8 @@
+@@ -38,8 +38,8 @@
  #  include <langinfo.h>
  #endif
  
@@ -12,7 +12,7 @@ index 73b24db..433394d 100644
  
  // On Linux, wint_t and wchar_t have different signed-ness, and this causes
  // lots of noise in the build log, but no bugs that I know of.
-@@ -595,8 +595,17 @@ void locale::facet::__on_zero_shared() noexcept { delete this; }
+@@ -593,8 +593,17 @@ void locale::facet::__on_zero_shared() noexcept { delete this; }
  constinit int32_t locale::id::__next_id = 0;
  
  long locale::id::__get() {
@@ -32,7 +32,7 @@ index 73b24db..433394d 100644
  }
  
  // template <> class collate_byname<char>
-@@ -897,6 +906,11 @@ extern "C" const int** __ctype_tolower_loc();
+@@ -895,6 +904,11 @@ extern "C" const int** __ctype_tolower_loc();
  extern "C" const int** __ctype_toupper_loc();
  #endif
  
@@ -44,7 +44,7 @@ index 73b24db..433394d 100644
  #ifdef _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
  const ctype<char>::mask* ctype<char>::classic_table() noexcept {
    // clang-format off
-@@ -992,6 +1006,8 @@ const ctype<char>::mask* ctype<char>::classic_table() noexcept {
+@@ -990,6 +1004,8 @@ const ctype<char>::mask* ctype<char>::classic_table() noexcept {
  #  elif defined(_NEWLIB_VERSION)
    // Newlib has a 257-entry table in ctype_.c, where (char)0 starts at [1].
    return _ctype_ + 1;
@@ -53,7 +53,7 @@ index 73b24db..433394d 100644
  #  elif defined(_AIX)
    return (const unsigned int*)__lc_ctype_ptr->obj->mask;
  #  elif defined(__MVS__)
-@@ -3646,15 +3662,25 @@ __codecvt_utf16<char32_t, true>::result __codecvt_utf16<char32_t, true>::do_out(
+@@ -3644,15 +3660,25 @@ __codecvt_utf16<char32_t, true>::result __codecvt_utf16<char32_t, true>::do_out(
      extern_type* to,
      extern_type* to_end,
      extern_type*& to_nxt) const {
@@ -85,7 +85,7 @@ index 73b24db..433394d 100644
    return r;
  }
  
-@@ -3714,7 +3740,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_out(
+@@ -3712,7 +3738,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_out(
      extern_type* to,
      extern_type* to_end,
      extern_type*& to_nxt) const {
@@ -94,7 +94,7 @@ index 73b24db..433394d 100644
    const uint16_t* _frm     = reinterpret_cast<const uint16_t*>(frm);
    const uint16_t* _frm_end = reinterpret_cast<const uint16_t*>(frm_end);
    const uint16_t* _frm_nxt = _frm;
-@@ -3743,7 +3769,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_in(
+@@ -3741,7 +3767,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_in(
    const uint8_t* _frm     = reinterpret_cast<const uint8_t*>(frm);
    const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
    const uint8_t* _frm_nxt = _frm;
@@ -103,7 +103,7 @@ index 73b24db..433394d 100644
    uint16_t* _to     = reinterpret_cast<uint16_t*>(to);
    uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
    uint16_t* _to_nxt = _to;
-@@ -3882,12 +3908,18 @@ __codecvt_utf8_utf16<char32_t>::result __codecvt_utf8_utf16<char32_t>::do_in(
+@@ -3880,12 +3906,18 @@ __codecvt_utf8_utf16<char32_t>::result __codecvt_utf8_utf16<char32_t>::do_in(
    const uint8_t* _frm     = reinterpret_cast<const uint8_t*>(frm);
    const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
    const uint8_t* _frm_nxt = _frm;
@@ -128,7 +128,7 @@ index 73b24db..433394d 100644
    return r;
  }
  
-@@ -5125,7 +5157,7 @@ static void __init_pat(
+@@ -5123,7 +5155,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[2]=space so that when
            // showbase is not set, the space goes away too.
@@ -137,7 +137,7 @@ index 73b24db..433394d 100644
          }
          return;
        default:
-@@ -5147,7 +5179,7 @@ static void __init_pat(
+@@ -5145,7 +5177,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[2]=space so that when
            // showbase is not set, the space goes away too.
@@ -146,7 +146,7 @@ index 73b24db..433394d 100644
          }
          return;
        case 2: // Space between sign and currency or value.
-@@ -5176,7 +5208,7 @@ static void __init_pat(
+@@ -5174,7 +5206,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[1]=space so that when
            // showbase is not set, the space goes away too.
@@ -155,7 +155,7 @@ index 73b24db..433394d 100644
          }
          pat.field[1] = none;
          pat.field[2] = symbol;
-@@ -5218,7 +5250,7 @@ static void __init_pat(
+@@ -5216,7 +5248,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[2]=space so that when
            // showbase is not set, the space goes away too.
@@ -164,7 +164,7 @@ index 73b24db..433394d 100644
          }
          return;
        default:
-@@ -5240,7 +5272,7 @@ static void __init_pat(
+@@ -5238,7 +5270,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[1]=space so that when
            // showbase is not set, the space goes away too.
@@ -173,7 +173,7 @@ index 73b24db..433394d 100644
          }
          return;
        case 2: // Space between sign and currency or value.
-@@ -5279,7 +5311,7 @@ static void __init_pat(
+@@ -5277,7 +5309,7 @@ static void __init_pat(
            // We insert the space into the symbol instead of
            // setting pat.field[2]=space so that when
            // showbase is not set, the space goes away too.

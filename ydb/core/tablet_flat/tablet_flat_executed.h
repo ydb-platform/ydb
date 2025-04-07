@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "flat_executor_counters.h"
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -15,7 +16,10 @@ struct IMiniKQLFactory {
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
 };
 
-class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
+class TTabletExecutedFlat
+    : public NFlatExecutorSetup::ITablet
+    , public IActorExceptionHandler
+{
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
@@ -23,11 +27,15 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
+    bool OnUnhandledException(const std::exception&) override;
+
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
-    void EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 Enqueue(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction);
 
-    const NTable::TScheme& Scheme() const noexcept;
+    const NTable::TScheme& Scheme() const;
 
     TActorContext ExecutorCtx(const TActivationContext &ctx) {
         return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
@@ -52,6 +60,8 @@ protected:
      * is never called, and will be removed in the future.
      */
     virtual void DefaultSignalTabletActive(const TActorContext &ctx) = 0;
+
+    void ReportStartTime();
 
     /**
      * Called by StateInitImpl for unhandled non-system events. Used to delay

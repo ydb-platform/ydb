@@ -81,7 +81,7 @@ namespace NKikimr {
             TPrinter printer(*GInfo, ev);
             SyncerData->Neighbors->OutputHtmlTable(str, printer);
             ctx.Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncerInfoId));
-            ctx.Send(NotifyId, new TEvents::TEvActorDied());
+            ctx.Send(NotifyId, new TEvents::TEvGone());
             Die(ctx);
         }
 
@@ -112,7 +112,7 @@ namespace NKikimr {
             , Ev(ev)
             , NotifyId(notifyId)
         {
-            Y_ABORT_UNLESS(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId, SyncerContext->VCtx->VDiskLogPrefix);
         }
     };
 
@@ -335,7 +335,7 @@ namespace NKikimr {
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -348,7 +348,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         )
 
@@ -358,7 +358,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
         )
 
     public:

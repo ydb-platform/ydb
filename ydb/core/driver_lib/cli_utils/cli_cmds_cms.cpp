@@ -207,7 +207,7 @@ public:
         } else {
             config.SetFreeArgsNum(0);
         }
-        config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
+        config.Opts->AddLongOption("dry", "Dry run").StoreTrue(&DryRun);
     }
 
     void Parse(TConfig& config) override
@@ -278,7 +278,7 @@ public:
             .RequiredArgument("NAME").StoreResult(&User);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<ID>", "Request ID");
-        config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
+        config.Opts->AddLongOption("dry", "Dry run").StoreTrue(&DryRun);
     }
 
     void Parse(TConfig& config) override
@@ -334,7 +334,7 @@ public:
             config.Opts->AddLongOption("duration", "Action duration in minutes")
                 .Required().RequiredArgument("NUM").StoreResult(&Duration);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<NAME>", FreeArgDescr(FreeArgField));
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<NAME>", FreeArgDescr(FreeArgField));
     }
 
     void Parse(TConfig& config) override
@@ -440,11 +440,11 @@ public:
 
         config.Opts->AddLongOption("user", "User name").Required()
             .RequiredArgument("NAME").StoreResult(&User);
-        config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
+        config.Opts->AddLongOption("dry", "Dry run").StoreTrue(&DryRun);
         config.Opts->AddLongOption("reason", "Informational request description")
             .RequiredArgument("STRING").StoreResult(&Reason);
         config.Opts->AddLongOption("schedule", "Schedule action in CMS if it's disallowed right now")
-            .NoArgument().SetFlag(&Schedule);
+            .StoreTrue(&Schedule);
         config.Opts->AddLongOption("hours", "Permission duration")
             .RequiredArgument("NUM").StoreResult(&Hours);
         config.Opts->AddLongOption("minutes", "Permission duration")
@@ -452,14 +452,14 @@ public:
         config.Opts->AddLongOption("tenant-policy", "Policy for computation node restart")
             .RequiredArgument("none|default").StoreResult(&TenantPolicy);
         config.Opts->AddLongOption("allow-partial", "Allow partial permission")
-            .NoArgument().SetFlag(&AllowPartial);
+            .StoreTrue(&AllowPartial);
         config.Opts->AddLongOption("availability-mode", "Availability mode")
             .RequiredArgument("max|keep|force").DefaultValue("max").StoreResult(&AvailabilityMode);
         config.Opts->AddLongOption("evict-vdisks", "Evict vdisks before granting permission(s)")
-            .NoArgument().SetFlag(&EvictVDisks);
+            .StoreTrue(&EvictVDisks);
         config.Opts->AddLongOption("priority", "Request priority")
             .RequiredArgument("NUM").StoreResult(&Priority);
-            
+
     }
 
     void Parse(TConfig& config) override
@@ -718,7 +718,7 @@ public:
         } else {
             config.SetFreeArgsNum(0);
         }
-        config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
+        config.Opts->AddLongOption("dry", "Dry run").StoreTrue(&DryRun);
     }
 
     void Parse(TConfig& config) override
@@ -846,7 +846,7 @@ public:
             config.Opts->AddLongOption("minutes", "New permission duration")
                 .RequiredArgument("NUM").StoreResult(&Minutes);
         }
-        config.Opts->AddLongOption("dry", "Dry run").NoArgument().SetFlag(&DryRun);
+        config.Opts->AddLongOption("dry", "Dry run").StoreTrue(&DryRun);
     }
 
     void Parse(TConfig& config) override

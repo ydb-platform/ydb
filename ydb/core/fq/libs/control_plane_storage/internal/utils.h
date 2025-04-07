@@ -2,12 +2,15 @@
 
 #include <tuple>
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <util/string/builder.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
-#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
+#include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
+#include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <yql/essentials/utils/exceptions.h>
 
 namespace NFq {
@@ -41,17 +44,17 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
                               std::string_view statsStr,
                               TDuration executionTime);
 
-using StatsValuesList = std::vector<std::pair<TString, i64>>;
+using TStatsValuesList = std::vector<std::pair<TString, i64>>;
 
-StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
+TStatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
 
-struct Statistics {
+struct TStatistics {
     operator bool() const noexcept { return !Stats.empty(); }
 
-    const StatsValuesList& Stats;
+    const TStatsValuesList& Stats;
 };
 
-TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics);
+TStringBuilder& operator<<(TStringBuilder& builder, const TStatistics& statistics);
 
 void AddTransientIssues(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* protoIssues, NYql::TIssues&& issues);
 

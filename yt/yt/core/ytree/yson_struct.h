@@ -97,15 +97,15 @@ public:
 
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
-    THashSet<TString> GetRegisteredKeys() const;
+    THashSet<std::string> GetRegisteredKeys() const;
     int GetParameterCount() const;
 
     // TODO(renadeen): remove this methods.
-    void SaveParameter(const TString& key, NYson::IYsonConsumer* consumer) const;
-    void LoadParameter(const TString& key, const NYTree::INodePtr& node);
-    void ResetParameter(const TString& key);
+    void SaveParameter(const std::string& key, NYson::IYsonConsumer* consumer) const;
+    void LoadParameter(const std::string& key, const NYTree::INodePtr& node);
+    void ResetParameter(const std::string& key);
 
-    std::vector<TString> GetAllParameterAliases(const TString& key) const;
+    std::vector<std::string> GetAllParameterAliases(const std::string& key) const;
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
@@ -149,7 +149,7 @@ class TYsonStruct
 public:
     void InitializeRefCounted();
 
-    bool IsSet(const TString& key) const;
+    bool IsSet(const std::string& key) const;
 
 private:
     TCompactBitmap SetFields_;
@@ -162,13 +162,10 @@ private:
 class TYsonStructFinalClassHolder
 {
 protected:
-    explicit TYsonStructFinalClassHolder(std::type_index typeIndex);
-
-    // This constructor is only declared but not defined as it never is called.
-    // If we delete it default constructor of TYsonStructLite will be implicitly deleted as well and compilation will fail.
-    TYsonStructFinalClassHolder();
-
     std::type_index FinalType_;
+
+    explicit TYsonStructFinalClassHolder(std::type_index typeIndex);
+    TYsonStructFinalClassHolder();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,7 +192,7 @@ public:
     TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
     TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
 
-    bool IsSet(const TString& key) const;
+    bool IsSet(const std::string& key) const;
 
 private:
     TCompactBitmap SetFields_;
@@ -329,13 +326,13 @@ public:
     explicit TYsonStructRegistrar(IYsonStructMeta* meta);
 
     template <class TValue>
-    TYsonStructParameter<TValue>& Parameter(const TString& key, TValue(TStruct::*field));
+    TYsonStructParameter<TValue>& Parameter(const std::string& key, TValue(TStruct::*field));
 
     template <class TBase, class TValue>
-    TYsonStructParameter<TValue>& BaseClassParameter(const TString& key, TValue(TBase::*field));
+    TYsonStructParameter<TValue>& BaseClassParameter(const std::string& key, TValue(TBase::*field));
 
     template <class TValue>
-    TYsonStructParameter<TValue>& ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor);
+    TYsonStructParameter<TValue>& ParameterWithUniversalAccessor(const std::string& key, std::function<TValue&(TStruct*)> accessor);
 
     void Preprocessor(std::function<void(TStruct*)> preprocessor);
 
@@ -355,10 +352,10 @@ public:
 
     template <class TExternal, class TValue>
         // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
-    TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
+    TYsonStructParameter<TValue>& ExternalClassParameter(const std::string& key, TValue(TExternal::*field));
 
     template <class TBase, class TValue>
-    TYsonStructParameter<TValue>& ExternalBaseClassParameter(const TString& key, TValue(TBase::*field));
+    TYsonStructParameter<TValue>& ExternalBaseClassParameter(const std::string& key, TValue(TBase::*field));
 
     template <class TExternalPreprocessor>
         // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)

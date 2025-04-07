@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -55,8 +56,19 @@ private:
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
+    const NConveyor::TProcessGuard ConveyorProcessGuard;
+    std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
 
 public:
+    const NArrow::NSSA::IColumnResolver* GetResolver() const {
+        AFL_VERIFY(!!Resolver);
+        return Resolver.get();
+    }
+
+    ui64 GetConveyorProcessId() const {
+        return ConveyorProcessGuard.GetProcessId();
+    }
+
     template <class T>
     std::shared_ptr<const T> GetReadMetadataPtrVerifiedAs() const {
         auto result = dynamic_pointer_cast<const T>(ReadMetadata);
@@ -135,20 +147,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId)
-        : StoragesManager(storagesManager)
-        , DataAccessorsManager(dataAccessorsManager)
-        , Counters(counters)
-        , ReadMetadata(readMetadata)
-        , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)
-        , ScanId(scanId)
-        , ScanActorId(scanActorId)
-        , ResourceSubscribeActorId(resourceSubscribeActorId)
-        , ReadCoordinatorActorId(readCoordinatorActorId)
-        , ComputeShardingPolicy(computeShardingPolicy)
-    {
-        Y_ABORT_UNLESS(ReadMetadata);
-    }
+        const ui64 scanId);
 };
 
 class IDataReader {

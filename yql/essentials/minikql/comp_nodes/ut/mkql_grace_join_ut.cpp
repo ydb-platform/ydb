@@ -194,6 +194,67 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
     constexpr ui64 SmallTableTuples = 150000;
     constexpr ui64 BigTupleSize = 40;
 
+    Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
+        TSetup<false> setup;
+        ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
+        ui32 strSizes[2] = {4, 4};
+        char * strVals[] = {(char *)"aaaaa", (char *)"bbbb"};
+
+        char * bigStrVal[] = {(char *)"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                             (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
+        ui32 bigStrSize[2] = {151, 151};
+
+
+        GraceJoin::TTable bigTable(1,1,1,1);
+        GraceJoin::TTable smallTable(1,1,1,1);
+        GraceJoin::TTable joinTable(1,1,1,1);
+
+        const ui64 TupleSize = 1024;
+
+        ui64 bigTuple[TupleSize];
+
+        std::mt19937_64 rng; // deterministic PRNG
+
+        std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
+
+        for (ui64 i = 0; i < TupleSize; i++) {
+            bigTuple[i] = dist(rng);
+        }
+
+
+        std::uniform_int_distribution<ui64> smallDist(0, SmallTableTuples - 1);
+
+        smallTable.AddTuple(tuple, bigStrVal, bigStrSize);
+
+        for ( ui64 i = 0; i < SmallTableTuples + 1; i++) {
+            tuple[1] = smallDist(rng);
+            tuple[2] = tuple[1];
+            smallTable.AddTuple(tuple, strVals, strSizes);
+        }
+
+
+        for ( ui64 i = 0; i < BigTableTuples; i++) {
+            tuple[1] = smallDist(rng);
+            tuple[2] = tuple[1];
+            bigTable.AddTuple(tuple, strVals, strSizes);
+        }
+
+        ui64 allocationsCount = 0;
+        if (EXCEPTION) {
+            TlsAllocState->SetLimit(1);
+            TlsAllocState->SetIncreaseMemoryLimitCallback([&allocationsCount](ui64, ui64 required) {
+                // Preallocate memory for some buckets before fail
+                if (allocationsCount++ > 5) {
+                    throw TMemoryLimitExceededException();
+                }
+                TlsAllocState->SetLimit(required);
+            });
+        }
+
+        bool preallocationResult = joinTable.TryToPreallocateMemoryForJoin(smallTable, bigTable, EJoinKind::Inner, true, true);
+        UNIT_ASSERT_EQUAL(preallocationResult, !EXCEPTION);
+    }
+
     Y_UNIT_TEST_LLVM(TestImp1) {
             TSetup<LLVM> setup;
             ui64 tuple[11] = {0,1,2,3,4,5,6,7,8,9,10};
@@ -825,7 +886,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
     }
 }
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 40u
 Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
     Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
@@ -983,7 +1043,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
 
 }
-#endif
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 

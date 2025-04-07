@@ -97,6 +97,27 @@ struct TWriteReplicationSettings {
     {}
 };
 
+struct TWriteTransferSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Source;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Target;
+    NNodes::TMaybeNode<NNodes::TCoAtom> TransformLambda;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
+struct TDatabaseSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TCoNameValueTupleList Other;
+
+    TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other) {}
+};
+
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
@@ -168,9 +189,12 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteTransferSettings ParseWriteTransferSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TDatabaseSettings ParseDatabaseSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 
@@ -191,6 +215,8 @@ void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStati
 
 TString TransformerStatsToYson(const IGraphTransformer::TStatistics& stats, NYson::EYsonFormat format
     = NYson::EYsonFormat::Pretty);
+
+void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type);
 
 void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
 

@@ -4,13 +4,14 @@
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/codegen/codegen.h>
 
 #include <yql/essentials/types/binary_json/read.h>
@@ -18,8 +19,8 @@
 
 #include <library/cpp/resource/resource.h>
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Module.h> // Y_IGNORE
+#include <llvm/IR/Instructions.h> // Y_IGNORE
 
 #endif
 
@@ -171,7 +172,7 @@ public:
         const auto valType = Type::getInt128Ty(context);
         const auto flagsConst = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags);
         if (nativeYtTypeFlags) {
-            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteContainerNativeYtValue);
+            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::WriteContainerNativeYtValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
@@ -180,7 +181,7 @@ public:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, flagsConst, elemPtr, buf }, "", Block_);
         } else {
-            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::NCommon::WriteYsonContainerValue);
+            const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), (ui64)&NYql::WriteYsonContainerValue);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {
                 Type::getInt64Ty(context), Type::getInt64Ty(context), PointerType::getUnqual(valType),
                 PointerType::getUnqual(Type::getInt8Ty(context))
@@ -792,7 +793,7 @@ private:
     void GenerateContainer(Value* velemPtr, Value* buf, TType* type, bool wrapOptional, ui64 nativeYtTypeFlags) {
         auto& context = Codegen_->GetContext();
 
-        const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags ? (ui64)&NCommon::ReadContainerNativeYtValue : (ui64)&NCommon::ReadYsonContainerValue);
+        const auto funcAddr = ConstantInt::get(Type::getInt64Ty(context), nativeYtTypeFlags ? (ui64)&ReadContainerNativeYtValue : (ui64)&ReadYsonContainerValue);
         const auto typeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)type);
         const auto holderFactoryConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)&HolderFactory_);
         const auto wrapConst = ConstantInt::get(Type::getInt1Ty(context), wrapOptional);

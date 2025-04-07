@@ -51,7 +51,9 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     TMaybe<ui8> minFillPercentage,
-    NUdf::IPgBuilder* pgBuilder);
+    const NDqProto::TTaskOutputHashPartition& hashPartition,
+    NUdf::IPgBuilder* pgBuilder
+);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 

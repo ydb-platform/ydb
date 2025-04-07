@@ -21,6 +21,8 @@ items:
       href: commands/scheme-ls.md
     - name: Information about the object
       href: commands/scheme-describe.md
+    - name: Permissions
+      href: commands/scheme-permissions.md
     - name: Directories
       href: commands/dir.md
     - name: Secondary indexes
@@ -109,6 +111,8 @@ items:
       href: commands/config-info.md
     - name: Getting the YDB CLI version
       href: version.md
+    - name: Health check
+      href: commands/monitoring-healthcheck.md 
   - name: Load testing
     items:
     - name: Overview

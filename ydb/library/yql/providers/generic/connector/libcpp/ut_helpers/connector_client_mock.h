@@ -62,6 +62,8 @@ namespace NYql::NConnector::NTest {
     }
 
     MATCHER_P(ProtobufRequestMatcher, expected, "request does not match") {
+        Cerr << "CRAB Expected: " << expected.DebugString() << Endl;
+        Cerr << "CRAB Actual: " << arg.DebugString() << Endl;
         return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
     }
 
@@ -826,10 +828,10 @@ namespace NYql::NConnector::NTest {
         static TString StatusToDebugString(const NYdbGrpc::TGrpcStatus& status) {
             TStringBuilder s;
             s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
-            if (status.Msg) {
+            if (!status.Msg.empty()) {
                 s << status.Msg;
             }
-            if (status.Details) {
+            if (!status.Details.empty()) {
                 s << " (" << status.Details << ')';
             }
             if (status.InternalError) {

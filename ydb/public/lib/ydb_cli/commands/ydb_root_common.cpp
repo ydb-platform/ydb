@@ -18,9 +18,10 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -36,7 +37,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     , Settings(settings)
 {
     ValidateSettings();
-    AddCommand(std::make_unique<TCommandAdmin>());
+    AddDangerousCommand(std::make_unique<TCommandAdmin>());
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
@@ -54,6 +55,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
     AddCommand(std::make_unique<TCommandDebug>());
+    PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
 }
 
 void TClientCommandRootCommon::ValidateSettings() {
@@ -87,6 +89,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
+    config.StorageUrl = Settings.StorageUrl;
     SetCredentialsGetter(config);
 }
 
@@ -98,7 +101,7 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
         }
 
         if (config.UseStaticCredentials) {
-            if (config.StaticCredentials.User) {
+            if (!config.StaticCredentials.User.empty()) {
                 return CreateLoginCredentialsProviderFactory(config.StaticCredentials);
             }
         }
@@ -115,154 +118,223 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 
 void TClientCommandRootCommon::Config(TConfig& config) {
     FillConfig(config);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
+
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     TStringBuilder endpointHelp;
-    endpointHelp << "[Required] Endpoint to connect. Protocols: grpc, grpcs (Default: "
-        << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << ")." << Endl;
+    endpointHelp << "Endpoint to connect. Protocols: "
+        << colors.BoldColor() << "grpc" << colors.OldColor() << ", "
+        << colors.BoldColor() << "grpcs" << colors.OldColor() << " (default: "
+        << colors.Cyan() << (Settings.EnableSsl.GetRef() ? "grpcs" : "grpc" ) << colors.OldColor() << ")";
 
-    endpointHelp << "  Endpoint search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. Profile specified with --profile option" << Endl
-        << "    3. Active configuration profile";
-    TStringBuilder databaseHelp;
-    databaseHelp << "[Required] Database to work with." << Endl
-        << "  Database search order:" << Endl
-        << "    1. This option" << Endl
-        << "    2. Profile specified with --profile option" << Endl
-        << "    3. Active configuration profile";
-
+    EnableSsl = Settings.EnableSsl.GetRef(); // default
     opts.AddLongOption('e', "endpoint", endpointHelp)
-        .RequiredArgument("[PROTOCOL://]HOST[:PORT]").StoreResult(&Address);
-    opts.AddLongOption('d', "database", databaseHelp)
-        .RequiredArgument("PATH").StoreResult(&Database);
-    opts.AddLongOption('v', "verbose", "Increase verbosity of operations")
+        .RequiredArgument("[PROTOCOL://]HOST[:PORT]")
+        .ProfileParam("endpoint")
+        .LogToConnectionParams("endpoint")
+        .Handler([this](const TString& value) {
+            // Parse address & enable SSL at one time
+            Address = GetAddressFromString(value, &EnableSsl);
+        })
+        .Validator([](const TString& value) {
+            // Get errors from parsing
+            std::vector<TString> errors;
+            GetAddressFromString(value, nullptr, &errors);
+            return errors;
+        });
+    opts.AddLongOption('d', "database", "Database to work with")
+        .RequiredArgument("PATH").StoreResult(&Database)
+        .ProfileParam("database")
+        .LogToConnectionParams("database");
+    opts.GetOpts().AddLongOption('v', "verbose", "Increase verbosity of operations")
         .Optional().NoArgument().Handler0([&](){
             VerbosityLevel++;
         });
-    opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from.")
+    opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from")
         .RequiredArgument("NAME").StoreResult(&ProfileName);
+    opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
+        .Optional().StoreTrue(&config.AssumeYes);
+
+    if (config.HelpCommandVerbosiltyLevel >= 2) {
+        opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection."
+            " If this option is set the user provided endpoint (by -e option) will be used to setup a connections")
+            .Optional().StoreTrue(&config.SkipDiscovery);
+    } else {
+        opts.AddLongOption("no-discovery")
+            .Optional().Hidden().StoreTrue(&config.SkipDiscovery);
+    }
+
     TClientCommandRootBase::Config(config);
+
+    TAuthMethodOption* iamTokenAuth = nullptr;
+    TAuthMethodOption* ycTokenAuth = nullptr;
+    TAuthMethodOption* metadataAuth = nullptr;
+    TAuthMethodOption* saKeyAuth = nullptr;
+    TAuthMethodOption* ydbTokenAuth = nullptr;
+    TAuthMethodOption* ydbUserAuth = nullptr;
+    TAuthMethodOption* oauth2TokenExchangeAuth = nullptr;
 
     if (config.UseIamAuth) {
         const TString docsUrl = "cloud.yandex.ru/docs";
-        TStringBuilder iamTokenHelp;
-        iamTokenHelp << "IAM token file. Note: IAM tokens expire in 12 hours." << Endl
-            << "  For more info go to: " << docsUrl << "/iam/concepts/authorization/iam-token" << Endl
-            << "  Token search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"IAM_TOKEN\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("iam-token-file", iamTokenHelp).RequiredArgument("PATH").StoreResult(&TokenFile);
+        iamTokenAuth = &opts.AddAuthMethodOption("iam-token-file", "IAM token file. Note: IAM tokens expire in 12 hours");
+        (*iamTokenAuth)
+            .AuthMethod("token")
+            .SimpleProfileDataParam("iam-token", false)
+            .DocLink(TStringBuilder() << docsUrl << "/iam/concepts/authorization/iam-token")
+            .LogToConnectionParams("token")
+            .Env("IAM_TOKEN", false)
+            .FileName("token").RequiredArgument("PATH")
+            .StoreFilePath(&TokenFile)
+            .StoreResult(&config.SecurityToken);
 
-        TStringBuilder ycTokenHelp;
-        ycTokenHelp << "YC token file. It should contain OAuth token of a Yandex Passport user to get IAM token with." << Endl
-            << "  For more info go to: " << docsUrl << "/iam/concepts/authorization/oauth-token" << Endl
-            << "  Token search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YC_TOKEN\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("yc-token-file", ycTokenHelp).RequiredArgument("PATH").StoreResult(&YCTokenFile);
+        ycTokenAuth = &opts.AddAuthMethodOption("yc-token-file", "YC token file. It should contain OAuth token of a Yandex Passport user to get IAM token with");
+        (*ycTokenAuth)
+            .AuthMethod("yc-token")
+            .SimpleProfileDataParam("yc-token", false) // parse token directly from profile
+            .SimpleProfileDataParam("yc-token-file", true) // parse token from file specified in profile
+            .DocLink(TStringBuilder() << docsUrl << "/iam/concepts/authorization/oauth-token")
+            .LogToConnectionParams("yc-token")
+            .Env("YC_TOKEN", false)
+            .FileName("YC token").RequiredArgument("PATH")
+            .StoreResult(&config.YCToken);
 
-        TStringBuilder metadataHelp;
-        metadataHelp << "Use metadata service on a virtual machine to get credentials" << Endl
-            << "  For more info go to: " << docsUrl << "/compute/operations/vm-connect/auth-inside-vm" << Endl
-            << "  Definition priority:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"USE_METADATA_CREDENTIALS\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("use-metadata-credentials", metadataHelp).Optional().StoreTrue(&UseMetadataCredentials);
+        metadataAuth = &opts.AddAuthMethodOption("use-metadata-credentials", "Use metadata service on a virtual machine to get credentials");
+        (*metadataAuth)
+            .AuthMethod("use-metadata-credentials")
+            .SimpleProfileDataParam()
+            .DocLink(TStringBuilder() << docsUrl << "/compute/operations/vm-connect/auth-inside-vm")
+            .LogToConnectionParams("use-metadata-credentials")
+            .Env("USE_METADATA_CREDENTIALS", false)
+            .StoreTrue(&config.UseMetadataCredentials);
 
-        TStringBuilder saKeyHelp;
-        saKeyHelp << "Service account";
-        if (Settings.MentionUserAccount.GetRef()) {
-            saKeyHelp << " (or user account)";
-        }
-        saKeyHelp << " key file" << Endl
-            << "  For more info go to: " << docsUrl << "/iam/operations/iam-token/create-for-sa" << Endl
-            << "  Definition priority:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"SA_KEY_FILE\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("sa-key-file", saKeyHelp).RequiredArgument("PATH").StoreResult(&SaKeyFile);
+        saKeyAuth = &opts.AddAuthMethodOption("sa-key-file", TStringBuilder() << "Service account" << (Settings.MentionUserAccount.GetRef() ? " (or user account) key file" : " key file"));
+        (*saKeyAuth)
+            .AuthMethod("sa-key-file")
+            .SimpleProfileDataParam("", true)
+            .DocLink(TStringBuilder() << docsUrl << "/iam/operations/iam-token/create-for-sa")
+            .LogToConnectionParams("sa-key-file")
+            .Env("SA_KEY_FILE", true, "SA key file")
+            .FileName("SA key file").RequiredArgument("PATH")
+            .StoreFilePath(&config.SaKeyFile)
+            .StoreResult(&config.SaKeyParams);
     }
 
     if (config.UseAccessToken) {
-        TStringBuilder tokenHelp;
-        tokenHelp << "Access token file" << Endl
-            << "  Token search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YDB_TOKEN\" environment variable" << Endl
-            << "    4. Active configuration profile";
+        ydbTokenAuth = &opts.AddAuthMethodOption("token-file", "Access token file");
+        (*ydbTokenAuth)
+            .AuthMethod("token")
+            .SimpleProfileDataParam()
+            .SimpleProfileDataParam("token-file", true)
+            .SimpleProfileDataParam("ydb-token", false)
+            .LogToConnectionParams("token")
+            .Env("YDB_TOKEN", false)
+            .FileName("token").RequiredArgument("PATH")
+            .StoreFilePath(&TokenFile)
+            .StoreResult(&config.SecurityToken);
         if (Settings.UseDefaultTokenFile.GetRef()) {
-            tokenHelp << Endl << "    5. Default token file \"" << defaultTokenFile << "\"";
+            (*ydbTokenAuth)
+                .DefaultValue(defaultTokenFile);
         }
-        opts.AddLongOption("token-file", tokenHelp).RequiredArgument("PATH").StoreResult(&TokenFile);
     }
 
     if (config.UseStaticCredentials) {
-        TStringBuilder userHelp;
-        userHelp << "User name to authenticate with" << Endl
-            << "  User name search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YDB_USER\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("user", userHelp).RequiredArgument("STR").StoreResult(&UserName);
+        auto parser = [this](const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly) -> bool {
+            TString user, password;
+            bool hasPasswordOption = false;
+            if (authData["user"]) {
+                user = authData["user"].as<TString>();
+            }
+            if (authData["password"]) {
+                hasPasswordOption = true;
+                password = authData["password"].as<TString>();
+            }
+            if (authData["password-file"]) {
+                if (hasPasswordOption) {
+                    if (errors) {
+                        errors->push_back(TStringBuilder() << "Profile has both password and password-file");
+                    }
+                    return false;
+                }
+                PasswordFile = authData["password-file"].as<TString>();
+                TString fileContent;
+                if (!ReadFromFileIfExists(PasswordFile, "password", fileContent, true)) {
+                    if (errors) {
+                        errors->push_back(TStringBuilder() << "Couldn't read password from file " << PasswordFile);
+                    }
+                    return false;
+                }
+                password = std::move(fileContent);
+            }
+            if (value) {
+                *value = user;
+            }
+            // Assign values
+            if (!parseOnly) {
+                if (!password.empty()) {
+                    DoNotAskForPassword = true;
+                }
+                UserName = std::move(user);
+                Password = std::move(password);
+            }
+            return true;
+        };
+        ydbUserAuth = &opts.AddAuthMethodOption("user", "User name to authenticate with");
+        (*ydbUserAuth)
+            .AuthMethod("static-credentials")
+            .AuthProfileParser(std::move(parser))
+            .LogToConnectionParams("user")
+            .Env("YDB_USER", false)
+            .RequiredArgument("NAME").StoreResult(&UserName);
 
-        TStringBuilder passwordHelp;
-        passwordHelp << "File with password to authenticate with" << Endl
-            << "  Password search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YDB_PASSWORD\" environment variable" << Endl
-            << "    4. Active configuration profile";
-        opts.AddLongOption("password-file", passwordHelp).RequiredArgument("PATH").StoreResult(&PasswordFile);
+        auto& passwordOpt = opts.AddLongOption("password-file", "File with password to authenticate with")
+            .Env("YDB_PASSWORD", false)
+            .SetSupportsProfile()
+            .FileName("password").RequiredArgument("PATH")
+            .StoreFilePath(&PasswordFileOption)
+            .StoreResult(&PasswordOption);
 
-        opts.AddLongOption("no-password", "Do not ask for user password (if empty)").Optional().StoreTrue(&DoNotAskForPassword);
+        auto& noPasswordOpt = opts.AddLongOption("no-password", "Do not ask for user password (if empty)")
+            .Optional().StoreTrue(&DoNotAskForPassword);
+
+        opts.MutuallyExclusiveOpt(passwordOpt, noPasswordOpt);
     }
 
     if (config.UseOauth2TokenExchange) {
         TOauth2TokenExchangeParams defaultParams;
         TJwtTokenSourceParams defaultJwtParams;
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-#define FIELD(name) "    " << colors.BoldColor() << name << colors.OldColor() << ": "
+#define FIELD(name) "  " << colors.BoldColor() << name << colors.OldColor() << ": "
 #define TYPE(type) "[" << colors.YellowColor() << type << colors.OldColor() << "] "
 #define TYPE2(type1, type2) "[" << colors.YellowColor() << type1 << colors.OldColor() << " | " << colors.YellowColor() << type2 << colors.OldColor() << "] "
 #define DEFAULT(value) " (default: " << colors.CyanColor() << value << colors.OldColor() << ")"
 
-        TStringBuilder oauth2TokenExchangeHelp;
-        oauth2TokenExchangeHelp << "OAuth 2.0 RFC8693 token exchange credentials parameters json file" << Endl;
-        if (config.HelpCommandVerbosiltyLevel <= 1) {
-            oauth2TokenExchangeHelp << "  Use -hh option to see file format description" << Endl;
-        }
-        oauth2TokenExchangeHelp
-            << "  Parameters file search order:" << Endl
-            << "    1. This option" << Endl
-            << "    2. Profile specified with --profile option" << Endl
-            << "    3. \"YDB_OAUTH2_KEY_FILE\" environment variable" << Endl
-            << "    4. Active configuration profile" << Endl << Endl
-            << "  Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl
-            << "  Detailed description about file parameters: https://ydb.tech/docs/en/reference/ydb-cli/connect" << Endl
-            << Endl;
+        oauth2TokenExchangeAuth = &opts.AddAuthMethodOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file");
+        (*oauth2TokenExchangeAuth)
+            .AuthMethod("oauth2-key-file")
+            .SimpleProfileDataParam()
+            .LogToConnectionParams("oauth2-key-file")
+            .DocLink("ydb.tech/docs/en/reference/ydb-cli/connect")
+            .Env("YDB_OAUTH2_KEY_FILE", true, "OAuth 2 key file")
+            .RequiredArgument("PATH")
+            .FileName("OAuth 2 key file")
+            .StoreFilePath(&config.Oauth2KeyFile)
+            .StoreResult(&config.Oauth2KeyParams);
 
         if (config.HelpCommandVerbosiltyLevel >= 2) {
+            TStringBuilder additionalHelp;
+            additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl << Endl;
+
             TStringBuilder supportedJwtAlgorithms;
-            for (const TString& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
+            for (const std::string& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
                 if (supportedJwtAlgorithms) {
                     supportedJwtAlgorithms << ", ";
                 }
                 supportedJwtAlgorithms << colors.BoldColor() << alg << colors.OldColor();
             }
 
-            oauth2TokenExchangeHelp
-                << "  Fields of json file:" << Endl
+            additionalHelp
+                << "Fields of json file:" << Endl
                 << FIELD("grant-type") "          " TYPE("string") "Grant type" DEFAULT(defaultParams.GrantType_) << Endl
                 << FIELD("res") "                 " TYPE("string") "Resource (optional)" << Endl
                 << FIELD("aud") "                 " TYPE2("string", "list of strings") "Audience option for token exchange request (optional)" << Endl
@@ -271,7 +343,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 << FIELD("subject-credentials") " " TYPE("creds_json") "Subject credentials (optional)" << Endl
                 << FIELD("actor-credentials") "   " TYPE("creds_json") "Actor credentials (optional)" << Endl
                 << Endl
-                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (JWT):" << Endl
+                << "Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (JWT):" << Endl
                 << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "JWT" << colors.OldColor() << Endl
                 << FIELD("alg") "                 " TYPE("string") "Algorithm for JWT signature. Supported algorithms: " << supportedJwtAlgorithms << Endl
                 << FIELD("private-key") "         " TYPE("string") "(Private) key in PEM format for JWT signature" << Endl
@@ -282,18 +354,18 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 << FIELD("jti") "                 " TYPE("string") "JWT ID JWT standard claim (optional)" << Endl
                 << FIELD("ttl") "                 " TYPE("string") "Token TTL" DEFAULT(defaultJwtParams.TokenTtl_) << Endl
                 << Endl
-                << "  Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
+                << "Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
                 << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
                 << FIELD("token") "               " TYPE("string") "Token value" << Endl
                 << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
                 << Endl;
+
+            additionalHelp
+                << "Note that additionally you need to set " << colors.BoldColor() << "--iam-endpoint" << colors.OldColor() << " option" << Endl
+                << "  in url format (SCHEMA://HOST:PORT/PATH) to configure endpoint.";
+
+            oauth2TokenExchangeAuth->AdditionalHelpNotes(additionalHelp);
         }
-
-        oauth2TokenExchangeHelp
-            << "  Note that additionally you need to set " << colors.BoldColor() << "--iam-endpoint" << colors.OldColor() << " option" << Endl
-            << "    in url format (SCHEMA://HOST:PORT/PATH) to configure endpoint.";
-
-        opts.AddLongOption("oauth2-key-file", oauth2TokenExchangeHelp).RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
 
 #undef DEFAULT
 #undef TYPE2
@@ -302,32 +374,55 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     }
 
     if (config.UseIamAuth) {
-        TStringBuilder iamEndpointHelp;
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        iamEndpointHelp << "Endpoint of IAM service (default: " << colors.Cyan();
-        iamEndpointHelp << "\"" << config.IamEndpoint << "\"" << colors.OldColor() << ")";
-        opts.AddLongOption("iam-endpoint", iamEndpointHelp)
+        opts.AddLongOption("iam-endpoint", "Endpoint of IAM service")
             .RequiredArgument("STR")
-            .StoreResult(&IamEndpoint);
+            .StoreResult(&config.IamEndpoint)
+            .LogToConnectionParams("iam-endpoint")
+            .ProfileParam("iam-endpoint")
+            .DefaultValue(config.IamEndpoint);
     }
+
+    // Special auth method that is not parsed from command line,
+    // but is parsed from profile
+    opts.AddAnonymousAuthMethodOption();
 
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
+    opts.SetAuthMethodsEnvPriority(
+        iamTokenAuth,
+        ycTokenAuth,
+        metadataAuth,
+        saKeyAuth,
+        ydbTokenAuth,
+        ydbUserAuth,
+        oauth2TokenExchangeAuth
+    );
+
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
-    opts.SetCmdLineDescr(stream.Str());
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
 
-    opts.GetLongOption("time").Hidden();
-    opts.GetLongOption("progress").Hidden();
+    // detailed help
+    stream << Endl << Endl << colors.BoldColor() << "Detailed help" << colors.OldColor() << ":" << Endl;
+    stream << colors.Green() << "-hh" << colors.OldColor() << ": Print detailed help" << Endl;
+
+    opts.GetOpts().SetCmdLineDescr(stream.Str());
+
+    opts.GetOpts().GetLongOption("time").Hidden();
+    opts.GetOpts().GetLongOption("progress").Hidden();
 
     config.SetFreeArgsMin(0);
 }
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
+    TClientCommandRootBase::Parse(config);
+    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+}
+
+void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
         config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
     } else {
@@ -339,149 +434,135 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
-    TClientCommandRootBase::Parse(config);
-    ParseDatabase(config);
-    ParseCaCerts(config);
-    ParseIamEndpoint(config);
-
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
-}
-
-namespace {
-    inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
-        Cerr << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
-            << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
+    if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
+        MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
-
-    inline TString GetProfileSource(std::shared_ptr<IProfile> profile, bool explicitOption) {
-        Y_ABORT_UNLESS(profile, "No profile to get source");
-        if (explicitOption) {
-            return TStringBuilder() << "profile \"" << profile->GetName() << "\" from explicit --profile option";
+    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
+        MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
+    }
+    if (IsVerbose()) {
+        std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {
+            config.ConnectionParams[paramName].push_back({value, sourceText});
+        });
+        if (!errors.empty()) {
+            MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
         }
-        return TStringBuilder() << "active profile \"" << profile->GetName() << "\"";
     }
-}
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
-                                                      std::function<bool(const TString&, const TString&, bool)> callback) {
-    if (profile && profile->Has(name)) {
-        return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
-    }
-    return false;
+    config.EnableSsl = EnableSsl;
+
+    ParseCaCerts(config);
+    ParseClientCert(config);
+    ParseStaticCredentials(config);
+
+    config.Address = Address;
+    config.Database = Database;
+    config.ChosenAuthMethod = ParseResult->GetChosenAuthMethod();
 }
 
 void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
-    auto getCaFile = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
-        if (!IsCaCertsFileSet && (explicitOption || !Profile)) {
-            config.CaCertsFile = param;
-            IsCaCertsFileSet = true;
-            GetCaCerts(config);
-        }
-        if (!IsVerbose()) {
-            return true;
-        }
-        config.ConnectionParams["ca-file"].push_back({param, sourceText});
-        return false;
-    };
-    // Priority 1. Explicit --ca-file option
-    if (CaCertsFile && getCaFile(CaCertsFile, "explicit --ca-file option", true)) {
-        return;
-    }
-    // Priority 2. Explicit --profile option
-    if (TryGetParamFromProfile("ca-file", Profile, true, getCaFile)) {
-        return;
-    }
-    // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("ca-file", ProfileManager->GetActiveProfile(), false, getCaFile)) {
-        return;
+    if (!config.EnableSsl && config.CaCerts) {
+        MisuseErrors.push_back("\"ca-file\" option is provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.");
     }
 }
 
-void TClientCommandRootCommon::GetCaCerts(TConfig& config) {
-    if (!config.EnableSsl && !config.CaCertsFile.empty()) {
-        throw TMisuseException()
-            << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+void TClientCommandRootCommon::ParseClientCert(TConfig& config) {
+    if (!config.EnableSsl && config.ClientCert) {
+        MisuseErrors.push_back("\"client-cert-file\"/\"client-cert-key-file\"/\"client-cert-key-password-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.");
     }
-    if (!config.CaCertsFile.empty()) {
-        config.CaCerts = ReadFromFile(config.CaCertsFile, "CA certificates");
+
+    if (config.ClientCert) {
+        // Convert certificates from PKCS#12 to PEM or encrypted private key to nonencrypted
+        // May ask for password
+        std::tie(config.ClientCert, config.ClientCertPrivateKey) = ConvertCertToPEM(config.ClientCert, config.ClientCertPrivateKey, config.ClientCertPrivateKeyPassword);
     }
 }
 
-void TClientCommandRootCommon::ParseAddress(TConfig& config) {
-    auto getAddress = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
-        TString address;
-        if (!IsAddressSet && (explicitOption || !Profile)) {
-            config.Address = param;
-            IsAddressSet = true;
-            GetAddressFromString(config);
-            address = config.Address;
-        }
-        if (!IsVerbose()) {
-            return true;
-        }
-        if (!address) {
-            address = param;
-            GetAddressFromString(config, &address);
-        }
-        config.ConnectionParams["endpoint"].push_back({address, sourceText});
-        return false;
-    };
-    // Priority 1. Explicit --endpoint option
-    if (Address && getAddress(Address, "explicit --endpoint option", true)) {
+void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
+    if (!config.UseStaticCredentials) {
         return;
     }
-    // Priority 2. Explicit --profile option
-    if (TryGetParamFromProfile("endpoint", Profile, true, getAddress)) {
+
+    if (ParseResult->GetChosenAuthMethod() != "static-credentials") {
         return;
     }
-    // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
+
+    // Check that we have username/password from one source
+    const TOptionParseResult* userResult = ParseResult->FindResult("user");
+    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
+    if (passwordResult && passwordResult->GetValueSource() == userResult->GetValueSource()) { // Both from command line or both from env
+        Password = PasswordOption;
+        PasswordFile = PasswordFileOption;
+    }
+
+    if (passwordResult && static_cast<int>(passwordResult->GetValueSource()) < static_cast<int>(userResult->GetValueSource())) { // Password is set from command line/env, but user is taken from source with less priority
+        MisuseErrors.push_back("User password was provided without user name");
         return;
+    }
+
+    // Assign values
+    config.StaticCredentials.User = UserName;
+    config.StaticCredentials.Password = Password;
+
+    if (!config.StaticCredentials.Password.empty()) {
+        DoNotAskForPassword = true;
+    }
+
+    // Interactively ask for password
+    if (!config.StaticCredentials.User.empty()) {
+        if (config.StaticCredentials.Password.empty() && !DoNotAskForPassword) {
+            Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
+            config.StaticCredentials.Password = InputPassword();
+            if (IsVerbose()) {
+                config.ConnectionParams["password"].push_back({TString{config.StaticCredentials.Password}, "standard input"});
+            }
+        }
     }
 }
 
-void TClientCommandRootCommon::GetAddressFromString(TConfig& config, TString* result) {
+TString TClientCommandRootCommon::GetAddressFromString(const TString& address_, bool* enableSsl, std::vector<TString>* errors) {
     TString port = "2135";
-    Address = result ? *result : config.Address;
-    if (!Address.empty()) {
-        if (!result) {
-            config.EnableSsl = Settings.EnableSsl.GetRef();
+    TString address = address_;
+    TString message;
+    if (!ParseProtocolNoConfig(address, enableSsl, message)) {
+        if (errors) {
+            errors->emplace_back(std::move(message));
         }
-        TString message;
-        if ((result && !ParseProtocolNoConfig(message)) || (!result && !ParseProtocol(config, message))) {
-            MisuseErrors.push_back(message);
+        return {};
+    }
+
+    const size_t colonPos = address.find(":");
+    if (colonPos == TString::npos) {
+        address = address + ':' + port;
+    } else {
+        if (colonPos != address.rfind(":")) {
+            if (errors) {
+                errors->emplace_back("Wrong format for option 'endpoint': more than one colon found.");
+            }
+            return {};
         }
-        auto colon_pos = Address.find(":");
-        if (colon_pos == TString::npos) {
-            if (result) {
-                *result = Address + ":" + port;
-            } else {
-                config.Address =  Address + ":" + port;
+    }
+    return address;
+}
+
+bool TClientCommandRootCommon::ParseProtocolNoConfig(TString& address, bool* enableSsl, TString& message) {
+    auto separatorPos = address.find("://");
+    if (separatorPos != TString::npos) {
+        TString protocol = address.substr(0, separatorPos);
+        protocol.to_lower();
+        if (protocol == "grpcs") {
+            if (enableSsl) {
+                *enableSsl = true;
+            }
+        } else if (protocol == "grpc") {
+            if (enableSsl) {
+                *enableSsl = false;
             }
         } else {
-            if (colon_pos == Address.rfind(":")) {
-                if (result) {
-                    *result = Address;
-                } else {
-                    config.Address =  Address;
-                }
-            } else {
-                MisuseErrors.push_back("Wrong format for option 'endpoint': more than one colon found.");
-            }
-        }
-    }
-}
-
-bool TClientCommandRootCommon::ParseProtocolNoConfig(TString& message) {
-    auto separator_pos = Address.find("://");
-    if (separator_pos != TString::npos) {
-        TString protocol = Address.substr(0, separator_pos);
-        protocol.to_lower();
-        if (protocol != "grpcs" && protocol != "grpc") {
             message = TStringBuilder() << "Unknown protocol \"" << protocol << "\".";
             return false;
         }
-        Address = Address.substr(separator_pos + 3);
+        address = address.substr(separatorPos + 3);
     }
     return true;
 }
@@ -495,62 +576,6 @@ void TClientCommandRootCommon::ParseProfile() {
                 << "Run \"ydb config profile list\" to see existing profiles");
             return;
         }
-    }
-}
-
-void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
-    auto getDatabase = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
-        if (!IsDatabaseSet && (explicitOption || !Profile)) {
-            config.Database = param;
-            IsDatabaseSet = true;
-        }
-        if (!IsVerbose()) {
-            return true;
-        }
-        config.ConnectionParams["database"].push_back({param, sourceText});
-        return false;
-    };
-    // Priority 1. Explicit --database option
-    if (Database && getDatabase(Database, "explicit --database option", true)) {
-        return;
-    }
-    // Priority 2. Explicit --profile option
-    if (TryGetParamFromProfile("database", Profile, true, getDatabase)) {
-        return;
-    }
-    // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
-        return;
-    }
-}
-
-void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
-    auto getIamEndpoint = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
-        if (!IsIamEndpointSet && (explicitOption || !Profile)) {
-            config.IamEndpoint = param;
-            IsIamEndpointSet = true;
-        }
-        if (!IsVerbose()) {
-            return true;
-        }
-        config.ConnectionParams["iam-endpoint"].push_back({param, sourceText});
-        return false;
-    };
-    // Priority 1. Explicit --iam-endpoint option
-    if (IamEndpoint && getIamEndpoint(IamEndpoint, "explicit --iam-endpoint option", true)) {
-        return;
-    }
-    // Priority 2. Explicit --profile option
-    if (TryGetParamFromProfile("iam-endpoint", Profile, true, getIamEndpoint)) {
-        return;
-    }
-    // Priority 3. Active profile (if --profile option is not specified)
-    if (TryGetParamFromProfile("iam-endpoint", ProfileManager->GetActiveProfile(), false, getIamEndpoint)) {
-        return;
-    }
-    // Priority 4. Default value
-    if (IsVerbose()) {
-        config.ConnectionParams["iam-endpoint"].push_back({config.IamEndpoint, "default value"});
     }
 }
 
@@ -574,19 +599,23 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
             throw TMisuseException() << errors;
         }
     }
+
+    // TODO: Maybe NeedToConnect doesn't always mean that we don't need to check endpoint and database
+    // TODO: Now we supplying only one error while it is possible to return all errors at once,
+    //       maybe even errors from nested command's validate
     if (!config.NeedToConnect) {
         return;
     }
 
-    if (config.Address.empty()) {
-        throw TMisuseException() << "Missing required option 'endpoint'.";
+    if (config.Address.empty() && !config.AllowEmptyAddress) {
+        throw TMisuseException() << "Missing required option 'endpoint'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     }
 
     if (config.Database.empty() && config.AllowEmptyDatabase) {
         // just skip the Database check
     } else if (config.Database.empty()) {
         throw TMisuseException()
-            << "Missing required option 'database'.";
+            << "Missing required option 'database'." << (config.OnlyExplicitProfile ? " Profile ignored due to admin command use." : "");
     } else if (!config.Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << config.Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";
@@ -611,517 +640,8 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfile> profile, TConfig& config, bool explicitOption) {
-    if (!profile || !profile->Has("authentication")) {
-        return false;
-    }
-    auto authValue = profile->GetValue("authentication");
-    if (!authValue["method"]) {
-        MisuseErrors.push_back("Configuration profile has \"authentication\" but does not have \"method\" in it");
-        return false;
-    }
-    TString authMethod = authValue["method"].as<TString>();
-
-    if (authMethod == "use-metadata-credentials") {
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("metadata service", profile, explicitOption);
-            }
-            config.UseMetadataCredentials = true;
-            config.ChosenAuthMethod = "use-metadata-credentials";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["use-metadata-credentials"].push_back({"true", GetProfileSource(profile, explicitOption)});
-        }
-        return true;
-    }
-    if (authMethod == "anonymous-auth") {
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("anonymous authentication", profile, explicitOption);
-            }
-            config.ChosenAuthMethod = "anonymous-auth";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["anonymous-auth"].push_back({"true", GetProfileSource(profile, explicitOption)});
-        }
-        return true;
-    }
-    bool knownMethod = false;
-    if (config.UseOauth2TokenExchange) {
-        knownMethod |= (authMethod == "oauth2-key-file");
-    }
-    if (config.UseIamAuth) {
-        knownMethod |= (authMethod == "iam-token" || authMethod == "yc-token" || authMethod == "sa-key-file" ||
-                        authMethod == "token-file" || authMethod == "yc-token-file");
-    }
-    if (config.UseAccessToken) {
-        knownMethod |= (authMethod == "ydb-token" || authMethod == "token-file");
-    }
-    if (config.UseStaticCredentials) {
-        knownMethod |= (authMethod == "static-credentials");
-    }
-    if (!knownMethod) {
-        MisuseErrors.push_back(TStringBuilder() << "Unknown authentication method in configuration profile: \""
-            << authMethod << "\"");
-        return false;
-    }
-    if (!authValue["data"]) {
-        MisuseErrors.push_back(TStringBuilder() << "Active configuration profile has \"authentication\" with method \""
-            << authMethod << "\" in it, but no \"data\"");
-        return false;
-    }
-    auto authData = authValue["data"];
-
-    if (authMethod == "iam-token") {
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("iam token", profile, explicitOption);
-            }
-            config.SecurityToken = authData.as<TString>();
-            config.ChosenAuthMethod = "token";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["token"].push_back({authData.as<TString>(), GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "token-file") {
-        TString filename = authData.as<TString>();
-        TString fileContent;
-        if (!ReadFromFileIfExists(filename, "token", fileContent, true)) {
-            MisuseErrors.push_back(TStringBuilder() << "Couldn't read token from file " << filename);
-            return false;
-        }
-        if (!fileContent) {
-            MisuseErrors.push_back(TStringBuilder() << "Empty token file " << filename << " provided");
-            return false;
-        }
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("token file", profile, explicitOption);
-            }
-            config.SecurityToken = fileContent;
-            config.ChosenAuthMethod = "token";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["token"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "oauth2-key-file") {
-        TString filePath = authData.as<TString>();
-        if (filePath.StartsWith("~")) {
-            filePath = HomeDir + filePath.substr(1);
-        }
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("oauth2 key file (oauth2-key-file)", profile, explicitOption);
-            }
-            config.Oauth2KeyFile = filePath;
-            config.ChosenAuthMethod = "oauth2-key-file";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["oauth2-key-file"].push_back({filePath, GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "yc-token") {
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
-            }
-            config.YCToken = authData.as<TString>();
-            config.ChosenAuthMethod = "yc-token";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["yc-token"].push_back({authData.as<TString>(), GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "yc-token-file") {
-        TString filename = authData.as<TString>();
-        TString fileContent;
-        if (!ReadFromFileIfExists(filename, "token", fileContent, true)) {
-            MisuseErrors.push_back(TStringBuilder() << "Couldn't read token from file " << filename);
-            return false;
-        }
-        if (!fileContent) {
-            MisuseErrors.push_back(TStringBuilder() << "Empty token file " << filename << " provided");
-            return false;
-        }
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
-            }
-            config.YCToken = fileContent;
-            config.ChosenAuthMethod = "yc-token";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["yc-token"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "sa-key-file") {
-        TString filePath = authData.as<TString>();
-        if (filePath.StartsWith("~")) {
-            filePath = HomeDir + filePath.substr(1);
-        }
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
-            }
-            config.SaKeyFile = filePath;
-            config.ChosenAuthMethod = "sa-key-file";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["sa-key-file"].push_back({filePath, GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "ydb-token") {
-        if (!IsAuthSet && (explicitOption || !Profile)) {
-            if (IsVerbose()) {
-                PrintSettingFromProfile("Access token (ydb-token)", profile, explicitOption);
-            }
-            config.SecurityToken = authData.as<TString>();
-            config.ChosenAuthMethod = "token";
-            IsAuthSet = true;
-        }
-        if (IsVerbose()) {
-            config.ConnectionParams["token"].push_back({authData.as<TString>(), GetProfileSource(profile, explicitOption)});
-        }
-    } else if (authMethod == "static-credentials") {
-        if (!IsAuthSet && (explicitOption || !Profile) && IsVerbose()) {
-            PrintSettingFromProfile("user name & password", profile, explicitOption);
-        }
-        if (authData["user"]) {
-            if (!IsAuthSet && (explicitOption || !Profile)) {
-                config.StaticCredentials.User = authData["user"].as<TString>();
-            }
-            if (IsVerbose()) {
-                config.ConnectionParams["user"].push_back({authData["user"].as<TString>(), GetProfileSource(profile, explicitOption)});
-            }
-        }
-        if (authData["password"]) {
-            if (!IsAuthSet && (explicitOption || !Profile)) {
-                config.StaticCredentials.Password = authData["password"].as<TString>();
-                if (!config.StaticCredentials.Password) {
-                    DoNotAskForPassword = true;
-                }
-            }
-            if (IsVerbose()) {
-                config.ConnectionParams["password"].push_back({authData["password"].as<TString>(), GetProfileSource(profile, explicitOption)});
-            }
-        }
-        if (authData["password-file"]) {
-            TString filename = authData["password-file"].as<TString>();
-            TString fileContent;
-            if (!ReadFromFileIfExists(filename, "password", fileContent, true)) {
-                MisuseErrors.push_back(TStringBuilder() << "Couldn't read password from file " << filename);
-                DoNotAskForPassword = true;
-                return false;
-            }
-            if (!IsAuthSet && (explicitOption || !Profile)) {
-                config.StaticCredentials.Password = fileContent;
-                if (!config.StaticCredentials.Password) {
-                    DoNotAskForPassword = true;
-                }
-            }
-            if (IsVerbose()) {
-                config.ConnectionParams["password"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
-            }
-        }
-        config.ChosenAuthMethod = "static-credentials";
-        IsAuthSet = true;
-    } else {
-        return false;
-    }
-    return true;
-}
-
 void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
-    size_t explicitAuthMethodCount = (size_t)(config.ParseResult->Has("iam-token-file")) + (size_t)(config.ParseResult->Has("token-file"))
-        + (size_t)(!YCTokenFile.empty())
-        + (size_t)UseMetadataCredentials + (size_t)(!SaKeyFile.empty())
-        + (size_t)(!UserName.empty() || !PasswordFile.empty() || DoNotAskForPassword)
-        + (size_t)(!Oauth2KeyFile.empty());
-
-    switch (explicitAuthMethodCount) {
-    case 1:
-        // Priority 1. Exactly one explicit auth method. Using it.
-        if (config.ParseResult->Has("token-file")) {
-            config.SecurityToken = ReadFromFile(TokenFile, "token");
-            config.ChosenAuthMethod = "token";
-            if (IsVerbose()) {
-                Cerr << "Using token from file provided with explicit option" << Endl;
-                config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --token-file option"});
-            }
-        } else if (Oauth2KeyFile) {
-            config.Oauth2KeyFile = Oauth2KeyFile;
-            config.ChosenAuthMethod = "oauth2-key-file";
-            if (IsVerbose()) {
-                Cerr << "Using oauth2 key file provided with --oauth2-key-file option" << Endl;
-                config.ConnectionParams["oauth2-key-file"].push_back({config.Oauth2KeyFile, "explicit --oauth2-key-file option"});
-            }
-        } else if (config.ParseResult->Has("iam-token-file")) {
-            config.SecurityToken = ReadFromFile(TokenFile, "token");
-            config.ChosenAuthMethod = "token";
-            if (IsVerbose()) {
-                Cerr << "Using IAM token from file provided with explicit option" << Endl;
-                config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --iam-token-file option"});
-            }
-        } else if (YCTokenFile) {
-            config.YCToken = ReadFromFile(YCTokenFile, "token");
-            config.ChosenAuthMethod = "yc-token";
-            if (IsVerbose()) {
-                Cerr << "Using Yandex.Cloud Passport token from file provided with --yc-token-file option" << Endl;
-                config.ConnectionParams["yc-token"].push_back({config.YCToken, "file provided with explicit --yc-token-file option"});
-            }
-        } else if (UseMetadataCredentials) {
-            config.ChosenAuthMethod = "use-metadata-credentials";
-            config.UseMetadataCredentials = true;
-            if (IsVerbose()) {
-                Cerr << "Using metadata service due to --use-metadata-credentials option" << Endl;
-                config.ConnectionParams["use-metadata-credentials"].push_back({"true", "explicit --use-metadata-credentials option"});
-            }
-        } else if (SaKeyFile) {
-            config.SaKeyFile = SaKeyFile;
-            config.ChosenAuthMethod = "sa-key-file";
-            if (IsVerbose()) {
-                Cerr << "Using service account key file provided with --sa-key-file option" << Endl;
-                config.ConnectionParams["sa-key-file"].push_back({config.SaKeyFile, "explicit --sa-key-file option"});
-            }
-        } else if (UserName || PasswordFile) {
-            if (UserName) {
-                config.StaticCredentials.User = UserName;
-                if (IsVerbose()) {
-                    Cerr << "Using user name provided with --user option" << Endl;
-                    config.ConnectionParams["user"].push_back({UserName, "explicit --user option"});
-                }
-            }
-            if (PasswordFile) {
-                config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
-                if (!config.StaticCredentials.Password) {
-                    DoNotAskForPassword = true;
-                }
-                if (IsVerbose()) {
-                    Cerr << "Using user password from file provided with --password-file option" << Endl;
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "file provided with explicit --password-file option"});
-                }
-            }
-            config.ChosenAuthMethod = "static-credentials";
-        }
-        IsAuthSet = true;
-        if (!IsVerbose()) {
-            break;
-        }
-    case 0:
-    {
-        // Priority 2. No explicit auth methods. Checking configuration profile given via --profile option.
-        if (GetCredentialsFromProfile(Profile, config, true) && !IsVerbose()) {
-            break;
-        }
-
-        // Priority 3. No auth methods from --profile either. Checking environment variables.
-        if (config.UseIamAuth) {
-            TString envIamToken = GetEnv("IAM_TOKEN");
-            if (!envIamToken.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using iam token from IAM_TOKEN env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "token";
-                    config.SecurityToken = envIamToken;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["token"].push_back({envIamToken, "IAM_TOKEN enviroment variable"});
-            }
-            TString envYcToken = GetEnv("YC_TOKEN");
-            if (!envYcToken.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using Yandex.Cloud Passport token from YC_TOKEN env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "yc-token";
-                    config.YCToken = envYcToken;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["yc-token"].push_back({envYcToken, "YC_TOKEN enviroment variable"});
-            }
-            if (GetEnv("USE_METADATA_CREDENTIALS") == "1") {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using metadata service due to USE_METADATA_CREDENTIALS=\"1\" env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "use-metadata-credentials";
-                    config.UseMetadataCredentials = true;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["use-metadata-credentials"].push_back({"true", "USE_METADATA_CREDENTIALS enviroment variable"});
-            }
-            TString envSaKeyFile = GetEnv("SA_KEY_FILE");
-            if (!envSaKeyFile.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using service account key file from SA_KEY_FILE env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "sa-key-file";
-                    config.SaKeyFile = envSaKeyFile;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["sa-key-file"].push_back({envSaKeyFile, "SA_KEY_FILE enviroment variable"});
-            }
-        }
-        if (config.UseAccessToken) {
-            TString envYdbToken = GetEnv("YDB_TOKEN");
-            if (!envYdbToken.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using access token from YDB_TOKEN env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "token";
-                    config.SecurityToken = envYdbToken;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["token"].push_back({envYdbToken, "YDB_TOKEN enviroment variable"});
-            }
-        }
-        if (config.UseStaticCredentials) {
-            TString userName = GetEnv("YDB_USER");
-            bool hasStaticCredentials = false;
-            if (!userName.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using user name from YDB_USER env variable" << Endl;
-                    }
-                    hasStaticCredentials = true;
-                    config.StaticCredentials.User = userName;
-                }
-                if (IsVerbose()) {
-                    config.ConnectionParams["user"].push_back({userName, "YDB_USER enviroment variable"});
-                }
-            }
-
-            TString password = GetEnv("YDB_PASSWORD");
-            if (!password.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using user password from YDB_PASSWORD env variable" << Endl;
-                    }
-                    hasStaticCredentials = true;
-                    config.StaticCredentials.Password = password;
-                }
-                if (IsVerbose()) {
-                    config.ConnectionParams["password"].push_back({password, "YDB_PASSWORD enviroment variable"});
-                }
-            }
-            if (hasStaticCredentials) {
-                config.ChosenAuthMethod = "static-credentials";
-                IsAuthSet = true;
-            }
-            if (!IsVerbose() && (!userName.empty() || !password.empty())) {
-                break;
-            }
-        }
-
-        if (config.UseOauth2TokenExchange) {
-            TString envOauth2KeyFile = GetEnv("YDB_OAUTH2_KEY_FILE");
-            if (!envOauth2KeyFile.empty()) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using oauth2 key file from YDB_OAUTH2_KEY_FILE env variable" << Endl;
-                    }
-                    config.ChosenAuthMethod = "oauth2-key-file";
-                    config.Oauth2KeyFile = envOauth2KeyFile;
-                    IsAuthSet = true;
-                }
-                if (!IsVerbose()) {
-                    break;
-                }
-                config.ConnectionParams["oauth2-key-file"].push_back({envOauth2KeyFile, "YDB_OAUTH2_KEY_FILE enviroment variable"});
-            }
-        }
-
-        // Priority 4. No auth methods from environment variables too. Checking active configuration profile.
-        // (if --profile option is not set)
-        if (GetCredentialsFromProfile(ProfileManager->GetActiveProfile(), config, false) && !IsVerbose()) {
-            break;
-        }
-
-        if (Settings.UseDefaultTokenFile.GetRef()) {
-            // Priority 5. No auth methods from active configuration profile. Checking default token file.
-            TString tokenFile = defaultTokenFile;
-            TString fileContent;
-            if (ReadFromFileIfExists(tokenFile, "default token", fileContent)) {
-                if (!IsAuthSet) {
-                    if (IsVerbose()) {
-                        Cerr << "Using auth token from default token file " << defaultTokenFile << Endl;
-                    }
-                    config.ChosenAuthMethod = "token";
-                    config.SecurityToken = fileContent;
-                }
-                if (IsVerbose()) {
-                    config.ConnectionParams["token"].push_back({fileContent, "default token file"});
-                }
-            } else {
-                if (!IsAuthSet && IsVerbose()) {
-                    Cerr << "No authentication methods were found. Going without authentication" << Endl;
-                }
-            }
-        }
-        break;
-    }
-    default:
-        TStringBuilder str;
-        str << explicitAuthMethodCount << " methods were provided via options:";
-        if (!TokenFile.empty()) {
-            str << " TokenFile (" << TokenFile << ")";
-        }
-        if (!YCTokenFile.empty()) {
-            str << " YCTokenFile (" << YCTokenFile << ")";
-        }
-        if (!SaKeyFile.empty()) {
-            str << " SaKeyFile (" << SaKeyFile << ")";
-        }
-        if (UseMetadataCredentials) {
-            str << " UseMetadataCredentials (true)";
-        }
-        if (Oauth2KeyFile) {
-            str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
-        }
-
-        MisuseErrors.push_back(TStringBuilder() << str << ". Choose exactly one of them");
-        return;
-    }
-
-    if (config.UseStaticCredentials) {
-        if (config.StaticCredentials.User) {
-            if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
-                Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
-                config.StaticCredentials.Password = InputPassword();
-                if (IsVerbose()) {
-                    config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "standard input"});
-                }
-            }
-        } else {
-            if (config.StaticCredentials.Password) {
-                MisuseErrors.push_back("User password was provided without user name");
-                return;
-            }
-        }
-    }
+    Y_UNUSED(config);
 }
 
 }

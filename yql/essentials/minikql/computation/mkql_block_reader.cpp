@@ -162,6 +162,19 @@ private:
     i32 TypeLen = 0;
 };
 
+class TSingularTypeItemConverter: public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(item, holderFactory);
+        return NUdf::TUnboxedValuePod::Zero();
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        Y_UNUSED(value);
+        return TBlockItem::Zero();
+    }
+};
+
 template <bool Nullable>
 class TTupleBlockItemConverter : public IBlockItemConverter {
 public:
@@ -285,6 +298,9 @@ struct TConverterTraits {
     using TExtOptional = TExternalOptionalBlockItemConverter;
     template<typename TTzDate, bool Nullable>
     using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
+    using TSingularType = TSingularTypeItemConverter;
+
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         if (desc.PassByValue) {
@@ -323,12 +339,16 @@ struct TConverterTraits {
             return std::make_unique<TTzDateConverter<TTzDate, false>>();
         }
     }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
+    }
 };
 
 } // namespace
 
 std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const NUdf::IPgBuilder& pgBuilder) {
-    return NYql::NUdf::MakeBlockReaderImpl<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
+    return NYql::NUdf::DispatchByArrowTraits<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
 }
 
 } // namespace NMiniKQL

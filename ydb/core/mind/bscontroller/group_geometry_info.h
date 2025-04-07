@@ -11,16 +11,18 @@ namespace NKikimr::NBsController {
     struct TExFitGroupError : yexception {};
 
     class TGroupGeometryInfo {
-        const TBlobStorageGroupType Type;
-        ui32 NumFailRealms;
-        ui32 NumFailDomainsPerFailRealm;
-        ui32 NumVDisksPerFailDomain;
-        ui32 RealmLevelBegin;
-        ui32 RealmLevelEnd;
-        ui32 DomainLevelBegin;
-        ui32 DomainLevelEnd;
+        TBlobStorageGroupType Type;
+        ui32 NumFailRealms = 0;
+        ui32 NumFailDomainsPerFailRealm = 0;
+        ui32 NumVDisksPerFailDomain = 0;
+        ui32 RealmLevelBegin = 0;
+        ui32 RealmLevelEnd = 0;
+        ui32 DomainLevelBegin = 0;
+        ui32 DomainLevelEnd = 0;
 
     public:
+        explicit TGroupGeometryInfo() = default;
+
         TGroupGeometryInfo(TBlobStorageGroupType type, NKikimrBlobStorage::TGroupGeometry g)
             : Type(type)
             , NumFailRealms(g.GetNumFailRealms())

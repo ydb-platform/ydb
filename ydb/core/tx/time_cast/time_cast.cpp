@@ -17,9 +17,6 @@
 
 namespace NKikimr {
 
-// We will unsubscribe from idle coordinators after 5 minutes
-static constexpr TDuration MaxIdleCoordinatorSubscriptionTime = TDuration::Minutes(5);
-
 ui64 TMediatorTimecastSharedEntry::Get() const noexcept {
     return Step.load(std::memory_order_acquire);
 }
@@ -192,7 +189,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         THashSet<TActorId> Subscribers;
         TMap<std::pair<ui64, TActorId>, ui64> SubscribeRequests; // (seqno, subscriber) -> Cookie
         TMap<std::pair<ui64, TActorId>, ui64> WaitRequests; // (step, subscriber) -> Cookie
-        TMonotonic IdleStart;
+        bool Unsubscribed = false;
     };
 
     THashMap<ui64, TMediator> Mediators; // mediator tablet -> info
@@ -336,7 +333,12 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             if (bucket.Tablets.empty()) {
                 // There are no tablets interested in this bucket, avoid unnecessary watches
                 bucket.WatchSent = false;
-                bucket.Waiters = { };
+                if (!bucket.Waiters.empty()) {
+                    bucket.Waiters = { };
+                }
+                if (!bucket.TabletWaiters.empty()) {
+                    bucket.TabletWaiters.clear();
+                }
                 continue;
             }
 
@@ -371,6 +373,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             NTabletPipe::SendData(ctx, client, req.release());
 
             bucket.WatchSent = true;
+            bucket.WatchSynced = false;
         }
     }
 
@@ -391,6 +394,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
 
     void SyncCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
     void ResyncCoordinator(ui64 coordinatorId, const TActorId& pipeClient, const TActorContext& ctx);
+    void UnsubscribeCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
     void NotifyCoordinatorWaiters(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx);
 
     void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr& ev, const TActorContext& ctx);
@@ -629,48 +633,46 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr& ev, co
         Y_ABORT_UNLESS(record.GetBucket() < mediator.BucketsSz);
         auto& bucket = mediator.Buckets[record.GetBucket()];
         const ui64 step = record.GetTimeBarrier();
-        switch (bucket.SafeStep.RefCount()) {
-            case 0:
-                break;
-            case 1:
+        bucket.SafeStep->Set(step);
+        if (bucket.Tablets.empty()) {
+            if (!bucket.Waiters.empty()) {
                 bucket.Waiters = { };
-                bucket.TabletWaiters = { };
-                [[fallthrough]];
-            default: {
-                bucket.SafeStep->Set(step);
-                THashSet<std::pair<TActorId, ui64>> processed; // a set of processed tablets
-                while (!bucket.Waiters.empty()) {
-                    const auto& top = bucket.Waiters.top();
-                    if (step < top.PlanStep) {
-                        break;
-                    }
-                    if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
-                        ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
-                    }
-                    bucket.Waiters.pop();
+            }
+            if (!bucket.TabletWaiters.empty()) {
+                bucket.TabletWaiters.clear();
+            }
+        } else {
+            THashSet<std::pair<TActorId, ui64>> processed; // a set of processed tablets
+            while (!bucket.Waiters.empty()) {
+                const auto& top = bucket.Waiters.top();
+                if (step < top.PlanStep) {
+                    break;
                 }
-                while (!bucket.TabletWaiters.empty()) {
-                    const auto& candidate = *bucket.TabletWaiters.begin();
-                    if (step < candidate.PlanStep) {
-                        break;
-                    }
-                    auto it = Tablets.find(candidate.TabletId);
-                    if (it != Tablets.end()) {
-                        auto& tabletInfo = it->second;
-                        while (!tabletInfo.Waiters.empty()) {
-                            const auto& top = *tabletInfo.Waiters.begin();
-                            if (step < top.PlanStep) {
-                                break;
-                            }
-                            if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
-                                ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
-                            }
-                            tabletInfo.Waiters.erase(tabletInfo.Waiters.begin());
+                if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
+                    ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
+                }
+                bucket.Waiters.pop();
+            }
+            while (!bucket.TabletWaiters.empty()) {
+                const auto& candidate = *bucket.TabletWaiters.begin();
+                if (step < candidate.PlanStep) {
+                    break;
+                }
+                auto it = Tablets.find(candidate.TabletId);
+                if (it != Tablets.end()) {
+                    auto& tabletInfo = it->second;
+                    while (!tabletInfo.Waiters.empty()) {
+                        const auto& top = *tabletInfo.Waiters.begin();
+                        if (step < top.PlanStep) {
+                            break;
                         }
+                        if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
+                            ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
+                        }
+                        tabletInfo.Waiters.erase(tabletInfo.Waiters.begin());
                     }
-                    bucket.TabletWaiters.erase(bucket.TabletWaiters.begin());
                 }
-                break;
+                bucket.TabletWaiters.erase(bucket.TabletWaiters.begin());
             }
         }
         for (ui64 coordinatorId : mediator.Coordinators) {
@@ -870,8 +872,9 @@ void TMediatorTimecastProxy::SyncCoordinator(ui64 coordinatorId, TCoordinator& c
             NTabletPipe::CreateClient(ctx.SelfID, coordinatorId, retryPolicy));
     }
 
-    coordinator.LastSentSeqNo = seqNo;
     NTabletPipe::SendData(ctx, coordinator.PipeClient, new TEvTxProxy::TEvSubscribeReadStep(coordinatorId, seqNo));
+    coordinator.LastSentSeqNo = seqNo;
+    coordinator.Unsubscribed = false;
 }
 
 void TMediatorTimecastProxy::ResyncCoordinator(ui64 coordinatorId, const TActorId& pipeClient, const TActorContext& ctx) {
@@ -894,6 +897,17 @@ void TMediatorTimecastProxy::ResyncCoordinator(ui64 coordinatorId, const TActorI
 
     ++LastSeqNo;
     SyncCoordinator(coordinatorId, coordinator, ctx);
+}
+
+void TMediatorTimecastProxy::UnsubscribeCoordinator(ui64 coordinatorId, TCoordinator& coordinator, const TActorContext& ctx) {
+    if (coordinator.Unsubscribed || !coordinator.PipeClient) {
+        return;
+    }
+
+    // Note: we leave the pipe open to make new subscriptions faster
+    // The idle entry will be removed when the pipe eventually disconnects
+    NTabletPipe::SendData(ctx, coordinator.PipeClient, new TEvTxProxy::TEvUnsubscribeReadStep(coordinatorId, coordinator.LastSentSeqNo));
+    coordinator.Unsubscribed = true;
 }
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvSubscribeReadStep::TPtr& ev, const TActorContext& ctx) {
@@ -924,7 +938,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep:
             auto& coordinator = Coordinators[coordinatorId];
             coordinator.Subscribers.erase(ev->Sender);
             if (coordinator.Subscribers.empty()) {
-                coordinator.IdleStart = ctx.Monotonic();
+                UnsubscribeCoordinator(coordinatorId, coordinator, ctx);
             }
         }
         subscriber.Coordinators.clear();
@@ -933,7 +947,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep:
         auto& coordinator = Coordinators[msg->CoordinatorId];
         coordinator.Subscribers.erase(ev->Sender);
         if (coordinator.Subscribers.empty()) {
-            coordinator.IdleStart = ctx.Monotonic();
+            UnsubscribeCoordinator(msg->CoordinatorId, coordinator, ctx);
         }
         subscriber.Coordinators.erase(msg->CoordinatorId);
     }
@@ -1041,16 +1055,6 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepUpdate::TPtr
         coordinator.ReadStep->Update(nextReadStep);
 
         NotifyCoordinatorWaiters(coordinatorId, coordinator, ctx);
-    }
-
-    // Unsubscribe from idle coordinators
-    if (coordinator.Subscribers.empty() && (ctx.Monotonic() - coordinator.IdleStart) >= MaxIdleCoordinatorSubscriptionTime) {
-        if (coordinator.PipeClient) {
-            NTabletPipe::CloseClient(ctx, coordinator.PipeClient);
-            coordinator.PipeClient = TActorId();
-        }
-
-        Coordinators.erase(itCoordinator);
     }
 }
 

@@ -1,2 +1,4 @@
+title: YQL core reference
+href: index.md
 items:
 - include: { mode: link, path: toc_i.yaml }

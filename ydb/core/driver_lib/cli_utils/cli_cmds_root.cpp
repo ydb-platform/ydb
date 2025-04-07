@@ -31,8 +31,8 @@ public:
     }
 
     void Config(TConfig& config) override {
-        NLastGetopt::TOpts& opts = *config.Opts;
-        HideOptions(*config.Opts);
+        TClientCommandOptions& opts = *config.Opts;
+        HideOptions(config.Opts->GetOpts());
         opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
         opts.AddLongOption('s', "server", "server address to connect")
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);
@@ -56,11 +56,16 @@ public:
             config.EnableSsl = endpoint.EnableSsl.GetRef();
         }
         ParseCaCerts(config);
+        ParseClientCert(config);
 
         CommandConfig.ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
+            if (config.ClientCert) {
+                CommandConfig.ClientConfig.SslCredentials.pem_cert_chain = config.ClientCert;
+                CommandConfig.ClientConfig.SslCredentials.pem_private_key = config.ClientCertPrivateKey;
+            }
         }
     }
 };
@@ -78,7 +83,7 @@ TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModul
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    commandsRoot->RenderCommandsDescription(stream, colors);
+    commandsRoot->RenderCommandDescription(stream, false, colors);
     return stream.Str();
 }
 

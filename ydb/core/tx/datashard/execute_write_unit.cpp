@@ -4,6 +4,7 @@
 #include "datashard_locks_db.h"
 #include "datashard_user_db.h"
 #include "datashard_kqp.h"
+#include "datashard_integrity_trails.h"
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
@@ -41,7 +42,8 @@ public:
     void AddLocksToResult(TWriteOperation* writeOp, const TActorContext& ctx) {
         NEvents::TDataEvents::TEvWriteResult& writeResult = *writeOp->GetWriteResult();
 
-        auto locks = DataShard.SysLocksTable().ApplyLocks();
+        auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+        NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), writeOp->GetTxId(), locksBrokenByTx);
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {
@@ -71,7 +73,7 @@ public:
             for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                 writeOp.AddVolatileDependency(txId);
                 bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp.GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
+                Y_ENSURE(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
             }
 
             ResetChanges(userDb, writeOp, txc);
@@ -95,8 +97,8 @@ public:
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
             return EExecutionStatus::Continue;
         
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Duplicate keys have been found.");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Duplicate keys have been found.");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }
@@ -117,7 +119,7 @@ public:
 
         auto fillOps = [&](ui32 rowIdx) {
             ops.clear();
-            Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
+            Y_ENSURE(matrix.GetColCount() >= userTable.KeyColumnIds.size());
             ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
 
             for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
@@ -171,7 +173,7 @@ public:
                 }
                 default:
                     // Checked before in TWriteOperation
-                    Y_FAIL_S(operationType << " operation is not supported now");
+                    Y_ENSURE(false, operationType << " operation is not supported now");
             }
         }
 
@@ -190,7 +192,7 @@ public:
             }
             default:
                 // Checked before in TWriteOperation
-                Y_FAIL_S(operationType << " operation is not supported now");
+                Y_ENSURE(false, operationType << " operation is not supported now");
         }
     }
 
@@ -228,13 +230,13 @@ public:
                 case ERestoreDataStatus::Error:
                     // For immediate transactions we want to translate this into a propose failure
                     if (op->IsImmediate()) {
-                        Y_ABORT_UNLESS(!writeTx->Ready());
+                        Y_ENSURE(!writeTx->Ready());
                         writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
                         return EExecutionStatus::Executed;
                     }
 
                     // For planned transactions errors are not expected
-                    Y_ABORT("Failed to restore tx data: %s", writeTx->GetErrStr().c_str());
+                    Y_ENSURE(false, "Failed to restore tx data: " << writeTx->GetErrStr());
             }
         }
 
@@ -243,7 +245,7 @@ public:
 
         if (op->IsImmediate() && !writeOp->ReValidateKeys(txc.DB.GetScheme())) {
             // Immediate transactions may be reordered with schema changes and become invalid
-            Y_ABORT_UNLESS(!writeTx->Ready());
+            Y_ENSURE(!writeTx->Ready());
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
             return EExecutionStatus::Executed;
         }
@@ -344,7 +346,8 @@ public:
                 }
 
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-                sysLocks.ApplyLocks();
+                auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+                NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
                 DataShard.SubscribeNewLocks(ctx);
                 if (locksDb.HasChanges()) {
                     op->SetWaitCompletionFlag(true);
@@ -392,7 +395,7 @@ public:
             if (commitTxIds) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
-                    txId,
+                    userDb.GetVolatileTxId(),
                     writeVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),
@@ -433,9 +436,9 @@ public:
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
         } catch (const TNeedGlobalTxId&) {
-            Y_VERIFY_S(op->GetGlobalTxId() == 0,
+            Y_ENSURE(op->GetGlobalTxId() == 0,
                 "Unexpected TNeedGlobalTxId exception for write operation with TxId# " << op->GetGlobalTxId());
-            Y_VERIFY_S(op->IsImmediate(),
+            Y_ENSURE(op->IsImmediate(),
                 "Unexpected TNeedGlobalTxId exception for a non-immediate write operation with TxId# " << op->GetTxId());
 
             ctx.Send(MakeTxProxyID(),
@@ -455,7 +458,7 @@ public:
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << tabletId << " cannot write more uncommitted changes");
 
             for (auto& table : guardLocks.AffectedTables) {
-                Y_ABORT_UNLESS(guardLocks.LockTxId);
+                Y_ENSURE(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
                     tabletId,

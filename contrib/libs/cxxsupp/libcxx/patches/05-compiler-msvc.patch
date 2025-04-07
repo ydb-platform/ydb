@@ -1,8 +1,8 @@
 diff --git a/include/__functional/bind.h b/include/__functional/bind.h
-index 19e7d82..92d9bbd 100644
+index b4f4644..3996460 100644
 --- a/include/__functional/bind.h
 +++ b/include/__functional/bind.h
-@@ -230,6 +230,10 @@ public:
+@@ -231,6 +231,10 @@ public:
    }
  };
  
@@ -13,7 +13,7 @@ index 19e7d82..92d9bbd 100644
  template <class _Fp, class... _BoundArgs>
  struct is_bind_expression<__bind<_Fp, _BoundArgs...> > : public true_type {};
  
-@@ -237,7 +241,11 @@ template <class _Rp, class _Fp, class... _BoundArgs>
+@@ -238,7 +242,11 @@ template <class _Rp, class _Fp, class... _BoundArgs>
  class __bind_r : public __bind<_Fp, _BoundArgs...> {
    typedef __bind<_Fp, _BoundArgs...> base;
    typedef typename base::_Fd _Fd;

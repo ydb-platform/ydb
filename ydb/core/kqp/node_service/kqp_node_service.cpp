@@ -107,7 +107,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_node", "KQP Node", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
@@ -257,7 +257,7 @@ private:
                 }
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor({
+            NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .LockTxId = lockTxId,
@@ -274,6 +274,7 @@ private:
                 .MemoryPool = memoryPool,
                 .WithSpilling = msgRtSettings.GetUseSpilling(),
                 .StatsMode = msgRtSettings.GetStatsMode(),
+                .WithProgressStats = msgRtSettings.GetWithProgressStats(),
                 .Deadline = TInstant(),
                 .ShareMailbox = false,
                 .RlPath = rlPath,
@@ -281,7 +282,14 @@ private:
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
                 // TODO: block tracking mode is not set!
-            });
+            };
+            if (msg.HasUserToken() && msg.GetUserToken()) {
+                createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
+            }
+
+            createArgs.Database = msg.GetDatabase();
+
+            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
@@ -450,7 +458,6 @@ private:
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
         ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
-        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

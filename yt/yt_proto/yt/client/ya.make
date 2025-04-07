@@ -46,6 +46,8 @@ SRCS(
 
     query_client/proto/query_statistics.proto
 
+    scheduler/proto/spec_patch.proto
+
     misc/proto/workload.proto
 )
 

@@ -37,12 +37,10 @@ class TLogicRedo {
     struct TCompletionEntry {
         ui32 Step;
 
-        /* vvvv argh.... */
-        TAutoPtr<TSeat> InFlyRWTransaction;
-        TVector<TAutoPtr<TSeat>> WaitingROTransactions;
-        TVector<TAutoPtr<TSeat>> WaitingTerminatedTransactions;
+        // The first owned tx is rw
+        TIntrusiveListWithAutoDelete<TSeat, TDelete> Transactions;
 
-        TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step);
+        TCompletionEntry(std::unique_ptr<TSeat> seat, ui32 step);
     };
 
     TDeque<TCompletionEntry> CompletionQueue; // would be graph once data-dependencies implemented
@@ -57,11 +55,10 @@ public:
     TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator>, TCommitManager*, TAutoPtr<NRedo::TQueue>);
     ~TLogicRedo();
 
-    void Describe(IOutputStream &out) const noexcept;
+    void Describe(IOutputStream &out) const;
     void InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes* appTxCounters);
-    bool TerminateTransaction(TAutoPtr<TSeat>, const TActorContext &ctx, const TActorId &ownerId);
-    bool CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx);
-    TCommitRWTransactionResult CommitRWTransaction(TAutoPtr<TSeat> seat, NTable::TChange &change, bool force);
+    bool CommitROTransaction(std::unique_ptr<TSeat> seat, const TActorContext &ownerCtx);
+    TCommitRWTransactionResult CommitRWTransaction(std::unique_ptr<TSeat> seat, NTable::TChange &change, bool force);
     void MakeLogEntry(TLogCommit&, TString redo, TArrayRef<const ui32> affects, bool embed);
     void FlushBatchedLog();
 
@@ -69,10 +66,10 @@ public:
 
     void CutLog(ui32 table, NTable::TSnapEdge, TGCBlobDelta&);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot&);
-    NRedo::TStats LogStats() const noexcept;
-    TArrayRef<const NRedo::TUsage> GrabLogUsage() const noexcept;
+    NRedo::TStats LogStats() const;
+    TArrayRef<const NRedo::TUsage> GrabLogUsage() const;
 };
 
-void CompleteRoTransaction(TAutoPtr<TSeat>, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters);
+void CompleteRoTransaction(std::unique_ptr<TSeat>, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters);
 
 }}

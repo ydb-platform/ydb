@@ -52,13 +52,13 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TTxInitRoot DoExecute"
                          << ", path: " << rootName
-                         << ", error creating user: " << defaultUser.GetName()
+                         << ", error creating user: '" << defaultUser.GetName() << "'"
                          << ", error: " << response.Error);
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                    Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.Hash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToMicroSeconds(sid.CreatedAt));
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -81,7 +81,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                 for (const auto& member : defaultGroup.GetMembers()) {
                     auto response = Self->LoginProvider.AddGroupMembership({
                         .Group = defaultGroup.GetName(),
@@ -91,7 +91,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                         LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInitRoot DoExecute"
                                 << ", path: " << rootName
-                                << ", error modifying group: " << defaultGroup.GetName()
+                                << ", error modifying group: '" << defaultGroup.GetName() << "'"
                                 << ", with member: " << member
                                 << ", error: " << response.Error);
                     } else {
@@ -123,9 +123,17 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
-            NACLibProto::TACE ace;
-            NACLib::TACL::FromString(ace, defaultAccess);
-            diffAcl.AddAccess(ace);
+            try {
+                NACLibProto::TACE ace;
+                NACLib::TACL::FromString(ace, defaultAccess);
+                diffAcl.AddAccess(ace);
+            } catch (const yexception& e) {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInitRoot DoExecute"
+                                << ", path: " << rootName
+                                << ", error setting access right: '" << defaultAccess << "'"
+                                << ", error: " << e.what());
+            }
         }
         newPath->ApplyACL(diffAcl.SerializeAsString());
         newPath->CachedEffectiveACL.Init(newPath->ACL);
@@ -258,7 +266,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             Self->PersistShardMapping(db, shardIdx, id, Self->RootPathId(), InvalidTxId, type);
 
             subdomain->AddPrivateShard(shardIdx);
-            subdomain->AddInternalShard(shardIdx);
+            subdomain->AddInternalShard(shardIdx, Self);
         }
     }
 
@@ -386,7 +394,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->AddStoragePool(x);
         }
 
-        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits));
+        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits), Self);
 
         if (record.HasDeclaredSchemeQuotas()) {
             subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());

@@ -288,7 +288,7 @@ inline TNodePtr ISource::AliasOrColumn(const TNodePtr& node, bool withSource) {
 
 bool ISource::AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func) {
     if (ctx.DistinctOverWindow) {
-        YQL_ENSURE(func->IsOverWindow() || func->IsOverWindowDistinct());    
+        YQL_ENSURE(func->IsOverWindow() || func->IsOverWindowDistinct());
     } else {
         YQL_ENSURE(func->IsOverWindow());
         if (func->IsDistinct()) {
@@ -649,7 +649,7 @@ TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
     return result ? result : FindMistypeIn(ExprAliases, name);
 }
 
-void ISource::AddDependentSource(ISource* usedSource) {
+void ISource::AddDependentSource(TSourcePtr usedSource) {
     UsedSources.push_back(usedSource);
 }
 

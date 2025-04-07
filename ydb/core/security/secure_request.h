@@ -2,6 +2,7 @@
 #include "ticket_parser.h"
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 
 namespace NKikimr {
 
@@ -43,14 +44,9 @@ private:
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
             }
         } else {
-            if (RequireAdminAccess) {
-                if (!GetAdministrationAllowedSIDs().empty()) {
-                    const auto& allowedSIDs(GetAdministrationAllowedSIDs());
-                    if (std::find_if(allowedSIDs.begin(), allowedSIDs.end(), [&result](const TString& sid) -> bool { return result.Token->IsExist(sid); }) == allowedSIDs.end()) {
-                        return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
-                    }
-                }
-                UserAdmin = true;
+            UserAdmin = IsTokenAllowed(result.Token.Get(), GetAdministrationAllowedSIDs());
+            if (RequireAdminAccess && !UserAdmin) {
+                return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
             }
         }
         AuthorizeTicketResult = ev.Get()->Release();

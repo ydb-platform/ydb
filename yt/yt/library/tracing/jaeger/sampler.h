@@ -12,10 +12,9 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSamplerConfig
+struct TSamplerConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! Request is sampled with probability P.
     double GlobalSampleRate;
 

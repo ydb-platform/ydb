@@ -270,7 +270,7 @@ public:
 
     void SetCompletionAction(TCompletionAction *completionAction) {
         AtomicSet(CompletionActionPtr, (TAtomicBase)completionAction);
-        Y_ABORT_UNLESS(AtomicGet(PartsPending) > 0);
+        Y_VERIFY(AtomicGet(PartsPending) > 0);
     }
 
     void Ref() {
@@ -347,6 +347,30 @@ public:
     TChunkTrimCompletion(TPDisk *pdisk, NHPTimer::STime startTime, size_t sizeBytes, TReqId reqId)
         : PDisk(pdisk)
         , StartTime(startTime)
+        , SizeBytes(sizeBytes)
+        , ReqId(reqId)
+    {}
+
+    void Exec(TActorSystem *actorSystem) override;
+
+    void Release(TActorSystem *actorSystem) override {
+        Y_UNUSED(actorSystem);
+        delete this;
+    }
+};
+
+class TChunkShredCompletion : public TCompletionAction {
+    TPDisk *PDisk;
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    size_t SizeBytes;
+    TReqId ReqId;
+
+public:
+    TChunkShredCompletion(TPDisk *pdisk, TChunkIdx chunk, ui32 sectorIdx, size_t sizeBytes, TReqId reqId)
+        : PDisk(pdisk)
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
         , SizeBytes(sizeBytes)
         , ReqId(reqId)
     {}

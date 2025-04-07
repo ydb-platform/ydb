@@ -1,9 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/tx/datashard/datashard.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/system/env.h>
 
 
@@ -101,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         Cout << res << Endl;
         CompareYson(R"(
             [[[0u];[0];["abcde"]];[[137u];[1];["abcde"]];[[274u];[2];["abcde"]];[[411u];[3];["abcde"]];[[548u];[4];["abcde"]];[[685u];[5];["abcde"]];[[822u];[6];["abcde"]];[[959u];[7];["abcde"]];[[1096u];[8];["abcde"]];[[1233u];[9];["abcde"]]]
-        )", res);
+        )", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_SpecificKey) {
@@ -151,13 +152,13 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         auto res = FormatResultSetYson(selectResult.GetResultSet());
         CompareYson(R"(
             [
-                [1858343823u;0u;"abcde"];
-                [1921763476782200957u;1u;"abcde"];
-                [3843526951706058091u;2u;"abcde"];
-                [5765290426629915225u;3u;"abcde"];
-                [7687053901553772359u;4u;"abcde"]
+                [[1858343823u];[0u];["abcde"]];
+                [[1921763476782200957u];[1u];["abcde"]];
+                [[3843526951706058091u];[2u];["abcde"]];
+                [[5765290426629915225u];[3u];["abcde"]];
+                [[7687053901553772359u];[4u];["abcde"]]
             ]
-        )", res);
+        )", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_UnknownTable) {
@@ -191,7 +192,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(selectResult.GetIssues().ToString().size(), "Expect non-empty issue in case of error");
         UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SCHEME_ERROR);
         auto res = FormatResultSetYson(selectResult.GetResultSet());
-        CompareYson("[]", res);
+        CompareYson("[]", TString{res});
     }
 
     Y_UNIT_TEST(ReadRows_NonExistentKeys) {
@@ -243,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             Cerr << res << Endl;
-            CompareYson("[]", res);
+            CompareYson("[]", TString{res});
         }
         {
             NYdb::TValueBuilder keys;
@@ -262,12 +263,12 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             CompareYson(R"([
-                [10u;0u;"abcde"];
-                [11u;1u;"abcde"];
-                [12u;2u;"abcde"];
-                [13u;3u;"abcde"];
-                [14u;4u;"abcde"]
-            ])", res);
+                [[10u];[0u];["abcde"]];
+                [[11u];[1u];["abcde"]];
+                [[12u];[2u];["abcde"]];
+                [[13u];[3u];["abcde"]];
+                [[14u];[4u];["abcde"]]
+            ])", TString{res});
         }
         {
             NYdb::TValueBuilder keys;
@@ -363,9 +364,92 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
         auto res = FormatResultSetYson(selectResult.GetResultSet());
-        CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), res);
+        CompareYson(Sprintf("[[[%du];[%du]]]", valueToReturn_1, valueToReturn_2), TString{res});
     }
 
+    Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {
+        NKikimrConfig::TImmediateControlsConfig controls;
+
+        if (UseExtBlobsPrecharge) {
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
+        }
+
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnablePublicApiExternalBlobs(true);
+        auto settings = TKikimrSettings()
+            .SetFeatureFlags(flags)
+            .SetWithSampleTables(false)
+            .SetControls(controls);
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName_1 = "blob_id";
+        const auto keyColumnName_2 = "chunk_num";
+        const auto dataColumnName = "data";
+
+        TTableBuilder builder;
+        builder
+            .BeginStorageSettings()
+                .SetExternal("test")
+                .SetStoreExternalBlobs(true)
+            .EndStorageSettings();
+        builder.AddNonNullableColumn(keyColumnName_1, EPrimitiveType::Uuid);
+        builder.AddNonNullableColumn(keyColumnName_2, EPrimitiveType::Int32);
+        builder.SetPrimaryKeyColumns({keyColumnName_1, keyColumnName_2});
+        builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
+
+        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TString largeValue(1_MB, 'L');
+        
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (int i = 0; i < 10; i++) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName_1).Uuid(NYdb::TUuidValue("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"))
+                    .AddMember(keyColumnName_2).Int32(i)
+                    .AddMember(dataColumnName).String(largeValue)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (int i = 0; i < 10; i++) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName_1).Uuid(NYdb::TUuidValue("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"))
+                    .AddMember(keyColumnName_2).Int32(i)
+                .EndStruct();
+        }
+        keys.EndList();
+
+        auto server = &kikimr.GetTestServer();
+
+        WaitForCompaction(server, tableName);
+
+        auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+        TResultSetParser parser{selectResult.GetResultSet()};
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 10);
+
+        UNIT_ASSERT(parser.TryNextRow());
+
+        auto val = parser.GetValue(0);
+        TValueParser valParser(val);
+        TUuidValue v = valParser.GetUuid();
+        Cout << v.ToString() << Endl;
+    }
+    
     TVector<::ReadRowsPgParam> readRowsPgParams
     {
         {.TypeId = BOOLOID, .TypeMod={}, .ValueContent="t"},
@@ -729,11 +813,11 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto res = FormatResultSetYson(selectResult.GetResultSet());
             CompareYson(R"(
                 [
-                    ["0.123456789";"0.123456789";"0.123456789";"0.123456789";0u];
-                    ["1.123456789";"1000.123456789";"10.123456789";"1000000.123456789";1u];
-                    ["2.123456789";"2000.123456789";"20.123456789";"2000000.123456789";2u]        
+                    [["0.123456789"];["0.123456789"];["0.123456789"];["0.123456789"];[0u]];
+                    [["1.123456789"];["1000.123456789"];["10.123456789"];["1000000.123456789"];[1u]];
+                    [["2.123456789"];["2000.123456789"];["20.123456789"];["2000000.123456789"];[2u]]        
                 ]
-            )", res);
+            )", TString{res});
         }
 
         // Good case: lookup overflowed decimal
@@ -749,8 +833,62 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
             UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
             auto res = FormatResultSetYson(selectResult.GetResultSet());
-            CompareYson(R"([["inf";"inf";"inf";"inf";999999999u];])", res);
+            CompareYson(R"([[["inf"];["inf"];["inf"];["inf"];[999999999u]];])", TString{res});
         }        
+    }
+
+    Y_UNIT_TEST(ReadRows_Nulls) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Data Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i * 1921763474923857134ull + 1858343823)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i * 1921763474923857134ull + 1858343823)
+                .EndStruct();
+        }
+        keys.EndList();
+        auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+        Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+        auto res = FormatResultSetYson(selectResult.GetResultSet());
+        CompareYson(R"(
+            [
+                [[1858343823u];#;#];
+                [[1921763476782200957u];#;#];
+                [[3843526951706058091u];#;#];
+                [[5765290426629915225u];#;#];
+                [[7687053901553772359u];#;#]
+            ]
+        )", TString{res});
     }
 
 

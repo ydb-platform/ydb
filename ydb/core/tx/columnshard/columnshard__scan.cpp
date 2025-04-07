@@ -9,7 +9,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     ui64 txId = record.GetTxId();
     const auto& scanId = record.GetScanId();
@@ -30,7 +30,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
         return;
     }
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(record.GetLocalPathId())->OnReadEvent();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(TInternalPathId::FromRawValue(record.GetLocalPathId()))->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);

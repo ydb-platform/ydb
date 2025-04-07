@@ -55,8 +55,7 @@ template <class T>
     requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 {
-    auto value = Find<T>(key);
-    if (value) {
+    if (auto value = Find<T>(key)) {
         Remove(key);
         return *value;
     } else {

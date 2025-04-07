@@ -21,13 +21,15 @@ class CalledProcessError(subprocess.CalledProcessError):
 
 
 class Slice:
-    def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, yav_version, walle_provider):
+    def __init__(self, components, nodes, cluster_details, bin, compressed_bin, do_clear_logs, yav_version, walle_provider, configurator=None):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.slice_cfg_path = '/Berkanavt/kikimr/cfg'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
         self.components = components
         self.nodes = nodes
         self.cluster_details = cluster_details
+        self.bin = bin
+        self.compressed_bin = compressed_bin
         self.configurator = configurator
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
@@ -60,7 +62,7 @@ class Slice:
     def _format_drives(self):
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
-            cmd = "sudo dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
+            cmd = "sudo {} admin bs disk obliterate {}".format(self.slice_kikimr_path, drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
 
@@ -113,6 +115,25 @@ class Slice:
             )
         )
 
+    def _dynamic_provision(self):
+
+        self.nodes.execute_async(
+            f"{self.slice_kikimr_path} admin blobstorage config init --yaml-file /Berkanavt/kikimr/cfg/config.yaml",
+            nodes=self.nodes.nodes_list[:1],
+            check_retcode=False
+        )
+
+        create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}:{{}}"
+        for domain in self.cluster_details.domains:
+            for tenant in domain.tenants:
+                for storage in tenant.storage_units:
+                    self.nodes.execute_async(
+                        create_db_template.format(domain.domain_name, tenant.name, storage.kind, storage.count),
+                        nodes=self.nodes.nodes_list[:1]
+                    )
+
+        return
+
     def slice_install(self):
         self._ensure_berkanavt_exists()
         self.slice_stop()
@@ -125,10 +146,10 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            self._format_drives()
-
             if 'bin' in self.components.get('kikimr', []):
                 self._update_kikimr()
+
+            self._format_drives()
 
             if 'cfg' in self.components.get('kikimr', []):
                 static_cfg_path = self.configurator.create_static_cfg()
@@ -136,7 +157,8 @@ class Slice:
                 self._deploy_secrets()
 
             self._start_static()
-            self._dynamic_configure()
+            self._dynamic_provision()
+            # self._dynamic_configure()
 
         self._deploy_slot_configs()
         self._start_dynamic()
@@ -355,8 +377,8 @@ mon={mon}""".format(
             self._stop_static()
 
     def _update_kikimr(self):
-        bin_directory = os.path.dirname(self.configurator.kikimr_bin)
-        self.nodes.copy(self.configurator.kikimr_bin, self.slice_kikimr_path, compressed_path=self.configurator.kikimr_compressed_bin)
+        bin_directory = os.path.dirname(self.bin)
+        self.nodes.copy(self.bin, self.slice_kikimr_path, compressed_path=self.compressed_bin)
         for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
             lib_path = os.path.join(bin_directory, lib)
             if os.path.exists(lib_path):

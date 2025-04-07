@@ -1,13 +1,13 @@
 #include "ydb_logstore.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -85,7 +85,7 @@ TSchema::TSchema(const Ydb::LogStore::Schema& schema)
 void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     for (const auto& c : Columns) {
         auto& col = *schema.add_columns();
-        col.set_name(c.Name);
+        col.set_name(TString(c.Name));
         col.mutable_type()->CopyFrom(TProtoAccessor::GetProto(c.Type));
     }
     for (const auto& pkc : PrimaryKeyColumns) {

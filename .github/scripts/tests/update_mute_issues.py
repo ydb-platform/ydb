@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-from github import Github
+from github import Github #pip3 install PyGithub
 from urllib.parse import quote, urlencode
 
 
@@ -19,6 +19,20 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # admin:org
 # project
 
+
+def handle_github_errors(response):
+    if 'errors' in response:
+        for error in response['errors']:
+            if error['type'] == 'INSUFFICIENT_SCOPES':
+                print("Error: Insufficient Scopes")
+                print("Message:", error['message'])
+                raise Exception("Insufficient scopes. Please update your token's scopes.")
+            # Handle other types of errors if necessary
+            else:
+                print("Unknown error type:", error.get('type', 'No type'))
+                print("Message:", error.get('message', 'No message available'))
+                raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
+
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
@@ -26,6 +40,7 @@ def run_query(query, variables=None):
         'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
     )
     if request.status_code == 200:
+        handle_github_errors(request.json())
         return request.json()
     else:
         raise Exception(f"Query failed to run by returning code of {request.status_code}. {query}")
@@ -329,7 +344,6 @@ def generate_github_issue_title_and_body(test_data):
     test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_run_history_params}"
 
     # owner
-    owner_link = f"[{owner}](https://github.com/orgs/ydb-platform/teams/{owner.split('/',1)[1]})"
     # Тело сообщения и кодирование
     body_template = (
         f"Mute:<!--mute_list_start-->\n"
@@ -449,7 +463,7 @@ def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
     for issue in issues:
-        if issues[issue]["status"] == "Muted":
+        if issues[issue]["status"] == "Muted" and issues[issue]["state"] != 'CLOSED':
             for test in issues[issue]['tests']:
                 if test not in muted_tests:
                     muted_tests[test] = []

@@ -35,6 +35,7 @@ YT_DEFINE_ERROR_ENUM(
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
     ((BeginCopyDeprecated)                       (1009))
+    ((PrerequisitePathDifferFromExecutionPaths)  (1010))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +147,7 @@ DEFINE_ENUM(EObjectType,
     ((ChunkMap)                                     (402))
     ((LostChunkMap)                                 (403))
     ((LostVitalChunkMap)                            (413))
+    ((LostVitalChunksSampleMap)                     (464))
     ((PrecariousChunkMap)                           (410))
     ((PrecariousVitalChunkMap)                      (411))
     ((OverreplicatedChunkMap)                       (404))
@@ -199,6 +201,7 @@ DEFINE_ENUM(EObjectType,
     ((ErasureJournalChunkPart_15)                   (140))
     ((ChunkLocation)                                (141))
     ((ChunkLocationMap)                             (142))
+    ((NbdChunk)                                     (143))
 
     // The following represent versioned objects (AKA Cypress nodes).
     // These must be created by calling TCypressYPathProxy::Create.
@@ -340,8 +343,10 @@ DEFINE_ENUM(EObjectType,
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
 
-    // Maintenance tracker stuff
+    // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))
+    ((CypressProxyObject)                          (1501))
+    ((CypressProxyMap)                              (465))
 
     // Zookeeper stuff
     // COMPAT(babenko): drop completely

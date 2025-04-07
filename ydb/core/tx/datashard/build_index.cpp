@@ -25,6 +25,7 @@ namespace NKikimr::NDataShard {
 
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
@@ -32,7 +33,7 @@ namespace NKikimr::NDataShard {
 static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
     auto types = GetAllTypes(tableInfo);
 
-    Y_ABORT_UNLESS(buildSettings.columnSize() > 0);
+    Y_ENSURE(buildSettings.columnSize() > 0);
     auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(tableInfo.KeyColumnIds.size() + buildSettings.columnSize());
 
@@ -102,7 +103,7 @@ class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable
     using TBase = TActor<TThis>;
 
 protected:
-    const TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     const ui64 BuildIndexId;
     const TString TargetTable;
@@ -128,7 +129,7 @@ protected:
     TSerializedCellVec LastUploadedKey;
 
     TActorId Uploader;
-    ui64 RetryCount = 0;
+    ui32 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
@@ -140,9 +141,9 @@ protected:
                      const TActorId& progressActorId,
                      const TSerializedTableRange& range,
                      const TUserTable& tableInfo,
-                     TUploadLimits limits)
+                     const TIndexBuildScanSettings& scanSettings)
         : TBase(&TThis::StateWork)
-        , Limits(limits)
+        , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
         , TargetTable(target)
         , SeqNo(seqNo)
@@ -155,12 +156,12 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
+    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
 
@@ -182,17 +183,17 @@ public:
 
     ~TBuildScanUpload() override = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
+    EScan Seek(TLead& lead, ui64 seq) override {
         LOG_T("Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
@@ -229,7 +230,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
@@ -254,9 +255,8 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
+        LOG_N("Finish" << Debug() << " " << progress->Record.ShortDebugString());
         this->Send(ProgressActorId, progress.Release());
-
-        LOG_D("Finish " << Debug());
 
         Driver = nullptr;
         this->PassAway();
@@ -268,7 +268,7 @@ public:
         NYql::IssuesToMessage(UploadStatus.Issues, msg.MutableIssues());
     }
 
-    void Describe(IOutputStream& out) const noexcept override {
+    void Describe(IOutputStream& out) const override {
         out << Debug();
     }
 
@@ -281,7 +281,7 @@ public:
                                 << UploadStatus.ToString();
     }
 
-    EScan PageFault() noexcept override {
+    EScan PageFault() override {
         LOG_T("Page fault"
               << " ReadBuf empty: " << ReadBuf.IsEmpty()
               << " WriteBuf empty: " << WriteBuf.IsEmpty()
@@ -320,12 +320,12 @@ private:
               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender,
+            Y_ENSURE(Uploader == ev->Sender,
                        "Mismatch"
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -354,7 +354,7 @@ private:
 
             this->Send(ProgressActorId, progress.Release());
 
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload();
             }
@@ -363,10 +363,10 @@ private:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug());
 
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -412,22 +412,22 @@ public:
                     TProtoColumnsCRef targetIndexColumns,
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
-                    TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits)
+                    const TIndexBuildScanSettings& scanSettings)
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
         UploadMode = NTxProxy::EUploadRowsMode::WriteToTableShadow;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(key),
                 TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)));
+                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
+                TSerializedCellVec(key));
         });
     }
 };
@@ -444,28 +444,28 @@ public:
                       const TSerializedTableRange& range,
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
-                      TUploadLimits limits)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits) {
-        Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
+                      const TIndexBuildScanSettings& scanSettings)
+        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
+        Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
 
         TMemoryPool valueDataPool(256);
         TVector<TCell> cells;
         TString err;
-        Y_ABORT_UNLESS(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
+        Y_ENSURE(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
         ValueSerialized = TSerializedCellVec::Serialize(cells);
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
             TSerializedCellVec pk(key);
             auto pkTarget = pk;
             auto valueTarget = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pk),
                 std::move(pkTarget),
-                std::move(valueTarget));
+                std::move(valueTarget),
+                std::move(pk));
         });
     }
 };
@@ -481,13 +481,13 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     TProtoColumnsCRef targetDataColumns,
     const NKikimrIndexBuilder::TColumnBuildSettings& columnsToBuild,
     const TUserTable& tableInfo,
-    TUploadLimits limits) {
+    const TIndexBuildScanSettings& scanSettings) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, limits);
+            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
     }
     return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, limits);
+        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -517,6 +517,9 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
 void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+
+    LOG_N("Starting TBuildIndexScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -561,7 +564,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
             return;
         }
 
-        CancelScan(userTable.LocalTid, recCard->ScanId);
+        for (auto scanId : recCard->ScanIds) {
+            CancelScan(userTable.LocalTid, scanId);
+        }
         ScanManager.Drop(buildIndexId);
     }
 
@@ -603,17 +608,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10);
 
-    TUploadLimits limits;
-    if (record.HasMaxBatchRows()) {
-        limits.BatchRowsLimit = record.GetMaxBatchRows();
-    }
-    if (record.HasMaxBatchBytes()) {
-        limits.BatchBytesLimit = record.GetMaxBatchBytes();
-    }
-    if (record.HasMaxRetries()) {
-        limits.MaxUploadRowsRetryCount = record.GetMaxRetries();
-    }
-
     const auto scanId = QueueScan(userTable.LocalTid,
                                   CreateBuildIndexScan(buildIndexId,
                                                        record.GetTargetName(),
@@ -625,13 +619,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                        record.GetDataColumns(),
                                                        record.GetColumnBuildSettings(),
                                                        userTable,
-                                                       limits),
+                                                       record.GetScanSettings()),
                                   0,
                                   scanOpts);
 
-    TScanRecord recCard = {scanId, seqNo};
-
-    ScanManager.Set(buildIndexId, recCard);
+    ScanManager.Set(buildIndexId, seqNo).push_back(scanId);
 }
 
 }

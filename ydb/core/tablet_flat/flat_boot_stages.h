@@ -44,18 +44,18 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             Execute();
         }
 
-        void HandleStep(TIntrusivePtr<IStep>) noexcept override
+        void HandleStep(TIntrusivePtr<IStep>) override
         {
             Pending -=1, Execute();
         }
 
     private:
-        void Execute() noexcept
+        void Execute()
         {
             while (!Pending && Next < EStage::Ready) {
                 if (EStage::Snap == Next) {
@@ -81,7 +81,7 @@ namespace NBoot {
             }
         }
 
-        void StartStageSnap() noexcept
+        void StartStageSnap()
         {
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
                 logl
@@ -93,7 +93,7 @@ namespace NBoot {
             Pending += Spawn<TSnap>(std::move(Deps), Snap);
         }
 
-        void StartStageMeta() noexcept
+        void StartStageMeta()
         {
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
                 logl
@@ -110,7 +110,7 @@ namespace NBoot {
             Pending += Spawn<TTurns>();
         }
 
-        void StartStageDatabaseImpl() noexcept
+        void StartStageDatabaseImpl()
         {
             auto weak = Back->RedoLog ? Back->RedoLog.back().Stamp + 1 : 0;
 
@@ -172,7 +172,7 @@ namespace NBoot {
             Pending += Spawn<TRedo>(std::move(Back->RedoLog));
         }
 
-        void StartStageResult(TResult &result) noexcept
+        void StartStageResult(TResult &result)
         {
             /* Tail of redo log before snapshot may have holes in space of
                 db change serial numbers. Thus embedded serials into log may
@@ -194,6 +194,9 @@ namespace NBoot {
 
             const auto was = Back->DatabaseImpl->Rewind(Back->Serial);
 
+            // Notify database that all merges have completed
+            Back->DatabaseImpl->MergeDone();
+
             result.Database = new NTable::TDatabase(Back->DatabaseImpl.Release());
 
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
@@ -209,7 +212,7 @@ namespace NBoot {
             }
         }
 
-        void FinalizeLeaderLogics(TResult&, TSteppedCookieAllocatorFactory&) noexcept;
+        void FinalizeLeaderLogics(TResult&, TSteppedCookieAllocatorFactory&);
 
     private:
         EStage Next = EStage::Snap;   /* Next stage to execute */

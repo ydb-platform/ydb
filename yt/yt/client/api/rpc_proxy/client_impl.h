@@ -53,6 +53,10 @@ public:
         const NYPath::TYPath& path,
         const NApi::TUnfreezeTableOptions& options) override;
 
+    TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const NApi::TCancelTabletTransitionOptions& options) override;
+
     TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,
@@ -252,6 +256,11 @@ public:
         const NYson::TYsonString& parameters,
         const NApi::TUpdateOperationParametersOptions& options) override;
 
+    TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const NApi::TPatchOperationSpecOptions& options) override;
+
     TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NApi::TGetOperationOptions& options) override;
@@ -337,6 +346,10 @@ public:
     TFuture<TMultiTablePartitions> PartitionTables(
         const std::vector<NYPath::TRichYPath>& paths,
         const NApi::TPartitionTablesOptions& options) override;
+
+    TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
 
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
@@ -456,6 +469,10 @@ public:
     TFuture<TRequestRestartResult> RequestRestart(
         const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
+
+    TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const NApi::TCollectCoverageOptions& options) override;
 
     // Query tracker
 

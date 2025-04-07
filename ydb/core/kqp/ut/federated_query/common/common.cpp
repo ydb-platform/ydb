@@ -1,8 +1,19 @@
 #include "common.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
+    TString GetSymbolsString(char start, char end, const TString& skip) {
+        TStringBuilder result;
+        for (char symbol = start; symbol <= end; ++symbol) {
+            if (skip.Contains(symbol)) {
+                continue;
+            }
+            result << symbol;
+        }
+        return result;
+    }
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
@@ -16,13 +27,34 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         }
     }
 
+    void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
+        std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager;
+        while (true) {
+            if (!resourceManager) {
+                resourceManager = NKikimr::NKqp::TryGetKqpResourceManager(nodeId);
+            }
+            if (resourceManager && resourceManager->GetClusterResources().size() == expectedNodeCount) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+    void WaitResourcesPublish(const TKikimrRunner& kikimrRunner) {
+        const auto& testServer = kikimrRunner.GetTestServer();
+        const auto nodeCount = testServer.StaticNodes();
+        for (ui32 nodeId = 0; nodeId < nodeCount; ++nodeId) {
+            WaitResourcesPublish(testServer.GetRuntime()->GetNodeId(nodeId), nodeCount);
+        }
+    }
+
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         bool initializeHttpGateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
         std::optional<NKikimrConfig::TAppConfig> appConfig,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        const TString& domainRoot)
+        const TKikimrRunnerOptions& optionst)
     {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
@@ -31,7 +63,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
 
         auto settings = TKikimrSettings();
 
@@ -49,6 +85,10 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
             nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
+            nullptr,
+            nullptr,
+            NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
             nullptr);
 
         settings
@@ -57,7 +97,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetKqpSettings({})
             .SetS3ActorsFactory(std::move(s3ActorsFactory))
             .SetWithSampleTables(false)
-            .SetDomainRoot(domainRoot);
+            .SetDomainRoot(optionst.DomainRoot)
+            .SetNodeCount(optionst.NodeCount);
 
         settings = settings.SetAppConfig(appConfig.value());
 

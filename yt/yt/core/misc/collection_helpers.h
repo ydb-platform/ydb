@@ -43,7 +43,7 @@ template <class TMap, class TKeySet>
 [[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, const TKeySet& set);
+void DropMissingKeys(TMap&& map, TKeySet&& set);
 
 /*!
  * This function is supposed to replace a frequent pattern
@@ -96,6 +96,12 @@ auto InsertOrCrash(TContainer&& container, TArg&& arg);
  */
 template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
+
+/*!
+ * This function emplaces default value at the given key.
+ */
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key);
 
 /*!
  * This function is supposed to replace std::get<T>(variant)

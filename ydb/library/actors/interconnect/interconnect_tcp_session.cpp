@@ -54,7 +54,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Init() {
-        auto destroyCallback = [as = TlsActivationContext->ExecutorThread.ActorSystem, id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
+        auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
         Pool.ConstructInPlace(Proxy->Common, std::move(destroyCallback));
@@ -953,8 +953,11 @@ namespace NActors {
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
-            ui64 gross = 0;
-            const bool eventDone = channel->FeedBuf(task, serial, &gross);
+            const ui32 grossBefore = task.GetDataSize();
+            const bool eventDone = channel->FeedBuf(task, serial);
+            const ui32 grossAfter = task.GetDataSize();
+            Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
+            const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
             Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
@@ -964,7 +967,7 @@ namespace NActors {
             TotalOutputQueueSize -= net;
             Proxy->Metrics->SubOutputBuffersTotalSize(net);
             bytesGenerated += gross;
-            Y_DEBUG_ABORT_UNLESS(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
+            Y_DEBUG_ABORT_UNLESS(gross || !net, "net# %" PRIu64 " gross# %" PRIu32, net, gross);
 
             // return it back to queue or delete, depending on whether this channel is still working or not
             ChannelScheduler->FinishPick(gross, EqualizeCounter);
@@ -1028,12 +1031,8 @@ namespace NActors {
                 } while (false);
             }
 
-            // we need track clockskew only if it's one tenant nodes connection
-            // they have one scope in this case
-            bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
-
             callback({
-                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .ActorSystem = TActivationContext::ActorSystem(),
                 .PeerNodeId = Proxy->PeerNodeId,
                 .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
                 .Connected = connected,
@@ -1042,7 +1041,7 @@ namespace NActors {
                 .SessionConnected = connected && Socket,
                 .ConnectStatus = flagState,
                 .ClockSkewUs = ReceiveContext->ClockSkew_us,
-                .ReportClockSkew = reportClockSkew,
+                .SameScope = Proxy->Common->LocalScopeId == Params.PeerScopeId,
                 .PingTimeUs = ReceiveContext->PingRTT_us,
                 .ScopeId = Params.PeerScopeId,
                 .Utilization = Utilized,
@@ -1379,7 +1378,17 @@ namespace NActors {
         TActivationContext::Send(h.release());
     }
 
+    void TInterconnectSessionKiller::Bootstrap() {
+        auto sender = SelfId();
+        const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
+            auto ev = new TEvSessionBufferSizeRequest();
+            return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
+        };
+        RepliesNumber = TActivationContext::ActorSystem()->BroadcastToProxies(eventFabric);
+        Become(&TInterconnectSessionKiller::StateFunc);
+    }
+
     void CreateSessionKillingActor(TInterconnectProxyCommon::TPtr common) {
-        TlsActivationContext->ExecutorThread.ActorSystem->Register(new TInterconnectSessionKiller(common));
+        TActivationContext::ActorSystem()->Register(new TInterconnectSessionKiller(common));
     }
 }

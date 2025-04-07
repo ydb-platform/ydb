@@ -45,7 +45,7 @@ public:
     using TStateType = TSumState<IsNullable, TSum>;
 
     TSumColumnBuilder(ui64 size, TType* dataType, TComputationContext& ctx)
-        : Builder_(TTypeInfoHelper(), dataType, ctx.ArrowMemoryPool, size)
+        : Builder_(dataType, TTypeInfoHelper(), ctx.ArrowMemoryPool, size)
         , Ctx_(ctx)
     {
     }
@@ -349,6 +349,40 @@ public:
         PushValueToState<IsNullable, IsScalar, TIn, TSum>(typedState.Get(), datum, row);
     }
 
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+        if constexpr (IsNullable) {
+            buffer.PushNumber(typedState->IsValid_);
+        }
+        buffer.PushNumber(typedState->Sum_);
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+
+        buffer.PopNumber(typedState->Sum_);
+
+        if constexpr (IsNullable) {
+            buffer.PopNumber(typedState->IsValid_);
+        }
+    }
+
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+
+        TStateType deserializedState;
+        buffer.PopNumber(deserializedState.Sum_);
+
+        if constexpr (IsNullable) {
+            buffer.PopNumber(deserializedState.IsValid_);
+            if (!deserializedState.IsValid_) return;
+
+            typedState->IsValid_ = 1;
+        }
+
+        typedState->Sum_ += deserializedState.Sum_;
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TSumColumnBuilder<IsNullable, TSum>>(size, DataType_, Ctx_);
     }
@@ -572,6 +606,28 @@ public:
                 typedState->Count_ += mask & countPtr[row];
             }
         }
+    }
+
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
+        buffer.PushNumber(typedState->Sum_);
+        buffer.PushNumber(typedState->Count_);
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
+        buffer.PopNumber(typedState->Count_);
+        buffer.PopNumber(typedState->Sum_);
+    }
+
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        TAvgState<TOut> deserializedState;
+        buffer.PopNumber(deserializedState.Count_);
+        buffer.PopNumber(deserializedState.Sum_);
+
+        auto typedState = MakeStateWrapper<TAvgState<TOut>>(state);
+        typedState->Count_ += deserializedState.Count_;
+        typedState->Sum_ += deserializedState.Sum_;
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {

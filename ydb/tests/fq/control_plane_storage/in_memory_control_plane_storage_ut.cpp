@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
 
     Y_UNIT_TEST_F(ExecuteSimpleStreamQuery, TTestFuxture) {
         TString queryId;
-        CheckSuccess(FqSetup->StreamRequest({
+        CheckSuccess(FqSetup->QueryRequest({
             .Query = "SELECT 42 AS result_value",
             .Action = FederatedQuery::ExecuteMode::RUN,
             .Type = FederatedQuery::QueryContent::STREAMING
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
 
     Y_UNIT_TEST_F(ExecuteSimpleAnalyticsQuery, TTestFuxture) {
         TString queryId;
-        CheckSuccess(FqSetup->StreamRequest({
+        CheckSuccess(FqSetup->QueryRequest({
             .Query = "SELECT 42 AS result_value",
             .Action = FederatedQuery::ExecuteMode::RUN,
             .Type = FederatedQuery::QueryContent::ANALYTICS

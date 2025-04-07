@@ -1,47 +1,120 @@
 ## Working with configuration
 
-This section contains commands for working with the {{ ydb-short-name }} cluster configuration.
+{% note info %}
 
-```bash
-# Apply the configuration dynconfig.yaml to the cluster
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
-# Check if it is possible to apply the configuration dynconfig.yaml to the cluster (validate all validators, version, and cluster match)
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
-# Apply the configuration dynconfig.yaml to the cluster, ignoring version and cluster checks (version and cluster will still be overwritten with correct ones)
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
-# Fetch the main cluster configuration
-{{ ydb-cli }} admin cluster config fetch
-# Fetch all current configuration files of the cluster
-{{ ydb-cli }} admin cluster config fetch --all
-# Generate all possible final configurations for dynconfig.yaml
-{{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
-# Generate the final configuration for dynconfig.yaml with labels tenant=/Root/test and canary=true
-{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
-# Generate the final configuration for dynconfig.yaml for labels from node 1003
-{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 1003
-# Generate a dynamic configuration file, based on a static configuration on the cluster
-{{ ydb-cli }} admin cluster config genereate
-# Initialize a directory with the configuration, using the path to the configuration file
-{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
-# Initialize a directory with the configuration, using the configuration from the cluster
-{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
-# Fetch all temporary configurations of the cluster
-{{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
-# Fetch the temporary configuration with id 1 from the cluster
-{{ ydb-cli }} admin volatile-config fetch --id 1
-# Apply the temporary configuration volatile.yaml to the cluster
-{{ ydb-cli }} admin volatile-config add -f volatile.yaml
-# Delete temporary configurations with ids 1 and 3 on the cluster
-{{ ydb-cli }} admin volatile-config drop --id 1 --id 3
-# Delete all temporary configurations on the cluster
-{{ ydb-cli }} admin volatile-config drop --all
-```
+Before YDB CLI X.X, the `{{ ydb-cli }} admin cluster config` commands had the format `{{ ydb-cli }} admin config`.
+
+{% endnote %}
+
+This section contains commands for working with the [cluster configuration](../../maintenance/manual/config-overview.md) of {{ ydb-short-name }}.
+
+- Apply the configuration dynconfig.yaml to the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
+    ```
+
+- Check if it is possible to apply the configuration dynconfig.yaml to the cluster (validate all validators, version, and cluster match):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
+    ```
+
+- Apply the configuration dynconfig.yaml to the cluster, ignoring version and cluster checks (version and cluster will still be overwritten with correct ones):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
+    ```
+
+- Fetch the main cluster configuration:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config fetch
+    ```
+
+- Generate all possible final configurations for dynconfig.yaml:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
+    ```
+
+- Generate the final configuration for dynconfig.yaml with labels tenant=/Root/test and canary=true:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
+    ```
+
+- Generate the final configuration for dynconfig.yaml for labels from node 100:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
+    ```
+
+- Generate a dynamic configuration file, based on a static configuration on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config genereate
+    ```
+
+- Initialize a directory with the configuration, using the path to the configuration file:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
+    ```
+
+- Initialize a directory with the configuration, using the configuration from the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
+    ```
+
+## Working with temporary configuration
+
+This section contains commands for working with [temporary configuration](../../maintenance/manual/dynamic-config-volatile-config.md).
+
+- Fetch all temporary configurations of the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
+    ```
+
+- Fetch the temporary configuration with id 1 from the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --id 1
+    ```
+
+- Apply the temporary configuration volatile.yaml to the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config add -f volatile.yaml
+    ```
+
+- Delete temporary configurations with ids 1 and 3 on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --id 1 --id 3
+    ```
+
+- Delete all temporary configurations on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --all
+    ```
+
+## Parameters
+
+* `-f, --filename <filename.yaml>` — read input from a file, `-` for STDIN. For commands that accept multiple files (e.g., resolve), you can specify it multiple times, the file type will be determined by the metadata field
+* `--output-directory <dir>` — dump/resolve files to a directory
+* `--strip-metadata` — remove the metadata field from the output
+* `--all` — extends the output of commands to the entire configuration (see advanced configuration)
+* `--allow-unknown-fields` — allows ignoring unknown fields in the configuration
 
 ## Scenarios
 
 ### Update the main cluster configuration
 
- ```bash
+```bash
 # Fetch the cluster configuration
 {{ ydb-cli }} admin cluster config fetch > dynconfig.yaml
 # Edit the configuration with your favorite editor

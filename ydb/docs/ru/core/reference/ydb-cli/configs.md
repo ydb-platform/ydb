@@ -1,41 +1,114 @@
 ## Работа с конфигурацией
 
-В этом разделе приведены команды для работы с конфигурацией кластера {{ ydb-short-name }}. 
+{% note info %}
 
-```bash
-# Применить конфигурацию dynconfig.yaml на кластер
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
-# Проверить возможно ли применить конфигурацию dynconfig.yaml на кластер (проверить все валидаторы, совпадение версий и кластера)
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
-# Применить конфигурацию dynconfig.yaml на кластер игнорирую проверку версий и кластера (версия и кластер всё равно будут перезаписаны на корректные)
-{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
-# Получить основную конфигурацию кластера
-{{ ydb-cli }} admin cluster config fetch
-# Получить все текущие конфигурационные файлы кластера
-{{ ydb-cli }} admin cluster config fetch --all
-# Сгенерировать все возможные конечные конфигурации для dynconfig.yaml
-{{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
-# Сгенерировать конечную конфигурацию для dynconfig.yaml при лейблах tenant=/Root/test и canary=true
-{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
-# Сгенерировать конечную конфигурацию для dynconfig.yaml для лейблов с узла 1003
-{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
-# Сгенерировать файл динамической конфигурации на основе статической конфигурации на кластере
-{{ ydb-cli }} admin cluster config genereate
-# Инициализировать директорию с конфигурацией, используя путь до конфигурационного файла
-{{ ydb-cli }} admin node config init --config-dir <путь до директории> --from-config <путь до файла конфигурации>
-# Инициализировать директорию с конфигурацией, используя конфигурацию на кластере
-{{ ydb-cli }} admin node config init --config-dir <путь до директории> --seed-node <эндпоинт узла кластера>
-# Получить все временные конфигурации кластера
-{{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
-# Получить временную конфигурацию с id 1 с кластера
-{{ ydb-cli }} admin volatile-config fetch --id 1
-# Применить временную конфигурацию volatile.yaml на кластер
-{{ ydb-cli }} admin volatile-config add -f volatile.yaml
-# Удалить временные конфигурации с id 1 и 3 на кластере
-{{ ydb-cli }} admin volatile-config drop --id 1 --id 3
-# Удалить все временные конфигурации на кластере
-{{ ydb-cli }} admin volatile-config drop --all
-```
+До версии YDB CLI X.X команды `{{ ydb-cli }} admin cluster config` имели формат `{{ ydb-cli }} admin config`.
+
+{% endnote %}
+
+В этом разделе приведены команды для работы с [конфигурацией кластера](../../maintenance/manual/config-overview.md) {{ ydb-short-name }}. 
+
+- Применение конфигурации dynconfig.yaml на кластер:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
+    ```
+
+- Проверка возможности применения конфигурацию dynconfig.yaml на кластер (проверить все валидаторы, совпадение версий и кластера):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
+    ```
+
+- Применение конфигурации dynconfig.yaml на кластер игнорируя проверку версий и кластера (версия и кластер всё равно будут перезаписаны на корректные):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
+    ```
+
+- Получение основной конфигурации кластера:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config fetch
+    ```
+
+- Генерация все возможных конечных конфигураций для dynconfig.yaml
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
+    ```
+
+- Генерация конечной конфигурации для dynconfig.yaml при лейблах tenant=/Root/test и canary=true:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
+    ```
+
+- Генерация конечной конфигурации для dynconfig.yaml для лейблов с узла 1003:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
+    ```
+
+- Генерация файла динамической конфигурации на основе статической конфигурации на кластере:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config genereate
+    ```
+
+- Инициализация директории с конфигурацией, используя путь до конфигурационного файла:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <путь до директории> --from-config <путь до файла конфигурации>
+    ```
+
+- Инициализация директории с конфигурацией, используя конфигурацию на кластере:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <путь до директории> --seed-node <эндпоинт узла кластера>
+    ```
+
+## Работа с временной конфигурацией
+
+В этом разделе перечислены команды, которые используются для работы с [временной конфигурацией](../../maintenance/manual/dynamic-config-volatile-config.md).
+
+- Получение всех временных конфигураций кластера:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
+    ```
+
+- Получение временной конфигурации с id 1 с кластера:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --id 1
+    ```
+
+- Применение временной конфигурации volatile.yaml на кластер:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config add -f volatile.yaml
+    ```
+
+- Удаление временной конфигурации с id 1 и 3 на кластере:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --id 1 --id 3
+    ```
+
+- Удаление всех временных конфигурации на кластере:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --all
+    ```
+
+## Параметры
+
+* `-f, --filename <filename.yaml>` — считать input из файла, `-` для STDIN. Для команд принимающих n файлов (прим. resolve) можно указать несколько раз, тип файла будет определён по полю metadata
+* `--output-directory <dir>` — сдампить/порезолвить файлы в директорию
+* `--strip-metadata` — выкинуть поле metadata из вывода
+* `--all` — расширяет вывод команд до всей конфигурации (см. продвинутое конфигурирование)
+* `--allow-unknown-fields` — позволяет игнорировать неизвестные поля в конфигурации
 
 ## Сценарии
 

@@ -766,10 +766,10 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     return builder.Finish();
 }
 
-std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess() const {
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
-    std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks;
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
     chunks.reserve(Blobs.size());
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
@@ -781,20 +781,22 @@ std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> TPortionDataAccesso
         }
     }
 
-    return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(recordsCount, Loader, std::move(chunks));
+    if (chunks.size() == 1) {
+        return chunks.front();
+    } else {
+        return std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(chunks), recordsCount, Loader->GetResultField()->type());
+    }
 }
 
-NArrow::NAccessor::TDeserializeChunkedArray::TChunk TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
     const std::shared_ptr<TColumnLoader>& loader) const {
     if (DefaultRowsCount) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "build_trivial");
         Y_ABORT_UNLESS(!Data);
-        auto col = std::make_shared<NArrow::NAccessor::TTrivialArray>(
-            NArrow::TThreadSimpleArraysCache::Get(loader->GetField()->type(), DefaultValue, DefaultRowsCount));
-        return NArrow::NAccessor::TDeserializeChunkedArray::TChunk(col);
+        return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader->GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return NArrow::NAccessor::TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
+        return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(*ExpectedRowsCount, loader, Data);
     }
 }
 

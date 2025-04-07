@@ -54,34 +54,7 @@ public:
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
 
-        void InitArrays() {
-            while (CurrentIndex < GlobalChunkedArray->GetRecordsCount()) {
-                if (!FullArrayAddress || !FullArrayAddress->GetAddress().Contains(CurrentIndex)) {
-                    FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
-                    ChunkAddress = std::nullopt;
-                }
-                const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
-                ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-                AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-                CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
-                if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
-                    if (CurrentArrayData->IsNull(localIndex)) {
-                        Next();
-                    }
-                    break;
-                } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-                    if (CurrentArrayData->IsNull(localIndex) &&
-                        std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
-                        CurrentIndex += ChunkAddress->GetArray()->length();
-                    } else {
-                        break;
-                    }
-                } else {
-                    AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
-                }
-            }
-            AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount());
-        }
+        void InitArrays();
 
     public:
         TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
@@ -109,6 +82,23 @@ public:
 
         bool IsValid() const {
             return CurrentIndex < GlobalChunkedArray->GetRecordsCount();
+        }
+
+        bool SkipRecordTo(const ui32 recordIndex) {
+            if (recordIndex <= CurrentIndex) {
+                return true;
+            }
+            AFL_VERIFY(IsValid());
+            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
+            CurrentIndex = recordIndex;
+            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                    continue;
+                }
+                return true;
+            }
+            InitArrays();
+            return IsValid();
         }
 
         bool Next() {

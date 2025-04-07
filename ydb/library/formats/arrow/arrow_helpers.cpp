@@ -748,7 +748,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
                 positions.emplace_back(pos);
                 pos += arr->length();
             }
-            AFL_VERIFY(pos == t->num_rows());
+            AFL_VERIFY(pos == t->num_rows())("pos", pos)("length", t->num_rows());
         }
         positions.emplace_back(t->num_rows());
     }

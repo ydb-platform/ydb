@@ -73,6 +73,7 @@ async def greenplum_handler(request):
         )
     return web.Response(body=json.dumps({}))
 
+
 async def mysql_handler(request):
     cluster_id = request.match_info['cluster_id']
 
@@ -94,6 +95,7 @@ async def mysql_handler(request):
             )
         )
     return web.Response(body=json.dumps({}))
+
 
 def serve(port: int):
     app = web.Application()

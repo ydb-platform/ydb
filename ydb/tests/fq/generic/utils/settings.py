@@ -57,7 +57,7 @@ class Settings:
         username: str
         password: str
 
-    postgresql: Optional[MySQL] = None
+    mysql: Optional[MySQL] = None
 
     @dataclass
     class PostgreSQL:

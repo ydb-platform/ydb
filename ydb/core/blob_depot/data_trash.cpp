@@ -1,11 +1,12 @@
 #include "data.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
     void TData::CommitTrash(void *cookie) {
-        auto [first, last] = InFlightTrash.equal_range(cookie);
+        auto [first, last] = InFlightTrashBlobs.equal_range(cookie);
         std::unordered_set<TRecordsPerChannelGroup*> records;
         for (auto it = first; it != last; ++it) {
             auto& record = GetRecordsPerChannelGroup(it->second);
@@ -13,12 +14,20 @@ namespace NKikimr::NBlobDepot {
             records.insert(&record);
             InFlightTrashSize -= it->second.BlobSize();
         }
-        InFlightTrash.erase(first, last);
-        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
+        InFlightTrashBlobs.erase(first, last);
 
         for (TRecordsPerChannelGroup *record : records) {
             record->CollectIfPossible(this);
         }
+
+        auto [s3first, s3last] = InFlightTrashS3.equal_range(cookie);
+        for (auto it = s3first; it != s3last; ++it) {
+            Self->S3Manager->AddTrashToCollect(it->second);
+            InFlightTrashSize -= it->second.Len;
+        }
+        InFlightTrashS3.erase(s3first, s3last);
+
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
     }
 
     void TData::HandleTrash(TRecordsPerChannelGroup& record) {

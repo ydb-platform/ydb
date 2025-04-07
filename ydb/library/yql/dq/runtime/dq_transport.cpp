@@ -44,6 +44,7 @@ TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
     result.Proto.SetChunks(1);
+    result.Proto.SetRows(1);
     result.SetPayload(std::move(packResult));
     return result;
 }
@@ -88,6 +89,7 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
     result.Proto.SetChunks(buffer.RowCount());
+    result.Proto.SetRows(buffer.RowCount()); // maybe incorrect for Arrow Blocks
     result.SetPayload(std::move(packResult));
     return result;
 }
@@ -177,6 +179,7 @@ NDqProto::TData TDqDataSerializer::SerializeParamValue(const TType* type, const 
     data.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
     data.SetRaw(packResult.data(), packResult.size());
     data.SetChunks(1);
+    data.SetRows(1);
 
     return data;
 }

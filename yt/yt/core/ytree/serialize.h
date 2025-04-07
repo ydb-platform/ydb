@@ -21,6 +21,11 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Infers value format (microseconds/nanoseconds) and returns unix time.
+TInstant ConvertRawValueToUnixTime(ui64 value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 NYson::EYsonType GetYsonType(const T&);
 NYson::EYsonType GetYsonType(const NYson::TYsonString& yson);
@@ -173,6 +178,8 @@ void Serialize(
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
 
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
+
 void Serialize(const NStatisticPath::TStatisticPath& path, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -246,6 +253,14 @@ void Deserialize(std::deque<T, A>& value, INodePtr node);
 template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node);
 
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& items, INodePtr node);
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& items, INodePtr node);
+
 // TErrorOr
 template <class T>
 void Deserialize(TErrorOr<T>& error, INodePtr node);
@@ -279,6 +294,8 @@ void Deserialize(
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+
+void Deserialize(TSize& value, INodePtr node);
 
 void Deserialize(NStatisticPath::TStatisticPath& path, INodePtr node);
 

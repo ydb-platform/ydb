@@ -3,7 +3,7 @@
 
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -363,7 +363,7 @@ public:
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
             .NoArgument().StoreTrue(&Serverless);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<pool type>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<pool type>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
     }
 
     void Parse(TConfig& config) override
@@ -427,7 +427,7 @@ public:
     {
         TTenantClientGRpcCommand::Config(config);
         config.Opts->AddLongOption("force", "Force command execution")
-            .NoArgument().SetFlag(&Force);
+            .StoreTrue(&Force);
     }
 
     void Parse(TConfig& config) override
@@ -465,7 +465,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
     }
 
     void Parse(TConfig& config) override
@@ -500,7 +500,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("[[<availability zone>:]<unit kind>:]<units count>", "Triples describing units.");
     }
 
     void Parse(TConfig& config) override
@@ -535,7 +535,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("<host>:<port>:<kind>", "Triples describing registered units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<host>:<port>:<kind>", "Triples describing registered units.");
     }
 
     void Parse(TConfig& config) override
@@ -576,7 +576,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->SetFreeArgDefaultTitle("<host>:<port>", "Pairs describing deregistered units.");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<host>:<port>", "Pairs describing deregistered units.");
     }
 
     void Parse(TConfig& config) override
@@ -615,7 +615,7 @@ public:
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
         config.SetFreeArgsMin(1);
-        config.Opts->SetFreeArgDefaultTitle("<pool kind>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
+        config.Opts->GetOpts().SetFreeArgDefaultTitle("<pool kind>:<pool size>", "Pairs describing storage pool type and size (number of groups).");
     }
 
     void Parse(TConfig& config) override

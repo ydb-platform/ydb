@@ -9,105 +9,155 @@ private:
     std::variant<TColumnsData::TIterator, TOthersData::TIterator> Iterator;
     std::optional<ui32> RemappedKey;
     std::vector<ui32> RemapKeys;
+    ui32 RecordIndex = 0;
+    ui32 KeyIndex = 0;
+    bool IsValidFlag = false;
+    bool HasValueFlag = false;
+    std::string_view Value;
+    bool IsColumnKeyFlag = false;
+
+    void InitFromIterator(const TColumnsData::TIterator& iterator) {
+        RecordIndex = iterator.GetCurrentRecordIndex();
+        KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
+        IsValidFlag = true;
+        HasValueFlag = iterator.HasValue();
+        Value = iterator.GetValue();
+    }
+
+    void InitFromIterator(const TOthersData::TIterator& iterator) {
+        RecordIndex = iterator.GetRecordIndex();
+        KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
+        IsValidFlag = true;
+        HasValueFlag = iterator.HasValue();
+        Value = iterator.GetValue();
+    }
+
+    bool Initialize() {
+        struct TVisitor {
+        private:
+            TGeneralIterator& Owner;
+        public:
+            TVisitor(TGeneralIterator& owner)
+                : Owner(owner) {
+            }
+            bool operator()(TOthersData::TIterator& iterator) {
+                Owner.IsColumnKeyFlag = false;
+                if (iterator.IsValid()) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+            bool operator()(TColumnsData::TIterator& iterator) {
+                Owner.IsColumnKeyFlag = true;
+                if (iterator.IsValid()) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+        };
+        return std::visit(TVisitor(*this), Iterator);
+    }
 
 public:
     TGeneralIterator(TColumnsData::TIterator&& iterator, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
         , RemappedKey(remappedKey) {
+        Initialize();
     }
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
         , RemapKeys(remapKeys) {
+        Initialize();
     }
     bool IsColumnKey() const {
-        struct TVisitor {
-            bool operator()(const TOthersData::TIterator& /*iterator*/) {
-                return false;
-            }
-            bool operator()(const TColumnsData::TIterator& /*iterator*/) {
-                return true;
-            }
-        };
-        TVisitor visitor;
-        return std::visit(visitor, Iterator);
+        return IsColumnKeyFlag;
     }
-    bool Next() {
-        struct TVisitor {
-            bool operator()(TOthersData::TIterator& iterator) {
-                return iterator.Next();
-            }
-            bool operator()(TColumnsData::TIterator& iterator) {
-                return iterator.Next();
-            }
-        };
-        return std::visit(TVisitor(), Iterator);
-    }
-    bool IsValid() const {
-        struct TVisitor {
-            bool operator()(const TOthersData::TIterator& iterator) {
-                return iterator.IsValid();
-            }
-            bool operator()(const TColumnsData::TIterator& iterator) {
-                return iterator.IsValid();
-            }
-        };
-        return std::visit(TVisitor(), Iterator);
-    }
-    ui32 GetRecordIndex() const {
-        struct TVisitor {
-            ui32 operator()(const TOthersData::TIterator& iterator) {
-                return iterator.GetRecordIndex();
-            }
-            ui32 operator()(const TColumnsData::TIterator& iterator) {
-                return iterator.GetCurrentRecordIndex();
-            }
-        };
-        return std::visit(TVisitor(), Iterator);
-    }
-    ui32 GetKeyIndex() const {
+
+    bool SkipRecordTo(const ui32 recordIndex) {
         struct TVisitor {
         private:
-            const TGeneralIterator& Owner;
-
+            TGeneralIterator& Owner;
+            const ui32 RecordIndex;
         public:
-            TVisitor(const TGeneralIterator& owner)
-                : Owner(owner) {
+            TVisitor(TGeneralIterator& owner, const ui32 recordIndex)
+                : Owner(owner)
+                , RecordIndex(recordIndex)
+            {
             }
-            ui32 operator()(const TOthersData::TIterator& iterator) {
-                return Owner.RemapKeys.size() ? Owner.RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
+            bool operator()(TOthersData::TIterator& iterator) {
+                if (iterator.SkipRecordTo(RecordIndex)) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
             }
-            ui32 operator()(const TColumnsData::TIterator& iterator) {
-                return Owner.RemappedKey.value_or(iterator.GetKeyIndex());
+            bool operator()(TColumnsData::TIterator& iterator) {
+                if (iterator.SkipRecordTo(RecordIndex)) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+        };
+        return std::visit(TVisitor(*this, recordIndex), Iterator);
+    }
+
+    bool Next() {
+        struct TVisitor {
+        private:
+            TGeneralIterator& Owner;
+        public:
+            TVisitor(TGeneralIterator& owner)
+                : Owner(owner)
+            {
+
+            }
+            bool operator()(TOthersData::TIterator& iterator) {
+                if (iterator.Next()) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
+            }
+            bool operator()(TColumnsData::TIterator& iterator) {
+                if (iterator.Next()) {
+                    Owner.InitFromIterator(iterator);
+                } else {
+                    Owner.IsValidFlag = false;
+                }
+                return Owner.IsValidFlag;
             }
         };
         return std::visit(TVisitor(*this), Iterator);
     }
+    bool IsValid() const {
+        return IsValidFlag;
+    }
+    ui32 GetRecordIndex() const {
+        AFL_VERIFY(IsValidFlag);
+        return RecordIndex;
+    }
+    ui32 GetKeyIndex() const {
+        AFL_VERIFY(IsValidFlag);
+        return KeyIndex;
+    }
     std::string_view GetValue() const {
-        struct TVisitor {
-            std::string_view operator()(const TOthersData::TIterator& iterator) {
-                return iterator.GetValue();
-            }
-            std::string_view operator()(const TColumnsData::TIterator& iterator) {
-                return iterator.GetValue();
-            }
-        };
-        return std::visit(TVisitor(), Iterator);
+        AFL_VERIFY(IsValidFlag);
+        return Value;
     }
-
     bool HasValue() const {
-        struct TVisitor {
-            bool operator()(const TOthersData::TIterator& iterator) {
-                return iterator.HasValue();
-            }
-            bool operator()(const TColumnsData::TIterator& iterator) {
-                return iterator.HasValue();
-            }
-        };
-        return std::visit(TVisitor(), Iterator);
+        AFL_VERIFY(IsValidFlag);
+        return HasValueFlag;
     }
-
     bool operator<(const TGeneralIterator& item) const {
-        return std::tuple(item.GetRecordIndex(), item.GetKeyIndex()) < std::tuple(GetRecordIndex(), GetKeyIndex());
+        return std::tie(item.RecordIndex, item.KeyIndex) < std::tie(RecordIndex, KeyIndex);
     }
 };
 
@@ -163,6 +213,18 @@ public:
             }
         }
         finishRecordActor();
+    }
+
+    void SkipRecordTo(const ui32 recordIndex) {
+        for (ui32 iIter = 0; iIter < SortedIterators.size();) {
+            if (!SortedIterators[iIter]->SkipRecordTo(recordIndex)) {
+                std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
+                SortedIterators.pop_back();
+            } else {
+                AFL_VERIFY(recordIndex <= SortedIterators[iIter]->GetRecordIndex());
+                ++iIter;
+            }
+        }
     }
 };
 

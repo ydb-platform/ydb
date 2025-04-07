@@ -919,7 +919,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
              TabletID, StartOffset, Head.Offset, offset, container.size(),
-             container.front().Key.ToString().c_str());
+             container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
              it->Key.GetOffset() > offset ||
              it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
@@ -1277,6 +1277,16 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             }
             txSourceIds.insert(s.first);
         }
+        auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
+
+        if (!inFlightIter.IsEnd()) {
+            if (s.second.MinSeqNo <= inFlightIter->second) {
+                tx.Predicate = false;
+                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.WriteInfoApplied = true;
+                break;
+            }
+        }
 
         auto existing = knownSourceIds.find(s.first);
         if (existing.IsEnd())
@@ -1290,9 +1300,6 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
-
-        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
-        WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
@@ -1414,7 +1421,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     }
 
     TReadAnswer answer(info.FormAnswer(
-        ctx, *ev->Get(), EndOffset, Partition, userInfo,
+        ctx, *ev->Get(), StartOffset, EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -2122,6 +2129,8 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
+        DumpKeyValueRequest(PersistRequest->Record);
+
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
         CurrentPersistRequestSpan = std::move(PersistRequestSpan);
@@ -2389,6 +2398,13 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo) {
         return;
     }
+    for (const auto& s : t.WriteInfo->SrcIdInfo) {
+        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, s.second.SeqNo);
+        if (!ins) {
+            Y_ABORT_UNLESS(iter->second < s.second.SeqNo);
+            iter->second = s.second.SeqNo;
+        }
+    }
     const auto& ctx = ActorContext();
 
     if (!HaveWriteMsg) {
@@ -2403,6 +2419,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+
+    auto oldHeadOffset = NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =
@@ -2492,11 +2510,15 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
             WriteInflightSize += msg.Msg.Data.size();
             ExecRequest(msg, *Parameters, PersistRequest.Get());
-
-            auto& info = TxSourceIdForPostPersist[blob.SourceId];
-            info.SeqNo = blob.SeqNo;
-            info.Offset = NewHead.Offset;
         }
+    }
+    for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
+        auto& sourceIdBatch = Parameters->SourceIdBatch;
+        auto sourceId = sourceIdBatch.GetSource(srcId);
+        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp);
+        auto& persistInfo = TxSourceIdForPostPersist[srcId];
+        persistInfo.SeqNo = info.SeqNo;
+        persistInfo.Offset = info.Offset + oldHeadOffset;
     }
 
     Parameters->FirstCommitWriteOperations = false;
@@ -2763,7 +2785,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
 TString TPartition::GetKeyConfig() const
 {
-    return Sprintf("_config_%u", Partition.OriginalPartitionId);
+    return Sprintf("_config_%u", Partition.InternalPartitionId);
 }
 
 void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)

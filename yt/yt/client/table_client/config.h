@@ -148,6 +148,7 @@ struct TChunkWriterConfig
     i64 MaxDataWeightBetweenBlocks;
 
     double SampleRate;
+    bool UseOriginalDataWeightInSamples;
 
     bool EnableLargeColumnarStatistics;
 
@@ -250,6 +251,9 @@ struct TDictionaryCompressionConfig
     i64 PolicyProbationSamplesSize;
     //! Upper limit on acceptable compression ratio. No chunk compression is performed if this limit is exceeded.
     double MaxAcceptableCompressionRatio;
+
+    //! For testing purposes only.
+    bool ElectRandomPolicy;
 
     REGISTER_YSON_STRUCT(TDictionaryCompressionConfig);
 

@@ -4,7 +4,7 @@
 
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/quote/quote.h>

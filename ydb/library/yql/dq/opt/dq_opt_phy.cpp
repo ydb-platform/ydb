@@ -698,6 +698,18 @@ TExprBase DqPushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptim
     return DqPushInputBaseCallableToStage<TCoSkipNullMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
 }
 
+TExprBase DqPushPruneKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    return DqPushInputBaseCallableToStage<TCoPruneKeys>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+}
+
+TExprBase DqPushPruneAdjacentKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    return DqPushInputBaseCallableToStage<TCoPruneAdjacentKeys>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+}
+
 TExprBase DqPushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -2716,14 +2728,14 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(
-    const TExprBase& node, 
-    TExprContext& ctx, 
+    const TExprBase& node,
+    TExprContext& ctx,
     IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, 
-    bool allowStageMultiUsage, 
-    bool pushLeftStage, 
-    EHashJoinMode hashJoin, 
-    bool shuffleMapJoin, 
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    bool pushLeftStage,
+    EHashJoinMode hashJoin,
+    bool shuffleMapJoin,
     bool useGraceCoreForMap,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,

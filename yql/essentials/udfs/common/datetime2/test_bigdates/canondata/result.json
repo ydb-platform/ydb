@@ -44,6 +44,11 @@
             "uri": "file://test.test_StartOf_/results.txt"
         }
     ],
+    "test.test[To]": [
+        {
+            "uri": "file://test.test_To_/results.txt"
+        }
+    ],
     "test.test[UpdateTz]": [
         {
             "uri": "file://test.test_UpdateTz_/results.txt"

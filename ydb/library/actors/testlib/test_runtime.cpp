@@ -15,7 +15,7 @@
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/random/mersenne.h>
 #include <util/string/printf.h>
 #include <typeinfo>
@@ -1721,6 +1721,9 @@ namespace NActors {
         IActor* actor = mailbox->FindActor(localId);
         if (!actor) {
             actor = mailbox->FindAlias(localId);
+        }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
         }
         return actor;
     }

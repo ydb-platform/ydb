@@ -88,6 +88,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardTxCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesBytes;
@@ -186,6 +188,11 @@ public:
     void OnWriteOverloadMetadata(const ui64 size) const {
         OverloadMetadataBytes->Add(size);
         OverloadMetadataCount->Add(1);
+    }
+
+    void OnWriteOverloadCompaction(const ui64 size) const {
+        OverloadCompactionBytes->Add(size);
+        OverloadCompactionCount->Add(1);
     }
 
     void OnWriteOverloadShardTx(const ui64 size) const {

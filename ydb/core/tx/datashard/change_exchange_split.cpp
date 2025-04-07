@@ -300,10 +300,10 @@ class TCdcWorker
             return Ack();
         }
 
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-        Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);
+        Y_ENSURE(topic.Kind == TNavigate::KindTopic);
         ResolveTopic(topic.PathId);
     }
 
@@ -522,7 +522,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         case EWorkerType::CdcStream:
             return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
         case EWorkerType::AsyncIndex:
-            Y_ABORT("unreachable");
+            Y_ENSURE(false, "unreachable");
         }
     }
 

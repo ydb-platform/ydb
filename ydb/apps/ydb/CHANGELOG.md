@@ -1,3 +1,14 @@
+* Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
+* Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
+* Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
+* Fixed bugs in `ydb scheme rmdir`: 1) do not try to delete subdomains, 2) order the deletion of external tables before the deletion of external data sources.
+* YDB CLI help message improvements. Different display for detailed help and brief help.
+* Support coordination nodes in `ydb scheme rmdir --recursive`.
+* Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
+
+## 2.20.0 ##
+
+* Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.
 * Add options for client certificates in SSL/TLS connections.
 * Add `ydb admin node config init` command to initialize directory with node config files.
 * Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.

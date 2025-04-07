@@ -2263,10 +2263,13 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    std::optional<ui64> days, hours, minutes, seconds, microseconds;
+    std::optional<ui64> weeks, days, hours, minutes, seconds, microseconds;
     ui64 num;
 
-    if (*pos != 'T') {
+    while (buf.cend() != pos) {
+        if (*pos == 'T') {
+            break;
+        }
         // Estimated upper bound for number of digits in the
         // numeric representation of days (weeks need less).
         // * Interval:   MAX_DATE (49673)                    = 5 digits.
@@ -2278,13 +2281,27 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         }
 
         switch (*pos++) {
-            case 'D': days = num; break;
-            case 'W': days = 7U * num; break;
+            case 'W':
+                if (weeks || days) {
+                    return NUdf::TUnboxedValuePod();
+                }
+                weeks = num;
+                break;
+            case 'D':
+                if (days) {
+                    return NUdf::TUnboxedValuePod();
+                }
+                days = num;
+                break;
             default: return NUdf::TUnboxedValuePod();
         }
     }
 
-    if (days > MaxDays) {
+    const ui32 dvalue
+        = weeks.value_or(0U) * 7ull
+        + days.value_or(0U);
+
+    if (dvalue > MaxDays) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -2342,7 +2359,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     }
 
     const ui64 value
-        = days.value_or(0U) * 86400000000ull
+        = dvalue * 86400000000ull
         + hours.value_or(0U) * 3600000000ull
         + minutes.value_or(0U) * 60000000ull
         + seconds.value_or(0U) * 1000000ull

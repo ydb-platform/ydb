@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkydb_embedded_ui=globalThis.webpackChunkydb_embedded_ui||[]).push([[66593],{66593:(d,e,b)=>{b.d(e,{default:()=>a});var u=b(33592);const a=b.n(u)()}}]);

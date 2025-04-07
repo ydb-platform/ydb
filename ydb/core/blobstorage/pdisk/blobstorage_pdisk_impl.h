@@ -428,7 +428,8 @@ public:
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
-    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey);
+    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
+        const TMainKey& mainKey, const TString& logPrefix);
     static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
 
     NMeta::TFormatted& GetFormattedMeta();
@@ -470,10 +471,10 @@ private:
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
-        ui64 *outPayloadBytes, ui64 *outPayloadOffset);
+        ui64 *outPayloadBytes, ui64 *outPayloadOffset, const TString& logPrefix);
 
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
-        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset);
+        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
 
 } // NPDisk
 } // NKikimr

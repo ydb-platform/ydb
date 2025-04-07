@@ -4,10 +4,10 @@
 #include "read_session_impl.h"
 #undef INCLUDE_READ_SESSION_IMPL_H
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <google/protobuf/util/time_util.h>
@@ -24,7 +24,7 @@
 #include <variant>
 
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 static const bool RangesMode = !std::string{std::getenv("PQ_OFFSET_RANGES_MODE") ? std::getenv("PQ_OFFSET_RANGES_MODE") : ""}.empty();
 
@@ -73,6 +73,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
+        if (commitOffset.has_value()) {
+            SetFirstNotReadOffset(commitOffset.value());
+        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }

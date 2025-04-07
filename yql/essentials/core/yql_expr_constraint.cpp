@@ -112,6 +112,8 @@ public:
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToSequence"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Collect"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["PruneAdjacentKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<true>;
+        Functions["PruneKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<false>;
         Functions["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
@@ -243,7 +245,9 @@ public:
         Functions["WideTopSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
@@ -803,6 +807,18 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
+    }
+
+    template <bool Adjacent>
+    TStatus PruneKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (const auto status = UpdateLambdaConstraints(*input->Child(1)); status != TStatus::Ok) {
+            return status;
+        }
+
+        if constexpr (Adjacent) {
+            return CopyAllFrom<0>(input, output, ctx);
+        }
+        return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode>(input, output, ctx);
     }
 
     template<class TConstraint>

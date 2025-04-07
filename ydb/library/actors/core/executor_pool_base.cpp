@@ -71,7 +71,7 @@ namespace NActors {
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
-        , UseRingQueue(useRingQueue)
+        , UseRingQueueValue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
@@ -147,7 +147,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-        if (UseRingQueue) {
+        if (UseRingQueue()) {
             ScheduleActivationEx(mailbox, 0);
         } else {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
@@ -169,9 +169,12 @@ namespace NActors {
         if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
             mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
-        if (mailbox && UseRingQueue) {
+        if (!mailbox) {
+            return;
+        }
+        if (UseRingQueueValue) {
             ScheduleActivationEx(mailbox, 0);
-        } else if (mailbox) {
+        } else {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
@@ -301,5 +304,9 @@ namespace NActors {
 
     TMailboxTable* TExecutorPoolBaseMailboxed::GetMailboxTable() const {
         return MailboxTable;
+    }
+
+    bool TExecutorPoolBase::UseRingQueue() const {
+        return UseRingQueueValue;
     }
 }

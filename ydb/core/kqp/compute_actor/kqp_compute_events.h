@@ -250,16 +250,22 @@ struct TEvKqpCompute {
         }
     };
 
+    struct TEvScanPing : public NActors::TEventPB<TEvScanPing, NKikimrKqp::TEvScanPing,
+        TKqpComputeEvents::EvScanPing>
+    {
+    };
+
     struct TEvScanInitActor : public NActors::TEventPB<TEvScanInitActor, NKikimrKqp::TEvScanInitActor,
         TKqpComputeEvents::EvScanInitActor>
     {
         TEvScanInitActor() = default;
 
-        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId) {
+        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId, bool allowPings = false) {
             Record.SetScanId(scanId);
             ActorIdToProto(scanActor, Record.MutableScanActorId());
             Record.SetGeneration(generation);
             Record.SetTabletId(tabletId);
+            Record.SetAllowPings(allowPings);
         }
     };
 

@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
 
@@ -333,26 +334,38 @@ void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
     SetParamsInput(InputFileHolder.Get());
 }
 
-void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString& queryText) {
-    NScripting::TScriptingClient client(driver);
+void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText) {
+    if (SyntaxType == NQuery::ESyntax::Pg) {
+        ParamTypes.clear();
+        return;
+    }
 
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(NScripting::ExplainYqlRequestMode::Validate);
+    auto types = TYqlParamParser::GetParamTypes(queryText);
+    if (types.has_value()) {
+        ParamTypes = *types;
+        return;
+    }
+
+    // Fallback to ExplainYql
+    NScripting::TScriptingClient client(driver);
+    auto explainSettings = NScripting::TExplainYqlRequestSettings()
+        .Mode(NScripting::ExplainYqlRequestMode::Validate);
 
     auto result = client.ExplainYqlScript(
         queryText,
         explainSettings
     ).GetValueSync();
+
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     ParamTypes = result.GetParameterTypes();
 }
 
-bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,
-        THolder<TParamsBuilder>& paramBuilder) {
+bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
-        GetParamTypes(driver, queryText);
+        InitParamTypes(driver, queryText);
+
         if (!InputParamStream) {
             AddParams(*paramBuilder);
             return true;

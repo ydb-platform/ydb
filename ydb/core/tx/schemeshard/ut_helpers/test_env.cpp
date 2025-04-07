@@ -133,8 +133,9 @@ private:
 
 class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
 public:
-    TFakeConfigDispatcher()
+    TFakeConfigDispatcher(const NKikimrConfig::TAppConfig& config = NKikimrConfig::TAppConfig())
         : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+        , Config(config)
     {
     }
 
@@ -146,8 +147,12 @@ public:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+        auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *event->Record.MutableConfig() = Config;
+        ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
+private:
+    NKikimrConfig::TAppConfig Config;
 };
 
 // Automatically resend notification requests to Schemeshard if it gets restarted
@@ -654,7 +659,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
     }
 
-    SetupTabletServices(runtime, &app);
+    SetupTabletServices(runtime, &app, !opts.DSProxies_.empty(), {}, nullptr, false, opts.DSProxies_);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
@@ -662,7 +667,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.RunFakeConfigDispatcher_) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(node)),
-                runtime.Register(new TFakeConfigDispatcher(), node), node);
+                runtime.Register(new TFakeConfigDispatcher(GetAppConfig()), node), node);
         }
     }
 
@@ -1018,6 +1023,23 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
 }
 
+NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
+    queryServiceConfig->AddAvailableExternalDataSources("ObjectStorage");
+    queryServiceConfig->AddAvailableExternalDataSources("ClickHouse");
+    queryServiceConfig->AddAvailableExternalDataSources("PostgreSQL");
+    queryServiceConfig->AddAvailableExternalDataSources("MySQL");
+    queryServiceConfig->AddAvailableExternalDataSources("Ydb");
+    queryServiceConfig->AddAvailableExternalDataSources("YT");
+    queryServiceConfig->AddAvailableExternalDataSources("Greenplum");
+    queryServiceConfig->AddAvailableExternalDataSources("MsSQLServer");
+    queryServiceConfig->AddAvailableExternalDataSources("Oracle");
+    queryServiceConfig->AddAvailableExternalDataSources("Logging");
+    queryServiceConfig->AddAvailableExternalDataSources("Solomon");
+    return appConfig;
+}
+
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : EnvOpts(GetDefaultTestEnvOptions())
     , SchemeShardFactory(ssFactory)
@@ -1119,7 +1141,7 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 }
 
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
-    return new TTestEnv(*Runtime, GetTestEnvOptions());
+    return new TTestEnv(*Runtime, GetTestEnvOptions().RunFakeConfigDispatcher(true));
 }
 
 

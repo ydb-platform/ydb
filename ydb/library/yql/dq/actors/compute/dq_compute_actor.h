@@ -256,6 +256,8 @@ struct TComputeRuntimeSettings {
 
     i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
 
+    bool WithProgressStats = false;
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }
@@ -376,7 +378,8 @@ struct TComputeMemoryLimits {
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
     ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer
+    ui64 ChunkSizeLimit = 48_MB;
+    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer and DqOutputChannel
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };

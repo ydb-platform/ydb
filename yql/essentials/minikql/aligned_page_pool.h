@@ -240,6 +240,10 @@ public:
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     static bool IsDefaultAllocatorUsed();
+#else
+    static consteval bool IsDefaultAllocatorUsed() {
+        return false;
+    }
 #endif
 
 protected:
@@ -309,7 +313,13 @@ template<typename TMmap = TSystemMmap>
 void* GetAlignedPage(ui64 size);
 
 template<typename TMmap = TSystemMmap>
+void* GetAlignedPage();
+
+template<typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem);
 
 template<typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();

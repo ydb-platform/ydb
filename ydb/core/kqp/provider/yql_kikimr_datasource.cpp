@@ -9,6 +9,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -16,7 +17,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/generic/is_in.h>
 
@@ -95,6 +96,15 @@ namespace {
 using namespace NKikimr;
 using namespace NNodes;
 
+bool IsShowCreate(const TExprNode& read) {
+    if (read.ChildrenSize() <= TKiReadTable::idx_Settings) {
+        return false;
+    }
+    const auto& settings = *read.Child(TKiReadTable::idx_Settings);
+    return HasSetting(settings, "showCreateTable")
+        || HasSetting(settings, "showCreateView");
+}
+
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
     TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
@@ -102,23 +112,48 @@ public:
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
+        bool sysViewRewritten = false;
+        TExprBase currentNode(node);
+        if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
+            auto readTable = maybeReadTable.Cast();
+            for (auto setting : readTable.Settings()) {
+                auto name = setting.Name().Value();
+                if (name == "sysViewRewritten") {
+                    sysViewRewritten = true;
+                }
+            }
+        }
+
         auto cluster = node.DataSource().Cluster();
         TKikimrKey key(ctx);
         if (!key.Extract(node.TableKey().Ref())) {
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
+        bool sysViewRewritten = false;
+        if (auto maybeRead = node.Maybe<TCoRead>()) {
+            auto read = maybeRead.Cast();
+            for (auto arg : read.FreeArgs()) {
+                if (auto maybeTuple = arg.Maybe<TCoNameValueTuple>()) {
+                    auto tuple = maybeTuple.Cast();
+                    if (tuple.Ref().Child(0)->Content() == "sysViewRewritten") {
+                        sysViewRewritten = true;
+                    }
+                }
+            }
+        }
+
         auto cluster = node.Ref().Child(1)->Child(1)->Content();
         TKikimrKey key(ctx);
         if (!key.Extract(*node.Ref().Child(2))) {
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -134,12 +169,15 @@ private:
     }
 
 private:
-    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten = false) {
         switch (key.GetKeyType()) {
+            case TKikimrKey::Type::Database:
+                return TStatus::Ok;
+
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
                 auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),
-                    key.GetTablePath());
+                    key.GetTablePath(), ETableType::Table, sysViewRewritten);
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -238,6 +276,7 @@ public:
                             .WithAuthInfo(table.GetNeedAuthInfo())
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
+                            .WithSysViewRewritten(table.GetSysViewRewritten())
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -617,6 +656,7 @@ public:
                 node.IsCallable(TDqSourceWideBlockWrap::CallableName()) ||
                 node.IsCallable(TDqReadWrap::CallableName()) ||
                 node.IsCallable(TDqReadWideWrap::CallableName()) ||
+                node.IsCallable(TDqReadBlockWideWrap::CallableName()) ||
                 node.IsCallable(TDqSource::CallableName())
             )
         )
@@ -765,7 +805,7 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
-            } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View) {
+            } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
                     ctx.AddError(TIssue(node->Pos(ctx),
                                         "Views are disabled. Please contact your system administrator to enable the feature"));

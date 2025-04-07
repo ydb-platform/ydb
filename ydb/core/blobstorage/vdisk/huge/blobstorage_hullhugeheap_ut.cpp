@@ -178,7 +178,7 @@ namespace NKikimr {
             STR << "leftBlocks# " << leftBlocks
                 << " milestoneBlocks# " << milestoneBlocks
                 << " rightBlocks# " << rightBlocks << "\n";
-            NPrivate::TChainLayoutBuilder builder(leftBlocks, milestoneBlocks, rightBlocks, overhead);
+            NPrivate::TChainLayoutBuilder builder("", leftBlocks, milestoneBlocks, rightBlocks, overhead);
             TString tableStr = builder.ToString(AppendBlockSize);
             STR << tableStr << "\n";
             TVector<NPrivate::TChainLayoutBuilder::TSeg> canonical = {
@@ -211,8 +211,8 @@ namespace NKikimr {
                 << " newLeftBlocks# " << newLeftBlocks
                 << " milestoneBlocks# " << milestoneBlocks
                 << " rightBlocks# " << rightBlocks << "\n";
-            NPrivate::TChainLayoutBuilder oldBuilder(oldLeftBlocks, milestoneBlocks, rightBlocks, overhead);
-            NPrivate::TChainLayoutBuilder newBuilder(newLeftBlocks, milestoneBlocks, rightBlocks, overhead);
+            NPrivate::TChainLayoutBuilder oldBuilder("", oldLeftBlocks, milestoneBlocks, rightBlocks, overhead);
+            NPrivate::TChainLayoutBuilder newBuilder("", newLeftBlocks, milestoneBlocks, rightBlocks, overhead);
             UNIT_ASSERT_EQUAL(oldBuilder.GetLayout()[0], newBuilder.GetMilestoneSegment());
         }
     }

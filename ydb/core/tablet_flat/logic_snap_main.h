@@ -27,7 +27,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "LSnap{" << Cookies->Tablet << ":" << Cookies->Gen
@@ -50,11 +50,12 @@ namespace NTabletFlatExecutor {
 
         const NSnap::TWaste& Waste() const noexcept { return *Waste_; }
 
-        void Confirm(ui32 step) noexcept
+        void Confirm(ui32 step)
         {
-            if (Pending == 0 || Pending != step)
-                Y_Fail(
+            if (Pending == 0 || Pending != step) {
+                Y_TABLET_ERROR(
                     NFmt::Do(*this) << " got unexpected confirm for " << step);
+            }
 
             Pending = 0;
         }
@@ -62,7 +63,7 @@ namespace NTabletFlatExecutor {
         void MakeSnap(TSnap &snap, TLogCommit &commit, NUtil::ILogger *logger)
         {
             if (Pending != 0) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     NFmt::Do(*this) << " cannot make snap on " << commit.Step);
             }
 

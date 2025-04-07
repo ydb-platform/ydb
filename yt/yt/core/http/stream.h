@@ -91,7 +91,8 @@ public:
         const NNet::TNetworkAddress& remoteAddress,
         IInvokerPtr readInvoker,
         EMessageType messageType,
-        THttpIOConfigPtr config);
+        THttpIOConfigPtr config,
+        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
     EMethod GetMethod() override;
     const TUrlRef& GetUrl() override;
@@ -136,6 +137,7 @@ private:
     const EMessageType MessageType_;
     const THttpIOConfigPtr Config_;
     const IInvokerPtr ReadInvoker_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TSharedMutableRef InputBuffer_;
     TSharedRef UnconsumedData_;
@@ -183,12 +185,14 @@ public:
         THeadersPtr headers,
         NNet::IConnectionPtr connection,
         EMessageType messageType,
-        THttpIOConfigPtr config);
+        THttpIOConfigPtr config,
+        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
     THttpOutput(
         NNet::IConnectionPtr connection,
         EMessageType messageType,
-        THttpIOConfigPtr config);
+        THttpIOConfigPtr config,
+        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
 
     const THeadersPtr& GetHeaders() override;
     void SetHeaders(const THeadersPtr& headers);
@@ -224,6 +228,7 @@ private:
     const THttpIOConfigPtr Config_;
 
     const TClosure OnWriteFinish_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     // Debug
     TRequestId RequestId_;

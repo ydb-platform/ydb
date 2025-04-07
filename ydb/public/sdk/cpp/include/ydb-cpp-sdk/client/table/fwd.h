@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
 
 class TKeyBound;
 class TKeyRange;

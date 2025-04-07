@@ -30,7 +30,7 @@ namespace NTable {
 
         virtual ~TColdPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out << "ColdPart{" << Label << " eph " << Epoch << "}";
         }
@@ -63,22 +63,22 @@ namespace NTable {
                 return !FlatGroups.empty();
             }
 
-            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    Y_ENSURE(groupId.Index < BTreeHistoric.size());
                     return BTreeHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    Y_ENSURE(groupId.Index < BTreeGroups.size());
                     return BTreeGroups[groupId.Index];
                 }
             }
 
-            TPageId GetFlat(TGroupId groupId) const noexcept {
+            TPageId GetFlat(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    Y_ENSURE(groupId.Index < FlatHistoric.size());
                     return FlatHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    Y_ENSURE(groupId.Index < FlatGroups.size());
                     return FlatGroups[groupId.Index];
                 }
             }
@@ -126,17 +126,15 @@ namespace NTable {
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_ABORT_UNLESS(Scheme->Groups.size() == GroupsCount,
-                "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
-                Scheme->Groups.size(), GroupsCount);
-            Y_ABORT_UNLESS(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
-                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                GroupsCount, HistoricGroupsCount);
+            Y_ENSURE(Scheme->Groups.size() == GroupsCount,
+                "Part has scheme with " << Scheme->Groups.size() << " groups, but " << GroupsCount << " indexes");
+            Y_ENSURE(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+                "Part has " << GroupsCount << " indexes, but " << HistoricGroupsCount << " historic indexes");
         }
 
         virtual ~TPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Part{" << Label << " eph " << Epoch << ", "
@@ -153,8 +151,8 @@ namespace NTable {
          */
         virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
 
-        virtual ui64 DataSize() const = 0;
-        virtual ui64 BackingSize() const = 0;
+        virtual ui64 DataSize() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
         virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
         virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
         virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
@@ -213,7 +211,7 @@ namespace NTable {
 
         virtual ~TTxStatusPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TxStatus{" << Label << " epoch " << Epoch << ", "

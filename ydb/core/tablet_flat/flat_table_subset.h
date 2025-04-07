@@ -45,7 +45,7 @@ namespace NTable {
             return Head == TEpoch::Zero() || Head == Epoch() + 1;
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TSubset{" << "head " << Head

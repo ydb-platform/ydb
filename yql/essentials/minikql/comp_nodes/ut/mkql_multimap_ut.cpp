@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiMapTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
+
     Y_UNIT_TEST_LLVM(TestFlattenByNarrow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -164,7 +164,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiMapTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-#endif
 }
 
 }

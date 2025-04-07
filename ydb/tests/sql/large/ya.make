@@ -1,4 +1,5 @@
 PY3TEST()
+TAG(ya:manual) #skip reason https://github.com/ydb-platform/ydb/issues/16128
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")

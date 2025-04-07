@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/types.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <memory>
 

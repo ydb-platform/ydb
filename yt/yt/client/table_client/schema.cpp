@@ -429,41 +429,13 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->clear_required();
     }
     ToProto(protoSchema->mutable_logical_type(), schema.LogicalType());
-    if (schema.Lock()) {
-        protoSchema->set_lock(ToProto(*schema.Lock()));
-    } else {
-        protoSchema->clear_lock();
-    }
-    if (schema.Expression()) {
-        protoSchema->set_expression(*schema.Expression());
-    } else {
-        protoSchema->clear_expression();
-    }
-    if (schema.Materialized()) {
-        protoSchema->set_materialized(*schema.Materialized());
-    } else {
-        protoSchema->clear_materialized();
-    }
-    if (schema.Aggregate()) {
-        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
-    } else {
-        protoSchema->clear_aggregate();
-    }
-    if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
-    } else {
-        protoSchema->clear_sort_order();
-    }
-    if (schema.Group()) {
-        protoSchema->set_group(ToProto(*schema.Group()));
-    } else {
-        protoSchema->clear_group();
-    }
-    if (schema.MaxInlineHunkSize()) {
-        protoSchema->set_max_inline_hunk_size(*schema.MaxInlineHunkSize());
-    } else {
-        protoSchema->clear_max_inline_hunk_size();
-    }
+    YT_OPTIONAL_SET_PROTO(protoSchema, lock, schema.Lock());
+    YT_OPTIONAL_TO_PROTO(protoSchema, expression, schema.Expression());
+    YT_OPTIONAL_SET_PROTO(protoSchema, materialized, schema.Materialized());
+    YT_OPTIONAL_SET_PROTO(protoSchema, aggregate, schema.Aggregate());
+    YT_OPTIONAL_SET_PROTO(protoSchema, sort_order, schema.SortOrder());
+    YT_OPTIONAL_SET_PROTO(protoSchema, group, schema.Group());
+    YT_OPTIONAL_SET_PROTO(protoSchema, max_inline_hunk_size, schema.MaxInlineHunkSize());
 }
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema)
@@ -492,13 +464,13 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
-    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
-    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
-    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
-    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetLock(YT_OPTIONAL_FROM_PROTO(protoSchema, lock));
+    schema->SetExpression(YT_OPTIONAL_FROM_PROTO(protoSchema, expression));
+    schema->SetMaterialized(YT_OPTIONAL_FROM_PROTO(protoSchema, materialized));
+    schema->SetAggregate(YT_OPTIONAL_FROM_PROTO(protoSchema, aggregate));
     schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
-    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
-    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
+    schema->SetGroup(YT_OPTIONAL_FROM_PROTO(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_OPTIONAL_FROM_PROTO(protoSchema, max_inline_hunk_size));
 }
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
@@ -526,7 +498,7 @@ std::string TTableSchema::TNameMapping::StableNameToName(const TColumnStableName
 {
     auto* column = Schema_.FindColumnByStableName(stableName);
     if (!column) {
-        if (Schema_.GetStrict()) {
+        if (Schema_.IsStrict()) {
             THROW_ERROR_EXCEPTION("No column with stable name %Qv in strict schema", stableName);
         }
         return stableName.Underlying();
@@ -538,7 +510,7 @@ TColumnStableName TTableSchema::TNameMapping::NameToStableName(TStringBuf name) 
 {
     auto* column = Schema_.FindColumn(name);
     if (!column) {
-        if (Schema_.GetStrict()) {
+        if (Schema_.IsStrict()) {
             if (auto originalColumnName = GetTimestampColumnOriginalNameOrNull(name);
                 !originalColumnName || !Schema_.FindColumn(*originalColumnName))
             {
@@ -787,11 +759,6 @@ bool TTableSchema::IsSorted() const
     return KeyColumnCount_ > 0;
 }
 
-bool TTableSchema::IsUniqueKeys() const
-{
-    return UniqueKeys_;
-}
-
 bool TTableSchema::HasRenamedColumns() const
 {
     return std::any_of(Columns().begin(), Columns().end(), [] (const TColumnSchema& column) {
@@ -901,7 +868,7 @@ std::vector<TColumnStableName> MapNamesToStableNames(
         const auto* column = schema.FindColumn(name);
         if (column) {
             stableNames.push_back(column->StableName());
-        } else if (!schema.GetStrict()) {
+        } else if (!schema.IsStrict()) {
             stableNames.push_back(TColumnStableName(name));
         } else if (missingColumnReplacement) {
             stableNames.push_back(TColumnStableName(std::string(*missingColumnReplacement)));
@@ -1524,7 +1491,7 @@ TKeyColumnTypes TTableSchema::GetKeyColumnTypes() const
 
 void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStringBuf /*spec*/)
 {
-    builder->AppendFormat("<strict=%v;unique_keys=%v", schema.GetStrict(), schema.GetUniqueKeys());
+    builder->AppendFormat("<strict=%v;unique_keys=%v", schema.IsStrict(), schema.IsUniqueKeys());
     if (schema.HasNontrivialSchemaModification()) {
         builder->AppendFormat(";schema_modification=%v", schema.GetSchemaModification());
     }
@@ -1559,9 +1526,17 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
 
 std::string SerializeToWireProto(const TTableSchemaPtr& schema)
 {
+    return schema ? SerializeToWireProto(*schema) : "";
+}
+
+std::string SerializeToWireProto(const TTableSchema& schema)
+{
     NTableClient::NProto::TTableSchemaExt protoSchema;
     ToProto(&protoSchema, schema);
-    return protoSchema.SerializeAsString();
+    if (protoSchema.IsInitialized()) {
+        return protoSchema.SerializeAsString();
+    }
+    THROW_ERROR_EXCEPTION("Table schema is not initialized");
 }
 
 void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto)
@@ -1577,8 +1552,8 @@ void ToProto(NProto::TTableSchemaExt* protoSchema, const TTableSchema& schema)
 {
     ToProto(protoSchema->mutable_columns(), schema.Columns());
     ToProto(protoSchema->mutable_deleted_columns(), schema.DeletedColumns());
-    protoSchema->set_strict(schema.GetStrict());
-    protoSchema->set_unique_keys(schema.GetUniqueKeys());
+    protoSchema->set_strict(schema.IsStrict());
+    protoSchema->set_unique_keys(schema.IsUniqueKeys());
     protoSchema->set_schema_modification(ToProto(schema.GetSchemaModification()));
 }
 
@@ -1702,8 +1677,8 @@ bool operator==(const TTableSchema& lhs, const TTableSchema& rhs)
 {
     return
         lhs.Columns() == rhs.Columns() &&
-        lhs.GetStrict() == rhs.GetStrict() &&
-        lhs.GetUniqueKeys() == rhs.GetUniqueKeys() &&
+        lhs.IsStrict() == rhs.IsStrict() &&
+        lhs.IsUniqueKeys() == rhs.IsUniqueKeys() &&
         lhs.GetSchemaModification() == rhs.GetSchemaModification() &&
         lhs.DeletedColumns() == rhs.DeletedColumns();
 }
@@ -1719,7 +1694,7 @@ bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rh
             }
             resultColumns.emplace_back(column);
         }
-        return TTableSchema(resultColumns, schema.GetStrict(), schema.GetUniqueKeys());
+        return TTableSchema(resultColumns, schema.IsStrict(), schema.IsUniqueKeys());
     };
     return dropRequiredness(lhs) == dropRequiredness(rhs);
 }
@@ -2118,11 +2093,11 @@ void ValidateColumnSchema(
 
 void ValidateDynamicTableConstraints(const TTableSchema& schema)
 {
-    if (!schema.GetStrict()) {
+    if (!schema.IsStrict()) {
         THROW_ERROR_EXCEPTION("\"strict\" cannot be \"false\" for a dynamic table");
     }
 
-    if (schema.IsSorted() && !schema.GetUniqueKeys()) {
+    if (schema.IsSorted() && !schema.IsUniqueKeys()) {
         THROW_ERROR_EXCEPTION("\"unique_keys\" cannot be \"false\" for a sorted dynamic table");
     }
 
@@ -2336,7 +2311,7 @@ void ValidateCumulativeDataWeightColumn(const TTableSchema& schema)
 // Validate schema attributes.
 void ValidateSchemaAttributes(const TTableSchema& schema)
 {
-    if (schema.GetUniqueKeys() && schema.GetKeyColumnCount() == 0) {
+    if (schema.IsUniqueKeys() && schema.GetKeyColumnCount() == 0) {
         THROW_ERROR_EXCEPTION("\"unique_keys\" can only be true if key columns are present");
     }
 }
@@ -2353,7 +2328,7 @@ void ValidateTableSchema(
             schema.IsSorted(),
             isTableDynamic,
             options);
-        if (!schema.GetStrict() && column.IsRenamed()) {
+        if (!schema.IsStrict() && column.IsRenamed()) {
             THROW_ERROR_EXCEPTION("Renamed column %v in non-strict schema",
                 column.GetDiagnosticNameString());
         }
@@ -2420,6 +2395,24 @@ void ValidateNoDescendingSortOrder(const TTableSchema& schema)
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Descending sort order is not available in this context yet")
                 << TErrorAttribute("column_name", column.Name());
+        }
+    }
+}
+
+void ValidateNoDescendingSortOrder(
+    const std::vector<ESortOrder>& sortOrders,
+    const TKeyColumns& keyColumns)
+{
+    YT_VERIFY(keyColumns.size() == sortOrders.size());
+
+    for (int index = 0; index < std::ssize(sortOrders); ++index) {
+        auto sortOrder = sortOrders[index];
+        const auto& column = keyColumns[index];
+        if (sortOrder == ESortOrder::Descending) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::InvalidSchemaValue,
+                "Descending sort order is not available in this context yet")
+                << TErrorAttribute("column_name", column);
         }
     }
 }
@@ -2584,7 +2577,7 @@ size_t THash<NYT::NTableClient::TDeletedColumn>::operator()(const NYT::NTableCli
 
 size_t THash<NYT::NTableClient::TTableSchema>::operator()(const NYT::NTableClient::TTableSchema& tableSchema) const
 {
-    size_t result = CombineHashes(THash<bool>()(tableSchema.GetUniqueKeys()), THash<bool>()(tableSchema.GetStrict()));
+    size_t result = CombineHashes(THash<bool>()(tableSchema.IsUniqueKeys()), THash<bool>()(tableSchema.IsStrict()));
     if (tableSchema.HasNontrivialSchemaModification()) {
         result = CombineHashes(
             result,

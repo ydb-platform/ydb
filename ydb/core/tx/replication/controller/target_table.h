@@ -12,7 +12,6 @@ public:
     TString GetStreamPath() const override;
 
 protected:
-    IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
     virtual TString BuildStreamPath() const = 0;
 };
 
@@ -48,34 +47,6 @@ public:
 
 protected:
     TString BuildStreamPath() const override;
-};
-
-class TTargetTransfer: public TTargetTableBase {
-public:
-    struct TTransferConfig : public TConfigBase {
-        using TPtr = std::shared_ptr<TTransferConfig>;
-
-        TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda);
-
-        const TString& GetTransformLambda() const;
-
-    private:
-        TString TransformLambda;
-    };
-
-    explicit TTargetTransfer(TReplication* replication,
-        ui64 id, const IConfig::TPtr& config);
-
-    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
-
-    void Progress(const TActorContext& ctx) override;
-    void Shutdown(const TActorContext& ctx) override;
-
-protected:
-    TString BuildStreamPath() const override;
-
-private:
-    TActorId StreamConsumerRemover;
 };
 
 }

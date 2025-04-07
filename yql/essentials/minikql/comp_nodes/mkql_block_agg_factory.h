@@ -68,6 +68,8 @@ public:
 
     virtual void DeserializeState(void* state, NUdf::TInputBuffer& buffer) = 0;
 
+    virtual void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) = 0;
+
     explicit IBlockAggregatorFinalizeKeys(ui32 stateSize)
         : IBlockAggregatorBase(stateSize)
     {}

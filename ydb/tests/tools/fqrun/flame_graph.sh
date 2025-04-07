@@ -9,4 +9,4 @@ fi
 
 SCRIPT_DIR=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
 
-$SCRIPT_DIR/../kqprun/flame_graph.sh ${1:-'30'} ${2:-''} fqrun
+$SCRIPT_DIR/../kqprun/scripts/flame_graph.sh ${1:-'30'} ${2:-''} fqrun

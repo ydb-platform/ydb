@@ -1,4 +1,5 @@
 #include "flat_dbase_apply.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -86,7 +87,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
 
-        Y_ABORT_UNLESS(ui32(codec) <= 1, "Invalid page encoding code value");
+        Y_ENSURE(ui32(codec) <= 1, "Invalid page encoding code value");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
@@ -96,7 +97,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
-        Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
+        Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
             ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
         }
@@ -177,7 +178,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
     } else if (action == TAlterRecord::SetCompactionPolicy) {
         changes |= SetCompactionPolicy(table, delta.GetCompactionPolicy());
     } else {
-        Y_ABORT("unknown scheme delta record type");
+        Y_TABLET_ERROR("unknown scheme delta record type");
     }
 
     if (delta.HasTableId() && changes)
@@ -188,7 +189,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 bool TSchemeModifier::AddColumnToFamily(ui32 tid, ui32 cid, ui32 family)
 {
     auto* column = Scheme.GetColumnInfo(Table(tid), cid);
-    Y_ABORT_UNLESS(column);
+    Y_ENSURE(column);
 
     if (column->Family != family) {
         PreserveTable(tid);
@@ -216,9 +217,9 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
             }
             return out;
         };
-        Y_VERIFY_S(itName->second == id, describeFailure());
+        Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this table really exists
-        Y_ABORT_UNLESS(it != Scheme.Tables.end() && it->second.Name == name);
+        Y_ENSURE(it != Scheme.Tables.end() && it->second.Name == name);
         return false;
     }
 
@@ -234,7 +235,7 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
 
     // Creating a new table
     auto pr = Scheme.Tables.emplace(id, TTable(name, id));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
     it = pr.first;
     Scheme.TableNames.emplace(name, id);
 
@@ -260,7 +261,7 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(!NScheme::NTypeIds::IsParametrizedType(type));
+    Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
     return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, null);
 }
 
@@ -273,7 +274,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     NScheme::TTypeInfo typeInfo;
     TString pgTypeMod;
-    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
+    Y_ENSURE((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     switch ((NScheme::TTypeId)type) {
     case NScheme::NTypeIds::Pg: {
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
@@ -304,10 +305,10 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
             }
             return out;
         };
-        Y_VERIFY_S(itName->second == id, describeFailure());
+        Y_ENSURE(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
-        Y_ABORT_UNLESS(it != table->Columns.end() && it->second.Name == name);
-        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it != table->Columns.end() && it->second.Name == name);
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
@@ -318,7 +319,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     // We assume column is renamed when the same id already exists
     if (it != table->Columns.end()) {
-        Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
+        Y_ENSURE(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
             << " with type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
@@ -329,7 +330,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
     }
 
     auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);
 
@@ -355,7 +356,7 @@ bool TSchemeModifier::AddColumnToKey(ui32 tid, ui32 columnId)
 {
     auto *table = Table(tid);
     auto* column = Scheme.GetColumnInfo(table, columnId);
-    Y_ABORT_UNLESS(column);
+    Y_ENSURE(column);
 
     auto keyPos = std::find(table->KeyColumns.begin(), table->KeyColumns.end(), column->Id);
     if (keyPos == table->KeyColumns.end()) {
@@ -408,7 +409,7 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCo
     return true;
 }
 
-void TSchemeModifier::PreserveTable(ui32 tid) noexcept
+void TSchemeModifier::PreserveTable(ui32 tid)
 {
     if (RollbackState && !RollbackState->Tables.contains(tid)) {
         auto it = Scheme.Tables.find(tid);
@@ -420,14 +421,14 @@ void TSchemeModifier::PreserveTable(ui32 tid) noexcept
     }
 }
 
-void TSchemeModifier::PreserveExecutor() noexcept
+void TSchemeModifier::PreserveExecutor()
 {
     if (RollbackState && !RollbackState->Executor) {
         RollbackState->Executor = Scheme.Executor;
     }
 }
 
-void TSchemeModifier::PreserveRedo() noexcept
+void TSchemeModifier::PreserveRedo()
 {
     if (RollbackState && !RollbackState->Redo) {
         RollbackState->Redo = Scheme.Redo;

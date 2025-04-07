@@ -755,6 +755,24 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
+std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+    const TString& cookie,
+    const TMaybe<TFormat>& format,
+    const TTablePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_table_partition", /*isApi*/ false);
+    header.SetOutputFormat(format);
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    auto params = NRawClient::SerializeParamsForReadTablePartition(cookie, options);
+    header.MergeParameters(params);
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
 std::unique_ptr<IInputStream> THttpRawClient::ReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -901,6 +919,11 @@ IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 IRawClientPtr THttpRawClient::Clone()
 {
     return ::MakeIntrusive<THttpRawClient>(Context_);
+}
+
+IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
+{
+    return ::MakeIntrusive<THttpRawClient>(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

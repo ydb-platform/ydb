@@ -19,7 +19,7 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/scheme/scheme.h>

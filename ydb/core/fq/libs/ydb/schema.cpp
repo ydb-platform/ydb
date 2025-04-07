@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>

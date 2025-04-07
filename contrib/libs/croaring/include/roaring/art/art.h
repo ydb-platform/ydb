@@ -19,8 +19,8 @@
  *    chunks _differ_. This means that if there are two entries with different
  *    high 48 bits, then there is only one inner node containing the common key
  *    prefix, and two leaves.
- *  * Intrusive leaves: the leaf struct is included in user values. This removes
- *    a layer of indirection.
+ *  * Mostly pointer-free: nodes are referred to by index rather than pointer,
+ *    so that the structure can be deserialized with a backing buffer.
  */
 
 // Fixed length of keys in the ART. All keys are assumed to be of this length.
@@ -33,25 +33,33 @@ namespace internal {
 #endif
 
 typedef uint8_t art_key_chunk_t;
-typedef struct art_node_s art_node_t;
+
+// Internal node reference type. Contains the node typecode in the low 8 bits,
+// and the index in the relevant node array in the high 48 bits. Has a value of
+// CROARING_ART_NULL_REF when pointing to a non-existent node.
+typedef uint64_t art_ref_t;
+
+typedef void art_node_t;
 
 /**
- * Wrapper to allow an empty tree.
+ * The ART is empty when root is a null ref.
+ *
+ * Each node type has its own dynamic array of node structs, indexed by
+ * art_ref_t. The arrays are expanded as needed, and shrink only when
+ * `shrink_to_fit` is called.
  */
 typedef struct art_s {
-    art_node_t *root;
+    art_ref_t root;
+
+    // Indexed by node typecode, thus 1 larger than they need to be for
+    // convenience. `first_free` indicates the index where the first free node
+    // lives, which may be equal to the capacity.
+    uint64_t first_free[6];
+    uint64_t capacities[6];
+    art_node_t *nodes[6];
 } art_t;
 
-/**
- * Values inserted into the tree have to be cast-able to art_val_t. This
- * improves performance by reducing indirection.
- *
- * NOTE: Value pointers must be unique! This is because each value struct
- * contains the key corresponding to the value.
- */
-typedef struct art_val_s {
-    art_key_chunk_t key[ART_KEY_BYTES];
-} art_val_t;
+typedef uint64_t art_val_t;
 
 /**
  * Compares two keys, returns their relative order:
@@ -63,14 +71,21 @@ int art_compare_keys(const art_key_chunk_t key1[],
                      const art_key_chunk_t key2[]);
 
 /**
- * Inserts the given key and value.
+ * Initializes the ART.
  */
-void art_insert(art_t *art, const art_key_chunk_t *key, art_val_t *val);
+void art_init_cleared(art_t *art);
 
 /**
- * Returns the value erased, NULL if not found.
+ * Inserts the given key and value. Returns a pointer to the value inserted,
+ * valid as long as the ART is not modified.
  */
-art_val_t *art_erase(art_t *art, const art_key_chunk_t *key);
+art_val_t *art_insert(art_t *art, const art_key_chunk_t *key, art_val_t val);
+
+/**
+ * Returns true if a value was erased. Sets `*erased_val` to the value erased,
+ * if any.
+ */
+bool art_erase(art_t *art, const art_key_chunk_t *key, art_val_t *erased_val);
 
 /**
  * Returns the value associated with the given key, NULL if not found.
@@ -83,16 +98,10 @@ art_val_t *art_find(const art_t *art, const art_key_chunk_t *key);
 bool art_is_empty(const art_t *art);
 
 /**
- * Frees the nodes of the ART except the values, which the user is expected to
- * free.
+ * Frees the contents of the ART. Should not be called when using
+ * `art_deserialize_frozen_safe`.
  */
 void art_free(art_t *art);
-
-/**
- * Returns the size in bytes of the ART. Includes size of pointers to values,
- * but not the values themselves.
- */
-size_t art_size_in_bytes(const art_t *art);
 
 /**
  * Prints the ART using printf, useful for debugging.
@@ -100,25 +109,28 @@ size_t art_size_in_bytes(const art_t *art);
 void art_printf(const art_t *art);
 
 /**
- * Callback for validating the value stored in a leaf.
+ * Callback for validating the value stored in a leaf. `context` is a
+ * user-provided value passed to the callback without modification.
  *
  * Should return true if the value is valid, false otherwise
  * If false is returned, `*reason` should be set to a static string describing
  * the reason for the failure.
  */
-typedef bool (*art_validate_cb_t)(const art_val_t *val, const char **reason);
+typedef bool (*art_validate_cb_t)(const art_val_t val, const char **reason,
+                                  void *context);
 
 /**
- * Validate the ART tree, ensuring it is internally consistent.
+ * Validate the ART tree, ensuring it is internally consistent. `context` is a
+ * user-provided value passed to the callback without modification.
  */
 bool art_internal_validate(const art_t *art, const char **reason,
-                           art_validate_cb_t validate_cb);
+                           art_validate_cb_t validate_cb, void *context);
 
 /**
  * ART-internal iterator bookkeeping. Users should treat this as an opaque type.
  */
 typedef struct art_iterator_frame_s {
-    art_node_t *node;
+    art_ref_t ref;
     uint8_t index_in_node;
 } art_iterator_frame_t;
 
@@ -129,6 +141,8 @@ typedef struct art_iterator_frame_s {
 typedef struct art_iterator_s {
     art_key_chunk_t key[ART_KEY_BYTES];
     art_val_t *value;
+
+    art_t *art;
 
     uint8_t depth;  // Key depth
     uint8_t frame;  // Node depth
@@ -143,19 +157,19 @@ typedef struct art_iterator_s {
  * depending on `first`. The iterator is not valid if there are no entries in
  * the ART.
  */
-art_iterator_t art_init_iterator(const art_t *art, bool first);
+art_iterator_t art_init_iterator(art_t *art, bool first);
 
 /**
  * Returns an initialized iterator positioned at a key equal to or greater than
  * the given key, if it exists.
  */
-art_iterator_t art_lower_bound(const art_t *art, const art_key_chunk_t *key);
+art_iterator_t art_lower_bound(art_t *art, const art_key_chunk_t *key);
 
 /**
  * Returns an initialized iterator positioned at a key greater than the given
  * key, if it exists.
  */
-art_iterator_t art_upper_bound(const art_t *art, const art_key_chunk_t *key);
+art_iterator_t art_upper_bound(art_t *art, const art_key_chunk_t *key);
 
 /**
  * The following iterator movement functions return true if a new entry was
@@ -174,14 +188,49 @@ bool art_iterator_lower_bound(art_iterator_t *iterator,
 /**
  * Insert the value and positions the iterator at the key.
  */
-void art_iterator_insert(art_t *art, art_iterator_t *iterator,
-                         const art_key_chunk_t *key, art_val_t *val);
+void art_iterator_insert(art_iterator_t *iterator, const art_key_chunk_t *key,
+                         art_val_t val);
 
 /**
  * Erase the value pointed at by the iterator. Moves the iterator to the next
- * leaf. Returns the value erased or NULL if nothing was erased.
+ * leaf.
+ * Returns true if a value was erased. Sets `*erased_val` to the value erased,
+ * if any.
  */
-art_val_t *art_iterator_erase(art_t *art, art_iterator_t *iterator);
+bool art_iterator_erase(art_iterator_t *iterator, art_val_t *erased_val);
+
+/**
+ * Shrinks the internal arrays in the ART to remove any unused elements. Returns
+ * the number of bytes freed.
+ */
+size_t art_shrink_to_fit(art_t *art);
+
+/**
+ * Returns true if the ART has no unused elements.
+ */
+bool art_is_shrunken(const art_t *art);
+
+/**
+ * Returns the serialized size in bytes.
+ * Requires `art_shrink_to_fit` to be called first.
+ */
+size_t art_size_in_bytes(const art_t *art);
+
+/**
+ * Serializes the ART and returns the number of bytes written. Returns 0 on
+ * error. Requires `art_shrink_to_fit` to be called first.
+ */
+size_t art_serialize(const art_t *art, char *buf);
+
+/**
+ * Deserializes the ART from a serialized buffer, reading up to `maxbytes`
+ * bytes. Returns 0 on error. Requires `buf` to be 8 byte aligned.
+ *
+ * An ART deserialized in this way should only be used in a readonly context.The
+ * underlying buffer must not be freed before the ART. `art_free` should not be
+ * called on the ART deserialized in this way.
+ */
+size_t art_frozen_view(const char *buf, size_t maxbytes, art_t *art);
 
 #ifdef __cplusplus
 }  // extern "C"

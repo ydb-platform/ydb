@@ -71,11 +71,12 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptShuffleElimination;
     NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, false> UseBlockReader;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
-
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+    NCommon::TConfSetting<ui64, false> DataSizePerPartition;
     NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, false> KMeansTreeSearchTopSize;
@@ -181,6 +182,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
     bool AllowMultiBroadcasts = false;
+    bool DefaultEnableShuffleElimination = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

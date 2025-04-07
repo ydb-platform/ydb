@@ -105,7 +105,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
             *lastResultPosition = TCursor(keys, 0, SortSchema->field_names());
         }
         if (SortHeap.Current().GetFilter()) {
-            AFL_VERIFY(SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(pos.GetPosition() + (include ? 0 : 1), resultSize)));
+            SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(pos.GetPosition() + (include ? 0 : 1), resultSize));
         }
     } else {
         result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
@@ -114,7 +114,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
             *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema->field_names());
         }
         if (SortHeap.Current().GetFilter()) {
-            AFL_VERIFY(SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(startPos, resultSize)));
+            SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(startPos, resultSize));
         }
     }
     if (!result || !result->num_rows()) {
@@ -214,7 +214,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
     return result;
 }
 
-void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, const bool include) {
+void TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const bool lower) {
     if (SortHeap.Empty()) {
         return;
     }
@@ -224,13 +224,13 @@ void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, co
         if (cmpResult == std::partial_ordering::greater) {
             break;
         }
-        if (cmpResult == std::partial_ordering::equivalent && include) {
+        if (cmpResult == std::partial_ordering::equivalent && lower) {
             break;
         }
         const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
         AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
         if (skipPos.IsEqual()) {
-            if (!include && !SortHeap.MutableCurrent().Next()) {
+            if (!lower && !SortHeap.MutableCurrent().Next()) {
                 SortHeap.RemoveTop();
             } else {
                 SortHeap.UpdateTop();

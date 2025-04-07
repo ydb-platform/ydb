@@ -157,7 +157,7 @@ public:
             Counters_->TotalTabletCount.Update(tabletCount);
 
             for (auto& [cluster, info] : ReplicaClusters_) {
-                Y_ASSERT(info.ReplicaId);
+                YT_ASSERT(info.ReplicaId);
                 auto tabletWithLagCount = tabletWithLagCountPerReplica.Value(info.ReplicaId, 0);
                 auto newLagPenalty = CalculateLagPenalty(tabletCount, tabletWithLagCount);
                 info.CurrentLagPenalty.store(newLagPenalty.GetValue(), std::memory_order::relaxed);

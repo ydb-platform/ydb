@@ -15,10 +15,13 @@ struct TCommandFlagsOverrides {
 class TCommandConfig : public TClientCommandTree {
 public:
     TCommandConfig(
+        bool useLegacyApi,
         TCommandFlagsOverrides commandFlagsOverrides = {},
         bool allowEmptyDatabase = false);
 
-    TCommandConfig(bool allowEmptyDatabase);
+    TCommandConfig(
+        bool useLegacyApi,
+        bool allowEmptyDatabase);
 
     void PropagateFlags(const TCommandFlags& flags) override;
 private:
@@ -27,12 +30,15 @@ private:
 
 class TCommandConfigReplace : public TYdbCommand {
 public:
-    TCommandConfigReplace(bool allowEmptyDatabase);
+    TCommandConfigReplace(
+        bool useLegacyApi,
+        bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:
+    bool UseLegacyApi = false;
     bool IgnoreCheck = false;
     bool Force = false;
     bool DryRun = false;
@@ -44,16 +50,20 @@ private:
 
 class TCommandConfigFetch : public TYdbReadOnlyCommand {
 public:
-    TCommandConfigFetch(bool allowEmptyDatabase);
+    TCommandConfigFetch(
+        bool useLegacyApi,
+        bool allowEmptyDatabase);
     void Config(TConfig&) override;
     void Parse(TConfig&) override;
     int Run(TConfig& config) override;
 
 private:
-    bool All = false;
+    bool UseLegacyApi = false;
     bool StripMetadata = false;
     TString OutDir;
     bool AllowEmptyDatabase = false;
+    bool DedicatedStorageSection = false;
+    bool DedicatedClusterSection = false;
 };
 
 class TCommandConfigResolve : public TYdbReadOnlyCommand {
@@ -101,7 +111,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    ui64 Version;
+    ui64 Version = 0;
     TString Cluster;
     THashSet<ui64> Ids;
     TString Dir;

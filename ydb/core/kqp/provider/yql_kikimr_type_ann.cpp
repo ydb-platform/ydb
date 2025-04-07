@@ -164,6 +164,17 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
+                if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
+                    for (auto setting : readTable.Settings()) {
+                        auto name = setting.Name().Value();
+                        if (name == "showCreateTable" || name == "showCreateView") {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                                TStringBuilder() << "SHOW CREATE statement is not supported"));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);
@@ -195,6 +206,11 @@ private:
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Yson));
                 node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
+                return TStatus::Ok;
+            }
+
+            case TKikimrKey::Type::Database:
+            {
                 return TStatus::Ok;
             }
 
@@ -1833,6 +1849,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password",
             "password_secret_name",
             "commit_interval",
+            "flush_interval",
+            "batch_size_bytes",
+            "consumer",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1860,6 +1879,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password_secret_name",
             "state",
             "failover_mode",
+            "flush_interval",
+            "batch_size_bytes",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1881,6 +1902,40 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
+        if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                TStringBuilder() << "ALTER DATABASE statement is not supported"));
+            return TStatus::Error;
+        }
+
+        if (!node.DatabasePath().Value()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        const THashSet<TString> supportedSettings = {
+            "owner"
+        };
+
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

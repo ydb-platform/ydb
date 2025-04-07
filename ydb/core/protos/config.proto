@@ -450,7 +450,7 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
-    optional bool EnableExternalDataChannel = 42;
+    optional bool EnableExternalDataChannel = 42 [default = true];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
 
@@ -551,6 +551,7 @@ message TMonitoringConfig {
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
+    optional bool HideHttpEndpoint = 19 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -716,6 +717,23 @@ message TGRpcConfig {
 
     repeated string RatelimiterServicesEnabled = 25;
     repeated string RatelimiterServicesDisabled = 26;
+
+    enum YdbGrpcCompressionAlgorithm {
+        YDB_GRPC_COMPRESS_NONE = 0;
+        YDB_GRPC_COMPRESS_DEFLATE = 1;
+        YDB_GRPC_COMPRESS_GZIP = 2;
+    };
+
+    optional YdbGrpcCompressionAlgorithm DefaultCompressionAlgorithm = 30 [default = YDB_GRPC_COMPRESS_NONE];
+
+    enum YdbGrpcCompressionLevel {
+        YDB_GRPC_COMPRESS_LEVEL_NONE = 0;
+        YDB_GRPC_COMPRESS_LEVEL_LOW = 1;
+        YDB_GRPC_COMPRESS_LEVEL_MED = 2;
+        YDB_GRPC_COMPRESS_LEVEL_HIGH = 3;
+    }
+
+    optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -1077,6 +1095,7 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
+    repeated string AvailableExternalDataSources = 22;
 }
 
 // Config describes immediate controls and allows
@@ -1226,6 +1245,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 ReadIteratorKeysExtBlobsPrecharge = 21 [(ControlOptions) = {
+          Description: "Enable external blobs precharge for DataShard read iterator keys requests",
+          MinValue: 0,
+          MaxValue: 1,
+          DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1447,6 +1472,12 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 130 }];
+
+        optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous VDisk sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1573,6 +1604,27 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTestShardControls {
+        optional uint64 DisableWrites = 1 [(ControlOptions) = {
+            Description: "Disable write load in all node TestShard tablets",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+    }
+
+    message TGRpcControls {
+        message TRequestConfig {
+            optional uint64 MaxInFlight = 1 [(ControlOptions) = {
+                Description: "Max in flight requests",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0
+            }];
+        }
+        map<string, TRequestConfig> RequestConfigs = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1585,6 +1637,8 @@ message TImmediateControlsConfig {
     optional TPDiskControls PDiskControls = 10;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
+    optional TTestShardControls TestShardControls = 13;
+    optional TGRpcControls GRpcControls = 14;
 };
 
 message TMeteringConfig {
@@ -1769,6 +1823,18 @@ message THiveConfig {
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
 }
 
+message THealthCheckConfig {
+    message TThresholds {
+        optional uint32 NodeRestartsYellow = 1 [default = 10]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint32 NodeRestartsOrange = 2 [default = 30]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint64 NodesTimeDifferenceYellow = 3 [default = 5000]; // microseconds
+        optional uint64 NodesTimeDifferenceOrange = 4 [default = 25000]; // microseconds
+        optional uint32 TabletsRestartsOrange = 5 [default = 30]; // per period, see HiveConfig.TabletRestartWatchPeriod
+    }
+    optional TThresholds Thresholds = 1;
+    optional uint32 Timeout = 2 [default = 20000]; // milliseconds
+}
+
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
@@ -1812,6 +1878,11 @@ message TColumnShardConfig {
     }
     repeated TRepairInfo Repairs = 15;
 
+    enum EJsonDoubleOutOfRangeHandlingPolicy {
+        REJECT = 0;
+        CAST_TO_INFINITY = 1;
+    }
+
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
@@ -1835,6 +1906,7 @@ message TColumnShardConfig {
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
+    optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
 }
 
 message TSchemeShardConfig {
@@ -1858,6 +1930,10 @@ message TSchemeShardConfig {
 
     // number of shards per table
     optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
+
+    // number of shards per table
+    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
+    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
 }
 
 message TCompactionConfig {
@@ -2254,6 +2330,7 @@ message TAppConfig {
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
+    optional THealthCheckConfig HealthCheckConfig = 89;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

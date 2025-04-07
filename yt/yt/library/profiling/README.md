@@ -37,6 +37,7 @@ yt/yt/library/profiling - это библиотека для мониторин�
 | Local Projections         | Yes | No     |
 | Sparse Sensors            | Yes | No     |
 | Sensor Deregistration     | Yes | No     |
+| MemOnly Metrics           | No  | Yes    |
 
 ## Разделение на интерфейс и реализацию
 

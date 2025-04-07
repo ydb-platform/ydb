@@ -13,6 +13,8 @@
 #include <util/generic/set.h>
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/dom/node.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
 
@@ -415,9 +417,8 @@ private:
  */
 class TBinaryJsonCallbacks : public TJsonCallbacks {
 public:
-    TBinaryJsonCallbacks(bool throwException)
-        : TJsonCallbacks(/* throwException */ throwException)
-    {
+    TBinaryJsonCallbacks(bool throwException, bool allowInf)
+        : TJsonCallbacks(/* throwException */ throwException), AllowInf(allowInf) {
     }
 
     bool OnNull() override {
@@ -445,7 +446,7 @@ public:
     }
 
     bool OnDouble(double value) override {
-        if (Y_UNLIKELY(std::isinf(value))) {
+        if (Y_UNLIKELY(std::isinf(value) && !AllowInf)) {
             if (ThrowException) {
                 ythrow yexception() << "JSON number is infinite";
             } else {
@@ -492,6 +493,7 @@ public:
 
 private:
     TJsonIndex Json;
+    bool AllowInf;
 };
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
@@ -573,8 +575,14 @@ template <typename TOnDemandValue>
             switch (value.get_number_type()) {
                 case simdjson::builtin::number_type::floating_point_number: {
                     double v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (const auto& error = value.get(v); Y_UNLIKELY(error != simdjson::SUCCESS)) {
+                        if (!NYql::TryDoubleFromString((std::string_view)value.raw_json_token(), v)) {
+                            return error;
+                        }
+                    };
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
                 }
                 case simdjson::builtin::number_type::signed_integer: {
@@ -592,7 +600,9 @@ template <typename TOnDemandValue>
                 case simdjson::builtin::number_type::big_integer:
                     double v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
             }
             break;
@@ -600,7 +610,7 @@ template <typename TOnDemandValue>
         case simdjson::ondemand::json_type::null: {
             auto is_null = value.is_null();
             RETURN_IF_NOT_SUCCESS(is_null.error());
-	    if (Y_UNLIKELY(!is_null.value_unsafe())) {
+            if (Y_UNLIKELY(!is_null.value_unsafe())) {
                 return simdjson::error_code::N_ATOM_ERROR;
             }
             callbacks.OnNull();
@@ -644,7 +654,7 @@ template <typename TOnDemandValue>
 }
 
 // unused, left for performance comparison
-[[maybe_unused]] [[nodiscard]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
+[[nodiscard]] [[maybe_unused]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
 #define RETURN_IF_NOT_SUCCESS(status)              \
     if (Y_UNLIKELY(status != simdjson::SUCCESS)) { \
         return status;                             \
@@ -715,9 +725,9 @@ template <typename TOnDemandValue>
 }
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, allowInf);
     const simdjson::padded_string paddedJson(json);
     simdjson::ondemand::parser parser;
     try {
@@ -739,15 +749,16 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf js
     return res;
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json) {
-    return SerializeToBinaryJsonImpl(json);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, bool allowInf) {
+    return SerializeToBinaryJsonImpl(json, allowInf);
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
     DomToJsonIndex(value, callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
 }
 
 }
+

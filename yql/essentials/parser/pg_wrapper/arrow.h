@@ -1184,6 +1184,12 @@ SkipCall:;
             Y_UNUSED(buffer);
         }
 
+        void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+            Y_ENSURE(false, "Unimplemented");
+            Y_UNUSED(state);
+            Y_UNUSED(buffer);
+        }
+
         std::unique_ptr<NKikimr::NMiniKQL::IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
             auto typeLen = NPg::LookupType(FinalType_).TypeLen;
             if constexpr (IsFinalTypeFixed) {

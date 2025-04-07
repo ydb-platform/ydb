@@ -18,7 +18,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommit(const ui64 
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
     AFL_VERIFY(event);
-
+    AFL_VERIFY(event->Record.GetTxId() == txId);
     return event->Record.GetStatus();
 }
 

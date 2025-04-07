@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include "counters.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -13,15 +14,18 @@ private:
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo = std::make_shared<TSimplePortionsGroupInfo>();
 
     std::vector<std::shared_ptr<IPortionsLevel>> Levels;
-    class TReverseSorting {
-    public:
-        bool operator()(const ui64 l, const ui64 r) const {
-            return r < l;
-        }
-    };
-    std::map<ui64, std::shared_ptr<IPortionsLevel>, TReverseSorting> LevelsByWeight;
+    std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+    virtual bool DoIsOverloaded() const override {
+        for (auto&& i : Levels) {
+            if (i->IsOverloaded()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const override {
         std::vector<TTaskDescription> result;
         for (auto&& i : Levels) {
@@ -144,7 +148,7 @@ public:
         return result;
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
 };
 

@@ -149,6 +149,18 @@ void DeserializeVector(T& value, INodePtr node)
 }
 
 template <class T>
+void DeserializeProtobufRepeated(T& value, INodePtr node)
+{
+    auto listNode = node->AsList();
+    auto size = listNode->GetChildCount();
+    value.Clear();
+    value.Reserve(size);
+    for (int i = 0; i < size; ++i) {
+        Deserialize(*value.Add(), listNode->GetChildOrThrow(i));
+    }
+}
+
+template <class T>
 void DeserializeSet(T& value, INodePtr node)
 {
     auto listNode = node->AsList();
@@ -348,8 +360,13 @@ template <class T>
     requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Serialize(T value, NYson::IYsonConsumer* consumer)
 {
-    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
-    consumer->OnInt64Scalar(static_cast<i64>(value));
+    if constexpr (std::is_signed_v<std::underlying_type_t<T>>) {
+        static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+        consumer->OnInt64Scalar(static_cast<i64>(value));
+    } else {
+        static_assert(CanFitSubtype<ui64, std::underlying_type_t<T>>());
+        consumer->OnUint64Scalar(static_cast<ui64>(value));
+    }
 }
 
 // std::optional
@@ -550,8 +567,13 @@ void Deserialize(T& value, INodePtr node)
 {
     switch (node->GetType()) {
         case ENodeType::Int64: {
-            // TODO: CheckedEnumCast via __PRETTY_FUNCTION__?
+            // TODO(dgolear): CheckedEnumCast via __PRETTY_FUNCTION__?
             i64 serialized = node->AsInt64()->GetValue();
+            value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(serialized));
+            break;
+        }
+        case ENodeType::Uint64: {
+            ui64 serialized = node->AsUint64()->GetValue();
             value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(serialized));
             break;
         }
@@ -594,6 +616,20 @@ template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node)
 {
     NDetail::DeserializeVector(value, node);
+}
+
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
+}
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
 }
 
 // TErrorOr

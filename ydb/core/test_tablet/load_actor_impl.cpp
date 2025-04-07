@@ -24,6 +24,9 @@ namespace NKikimr::NTestShard {
         } else {
             sys->Send(ev.release());
         }
+
+        auto *appData = AppData();
+        appData->Icb->RegisterSharedControl(DisableWrites, "TestShardControls.DisableWrites");
     }
 
     void TLoadActor::ClearKeys() {
@@ -89,7 +92,7 @@ namespace NKikimr::NTestShard {
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight()) {
+            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites) {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
@@ -121,6 +124,12 @@ namespace NKikimr::NTestShard {
 
             if (!DoSomeActionInFlight && (canWriteMore || canReadMore)) {
                 TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                DoSomeActionInFlight = true;
+            }
+
+            if (!DoSomeActionInFlight && ReadsInFlight.empty() && WritesInFlight.empty() && PatchesInFlight.empty() &&
+                    DeletesInFlight.empty() && TransitionInFlight.empty()) {
+                TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
                 DoSomeActionInFlight = true;
             }
         }

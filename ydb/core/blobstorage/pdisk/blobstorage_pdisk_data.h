@@ -526,17 +526,17 @@ struct TChunkTrimInfo {
     {}
 
     void SetChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask |= (1 << idx);
     }
 
     void SetChunkUntrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask &= ~(1 << idx);
     }
 
     bool IsChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         return TrimMask & (1 << idx);
     }
 };
@@ -781,7 +781,7 @@ struct TDiskFormat {
     }
 
     ui64 RoundUpToSectorSize(ui64 size) const { // assuming SectorSize is a power of 2
-        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(SectorSize));
+        Y_VERIFY_DEBUG(IsPowerOf2(SectorSize));
         return (size + SectorSize - 1) & ~ui64(SectorSize - 1);
     }
 
@@ -819,7 +819,7 @@ struct TDiskFormat {
         // Set Hash
         {
             NPDisk::TPDiskHashCalculator hashCalculator;
-            Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
+            Y_VERIFY(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);
             Hash = hashCalculator.GetHashResult();
@@ -867,8 +867,8 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        Y_ABORT_UNLESS(format.Version <= Version);
-        Y_ABORT_UNLESS(format.GetUsedSize() <= sizeof(TDiskFormat));
+        Y_VERIFY(format.Version <= Version);
+        Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());
     }
 
@@ -900,4 +900,3 @@ struct TPDiskFormatBigChunkException : public yexception {
 
 } // NPDisk
 } // NKikimr
-

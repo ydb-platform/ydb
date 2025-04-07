@@ -58,14 +58,6 @@
 struct W_ITEM_TBL g_w_item,
     g_OldValues;
 
-void validate_string(char *szString, unsigned long maxSize) {
-    // Prevent passing unterminated string. Fixing coverity issue STRING_NULL
-    if (strlen(szString) > maxSize) {
-      INTERNAL("Trying po pass unterminated string");
-      exit(EXIT_FAILURE);
-    }
-}
-
 /*
 * mk_item
 */
@@ -198,7 +190,6 @@ mk_w_item (void* row, ds_key_t index)
 
     gen_charset(r->i_formulation, DIGITS, RS_I_FORMULATION, RS_I_FORMULATION, I_FORMULATION);
     embed_string(r->i_formulation, "colors", 1, 2, I_FORMULATION);
-    validate_string(r->i_formulation, RS_I_FORMULATION);
     changeSCD(SCD_CHAR, &r->i_formulation, &rOldValues->i_formulation,  &nFieldChangeFlags,  bFirstRecord);
 
     pick_distribution (&r->i_color, "colors", 1, 2, I_COLOR);

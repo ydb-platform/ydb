@@ -230,6 +230,7 @@ message TEvNodeConfigInvokeOnRootResult {
         NO_QUORUM = 1; // root node did not have quorum of following nodes
         ERROR = 2; // failure during request execution
         RACE = 3; // race in requests with other entities
+        CONTINUE_BSC = 4; // process this request with BSC
     }
 
     message TScepter {
@@ -247,6 +248,10 @@ message TEvNodeConfigInvokeOnRootResult {
         optional string StorageYAML = 2;
     }
 
+    message TReplaceStorageConfig {
+        optional bool AllowEnablingDistconf = 1;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -256,6 +261,7 @@ message TEvNodeConfigInvokeOnRootResult {
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
+        TReplaceStorageConfig ReplaceStorageConfig = 11;
     }
 }
 

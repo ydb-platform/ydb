@@ -1,6 +1,7 @@
 #include "kqp_scan_fetcher_actor.h"
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -82,6 +83,7 @@ void TKqpScanFetcherActor::Bootstrap() {
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
@@ -110,7 +112,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& 
     }
     auto& msg = ev->Get()->Record;
     auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
-    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId);
+    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId, msg.GetAllowPings());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
@@ -461,7 +463,15 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
 
     ev->Record.SetGeneration(gen);
 
-    ev->Record.SetReverse(Meta.GetReverse());
+    if (Meta.HasOptionalSorting()) {
+        if (Meta.GetOptionalSorting() == (ui32)ERequestSorting::DESC) {
+            ev->Record.SetReverse(true);
+        } else if (Meta.GetOptionalSorting() == (ui32)ERequestSorting::ASC) {
+            ev->Record.SetReverse(false);
+        }
+    } else {
+        ev->Record.SetReverse(Meta.GetReverse());
+    }
     ev->Record.SetItemsLimit(Meta.GetItemsLimit());
 
     if (Meta.GroupByColumnNamesSize()) {
@@ -674,6 +684,11 @@ void TKqpScanFetcherActor::CheckFinish() {
         );
         PassAway();
     }
+}
+
+void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
+    InFlightShards.PingAllScanners();
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
 }
 
 }

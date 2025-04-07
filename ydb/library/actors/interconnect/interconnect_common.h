@@ -49,7 +49,7 @@ namespace NActors {
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
-        bool EnableExternalDataChannel = false;
+        bool EnableExternalDataChannel = true;
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
         TDuration FirstErrorSleep = TDuration::MilliSeconds(10);

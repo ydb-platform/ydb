@@ -220,6 +220,20 @@ public:
         *typedState = Packer_.Unpack(buffer.PopString(), Ctx_.HolderFactory).Release();
     }
 
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto serializedState = buffer.PopString();
+
+        auto typedState = static_cast<TGenericState*>(state);
+        if (*typedState) {
+            return;
+        }
+
+        TGenericState deserializedState = Packer_.Unpack(serializedState, Ctx_.HolderFactory).Release();
+        if (!deserializedState) return;
+
+        *typedState = std::move(deserializedState);
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TGenericColumnBuilder>(size, Type_, Ctx_);
     }

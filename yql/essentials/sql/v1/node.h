@@ -1324,6 +1324,7 @@ namespace NSQLTranslationV1 {
 
     struct TUserParameters : TRoleParameters {
         TMaybe<TDeferredAtom> Password;
+        bool IsPasswordNull = false;
         bool IsPasswordEncrypted = false;
         std::optional<bool> CanLogin;
         TMaybe<TDeferredAtom> Hash;
@@ -1638,6 +1639,7 @@ namespace NSQLTranslationV1 {
         return {};
     }
 
+    void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback);
     bool Parseui32(TNodePtr from, ui32& to);
     TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
     const TString* DeriveCommonSourceName(const TVector<TNodePtr> &nodes);

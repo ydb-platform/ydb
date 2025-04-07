@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
+
 Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test) {
     Y_UNIT_TEST_LLVM(TestConcatItemsToKey) {
         TSetup<LLVM> setup;
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCondense1Test) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 }
-#endif
+
 }
 }
 

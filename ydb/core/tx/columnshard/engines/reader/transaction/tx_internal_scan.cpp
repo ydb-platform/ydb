@@ -38,9 +38,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString())("task_id", request.TaskIdentifier);
     TReadMetadataPtr readMetadataRange;
-    TScannerConstructorContext context(snapshot, 0, request.GetReverse());
+    const TReadMetadataBase::ESorting sorting = [&]() {
+        return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+    }();
+
+    TScannerConstructorContext context(snapshot, 0, sorting);
     {
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         read.PathId = request.GetPathId();
         read.LockId = LockId;

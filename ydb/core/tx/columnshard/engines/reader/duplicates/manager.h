@@ -397,7 +397,7 @@ private:
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
-    TDuplicateFilterConstructor(const std::shared_ptr<NSimple::TSpecialReadContext>& context);
+    TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context);
 };
 
 }   // namespace NKikimr::NOlap::NReader

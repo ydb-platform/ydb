@@ -354,7 +354,7 @@ void TDuplicateFilterConstructor::AbortConstruction(const TString& reason) {
     // FIXME: is it correct moment to pass away?
 }
 
-TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::shared_ptr<NSimple::TSpecialReadContext>& context)
+TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context)
     : TActor(&TDuplicateFilterConstructor::StateMain)
     , Intervals(context->GetReadMetadata()->SelectInfo->Portions)
     , NotFetchedSourcesCount([this]() {

@@ -352,7 +352,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     void AssertFilter(const TString& lambdaText, const TString& filterText) {
         const auto& filter = BuildProtoFilterFromLambda(lambdaText);
         NConnector::NApi::TPredicate expectedFilter;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter));
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter), expectedFilter.InitializationErrorString());
         UNIT_ASSERT_STRINGS_EQUAL(filter.Utf8DebugString(), expectedFilter.Utf8DebugString());
     }
 
@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (Coalesce
@@ -667,17 +667,48 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_utf8"
+                    }
+                    right_value {
+                        column: "col_optional_utf8"
+                    }
+                }
+            )proto"
+        );
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported2) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (!=
                     (Member $row '"col_string")
                     (String '"value")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: NE
+                    left_value {
+                        column: "col_string"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "value"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
     }
 }

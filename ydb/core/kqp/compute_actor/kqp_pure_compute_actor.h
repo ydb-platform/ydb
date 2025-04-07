@@ -1,14 +1,13 @@
 #pragma once
 
 #include "kqp_compute_actor.h"
-#include "kqp_compute_actor_impl.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -24,9 +23,9 @@ public:
         return NKikimrServices::TActivity::KQP_COMPUTE_ACTOR;
     }
 
-    TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
-        IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
+    TKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
+        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
         NScheduler::TComputeActorOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
@@ -43,7 +42,7 @@ protected:
     void CheckRunStatus() override;
 
 public:
-    void FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last);
+    void FillExtraStats(NYql::NDqProto::TDqComputeActorStats* dst, bool last);
 
 private:
     void PassAway() override;
@@ -62,7 +61,7 @@ private:
     TMaybe<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta> Meta;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     TActorId SysViewActorId;
-    const TDqTaskRunnerParameterProvider ParameterProvider;
+    const NYql::NDq::TDqTaskRunnerParameterProvider ParameterProvider;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;

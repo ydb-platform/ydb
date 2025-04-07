@@ -1,9 +1,16 @@
 #include "kqp_pure_compute_actor.h"
+
+#include "kqp_compute_actor_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 
+
 namespace NKikimr {
 namespace NKqp {
+
+using namespace NYql;
+using namespace NYql::NDq;
 
 bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
     auto* settings = actorSystem->LoggerSettings();

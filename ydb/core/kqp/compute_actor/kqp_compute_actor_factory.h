@@ -8,7 +8,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
 
 #include <vector>
 

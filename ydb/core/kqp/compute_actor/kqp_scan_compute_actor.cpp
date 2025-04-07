@@ -1,6 +1,9 @@
 #include "kqp_scan_compute_actor.h"
-#include "kqp_scan_common.h"
+
+#include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
+#include "kqp_scan_common.h"
+
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>

@@ -1,6 +1,6 @@
 #include "kqp_compute_pool.h"
 
-#include "kqp_compute_scheduler.h"
+#include "kqp_schedulable_actor.h"
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -101,7 +101,7 @@ bool TPool::IsActive() const {
 }
 
 void TPool::InitCounters(const TIntrusivePtr<TKqpCounters>& counters) {
-    auto group = counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", Name);
+    auto group = counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Pool", Name);
 
     Vtime = group->GetCounter("VTime", true);
     EntitiesWeight = group->GetCounter("Entities", false);

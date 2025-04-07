@@ -1,6 +1,7 @@
 #include "kqp_compute_scheduler.h"
 
 #include "kqp_compute_pool.h"
+#include "kqp_schedulable_actor.h"
 
 #include <ydb/core/protos/table_service_config.pb.h>
 
@@ -9,16 +10,6 @@
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-
-namespace {
-    static constexpr TDuration ToDuration(double t) {
-        return TDuration::MicroSeconds(t);
-    }
-
-    static constexpr TDuration AvgBatch = TDuration::MicroSeconds(100);
-
-    static constexpr double MinCapacity = 1e-9;
-}
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -375,81 +366,6 @@ private:
     TObservableUpdater* Updater_;
 };
 
-TSchedulerEntity::TSchedulerEntity(TPool* pool)
-    : Pool(pool)
-    , LastExecutionTime(AvgBatch)
-{
-    ++Pool->EntitiesCount;
-}
-
-TSchedulerEntity::~TSchedulerEntity() {
-    --Pool->EntitiesCount;
-}
-
-void TSchedulerEntity::TrackTime(TDuration time, TMonotonic) {
-    Pool->TrackedMicroSeconds.fetch_add(time.MicroSeconds());
-}
-
-void TSchedulerEntity::UpdateLastExecutionTime(TDuration time) {
-    Wakeups = 0;
-    if (IsThrottled) {
-        // TODO: how is it possible to have execution time while being throttled?
-        // resume-throttle is for proper update of |DelayedSumBatches|
-        MarkResumed();
-        LastExecutionTime = time;
-        MarkThrottled();
-    } else {
-        LastExecutionTime = time;
-    }
-}
-
-TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now, TPool* pool) {
-    auto current = pool->MutableStats.Current();
-    auto limit = current.get()->Limit(now);
-    auto tracked = pool->TrackedMicroSeconds.load();
-    if (limit > tracked) {
-        return {};
-    } else {
-        if (current.get()->Capacity < MinCapacity) {
-            return MaxDelay;
-        }
-        return Min(MaxDelay, ToDuration((tracked - limit +
-                    Max<i64>(0, pool->DelayedSumBatches.load()) + LastExecutionTime.MicroSeconds() +
-                    ActivationPenalty.MicroSeconds() * (pool->DelayedCount.load() + 1) +
-                    current.get()->MaxLimitDeviation) / current.get()->Capacity));
-    }
-}
-
-TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now) {
-    TMaybe<TDuration> result;
-    auto poolResult = Delay(now, Pool);
-    if (!result) {
-        result = poolResult;
-    } else if (poolResult && *result < *poolResult) {
-        result = poolResult;
-    }
-    return result;
-}
-
-void TSchedulerEntity::MarkThrottled() {
-    IsThrottled = true;
-    Pool->DelayedSumBatches.fetch_add(LastExecutionTime.MicroSeconds());
-    Pool->DelayedCount.fetch_add(1);
-}
-
-void TSchedulerEntity::MarkResumed() {
-    IsThrottled = false;
-    Pool->DelayedSumBatches.fetch_sub(LastExecutionTime.MicroSeconds());
-    Pool->DelayedCount.fetch_sub(1);
-}
-
-void TSchedulerEntity::MarkResumed(TMonotonic now) {
-    MarkResumed();
-    if (auto lastNow = Pool->MutableStats.Current().get()->LastNowRecalc; now > lastNow) {
-        Pool->ThrottledMicroSeconds.fetch_add((now - lastNow).MicroSeconds());
-    }
-}
-
 struct TComputeScheduler::TImpl {
     THashMap<TString, std::unique_ptr<TPool>> Pools;
     THashMap<TString, double> ResourceWeights;
@@ -515,18 +431,18 @@ TComputeScheduler::~TComputeScheduler() = default;
 THolder<TSchedulerEntity> TComputeScheduler::Enroll(TString poolName, i64 weight, TMonotonic now) {
     auto* pool = Impl->Pools.at(poolName).get();
 
-    auto result = MakeHolder<TSchedulerEntity>(pool);
-    result->Weight = weight;
-    result->MaxDelay = Impl->MaxDelay;
+    auto entity = MakeHolder<TSchedulerEntity>(pool);
+    entity->Weight = weight;
+    entity->MaxDelay = Impl->MaxDelay;
 
-    pool->AddEntity(result);
+    pool->AddEntity(entity);
     auto* tasksCount = Impl->WeightsUpdater.FindOrAddParameter<i64>({poolName, TImpl::TasksCount}, 0);
-    if (result->Weight > 0) {
+    if (entity->Weight > 0) {
         tasksCount->Add(1);
     }
     pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
 
-    return result;
+    return entity;
 }
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
@@ -651,18 +567,6 @@ void TComputeScheduler::UpdatePerQueryShare(TString poolName, double share, TMon
 void TComputeScheduler::SetCapacity(ui64 cores) {
     Impl->SumCores.SetValue(cores);
 }
-
-NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetPoolUsageCounter(TString poolName) const {
-    if (Impl->Counters) {
-        return Impl->Counters
-            ->GetKqpCounters()
-            ->GetSubgroup("NodeScheduler/Pool", poolName)
-            ->GetCounter("Usage", true);
-    }
-
-    return {};
-}
-
 
 struct TEvPingPool : public TEventLocal<TEvPingPool, TKqpComputeSchedulerEvents::EvPingPool> {
     TString DatabaseId;

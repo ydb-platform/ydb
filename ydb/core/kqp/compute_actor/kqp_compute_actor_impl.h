@@ -1,7 +1,5 @@
 #pragma once
 
-#include "kqp_compute_actor.h"
-
 #include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 

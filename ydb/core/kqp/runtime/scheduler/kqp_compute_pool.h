@@ -11,66 +11,66 @@ namespace NKikimr::NKqp::NScheduler {
     class TPool {
         friend struct TSchedulerEntity;
 
-        public:
-            TPool(const TString& name, THolder<IObservableValue<double>> share, TIntrusivePtr<TKqpCounters> counters);
+    public:
+        TPool(const TString& name, THolder<IObservableValue<double>> share, TIntrusivePtr<TKqpCounters> counters);
 
-            void AddEntity(THolder<TSchedulerEntity>& entity);
-            void RemoveEntity(THolder<TSchedulerEntity>& entity);
+        void AddEntity(THolder<TSchedulerEntity>& entity);
+        void RemoveEntity(THolder<TSchedulerEntity>& entity);
 
-            // TODO: pool should be always enabled.
-            void Enable();
-            void Disable();
-            bool IsDisabled() const;
+        // TODO: pool should be always enabled.
+        void Enable();
+        void Disable();
+        bool IsDisabled() const;
 
-            void AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forgetInterval);
-            void UpdateGuarantee(ui64 value);
+        void AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forgetInterval);
+        void UpdateGuarantee(ui64 value);
 
-            const TString& GetName() const;
-            bool IsActive() const; // TODO: better name - HasEntities()?
+        const TString& GetName() const;
+        bool IsActive() const; // TODO: better name - HasEntities()?
 
-        private:
-            void InitCounters(const TIntrusivePtr<TKqpCounters>& counters);
+    private:
+        void InitCounters(const TIntrusivePtr<TKqpCounters>& counters);
 
-        private:
-            struct TMutableStats {
-                double Capacity = 0;
-                TMonotonic LastNowRecalc;
-                bool Disabled = false;
-                i64 EntitiesWeight = 0;
-                double MaxLimitDeviation = 0;
+    private:
+        struct TMutableStats {
+            double Capacity = 0;
+            TMonotonic LastNowRecalc;
+            bool Disabled = false;
+            i64 EntitiesWeight = 0;
+            double MaxLimitDeviation = 0;
 
-                ssize_t TrackedBefore = 0;
+            ssize_t TrackedBefore = 0;
 
-                double Limit(TMonotonic now) const;
-            };
+            double Limit(TMonotonic now) const;
+        };
 
-            const TString Name;
-            const bool HasCounters;
+        const TString Name;
+        const bool HasCounters;
 
-            std::atomic<ui64> EntitiesCount = 0;
-            std::atomic<i64> TrackedMicroSeconds = 0;
-            std::atomic<i64> ThrottledMicroSeconds = 0;
-            std::atomic<i64> DelayedSumBatches = 0; // sum of all LastExecutionTime for throttled tasks
-            std::atomic<i64> DelayedCount = 0;
+        std::atomic<ui64> EntitiesCount = 0;
+        std::atomic<i64> TrackedMicroSeconds = 0;
+        std::atomic<i64> ThrottledMicroSeconds = 0;
+        std::atomic<i64> DelayedSumBatches = 0; // sum of all LastExecutionTime for throttled tasks
+        std::atomic<i64> DelayedCount = 0;
 
-            THolder<IObservableValue<double>> Share;
+        THolder<IObservableValue<double>> Share;
 
-            ::NMonitoring::TDynamicCounters::TCounterPtr Vtime;
-            ::NMonitoring::TDynamicCounters::TCounterPtr EntitiesWeight;
-            ::NMonitoring::TDynamicCounters::TCounterPtr OldLimit;
-            ::NMonitoring::TDynamicCounters::TCounterPtr Weight;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Vtime;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EntitiesWeight;
+        ::NMonitoring::TDynamicCounters::TCounterPtr OldLimit;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Weight;
 
-            ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerClock;
-            ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerLimitUs;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerClock;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerLimitUs;
 
-            ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
-            ::NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
-            ::NMonitoring::TDynamicCounters::TCounterPtr Demand;
-            ::NMonitoring::TDynamicCounters::TCounterPtr Usage;
-            ::NMonitoring::TDynamicCounters::TCounterPtr Throttle;
-            ::NMonitoring::TDynamicCounters::TCounterPtr FairShare;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Demand;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Usage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Throttle;
+        ::NMonitoring::TDynamicCounters::TCounterPtr FairShare;
 
-            mutable TMultithreadPublisher<TMutableStats> MutableStats;
+        mutable TMultithreadPublisher<TMutableStats> MutableStats;
     };
 
-}
+} // namespace NKikimr::NKqp::NScheduler

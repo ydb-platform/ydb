@@ -1,5 +1,5 @@
-#include <contrib/ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <contrib/ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 
 #include <util/system/fs.h>
 

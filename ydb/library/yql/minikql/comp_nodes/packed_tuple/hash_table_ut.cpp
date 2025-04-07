@@ -27,15 +27,6 @@ static volatile bool IsVerbose = true;
 
 namespace {
 
-using TRobinHoodTableList = TRobinHoodHashBase<false>;
-using TRobinHoodTableSeq = TRobinHoodHashBase<true>;
-
-using TPageTable = TPageHashTableImpl<NSimd::TSimdAVX2Traits>;
-
-} // namespace
-
-namespace {
-
 constexpr ui64 CachelineBits = 9;
 constexpr ui64 CachelineSize = ui64(1) << CachelineBits;
 
@@ -292,11 +283,12 @@ class TMixtureDistribution : public IDistribution {
 
 namespace {
 
-template <typename... Args> class TBenchmark {
+template <size_t Batch, typename... Args> class TBenchmark {
     struct TResult {
         ui64 coldBuildTime = 0;
         ui64 warmBuildTime = 0;
         ui64 lookupTime = 0;
+        ui64 batchedLookupTime = 0;
         ui64 memUsed = 0;
     };
 
@@ -406,6 +398,7 @@ template <typename... Args> class TBenchmark {
 
         for (ui32 i = 0; i < size; ++i) {
             col1[i] = distribution(gen);
+            col2[i * PayloadSize_] = 1;
         }
 
         const ui8 *cols[2];
@@ -484,7 +477,12 @@ template <typename... Args> class TBenchmark {
                     [](TResult arg) { return arg.warmBuildTime; });
         PrintResult("lookups", results,
                     [](TResult arg) { return arg.lookupTime; });
-        PrintResult("memory KiB", results,
+        if constexpr (Batch > 1) {
+            PrintResult("batch " + std::to_string(Batch), results,
+                [](TResult arg) { return arg.batchedLookupTime; });
+        }
+        CTEST << "\nMemory measurements (KiB):" << Endl;
+        PrintResult("used by ht", results,
                     [](TResult arg) { return arg.memUsed; });
 
         return results;
@@ -533,23 +531,49 @@ template <typename... Args> class TBenchmark {
             result.lookupTime = Measure([&] {
                 ui8 *const end =
                     lookupKeys + Layout_->TotalRowSize * lookupSize;
-                for (ui8 *it = lookupKeys; it != end;
-                     it += Layout_->TotalRowSize) {
+                for (ui8 *it = lookupKeys; it != end; it += Layout_->TotalRowSize) {
                     arg.Apply(it, lookupOverflow, [&](const ui8 *const row) {
-                        ++matches;
-                        checksum += ReadUnaligned<ui32>(row);
+                        checksum += ReadUnaligned<ui32>(it);
+                        matches += 
+                            ReadUnaligned<ui8>(row + 2 * sizeof(ui32) + (1 + 7) / 8);
                     });
                 }
             });
-            arg.Clear();
-
             UNIT_ASSERT_EQUAL(matches, info.totalMatches);
             UNIT_ASSERT_EQUAL(checksum, info.checksum);
+
+            if constexpr (Batch > 1) {
+                matches = 0;
+                checksum = 0;
+                result.batchedLookupTime = Measure([&] {
+                    for (size_t batchInd = 0; batchInd < lookupSize; batchInd += Batch) {
+                        std::array<const ui8 *, Batch> rows;
+                        for (size_t i = 0; i < Batch && batchInd + i < lookupSize; ++i) {
+                            rows[i] = lookupKeys + Layout_->TotalRowSize * (batchInd + i);
+                        }
+
+                        std::array<typename Arg::TIterator, Batch> iters =
+                            arg.FindBatch(rows, lookupOverflow);
+                        for (size_t i = 0; i < Batch && batchInd + i < lookupSize; ++i) {
+                            while (auto match = arg.NextMatch(iters[i])) {
+                                checksum += ReadUnaligned<ui32>(rows[i]);
+                                matches +=
+                                    ReadUnaligned<ui8>(match + 2 * sizeof(ui32) + (1 + 7) / 8);    
+                            }
+                        }
+                    }
+                });
+                UNIT_ASSERT_EQUAL(matches, info.totalMatches);
+                UNIT_ASSERT_EQUAL(checksum, info.checksum);
+            }
+
+            arg.Clear();
         }
 
         result.coldBuildTime /= kIters;
         result.warmBuildTime /= kIters;
         result.lookupTime /= kIters;
+        result.batchedLookupTime /= kIters;
 
         return result;
     }
@@ -595,18 +619,41 @@ template <typename... Args> class TBenchmark {
 
 // -----------------------------------------------------------------
 
-using TTablesBenchmark =
-    TBenchmark<TRobinHoodTableSeq, TNeumannHashTable, TPageTable>;
+using TRobinHoodTableSeq = TRobinHoodHashBase<true, false>;
+using TRobinHoodTableSeqPref = TRobinHoodHashBase<true, true>;
 
-static constexpr bool toCSV = false;
+using TNeumannTable = TNeumannHashTable<false, false>;
+using TNeumannTableSeq = TNeumannHashTable<true, false>;
+
+using TNeumannTablePref = TNeumannHashTable<false, true>;
+using TNeumannTableSeqPref = TNeumannHashTable<true, true>;
+
+using TPageTableSSE = TPageHashTableImpl<NSimd::TSimdSSE42Traits>;
+
+// -----------------------------------------------------------------
+
+using TTablesBenchmark =
+    TBenchmark<0, TRobinHoodTableSeq, TRobinHoodTableSeqPref,
+               TNeumannTable, TNeumannTableSeq, TPageTableSSE>;
+
+template <typename... Args> struct TTablesCase {
+    template <size_t Batch> using TBenchmark = TBenchmark<Batch, Args...>;
+};
+using TTablesBatched =
+    TTablesCase<TRobinHoodTableSeq, TRobinHoodTableSeqPref, TNeumannTable,
+                TNeumannTablePref, TNeumannTableSeq, TNeumannTableSeqPref>;
+
+// -----------------------------------------------------------------
 
 Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
+
+    static constexpr bool toCSV = false;
 
     Y_UNIT_TEST(Uniform) {
         TUniformDistribution uni1M(0, 999999);
         TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
 
-        auto benchmark = TTablesBenchmark(1, Name_);
+        auto benchmark = TTablesBenchmark(4, Name_);
 
         benchmark.Register({"uniform 1M", uni1M, uni1M});
         // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
@@ -614,6 +661,20 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
         // benchmark.Register({"uniform 1B", uni1B, uni1B});
 
         benchmark.Run(toCSV);
+    }
+
+    Y_UNIT_TEST(UniformBatched) {
+        TUniformDistribution uni1M(0, 999999);
+        TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
+
+        auto benchmark = TTablesBatched::TBenchmark<16>(4, Name_);
+
+        benchmark.Register({"uniform 1M", uni1M, uni1M});
+        // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
+        // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
+        // benchmark.Register({"uniform 1B", uni1B, uni1B});
+
+        // benchmark.Run(toCSV);
     }
 
     Y_UNIT_TEST(UniformPayloaded) {
@@ -627,7 +688,21 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
         // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
         // benchmark.Register({"uniform 1B", uni1B, uni1B});
 
-        benchmark.Run(toCSV);
+        // benchmark.Run(toCSV);
+    }
+
+    Y_UNIT_TEST(UniformPayloadedBatched) {
+        TUniformDistribution uni1M(0, 999999);
+        TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
+
+        auto benchmark = TTablesBatched::TBenchmark<16>(21, Name_);
+
+        benchmark.Register({"uniform 1M", uni1M, uni1M});
+        // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
+        // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
+        // benchmark.Register({"uniform 1B", uni1B, uni1B});
+
+        // benchmark.Run(toCSV);
     }
 
     Y_UNIT_TEST(NormalPayloaded) {
@@ -639,8 +714,8 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
 
         benchmark.Register({"norm 1M", norm1M, norm1M});
         // benchmark.Register({"norm 1M, 1B", norm1M, norm1B});
-        benchmark.Register({"norm 1B, 1M", norm1M, norm1B});
-        benchmark.Register({"norm 1B", norm1B, norm1B});
+        // benchmark.Register({"norm 1B, 1M", norm1M, norm1B});
+        // benchmark.Register({"norm 1B", norm1B, norm1B});
 
         // benchmark.Run(toCSV);
     }

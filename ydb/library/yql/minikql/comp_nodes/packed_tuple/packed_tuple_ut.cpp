@@ -187,8 +187,8 @@ Y_UNIT_TEST(Pack) {
     }();
     std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> overflowsData;
 
-    auto reses = PaddedPtr(resesData.data(), sizeof(resesData[0]));
-    auto overflows = PaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
 
     begintp = std::chrono::steady_clock::now();
     tl->BucketPack(cols, colsValid, reses, overflows, 0, NTuples1, NLogBuckets);
@@ -657,8 +657,8 @@ Y_UNIT_TEST(PackVarSize) {
     std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> resesData;
     std::array<std::vector<ui8, TMKQLAllocator<ui8>>, 1u << NLogBuckets> overflowsData;
 
-    auto reses = PaddedPtr(resesData.data(), sizeof(resesData[0]));
-    auto overflows = PaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
 
     begintp = std::chrono::steady_clock::now();
     tl->BucketPack(cols, colsValid, reses, overflows, 0, NTuples1, NLogBuckets);

@@ -92,66 +92,115 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
 
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
                              const ui8 *rhsRow, const ui8 *rhsOverflow) const {
-    static const ui32 keyOffset = 4;
-    if (std::memcmp(lhsRow + keyOffset, rhsRow + keyOffset,
-                    KeyColumnsFixedEnd - keyOffset)) {
+    if (std::memcmp(lhsRow, rhsRow, KeyColumnsFixedEnd)) {
         return false;
     }
-
-    // TODO: better nulls detection??
-    const ui8 rem = KeyColumnsNum % 8;
-    const ui8 masks[2] = {static_cast<ui8>((1 << rem) - 1), 0xFF};
-    for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
-        const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + BitmaskOffset + byteN);
-        const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + BitmaskOffset + byteN);
-        const ui8 midx = (i >= 8);
-        if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
-            return false;
-        }
+    if (std::memcmp(lhsRow + BitmaskOffset, rhsRow + BitmaskOffset,
+                    BitmaskSize)) {
+        return false;
     }
 
     for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
         const auto &col = Columns[colInd];
 
-        /// TODO: better key comparison
+        const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
+        const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
+        if (lhsPrefSize != rhsPrefSize) {
+            return false;
+        }
 
-        {
-            const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
-            const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
-            if (lhsPrefSize != rhsPrefSize) {
+        if (lhsPrefSize < 255) {
+            if (std::memcmp(lhsRow + col.Offset + 1,
+                            rhsRow + col.Offset + 1, lhsPrefSize)) {
                 return false;
             }
+        } else {
+            const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+            const auto lhsOverflowOffset = ReadUnaligned<ui32>(
+                lhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+            const auto lhsOverflowSize = ReadUnaligned<ui32>(
+                lhsRow + col.Offset + 1 + 1 * sizeof(ui32));
+            const auto rhsOverflowOffset = ReadUnaligned<ui32>(
+                rhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+            const auto rhsOverflowSize = ReadUnaligned<ui32>(
+                rhsRow + col.Offset + 1 + 1 * sizeof(ui32));
 
-            if (lhsPrefSize < 255) {
-                if (std::memcmp(lhsRow + col.Offset + 1,
-                                rhsRow + col.Offset + 1, lhsPrefSize)) {
-                    return false;
-                }
-            } else {
-                const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
-                const auto lhsOverflowOffset = ReadUnaligned<ui32>(
-                    lhsRow + col.Offset + 1 + 0 * sizeof(ui32));
-                const auto lhsOverflowSize = ReadUnaligned<ui32>(
-                    lhsRow + col.Offset + 1 + 1 * sizeof(ui32));
-                const auto rhsOverflowOffset = ReadUnaligned<ui32>(
-                    rhsRow + col.Offset + 1 + 0 * sizeof(ui32));
-                const auto rhsOverflowSize = ReadUnaligned<ui32>(
-                    rhsRow + col.Offset + 1 + 1 * sizeof(ui32));
-
-                if (lhsOverflowSize != rhsOverflowSize ||
-                    std::memcmp(lhsRow + col.Offset + 1 + 2 * sizeof(ui32),
-                                rhsRow + col.Offset + 1 + 2 * sizeof(ui32),
-                                prefixSize) ||
-                    std::memcmp(lhsOverflow + lhsOverflowOffset,
-                                rhsOverflow + rhsOverflowOffset,
-                                lhsOverflowSize)) {
-                    return false;
-                }
+            if (lhsOverflowSize != rhsOverflowSize ||
+                std::memcmp(lhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                            rhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                            prefixSize) ||
+                std::memcmp(lhsOverflow + lhsOverflowOffset,
+                            rhsOverflow + rhsOverflowOffset,
+                            lhsOverflowSize)) {
+                return false;
             }
         }
     }
 
     return true;
+}
+
+/// used just for having AN order on tuples
+/// cant rely on that comparison in any other way
+bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
+                            const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+    int cmpRes;
+
+    cmpRes = std::memcmp(lhsRow, rhsRow, KeyColumnsFixedEnd);
+    if (cmpRes) {
+        return cmpRes < 0;
+    }
+    cmpRes = std::memcmp(lhsRow + BitmaskOffset, rhsRow + BitmaskOffset,
+                         BitmaskSize);
+    if (cmpRes) {
+        return cmpRes < 0;
+    }
+
+    for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
+        const auto &col = Columns[colInd];
+
+        const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
+        const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
+        if (lhsPrefSize != rhsPrefSize) {
+            return lhsPrefSize < rhsPrefSize;
+        }
+
+        if (lhsPrefSize < 255) {
+            cmpRes = std::memcmp(lhsRow + col.Offset + 1,
+                                 rhsRow + col.Offset + 1, lhsPrefSize);
+            if (cmpRes) {
+                return cmpRes < 0;
+            }
+        } else {
+            const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+            const auto lhsOverflowOffset =
+                ReadUnaligned<ui32>(lhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+            const auto lhsOverflowSize =
+                ReadUnaligned<ui32>(lhsRow + col.Offset + 1 + 1 * sizeof(ui32));
+            const auto rhsOverflowOffset =
+                ReadUnaligned<ui32>(rhsRow + col.Offset + 1 + 0 * sizeof(ui32));
+            const auto rhsOverflowSize =
+                ReadUnaligned<ui32>(rhsRow + col.Offset + 1 + 1 * sizeof(ui32));
+
+            if (lhsOverflowSize != rhsOverflowSize) {
+                return lhsOverflowSize < rhsOverflowSize;
+            }
+            cmpRes = std::memcmp(lhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                                 rhsRow + col.Offset + 1 + 2 * sizeof(ui32),
+                                 prefixSize);
+            if (cmpRes) {
+                return cmpRes < 0;
+            }
+            cmpRes =
+                std::memcmp(lhsOverflow + lhsOverflowOffset,
+                            rhsOverflow + rhsOverflowOffset, lhsOverflowSize);
+            if (cmpRes) {
+                return cmpRes < 0;
+            }
+        }
+    }
+
+    return false;
 }
 
 THolder<TTupleLayout>
@@ -744,8 +793,8 @@ void TTupleLayoutFallback::Unpack(
 
 void TTupleLayoutFallback::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const {
     using TTraits = NSimd::TSimdFallbackTraits;
 
@@ -1264,8 +1313,8 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
 template <typename TTraits>
 void TTupleLayoutSIMD<TTraits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const {
     if (bucketsLogNum == 0) {
         auto& bres = reses[0];
@@ -1501,14 +1550,14 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Unpack(
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
 template __attribute__((target("sse4.2"))) void
 TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
 
 void TTupleLayout::CalculateColumnSizes(

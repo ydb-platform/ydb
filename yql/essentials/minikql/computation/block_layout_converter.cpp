@@ -490,8 +490,8 @@ public:
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
         auto tuplesToPack = columns.front().array()->length;
 
-        const auto reses = PaddedPtr(&packs[0].PackedTuples, sizeof(PackResult));
-        const auto overflows = PaddedPtr(&packs[0].Overflow, sizeof(PackResult));
+        const auto reses = TPaddedPtr(&packs[0].PackedTuples, sizeof(PackResult));
+        const auto overflows = TPaddedPtr(&packs[0].Overflow, sizeof(PackResult));
 
         TupleLayout_->BucketPack(
             columnsData.data(), columnsNullBitmap.data(),

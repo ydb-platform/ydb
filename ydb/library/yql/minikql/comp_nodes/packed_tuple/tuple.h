@@ -12,44 +12,93 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template <typename T>
-class PaddedPtr {
+template <typename TData>
+struct TCastPtrTransform {
+    using T = TData;
+    static T *ToPtr(ui8 *ptr) { return reinterpret_cast<T *>(ptr); }
+    static T &ToRef(ui8 *ptr) { return *reinterpret_cast<T *>(ptr); }
+};
+
+template <typename TData, typename TPtrTransform = TCastPtrTransform<TData>>
+class TPaddedPtr
+    : public std::iterator<std::random_access_iterator_tag,
+                           typename TPtrTransform::T, int64_t,
+                           decltype(TPtrTransform::ToPtr(nullptr)),
+                           decltype(TPtrTransform::ToRef(nullptr))> {
+    using T = std::iterator_traits<TPaddedPtr>::value_type;
+    using TPtr = std::iterator_traits<TPaddedPtr>::pointer;
+    using TRef = std::iterator_traits<TPaddedPtr>::reference;
+
   public:
-    PaddedPtr(T* ptr, size_t step): Ptr_(reinterpret_cast<char*>(ptr)), Step_(step) {}
+    TPaddedPtr(ui8 *ptr, uint32_t step)
+        : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
 
-    T& operator[](size_t ind) {
-        return *reinterpret_cast<T*>(Ptr_ + Step_ * ind);
-    }
-    const T& operator[](size_t ind) const {
-        return const_cast<PaddedPtr*>(this)->operator[](ind);
+    TPaddedPtr(TData *ptr, uint32_t step)
+        requires(!std::same_as<ui8, TData>)
+        : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
+
+    TRef operator[](int64_t ind) const {
+        return TPtrTransform::ToRef(Ptr_ + Step_ * ind);
     }
 
-    T& operator*() {
-        return *reinterpret_cast<T*>(Ptr_);
+    TPtr operator->() const {
+        return TPtrTransform::ToPtr(Ptr_);
     }
-    const T& operator*() const {
-        return const_cast<PaddedPtr*>(this)->operator*();
+
+    TRef operator*() const {
+        return TPtrTransform::ToRef(Ptr_);
     }
-    
-    T* operator->() {
-        return reinterpret_cast<T*>(Ptr_);
-    }
-    const T* operator->() const {
-        return const_cast<PaddedPtr*>(this)->operator->();
-    }
-    
-    PaddedPtr& operator++() {
-        Ptr_ += Step_;
+        
+    TPaddedPtr& operator+=(int64_t n) {
+        Ptr_ += n * Step_;
         return *this;
     }
+    TPaddedPtr& operator++() {
+        return (*this) += 1;
+    }
+    TPaddedPtr& operator-=(int64_t n) {
+        return (*this) += -n;
+    }
+    TPaddedPtr& operator--() {
+        return (*this) -= 1;
+    }
 
-    bool operator==(const PaddedPtr& rhs) const {
+    TPaddedPtr operator+(int64_t n) const {
+        auto ptr = *this;
+        ptr += n;
+        return ptr;
+    }
+    TPaddedPtr operator-(int64_t n) const {
+        return (*this) + (-n);
+    }
+
+    int64_t operator-(const TPaddedPtr& rhs) const {
+        return (Ptr_ - rhs.Ptr_) / Step_;
+    }
+
+    bool operator==(const TPaddedPtr& rhs) const {
         return Ptr_ == rhs.Ptr_;
+    }
+    bool operator!=(const TPaddedPtr& rhs) const {
+        return Ptr_ != rhs.Ptr_;
+    }
+
+    bool operator<(const TPaddedPtr& rhs) const {
+        return Ptr_ < rhs.Ptr_;
+    }
+    bool operator<=(const TPaddedPtr& rhs) const {
+        return Ptr_ <= rhs.Ptr_;
+    }
+    bool operator>(const TPaddedPtr& rhs) const {
+        return Ptr_ > rhs.Ptr_;
+    }
+    bool operator>=(const TPaddedPtr& rhs) const {
+        return Ptr_ >= rhs.Ptr_;
     }
 
   private:
-    char* Ptr_;
-    size_t Step_;
+    ui8* Ptr_;
+    int64_t Step_;
 };
 
 namespace NPackedTuple {
@@ -124,8 +173,8 @@ struct TTupleLayout {
 
     virtual void
     BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
                  ui32 start, ui32 count, ui32 bucketsLogNum) const = 0;
 
     // Takes packed rows,
@@ -140,6 +189,7 @@ struct TTupleLayout {
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
+    bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {
@@ -156,8 +206,8 @@ struct TTupleLayoutFallback : public TTupleLayout {
 
     void
     BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
                  ui32 start, ui32 count, ui32 bucketsLogNum) const override;
 
   protected:
@@ -182,8 +232,8 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
 
     void
     BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
-                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
                  ui32 start, ui32 count, ui32 bucketsLogNum) const override;
 
   private:
@@ -217,74 +267,66 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
                                                                           4, 8};
 };
 
+template <size_t Size>
+struct TEmbeddedTupleRowRef {
+    TEmbeddedTupleRowRef(ui8* tuple): Ptr(tuple) {}
 
-// It is expected that key columns layout is same for lhs and rhs
-Y_FORCE_INLINE
-bool CompareKeys(
-    const TTupleLayout* lhsLayout, const ui8* lhsData, const std::vector<ui8, TMKQLAllocator<ui8>>& lhsOverflow,
-    const TTupleLayout* rhsLayout, const ui8* rhsData, const std::vector<ui8, TMKQLAllocator<ui8>>& rhsOverflow)
-{
-    const ui8* lhsKey = lhsData + lhsLayout->KeyColumnsOffset;
-    const ui8* rhsKey = rhsData + rhsLayout->KeyColumnsOffset;
-
-    ui32 fixedEndOffset = lhsLayout->KeyColumnsFixedEnd - lhsLayout->KeyColumnsOffset;
-    if (!std::equal(lhsKey, lhsKey + fixedEndOffset, rhsKey)) { // fixed size columns can be compared via std::equal
-        return false;
+    TEmbeddedTupleRowRef(const TEmbeddedTupleRowRef&) = default;
+    
+    TEmbeddedTupleRowRef& operator=(const TEmbeddedTupleRowRef& rhs) {
+        std::memcpy(Ptr, rhs.Ptr, Size);
+        return *this;
+    }
+    
+    friend void swap(TEmbeddedTupleRowRef lhs, TEmbeddedTupleRowRef rhs) {
+        ui8 buf[Size];
+        std::memcpy(buf, lhs.Ptr, Size);
+        std::memcpy(lhs.Ptr, rhs.Ptr, Size);
+        std::memcpy(rhs.Ptr, buf, Size);
     }
 
-    lhsKey += fixedEndOffset;
-    rhsKey += fixedEndOffset;
+  public:
+    ui8* Ptr;
+};
 
-    const auto n = lhsLayout->KeyColumnsNum;
-    for (ui32 i = lhsLayout->KeyColumnsFixedNum; i < n; ++i) {
-        const auto& lhsCol = lhsLayout->KeyColumns[i];
-        const auto& rhsCol = lhsLayout->KeyColumns[i];
+template <size_t Size>
+struct TEmbeddedTuple {
+    TEmbeddedTuple() {}
 
-        auto lhsSize = ReadUnaligned<ui8>(lhsKey);
-        auto rhsSize = ReadUnaligned<ui8>(rhsKey);
+    TEmbeddedTuple(const TEmbeddedTuple& row) {
+        std::memcpy(Ptr, row.Ptr, Size);
+    };
 
-        if (lhsSize != rhsSize) {
-            return false;
-        }
-
-        if (lhsSize < 255) { // embedded str
-            if (!std::equal(lhsKey + 1, lhsKey + 1 + lhsSize, rhsKey + 1)) {
-                return false;
-            }
-        } else { // overflow buffer used
-            const auto lhsPrefixSize = (lhsCol.DataSize - 1 - 2 * sizeof(ui32));
-            const auto rhsPrefixSize = (rhsCol.DataSize - 1 - 2 * sizeof(ui32));
-
-            if (lhsPrefixSize != rhsPrefixSize) {
-                return false;
-            }
-
-            const auto lhsOverflowOffset = ReadUnaligned<ui32>(lhsKey + 1 + 0 * sizeof(ui32));
-            const auto lhsOverflowSize = ReadUnaligned<ui32>(lhsKey + 1 + 1 * sizeof(ui32));
-
-            const auto rhsOverflowOffset = ReadUnaligned<ui32>(rhsKey + 1 + 0 * sizeof(ui32));
-            const auto rhsOverflowSize = ReadUnaligned<ui32>(rhsKey + 1 + 1 * sizeof(ui32));
-
-            if (lhsOverflowSize != rhsOverflowSize) {
-                return false;
-            }
-
-            if (!std::equal(lhsKey + 1 + 2 * sizeof(ui32), lhsKey + 1 + 2 * sizeof(ui32) + lhsPrefixSize, rhsKey + 1 + 2 * sizeof(ui32))) {
-                return false;
-            }
-            auto lhsBit = lhsOverflow.begin() + lhsOverflowOffset;
-            auto lhsEit = lhsOverflow.begin() + lhsOverflowOffset + lhsOverflowSize;
-            auto rhsBit = rhsOverflow.begin() + rhsOverflowOffset;
-            if (!std::equal(lhsBit, lhsEit, rhsBit)) {
-                return false;
-            }
-        }
-
-        lhsKey += lhsCol.DataSize;
-        rhsKey += rhsCol.DataSize;
+    TEmbeddedTuple& operator=(const TEmbeddedTuple &rhs) {
+        std::memcpy(Ptr, rhs.Ptr, Size);
+        return *this;
     }
+    
+  public:
+    ui8 Ptr[Size];
+};
 
-    return true;
+template <size_t Size = 16>
+[[maybe_unused]] void SortEmbeddedTuples(TPaddedPtr<TEmbeddedTuple<Size>> first, size_t n, const TTupleLayout* layout, const ui8* overflow) {
+    auto cmpr = [layout, overflow](const TEmbeddedTuple<Size> &lhs, const TEmbeddedTuple<Size> &rhs) {
+        return layout->KeysLess(lhs.Ptr, overflow, rhs.Ptr, overflow);
+    };
+    std::sort(first, first + n, cmpr);
+}
+
+struct TIndexedTuple {
+    ui32 Hash;
+    ui32 Index;
+};
+
+[[maybe_unused]] inline void SortIndexedTuples(TPaddedPtr<TIndexedTuple> first, size_t n, const TTupleLayout* layout, const ui8* tuples, const ui8* overflow) {
+    auto cmpr = [layout, tuples, overflow](TIndexedTuple lhs, TIndexedTuple rhs) {
+        if (lhs.Hash != rhs.Hash) {
+            return lhs.Hash < rhs.Hash;
+        }
+        return layout->KeysLess(tuples + layout->TotalRowSize * lhs.Index, overflow, tuples + layout->TotalRowSize * rhs.Index, overflow);
+    };
+    std::sort(first, first + n, cmpr);
 }
 
 } // namespace NPackedTuple

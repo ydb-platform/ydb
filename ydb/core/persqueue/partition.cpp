@@ -673,8 +673,7 @@ TConsumerSnapshot TPartition::CreateSnapshot(const TUserInfo& userInfo) const {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
     } else if (userInfo.ReadOffset == -1) {
-        result.LastReadMessage.CreateTimestamp = result.LastCommittedMessage.CreateTimestamp;
-        result.LastReadMessage.WriteTimestamp = result.LastCommittedMessage.WriteTimestamp;
+        result.LastReadMessage = result.LastCommittedMessage;
     } else if (userInfo.ReadWriteTimestamp) {
         result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
         result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;

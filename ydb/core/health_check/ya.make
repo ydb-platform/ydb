@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    builder.cpp
     health_check.cpp
     health_check.h
 )

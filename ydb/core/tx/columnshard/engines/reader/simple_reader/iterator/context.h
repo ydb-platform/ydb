@@ -48,9 +48,7 @@ public:
         }
     }
 
-    void RegisterDuplicatesManager(const std::deque<TSourceConstructor>& sources, const std::shared_ptr<TSpecialReadContext>& self);
-    void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source);
-    void OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
+    void RegisterDuplicatesManager(const std::shared_ptr<TSpecialReadContext>& self);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

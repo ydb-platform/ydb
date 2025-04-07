@@ -2,7 +2,7 @@ name: Regression-run
 
 on:
   schedule:
-    - cron: "55 23 * * *"  # At 23:50 every day
+    - cron: "55 23 * * *"  # At 23:55 every day
   workflow_dispatch:
 
 jobs:
@@ -19,4 +19,3 @@ jobs:
       test_targets: ydb/
       ref: ${{ matrix.branch }}
       build_preset: ${{ matrix.build_preset }}
-      

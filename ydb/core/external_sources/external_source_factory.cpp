@@ -1,13 +1,14 @@
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
+#include "iceberg_fields.h"
+#include "external_source_builder.h"
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-
 
 namespace NKikimr::NExternalSource {
 
@@ -40,6 +41,50 @@ private:
     const std::set<TString> AvailableExternalDataSources;
 };
 
+}
+
+
+IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnamePatternsRegEx) {
+    using namespace NKikimr::NExternalSource::NIceberg;
+
+    return TExternalSourceBuilder(TString{NYql::GenericProviderName})
+        // Basic, Token and SA Auth are available only if warehouse type is set to s3
+        .Auth(
+            {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
+        )
+        // DataBase is a required field
+        .Property(WAREHOUSE_DB, GetRequiredValidator())
+        // Tls is an optional field
+        .Property(WAREHOUSE_TLS)
+        // Warehouse type is a required field and can be equal only to "s3"
+        .Property(
+            WAREHOUSE_TYPE,
+            GetIsInListValidator({VALUE_S3}, true)
+        )
+        // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
+        .Properties(
+            {
+                WAREHOUSE_S3_ENDPOINT,
+                WAREHOUSE_S3_REGION,
+                WAREHOUSE_S3_URI
+            },
+            GetRequiredValidator(),
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
+        )
+        // Catalog type is a required field and can be equal only to "hive" or "hadoop"
+        .Property(
+            CATALOG_TYPE,
+            GetIsInListValidator({VALUE_HIVE, VALUE_HADOOP}, true)
+        )
+        // If catalog type is equal to "hive" the field "hive_uri" is required
+        .Property(
+            CATALOG_HIVE_URI,
+            GetRequiredValidator(),
+            GetHasSettingCondition(CATALOG_TYPE,VALUE_HIVE)
+        )
+        .HostnamePatterns(hostnamePatternsRegEx)
+        .Build();
 }
 
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
@@ -95,6 +140,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Solomon),
             CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Iceberg),
+            BuildIcebergSource(hostnamePatternsRegEx)
         }
     },
     allExternalDataSourcesAreAvailable,

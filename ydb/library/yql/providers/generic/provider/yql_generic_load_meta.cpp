@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NYql {
     using namespace NNodes;
@@ -455,6 +456,58 @@ namespace NYql {
             }
         }
 
+        TString GetOptionValue(const ::google::protobuf::Map<TProtoStringType,
+                                     TProtoStringType>& options, TString option) {
+            auto it = options.find(option);
+
+            if (options.end() == it) {
+                throw yexception()
+                    << "Cluster config for an Iceberg data source"
+                    << " is missing option: "
+                    << option;
+            }
+
+            return it->second;
+        }
+
+        ///
+        /// Fill options into DatSourceOptions specific for an iceberg data type
+        ///
+        void SetIcebergOptions(NYql::TIcebergDataSourceOptions& dataSourceOptions, const TGenericClusterConfig& clusterConfig) {
+            using namespace NKikimr::NExternalSource::NIceberg;
+
+            const auto& clusterOptions = clusterConfig.GetDataSourceOptions();
+            auto warehouseType = GetOptionValue(clusterOptions, WAREHOUSE_TYPE);
+
+            if (VALUE_S3 != warehouseType) {
+                throw yexception() << "Unexpected warehouse type: " << warehouseType;
+            }
+
+            auto endpoint = GetOptionValue(clusterOptions, WAREHOUSE_S3_ENDPOINT);
+            auto region = GetOptionValue(clusterOptions, WAREHOUSE_S3_REGION);
+            auto uri = GetOptionValue(clusterOptions, WAREHOUSE_S3_URI);
+            auto& s3 = *dataSourceOptions.mutable_warehouse()->mutable_s3();
+
+            s3.set_endpoint(endpoint);
+            s3.set_region(region);
+            s3.set_uri(uri);
+
+            auto catalogType = GetOptionValue(clusterOptions, CATALOG_TYPE);
+            auto& catalog = *dataSourceOptions.mutable_catalog();
+
+            // set catalog options
+            if (VALUE_HADOOP == catalogType) {
+                // hadoop nothing yet
+                catalog.mutable_hadoop();
+            } else if (VALUE_HIVE == catalogType) {
+                auto hiveUri = GetOptionValue(clusterOptions, CATALOG_HIVE_URI);
+
+                catalog.mutable_hive()->set_uri(hiveUri);
+            } else {
+                throw yexception() << "Unexpected catalog type: " << catalogType;
+            }
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
                                    const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
@@ -482,6 +535,10 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::LOGGING: {
                     auto* options = request.mutable_data_source_instance()->mutable_logging_options();
                     SetLoggingFolderId(*options, clusterConfig);
+                } break;
+                case NYql::EGenericDataSourceKind::ICEBERG: {
+                    auto* options = request.mutable_data_source_instance()->mutable_iceberg_options();
+                    SetIcebergOptions(*options, clusterConfig);
                 } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"

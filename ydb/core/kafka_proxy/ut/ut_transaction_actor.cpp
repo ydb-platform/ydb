@@ -9,7 +9,7 @@
 namespace {
     class TTransactionActorFixture : public NUnitTest::TBaseFixture {
         public:
-            struct TTopicPartitions {
+            struct TTopicPartition {
                 TString Topic;
                 TVector<ui32> Partitions;
             };
@@ -17,18 +17,28 @@ namespace {
             struct TPartitionCommit {
                 ui32 Partition; 
                 ui64 Offset;
+                TString ConsumerName;
                 ui64 ConsumerEpoch;
             };
 
-            struct QueryRequestMatcher {
-                bool commitTx;
-                bool beginTx;
-                TVector<TTopicPartitions> topics;
-                std::unordered_map<TString, std::vector<TPartitionCommit>> offsetsToCommitByTopic;
+            struct TQueryRequestMatcher {
+                bool CommitTx;
+                bool BeginTx;
+                TVector<TTopicPartition> TopicPartitions;
+                std::unordered_map<TString, std::vector<TPartitionCommit>> OffsetsToCommitByTopic;
+            };
+
+            using TopicPartition = TKafkaApiOperationsRequest::KafkaApiPartitionInTxn;
+
+            struct TopicPartitionHashFn {
+                size_t operator()(const TopicPartition& partition) const {
+                    return std::hash<TString>()(partition.TopicPath) ^ std::hash<int64_t>()(partition.PartitionId);
+                }
             };
 
             TMaybe<NKikimr::NPQ::TTestContext> Ctx;
             TActorId ActorId;
+            const TString Database = "/Root/PQ";
             const TString TransactionalId = "123"; // transactional id from kafka SDK
             const ui64 ProducerId = 1;
             const ui16 ProducerEpoch = 1;
@@ -93,63 +103,198 @@ namespace {
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
-            void AddObserverForRequestToKqpWithAssert(std::function<void(NKikimr::NKqp::TEvKqp::TEvQueryRequest)> callback) {
+            void AddObserverForRequestToKqpWithAssert(std::function<void(const NKikimr::NKqp::TEvKqp::TEvQueryRequest&)> callback) {
                 auto observer = [&callback](TAutoPtr<IEventHandle>& input) {
                     if (auto* event = input->CastAsLocal<NKikimr::NKqp::TEvKqp::TEvQueryRequest>()) {
-                        callback(event);
+                        callback(*event);
                     }
 
                     return TTestActorRuntimeBase::EEventAction::PROCESS;
                 };
                 Ctx->Runtime->SetObserverFunc(observer);
             }
+
+            void MatchQueryRequest(const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request, const TQueryRequestMatcher& matcher) {
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetTxControl().begin_tx().has_serializable_read_write(), matcher.BeginTx);
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetTxControl().commit_tx(), matcher.CommitTx);
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetKafkaApiOperations().GetTransactionalId(), TransactionalId);
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetKafkaApiOperations().GetProducerId(), ProducerId);
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetKafkaApiOperations().GetProducerEpoch(), ProducerEpoch);
+                
+                MatchPartitionsInTxn(request, matcher);
+                MatchOffsetsInTxn(request, matcher);
+            }
+
+        private:
+            void MatchPartitionsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request, const TQueryRequestMatcher& matcher) {
+                UNIT_ASSERT_VALUES_EQUAL(request.Record.GetRequest().GetKafkaApiOperations().partitionsInTxn_size(), matcher.TopicPartitions.size());
+                std::set<TopicPartition, TopicPartitionHashFn> paritionsInRequest;
+                request.Record.GetRequest().GetKafkaApiOperations().partitionsInTxn().UnpackTo(&paritionsInRequest);
+
+                for (ui32 i = 0; i < matcher.TopicPartitions.size(); i++) {
+                    auto& topicPartition = matcher.TopicPartitions[i];
+                    TString expectedTopicPath = GetExpectedTopicPath(topicPartition.Topic);
+                    auto& partitionsInRequest = request.Record.GetRequest().GetTopicOperations().GetTopics().Get(i).Getpartitions();
+                    UNIT_ASSERT_VALUES_EQUAL(partitionsInRequest.size(), topicPartition.Partitions.size());
+                    for (i32 partition : topicPartition.Partitions) {
+                        UNIT_ASSERT(paritionsInRequest.contains(TopicPartition{expectedTopicPath, partition});
+                    }
+                }
+            }
+
+            void MatchOffsetsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request, const TQueryRequestMatcher& matcher) {
+                std::unordered_map<TopicPartition, TKafkaApiOperationsRequest::KafkaApiOffsetInTxn> offsetsInRequest;
+                for (auto& offsetInTxn : request.Record.GetRequest().GetKafkaApiOperations().OffsetsInTxn()) {
+                    offsetsInRequest[TopicPartition{offsetInTxn.GetTopicPath(), offsetInTxn.GetPartitionId()}] = offsetInTxn;
+                }
+
+                for (auto& [topicName, partitionCommit]: matcher.OffsetsToCommitByTopic) {
+                    UNIT_ASSERT(offsetsInRequest.contains(offsetsInRequest[TopicPartition{GetExpectedTopicPath(topicName), partitionCommit.Partition}]);
+                    auto& offsetInRequest = offsetsInRequest[TopicPartition{GetExpectedTopicPath(topicName), partitionCommit.Partition}];
+                    UNIT_ASSERT_VALUES_EQUAL(offsetInRequest.GetOffset(), partitionCommit.Offset);
+                    UNIT_ASSERT_VALUES_EQUAL(offsetInRequest.GetConsumerName(), partitionCommit.ConsumerName);
+                    UNIT_ASSERT_VALUES_EQUAL(offsetInRequest.GetConsumerGeneration(), partitionCommit.ConsumerEpoch);
+                }
+            }
+
+            std::vector<TopicPartition> ConvertToTopicPartitionVector(const TVector<TTopicPartitions>& topicPartitionsList) {
+                std::vector<TopicPartition> result;
+                for (auto& topicPartitions : topicPartitionsList) {
+                    for (auto& partition : topicPartitions.Partitions) {
+                        result.push_back({topicPartitions.Topic, partition});
+                    }
+                }
+                return result;
+            }
+
+            TString GetExpectedTopicPath(const TString& topicName) {
+                return TStringBuilder() << Database << "/" << topicName;
+            }
     };
 
     Y_UNIT_TEST_SUITE_F(KafkaTransactionActor, TTransactionActorFixture) {
         Y_UNIT_TEST(OnAddPartitionsAndEndTxn_shouldSendTxnToKqpWithSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
-            AddObserverForRequestToKqpWithAssert({true, true, topics, {}});
+            bool seenEvent = false;
+            AddObserverForRequestToKqpWithAssert([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
+                seenEvent = true;
+                MatchQueryRequest(request, {true, true, topics});
+            });
 
             SendAddPartitionsToTxnRequest(topics);
             SendEndTxnRequest();
 
-            UNIT_ASSERT_C(false, "Not implemented yet");
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
         }
 
-        Y_UNIT_TEST(OnAddPartitions_shouldReturnOkToSDK) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
+        Y_UNIT_TEST(OnAddPartitionsToTxn_shouldReturnOkToSDK) {
+            TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
+            ui64 correlationId = 123;
+
+            SendAddPartitionsToTxnRequest(topics, correlationId);
+            // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::ADD_PARTITIONS_TO_TXN);
+            const auto& message = static_cast<const NKafka::TAddPartitionsToTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[0].Name, "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[0].Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[0].Results[0].PartitionIndex, 0);
+            UNIT_ASSERT_EQUAL(message.Results[0].Results[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[0].Results[1].PartitionIndex, 1);
+            UNIT_ASSERT_EQUAL(message.Results[0].Results[1].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[1].Name, "topic2");
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[1].Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.Results[1].Results[0].PartitionIndex, 0);
+            UNIT_ASSERT_EQUAL(message.Results[1].Results[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnDoubleAddPartitionsWithSamePartitionsAndEndTxn_shouldSendTxnToKqpWithOnceSpecifiedPartitions) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
+            TVector<TTopicPartitions> topics = {{"topic1", {0}}};
+            bool seenEvent = false;
+            AddObserverForRequestToKqpWithAssert([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
+                seenEvent = true;
+                MatchQueryRequest(request, {true, true, topics});
+            });
+
+            SendAddPartitionsToTxnRequest(topics);
+            SendAddPartitionsToTxnRequest(topics);
+            SendEndTxnRequest();
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
         }
 
         Y_UNIT_TEST(OnDoubleAddPartitionsWithDifferentPartitionsAndEndTxn_shouldSendTxnToKqpWithAllSpecifiedPartitions) {
+            // implement after specifiying how many requests to KQP i should send
             UNIT_ASSERT_C(false, "Not implemented yet");
         }
 
         Y_UNIT_TEST(OnAddOffsetsToTxnAndEndTxn_shouldSendTxnToKqpWithSpecifiedOffsets) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
-        }
-
-        Y_UNIT_TEST(OnAddOffsetsToTxn_shouldReturnOkToSDK) {
+            // implement after specifiying how to commit offsets
             UNIT_ASSERT_C(false, "Not implemented yet");
         }
 
         Y_UNIT_TEST(OnTxnOffsetCommit_shouldReturnOkToSDK) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
-        }
+            std::unordered_map<TString, std::vector<TPartitionCommit>> offsetsToCommitByTopic;
+            offsetsToCommitByTopic["topic1"] = {{0, 0, 0}};
+            offsetsToCommitByTopic["topic2"] = {{0, 10, 0}, {1, 5, 0}};
+            ui64 correlationId = 123;
 
-        Y_UNIT_TEST(OnPoisonPillAfterCommitStart_shouldSendAbortToKqp) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
+            SendTxnOffsetCommitRequest(offsetsToCommitByTopic, correlationId);
+            // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::TXN_OFFSET_COMMIT);
+            const auto& message = static_cast<const NKafka::TTxnOffsetCommitResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[0].Name, "topic1");
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[0].Partitions[0].PartitionIndex, 0);
+            UNIT_ASSERT_EQUAL(message.Topics[0].Partitions[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Name, "topic2");
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions[0].PartitionIndex, 0);
+            UNIT_ASSERT_EQUAL(message.Topics[1].Partitions[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions[1].PartitionIndex, 1);
+            UNIT_ASSERT_EQUAL(message.Topics[1].Partitions[1].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnAddOffsetsToTxnAndAddPartitionsAndEndTxn_shouldSendTxnToKqpCorrectTxn) {
+            // implement after understanding how many requests i should send
             UNIT_ASSERT_C(false, "Not implemented yet");
         }
 
         Y_UNIT_TEST(OnEndTxnWithAbort_shouldSendOkAndDie) {
-            UNIT_ASSERT_C(false, "Not implemented yet");
+            auto request = std::make_shared<NKafka::TEndTxnRequestData>();
+            request->Committed = false;
+            ui64 correlationId = 123;
+            auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, request), Ctx->Edge);
+            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
     }
 } // namespace

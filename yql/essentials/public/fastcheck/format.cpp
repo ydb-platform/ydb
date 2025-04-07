@@ -5,6 +5,7 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <util/charset/utf8.h>
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -88,7 +89,7 @@ private:
                     continue;
                 }
 
-                while (i > 0 && TTextWalker::IsUtf8Intermediate(request.Program[i])) {
+                while (i > 0 && IsUTF8ContinuationByte(request.Program[i])) {
                     --i;
                 }
 
@@ -96,12 +97,12 @@ private:
             }
 
             TString formattedSample = formattedQuery.substr(i, FormatContextLimit);
-            while (!formattedSample.empty() && TTextWalker::IsUtf8Intermediate(formattedQuery.back())) {
+            while (!formattedSample.empty() && IsUTF8ContinuationByte(formattedQuery.back())) {
                 formattedSample.erase(formattedSample.size() - 1);
             }
 
             TString origSample = request.Program.substr(i, FormatContextLimit);
-            while (!origSample.empty() && TTextWalker::IsUtf8Intermediate(origSample.back())) {
+            while (!origSample.empty() && IsUTF8ContinuationByte(origSample.back())) {
                 origSample.erase(origSample.size() - 1);
             }
 

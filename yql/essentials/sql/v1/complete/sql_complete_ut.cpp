@@ -63,8 +63,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
-    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TStringBuf prefix) {
-        return engine->Complete({prefix}).Candidates;
+    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TCompletionInput input) {
+        return engine->Complete(input).Candidates;
     }
 
     Y_UNIT_TEST(Beginning) {
@@ -438,17 +438,31 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "se"), expected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "sE"), expected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "Se"), expected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SE"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"se"}), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"sE"}), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"Se"}), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SE"}), expected);
     }
 
     Y_UNIT_TEST(InvalidStatementsRecovery) {
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_GE(Complete(engine, "select select; ").size(), 35);
-        UNIT_ASSERT_GE(Complete(engine, "select select;").size(), 35);
-        UNIT_ASSERT_VALUES_EQUAL_C(Complete(engine, "!;").size(), 0, "Lexer failing");
+        UNIT_ASSERT_GE(Complete(engine, {"select select; "}).size(), 35);
+        UNIT_ASSERT_GE(Complete(engine, {"select select;"}).size(), 35);
+        UNIT_ASSERT_VALUES_EQUAL_C(Complete(engine, {"!;"}).size(), 0, "Lexer failing");
+    }
+
+    Y_UNIT_TEST(InvalidCursorPosition) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        UNIT_ASSERT_NO_EXCEPTION(Complete(engine, {"", 0}));
+        UNIT_ASSERT_EXCEPTION(Complete(engine, {"", 1}), yexception);
+
+        UNIT_ASSERT_NO_EXCEPTION(Complete(engine, {"s", 0}));
+        UNIT_ASSERT_NO_EXCEPTION(Complete(engine, {"s", 1}));
+
+        UNIT_ASSERT_NO_EXCEPTION(Complete(engine, {"ы", 0}));
+        UNIT_ASSERT_EXCEPTION(Complete(engine, {"ы", 1}), yexception);
+        UNIT_ASSERT_NO_EXCEPTION(Complete(engine, {"ы", 2}));
     }
 
     Y_UNIT_TEST(DefaultNameService) {

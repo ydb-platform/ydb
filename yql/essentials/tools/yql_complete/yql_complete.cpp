@@ -6,7 +6,11 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
+#include <yql/essentials/utils/utf8.h>
+
 #include <library/cpp/getopt/last_getopt.h>
+
+#include <util/charset/utf8.h>
 #include <util/stream/file.h>
 
 NSQLComplete::TFrequencyData LoadFrequencyDataFromFile(TString filepath) {
@@ -23,6 +27,11 @@ NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
             lexers, ansi, /* antlr4 = */ true,
             NSQLTranslationV1::ELexerFlavor::Pure);
     };
+}
+
+size_t UTF8PositionToBytes(const TStringBuf text, size_t position) {
+    const TStringBuf substr = SubstrUTF8(text, position, text.length());
+    return substr.begin() - text.begin();
 }
 
 int Run(int argc, char* argv[]) {
@@ -60,9 +69,20 @@ int Run(int argc, char* argv[]) {
             std::move(ranking)));
 
     NSQLComplete::TCompletionInput input;
+
     input.Text = queryString;
+    if (!NYql::IsUtf8(input.Text)) {
+        ythrow yexception() << "provided input is not UTF encoded";
+    }
+
     if (pos) {
-        input.CursorPosition = *pos;
+        input.CursorPosition = UTF8PositionToBytes(input.Text, *pos);
+    } else if (Count(input.Text, '#') == 1) {
+        Cerr << "Note: found an only '#', setting the cursor position\n";
+        input.CursorPosition = input.Text.find('#');
+    } else if (Count(input.Text, '#') >= 2) {
+        Cerr << "Note: found multiple '#', defaulting the cursor position\n";
+        input.CursorPosition = queryString.size();
     } else {
         input.CursorPosition = queryString.size();
     }

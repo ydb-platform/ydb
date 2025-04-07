@@ -51,8 +51,8 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items, bool isBlockType = true)
 
 // -------------------------------------------------------------------
 
-using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<>;
-using TNeumannTable = NPackedTuple::TNeumannHashTable;
+using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<true>;
+using TNeumannTable = NPackedTuple::TNeumannHashTable<false>;
 
 size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, size_t nTuples) {
     size_t varSizedCount = 0;

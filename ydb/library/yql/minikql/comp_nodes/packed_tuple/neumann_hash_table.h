@@ -66,7 +66,7 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = true, bool Prefetch = true>
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
 class TNeumannHashTable {
     /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
     using Hash = ui32;

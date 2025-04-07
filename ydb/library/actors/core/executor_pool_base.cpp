@@ -13,15 +13,16 @@ namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
+        TStringStream logOut;
+        logOut << "New " 
+	    << TThread::CurrentThreadId() << " "
+            << self << " "
+            << TInstant::Now().ToString() << "\n";
+        Cerr << logOut.Str();
+
         actor->SelfActorId = self;
         actor->DoActorInit();
         actor->Registered(sys, owner);
-
-        TStringStream logOut;
-        logOut << "New " 
-            << actor->SelfId() << " "
-            << TInstant::Now().ToString() << "\n";
-        Cerr << logOut.Str();
     }
 
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)

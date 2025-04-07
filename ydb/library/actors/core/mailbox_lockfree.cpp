@@ -415,6 +415,7 @@ namespace NActors {
         };
         TStringStream logOut;
         logOut << "Send "
+	    << TThread::CurrentThreadId() << " "
 	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
             << (void*)ev << " "
@@ -576,6 +577,7 @@ namespace NActors {
         };
         TStringStream logOut;
         logOut << "Send "
+	    << TThread::CurrentThreadId() << " "
 	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
             << (void*)ev << " "

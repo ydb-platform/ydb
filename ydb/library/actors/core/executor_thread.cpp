@@ -87,11 +87,10 @@ namespace NActors {
 
     void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
-	
-
 	// For logging
 	TStringStream logOut;
 	logOut << "Die "
+		<< TThread::CurrentThreadId() << " "
 		<< actorId << " "
 		<< TInstant::Now().ToString() << "\n";
 	Cerr << logOut.Str();
@@ -275,7 +274,6 @@ namespace NActors {
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-
                     // For logging
                     auto getNameWithoutSpace = [&actor]() {
                         auto name = actor->GetActorName();
@@ -317,14 +315,14 @@ namespace NActors {
                     if (ev) {
    		        TStringStream logOut;
                         logOut << "Receive "
+                            << TThread::CurrentThreadId() << " "
                             << actor->SelfId() << " "
                             << ev->Sender << " "
                             << (void*)ev.Get() << " "
                             << TInstant::Now().ToString() << " "
                             << getThreadNameWithoutSpace() << " "
                             << getNameWithoutSpace() << " "
-                            << getMessageTypeWithoutSpace() << " "
-                            << TThread::CurrentThreadId() << "\n";
+                            << getMessageTypeWithoutSpace() << "\n";
                         Cerr << logOut.Str();
                     }
 

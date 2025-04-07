@@ -74,11 +74,35 @@ async def greenplum_handler(request):
     return web.Response(body=json.dumps({}))
 
 
+async def mysql_handler(request):
+    cluster_id = request.match_info['cluster_id']
+
+    if cluster_id == 'mysql_cluster_id':
+        return web.Response(
+            body=json.dumps(
+                {
+                    'hosts': [
+                        {
+                            'name': 'mysql',
+                            'services': [
+                                {
+                                    'health': 'ALIVE',
+                                },
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
+    return web.Response(body=json.dumps({}))
+
+
 def serve(port: int):
     app = web.Application()
     app.add_routes([web.get('/managed-clickhouse/v1/clusters/{cluster_id}/hosts', clickhouse_handler)])
     app.add_routes([web.get('/managed-postgresql/v1/clusters/{cluster_id}/hosts', postgresql_handler)])
     app.add_routes([web.get('/managed-greenplum/v1/clusters/{cluster_id}/master-hosts', greenplum_handler)])
+    app.add_routes([web.get('/managed-mysql/v1/clusters/{cluster_id}/hosts', mysql_handler)])
     web.run_app(app, port=port)
 
 

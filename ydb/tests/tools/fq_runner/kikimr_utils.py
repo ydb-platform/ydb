@@ -294,6 +294,7 @@ class ConnectorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['common']['disable_ssl_for_generic_data_sources'] = True
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('CLICKHOUSE_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('GREENPLUM_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('MYSQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('YDB_DATABASE')
 

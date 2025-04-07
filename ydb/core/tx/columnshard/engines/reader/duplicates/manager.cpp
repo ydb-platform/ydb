@@ -300,7 +300,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterIntervalResult::TPtr& ev) {
     if (ev->Get()->GetResult().IsFail()) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_merging_error")("error", ev->Get()->GetResult().GetErrorMessage());
-        AbortConstruction(ev->Get()->GetResult().GetErrorMessage());
+        AbortAndPassAway(ev->Get()->GetResult().GetErrorMessage());
         return;
     }
 
@@ -327,7 +327,7 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterStartFetching::
 
 void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TPtr& ev) {
     if (ev->Get()->GetStatus().IsFail()) {
-        AbortConstruction(ev->Get()->GetStatus().GetErrorMessage());
+        AbortAndPassAway(ev->Get()->GetStatus().GetErrorMessage());
         return;
     }
 
@@ -343,20 +343,20 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
 }
 
 void TDuplicateFilterConstructor::Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-    AbortConstruction("aborted by actor system");
+    AbortAndPassAway("aborted by actor system");
 }
 
-void TDuplicateFilterConstructor::AbortConstruction(const TString& reason) {
+void TDuplicateFilterConstructor::AbortAndPassAway(const TString& reason) {
     for (auto [id, constructor] : ActiveSources) {
         constructor->AbortConstruction(reason);
     }
+    ActiveSources.clear();
     PassAway();
-    // FIXME: is it correct moment to pass away?
 }
 
 TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context)
     : TActor(&TDuplicateFilterConstructor::StateMain)
-    , Intervals(context->GetReadMetadata()->SelectInfo->Portions)
+    , Intervals(context.GetReadMetadata()->SelectInfo->Portions)
     , NotFetchedSourcesCount([this]() {
         std::vector<std::pair<ui32, ui32>> intervals;
         for (const auto& [_, interval] : Intervals.GetSourceRanges()) {
@@ -367,7 +367,7 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecial
     for (const auto& [id, range] : Intervals.GetSourceRanges()) {
         NotFetchedSourcesIndex.Insert(range.GetFirstIdx(), range.GetLastIdx(), id);
     }
-    const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
+    const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
     for (ui64 i = 0; i < portions.size(); ++i) {
         WaitingSources.emplace(portions[i]->GetPortionId(), std::make_shared<TWaitingSourceInfo>(i));
     }

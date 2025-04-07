@@ -210,7 +210,7 @@ namespace {
 
     class TExportFixture : public NUnitTest::TBaseFixture {
     public:
-        void RunS3(const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+        void RunS3(const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS, bool checkS3FilesExistence = true) {
             auto requestStr = Sprintf(requestTpl.c_str(), S3Port());
             NKikimrExport::TCreateExportRequest request;
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
@@ -231,7 +231,7 @@ namespace {
                 return result;
             };
 
-            if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            if (expectedStatus == Ydb::StatusIds::SUCCESS && checkS3FilesExistence) {
                 for (auto& path : GetExportTargetPaths(requestStr)) {
                     UNIT_ASSERT_C(HasS3File(calcPath(path, "metadata.json")), calcPath(path, "metadata.json"));
                     UNIT_ASSERT_C(HasS3File(calcPath(path, "scheme.pb")), calcPath(path, "scheme.pb"));
@@ -242,6 +242,29 @@ namespace {
         bool HasS3File(const TString& path) {
             auto it = S3Mock().GetData().find(path);
             return it != S3Mock().GetData().end();
+        }
+
+        template <class T>
+        void CheckHasAllS3Files(std::initializer_list<T> paths) {
+            for (const T& path : paths) {
+                UNIT_ASSERT_C(HasS3File(path), "Path \"" << path << "\" is expected to exist in S3");
+            }
+        }
+
+        template <class T>
+        void CheckNoSuchS3Files(std::initializer_list<T> paths) {
+            for (const T& path : paths) {
+                UNIT_ASSERT_C(!HasS3File(path), "Path \"" << path << "\" is expected not to exist in S3");
+            }
+        }
+
+        template <class T>
+        void CheckNoS3Prefix(std::initializer_list<T> prefixes) {
+            for (const T& prefix : prefixes) {
+                for (auto&& [fileName, _] : S3Mock().GetData()) {
+                    UNIT_ASSERT_C(!fileName.StartsWith(prefix), "S3 path \"" << fileName << "\" has prefix \"" << prefix << "\", which is not expected prefix");
+                }
+            }
         }
 
         TString GetS3FileContent(const TString& path) {
@@ -2701,44 +2724,214 @@ attributes {
     }
 
     Y_UNIT_TEST(RecursiveFolder) {
-        // Env(); // Init test env
-        // ui64 txId = 100;
-        // TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
-        //     Name: "Table1"
-        //     Columns { Name: "key" Type: "Utf8" }
-        //     Columns { Name: "value" Type: "Utf8" }
-        //     KeyColumnNames: ["key"]
-        // )");
-        // Env().TestWaitNotification(Runtime(), txId);
+        Env(); // Init test env
+        Runtime().GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
+        ui64 txId = 90;
+        TestMkDir(Runtime(), ++txId, "/MyRoot", "dir1");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestMkDir(Runtime(), ++txId, "/MyRoot/dir1", "dir2");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table0"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateTable(Runtime(), ++txId, "/MyRoot/dir1", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateTable(Runtime(), ++txId, "/MyRoot/dir1/dir2", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
 
-        // TestCreateTable();
-
-        RunS3({
+        // Export whole database
+        RunS3({},
             R"(
-                Name: "Table1"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-            R"(
-                Name: "Table2"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              destination_prefix: "test_export0"
+            }
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export0/metadata.json",
+            "/test_export0/SchemaMapping/metadata.json",
+            "/test_export0/SchemaMapping/mapping.json",
+            "/test_export0/Table0/metadata.json",
+            "/test_export0/Table0/scheme.pb",
+            "/test_export0/Table0/permissions.pb",
+            "/test_export0/Table0/data_00.csv",
+            "/test_export0/dir1/Table1/scheme.pb",
+            "/test_export0/dir1/Table1/permissions.pb",
+            "/test_export0/dir1/Table1/data_00.csv",
+            "/test_export0/dir1/dir2/Table2/scheme.pb",
+            "/test_export0/dir1/dir2/Table2/permissions.pb",
+            "/test_export0/dir1/dir2/Table2/data_00.csv",
+        });
+
+        // Export subdir by common source path
+        RunS3({},
+            R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot/dir1"
+              destination_prefix: "test_export1"
+            }
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export1/metadata.json",
+            "/test_export1/SchemaMapping/metadata.json",
+            "/test_export1/SchemaMapping/mapping.json",
+            "/test_export1/Table1/scheme.pb",
+            "/test_export1/Table1/permissions.pb",
+            "/test_export1/Table1/data_00.csv",
+            "/test_export1/dir2/Table2/scheme.pb",
+            "/test_export1/dir2/Table2/permissions.pb",
+            "/test_export1/dir2/Table2/data_00.csv",
+        });
+
+        CheckNoS3Prefix({
+            "/test_export1/Table0",
+        });
+
+        // Export table + subdir
+        RunS3({},
+            R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "test_export2"
               items {
-                source_path: "/MyRoot/Table1"
-                destination_prefix: "table1"
+                source_path: "/MyRoot/Table0"
               }
               items {
-                source_path: "/MyRoot/Table2"
-                destination_prefix: "table2"
+                source_path: "/MyRoot/dir1/dir2"
               }
             }
-        )");
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export2/metadata.json",
+            "/test_export2/SchemaMapping/metadata.json",
+            "/test_export2/SchemaMapping/mapping.json",
+            "/test_export2/dir1/dir2/Table2/scheme.pb",
+            "/test_export2/dir1/dir2/Table2/permissions.pb",
+            "/test_export2/dir1/dir2/Table2/data_00.csv",
+        });
+
+        CheckNoS3Prefix({
+            "/test_export2/dir1/Table1",
+        });
+
+        // Export explicit objects with common source path
+        RunS3({},
+            R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot/dir1/"
+              destination_prefix: "test_export3"
+              items {
+                source_path: "Table1"
+              }
+              items {
+                source_path: "dir2/Table2"
+                destination_prefix: "explicit_table2_prefix"
+              }
+            }
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export3/metadata.json",
+            "/test_export3/SchemaMapping/metadata.json",
+            "/test_export3/SchemaMapping/mapping.json",
+            "/test_export3/Table1/scheme.pb",
+            "/test_export3/Table1/permissions.pb",
+            "/test_export3/Table1/data_00.csv",
+            "/test_export3/explicit_table2_prefix/scheme.pb",
+            "/test_export3/explicit_table2_prefix/permissions.pb",
+            "/test_export3/explicit_table2_prefix/data_00.csv",
+        });
+
+        CheckNoS3Prefix({
+            "/test_export3/dir2",
+            "/test_export3/Table0",
+        });
+
+        // Specify both directory and its objects in export
+         RunS3({},
+            R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot/dir1"
+              destination_prefix: "test_export4"
+              items {
+                source_path: "dir2"
+              }
+              items {
+                source_path: "dir2/Table2"
+              }
+            }
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export4/metadata.json",
+            "/test_export4/SchemaMapping/metadata.json",
+            "/test_export4/SchemaMapping/mapping.json",
+            "/test_export4/dir2/Table2/scheme.pb",
+            "/test_export4/dir2/Table2/permissions.pb",
+            "/test_export4/dir2/Table2/data_00.csv",
+        });
+
+        // Export whole database with encryption
+        RunS3({},
+            R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "test_export5"
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+            }
+        )",
+        Ydb::StatusIds::SUCCESS, false);
+
+        CheckHasAllS3Files({
+            "/test_export5/metadata.json",
+            "/test_export5/SchemaMapping/metadata.json.enc",
+            "/test_export5/SchemaMapping/mapping.json.enc",
+            "/test_export5/001/metadata.json.enc",
+            "/test_export5/001/scheme.pb.enc",
+            "/test_export5/001/permissions.pb.enc",
+            "/test_export5/001/data_00.csv.enc",
+            "/test_export5/002/scheme.pb.enc",
+            "/test_export5/002/permissions.pb.enc",
+            "/test_export5/002/data_00.csv.enc",
+            "/test_export5/003/scheme.pb.enc",
+            "/test_export5/003/permissions.pb.enc",
+            "/test_export5/003/data_00.csv.enc",
+        });
     }
 }

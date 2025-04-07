@@ -940,13 +940,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
         return *this;
     }
 
-    // Warning: scheme objects using YQL backups should only be allowed to be exported
-    // when we can be certain that the database will never be downgraded to a version
-    // which does not support the YQL export process. Otherwise, they will be considered as tables,
-    // and we might cause the process to be aborted.
-    if (Path.Base()->IsTable()
-        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
-    )  {
+    if (Path.IsSupportedInExports()) {
         return *this;
     }
 
@@ -1763,6 +1757,18 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsSupportedInExports() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    // Warning: scheme objects using YQL backups should only be allowed to be exported
+    // when we can be certain that the database will never be downgraded to a version
+    // which does not support the YQL export process. Otherwise, they will be considered as tables,
+    // and we might cause the process to be aborted.
+    return (Base()->IsTable()
+        || (Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+    );
 }
 
 ui32 TPath::Depth() const {

@@ -207,8 +207,7 @@ public:
         AFL_VERIFY(Borders.erase(TBorder::End(r, id)));
     }
 
-    THashSet<ui64> GetIntersections(const ui32 l, const ui32 r) const {
-        // NOTE: fully overlaying intervals are not counted: [L, R] where L < l < r < R
+    THashSet<ui64> GetPartialIntersections(const ui32 l, const ui32 r) const {
         THashSet<ui64> intervals;
         for (auto it = Borders.lower_bound(TBorder::Begin(l, std::numeric_limits<TIntervalId>::min()));
              it != Borders.end() && *it <= TBorder::End(r, std::numeric_limits<TIntervalId>::max()); ++it) {

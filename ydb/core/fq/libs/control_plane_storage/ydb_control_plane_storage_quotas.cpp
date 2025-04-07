@@ -67,7 +67,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
             TResultSetParser parser(resultSets.front());
             while (parser.TryNextRow()) {
                 auto scope = *parser.ColumnParser(SCOPE_COLUMN_NAME).GetOptionalString();
-                auto queryType = static_cast<FederatedQuery::QueryContent::QueryType>(parser.ColumnParser("QUERY_TYPE").GetOptionalInt64().value_or(1));
+                auto queryType = static_cast<FederatedQuery::QueryContent::QueryType>(parser.ColumnParser("QUERY_TYPE").GetOptionalInt64().GetOrElse(1));
                 auto count = parser.ColumnParser("PENDING_COUNT").GetUint64();
                 executer.Read(
                     [=](TQuotaCountExecuter&, TSqlQueryBuilder& builder) {

@@ -44,6 +44,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             auto cursor = SourcesCollection->BuildCursor(frontSource, startIndex + recordsCount);
             reader.OnIntervalResult(std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table,
                 cursor, Context->GetCommonContext(), sourceIdxToContinue));
+            SourcesCollection->OnIntervalResult(table, frontSource);
         } else if (sourceIdxToContinue) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", frontSource->GetSourceId())(
                 "source_idx", frontSource->GetSourceIdx());

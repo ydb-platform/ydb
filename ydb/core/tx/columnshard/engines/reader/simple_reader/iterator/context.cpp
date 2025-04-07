@@ -43,10 +43,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
+    const bool needDeduplication = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                           [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
+                                           [hasDeletions ? 1 : 0][needDeduplication ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
@@ -60,7 +60,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates) const {
+    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool needFilterDuplicates) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
@@ -93,9 +93,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
-        acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
-        acc.AddAssembleStep(*GetMergeColumns(), "DUPLICATE", EStageFeaturesIndexes::Filter, false);
-        acc.AddStep(std::make_shared<TDuplicateFilter>());
+        if (needFilterDuplicates) {
+            acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddAssembleStep(*GetMergeColumns(), "DUPLICATE", EStageFeaturesIndexes::Filter, false);
+            acc.AddStep(std::make_shared<TDuplicateFilter>());
+        }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }
@@ -106,6 +108,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : TBase(commonContext) {
+    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES) {
+        DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(*this));
+    }
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {
@@ -121,11 +126,6 @@ TString TSpecialReadContext::ProfileDebugString() const {
         }
     }
     return sb;
-}
-
-void TSpecialReadContext::RegisterDuplicatesManager(const std::shared_ptr<TSpecialReadContext>& self) {
-    AFL_VERIFY(!DuplicatesManager);
-    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(self));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

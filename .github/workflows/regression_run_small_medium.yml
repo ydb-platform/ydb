@@ -5,13 +5,11 @@ on:
     - cron: "30 23 * * *"  # At 23:30 every day
   workflow_dispatch:
     inputs:
-      branches:
-        description: 'Branches to test (JSON array or single branch name)'
+      use_default_branches:
+        description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
+        type: boolean
         required: false
-
-
-env:
-  DEFAULT_BRANCHES: '["main", "stable-25-1", "stable-25-1-1"]'
+        default: true
 
 jobs:
   main:
@@ -25,5 +23,5 @@ jobs:
     with:
       test_targets: ydb/
       test_size: small,medium
-      branches: ${{ inputs.branches || '["main", "stable-25-1", "stable-25-1-1"]' }}
+      branches: ${{ inputs.use_default_branches== true && '["main", "stable-25-1", "stable-25-1-1"]' || github.ref_name }}
       build_preset: ${{ matrix.build_preset }}

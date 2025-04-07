@@ -1381,7 +1381,7 @@ namespace NActors {
                             TABLER() {
                                 TABLED() { str << "ZeroCopy confirmed send with copy / confirmed send total"; }
                                 TABLED() {
-                                    str << Sprintf("%d / %d", ZcProcessor.GetConfirmedWithCopy(), ZcProcessor.GetConfirmed());
+                                    str << Sprintf("%lu / %lu", ZcProcessor.GetConfirmedWithCopy(), ZcProcessor.GetConfirmed());
                                 }
                             }
                             TABLER() {

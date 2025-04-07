@@ -779,14 +779,14 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
                                             ? (userInfo.GetReadTimestamp() - snapshot.LastReadMessage.WriteTimestamp).MilliSeconds()
                                             : 0);
-                clientInfo->SetCommitedLagMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
+                clientInfo->SetSinceCommittedWriteTimeMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
 
                 ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (now - userInfo.GetReadTimestamp()).MilliSeconds();
                 clientInfo->SetTotalLagMs(totalLag);
             } else {
                 clientInfo->SetReadLagMs(0);
-                clientInfo->SetCommitedLagMs(0);
+                clientInfo->SetSinceCommittedWriteTimeMs(0);
                 clientInfo->SetWriteLagMs(0);
                 clientInfo->SetTotalLagMs(0);
             }
@@ -803,11 +803,11 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
                                             ? (userInfo.GetReadTimestamp() - snapshot.LastReadMessage.WriteTimestamp).MilliSeconds()
                                             : 0);
-                clientInfo->SetCommitedLagMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
+                clientInfo->SetSinceCommittedWriteTimeMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
             } else {
                 clientInfo->SetReadLagMs(0);
-                clientInfo->SetCommitedLagMs(0);
+                clientInfo->SetSinceCommittedWriteTimeMs(0);
                 clientInfo->SetWriteLagMs(0);
             }
 

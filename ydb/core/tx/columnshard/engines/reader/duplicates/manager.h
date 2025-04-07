@@ -13,19 +13,10 @@ namespace NKikimr::NOlap::NReader {
 namespace NSimple {
 class TSpecialReadContext;
 class IDataSource;
-class TSourceConstructor;
+class TPortionDataSource;
 }
 
-class TEvNotifyReadingFinished: public NActors::TEventLocal<TEvNotifyReadingFinished, NColumnShard::TEvPrivate::EvNotifyReadingFinished> {
-private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
-
-public:
-    TEvNotifyReadingFinished(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources)
-        : Sources(sources) {
-        AFL_VERIFY(!sources.empty());
-    }
-};
+class TColumnFetchingContext;
 
 class TEvDuplicateFilterIntervalResult
     : public NActors::TEventLocal<TEvDuplicateFilterIntervalResult, NColumnShard::TEvPrivate::EvDuplicateFilterIntervalResult> {
@@ -56,6 +47,20 @@ public:
     TEvDuplicateFilterDataFetched(const ui64 sourceId, const TConclusionStatus& status)
         : SourceId(sourceId)
         , Status(status) {
+    }
+};
+
+class TEvDuplicateFilterStartFetching
+    : public NActors::TEventLocal<TEvDuplicateFilterStartFetching, NColumnShard::TEvPrivate::EvDuplicateFilterStartFetching> {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TColumnFetchingContext>, Context);
+    YDB_READONLY_DEF(std::shared_ptr<NBlobOperations::NRead::ITask>, NextAction);
+
+public:
+    TEvDuplicateFilterStartFetching(
+        const std::shared_ptr<TColumnFetchingContext>& context, const std::shared_ptr<NBlobOperations::NRead::ITask>& nextAction)
+        : Context(context)
+        , NextAction(nextAction) {
     }
 };
 
@@ -109,14 +114,31 @@ private:
         }
     };
 
+    class TZeroCollector {
+    private:
+        std::vector<ui32> Positions;
+
+    public:
+        void OnNewZeros(const TPosition& node) {
+            for (ui32 i = node.GetLeft(); i <= node.GetRight(); ++i) {
+                Positions.emplace_back(i);
+            }
+        }
+
+        std::vector<ui32> ExtractNewZeroPositions() {
+            return std::move(Positions);
+        }
+    };
+
     // Segment tree: Count[i] = GetCount(i * 2 + 1) + GetCount(i * 2 + 2)
     std::vector<ui64> Count;
+    std::vector<ui64> MinValue;
     std::vector<i64> PropagatedDeltas;
     ui32 MaxIndex = 0;
 
 private:
-    void PropagateDelta(const TPosition& node);
-    void Update(const TPosition& node, const TModification& modification);
+    void PropagateDelta(const TPosition& node, TZeroCollector* callback);
+    void Update(const TPosition& node, const TModification& modification, TZeroCollector* callback);
     void Inc(const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node) const {
@@ -124,17 +146,76 @@ private:
         return Count[node.GetIndex()] +
                (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0) * node.IntervalSize();
     }
+    ui64 GetMinValue(const TPosition& node) const {
+        AFL_VERIFY(node.GetIndex() < Count.size());
+        return MinValue[node.GetIndex()] + (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0);
+    }
     TPosition GetRoot() const {
         return TPosition(MaxIndex);
     }
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);
-    void Dec(const ui32 l, const ui32 r);
+    std::vector<ui32> DecAndGetZeros(const ui32 l, const ui32 r);
     ui64 GetCount(const ui32 l, const ui32 r) {
         return GetCount(GetRoot(), l, r);
     }
     bool IsAllZeros() const;
+};
+
+class TIntervalSet {
+private:
+    using TPosition = ui32;
+    using TIntervalId = ui64;
+
+private:
+    class TBorder {
+    private:
+        YDB_READONLY_DEF(bool, IsEnd);
+        YDB_READONLY_DEF(TPosition, Position);
+        YDB_READONLY_DEF(TIntervalId, Interval);
+
+        TBorder(const TPosition position, const TIntervalId interval, const bool isEnd)
+            : IsEnd(isEnd)
+            , Position(position)
+            , Interval(interval) {
+        }
+
+    public:
+        static TBorder Begin(const TPosition position, const TIntervalId interval) {
+            return TBorder(position, interval, false);
+        }
+        static TBorder End(const TPosition position, const TIntervalId interval) {
+            return TBorder(position, interval, true);
+        }
+
+        std::partial_ordering operator<=>(const TBorder& other) const {
+            return std::tie(IsEnd, Position, Interval) <=> std::tie(other.IsEnd, Position, other.Interval);
+        }
+    };
+
+    std::set<TBorder> Borders;
+
+public:
+    void Insert(const TPosition l, const TPosition r, const TIntervalId id) {
+        AFL_VERIFY(Borders.insert(TBorder::Begin(l, id)).second);
+        AFL_VERIFY(Borders.insert(TBorder::End(r, id)).second);
+    }
+
+    void Erase(const TPosition l, const TPosition r, const TIntervalId id) {
+        AFL_VERIFY(Borders.erase(TBorder::Begin(l, id)));
+        AFL_VERIFY(Borders.erase(TBorder::End(r, id)));
+    }
+
+    THashSet<ui64> GetIntersections(const ui32 l, const ui32 r) const {
+        // NOTE: fully overlaying intervals are not counted: [L, R] where L < l < r < R
+        THashSet<ui64> intervals;
+        for (auto it = Borders.lower_bound(TBorder::Begin(l, std::numeric_limits<TIntervalId>::min()));
+             it != Borders.end() && *it <= TBorder::End(r, std::numeric_limits<TIntervalId>::max()); ++it) {
+            intervals.insert(it->GetInterval());
+        }
+        return intervals;
+    }
 };
 
 class TDuplicateFilterConstructor: public NActors::TActor<TDuplicateFilterConstructor> {
@@ -164,6 +245,10 @@ private:
         ui32 NumIntervals() const {
             return LastIdx - FirstIdx + 1;
         }
+
+        TString DebugString() const {
+            return TStringBuilder() << '[' << FirstIdx << ',' << LastIdx << ']';
+        }
     };
 
     class TSourceIntervals {
@@ -174,7 +259,7 @@ private:
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
     public:
-        TSourceIntervals(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources);
+        TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& sources);
 
         const NArrow::TReplaceKey& GetRightInclusiveBorder(const ui32 intervalIdx) const {
             return IntervalBorders[intervalIdx];
@@ -204,112 +289,27 @@ private:
         }
     };
 
-    class TIntervalsCursor {
-    private:
-        using TSourceSeqNumberByIntervalIdx = std::multimap<ui32, ui32>;
-        YDB_READONLY(ui32, IntervalIdx, 0);
-        YDB_READONLY_DEF(TSourceSeqNumberByIntervalIdx, SourcesByRightInterval);
-        const TSourceIntervals* Owner;
-        ui32 NextSourceSeqNumber = 0;
-
-        void NextImpl(const bool init = false) {
-            if (init) {
-                AFL_VERIFY(IntervalIdx == 0);
-            } else {
-                ++IntervalIdx;
-            }
-
-            while (!SourcesByRightInterval.empty() && SourcesByRightInterval.begin()->first < IntervalIdx) {
-                SourcesByRightInterval.erase(SourcesByRightInterval.begin());
-            }
-
-            while (NextSourceSeqNumber != Owner->NumSources() && Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetFirstIdx() <= IntervalIdx) {
-                SourcesByRightInterval.emplace(Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetLastIdx(), NextSourceSeqNumber);
-                ++NextSourceSeqNumber;
-            }
-
-            AFL_VERIFY(IntervalIdx <= Owner->NumIntervals())("i", IntervalIdx)("num_intervals", Owner->NumIntervals());
-            AFL_VERIFY(IsEnd() == SourcesByRightInterval.empty())("sources", SourcesByRightInterval.size())("interval", IntervalIdx);
-        }
-
-    public:
-        TIntervalsCursor(const TSourceIntervals* owner)
-            : Owner(owner) {
-            AFL_VERIFY(Owner);
-            NextImpl(true);
-        }
-
-        void Next() {
-            NextImpl(false);
-        }
-
-        bool IsEnd() const {
-            return IntervalIdx == Owner->NumIntervals();
-        }
-    };
-
-    class TSourceFilterConstructor {
+    class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor> {
     private:
         ui32 FirstIntervalIdx;
         YDB_READONLY_DEF(std::vector<std::optional<NArrow::TColumnFilter>>, IntervalFilters);
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, ColumnData);
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> MemoryGuard;
-        YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
+        YDB_READONLY_DEF(std::shared_ptr<NSimple::TPortionDataSource>, Source);
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
         std::vector<NArrow::TReplaceKey> RightIntervalBorders;
         ui64 ReadyFilterCount = 0;
 
     public:
-        TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source, const TSourceIntervals& intervals)
-            : FirstIntervalIdx(intervals.GetRangeBySourceId(source->GetSourceId()).GetFirstIdx())
-            , IntervalFilters(intervals.GetRangeBySourceId(source->GetSourceId()).NumIntervals())
-            , Source(source) {
-            AFL_VERIFY(IntervalFilters.size());
-
-            const TIntervalsRange range = intervals.GetRangeBySourceId(Source->GetSourceId());
-            RightIntervalBorders.reserve(range.NumIntervals());
-            for (ui32 intervalIdx = range.GetFirstIdx(); intervalIdx <= range.GetLastIdx(); ++intervalIdx) {
-                RightIntervalBorders.emplace_back(intervals.GetRightInclusiveBorder(intervalIdx));
-            }
-        }
-
-        void StartFetchingColumns(const ui64 memoryGroupId);
+        TSourceFilterConstructor(const std::shared_ptr<NSimple::TPortionDataSource>& source, const TSourceIntervals& intervals);
 
         void SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter);
         void SetMemoryGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
             AFL_VERIFY(!MemoryGuard);
             MemoryGuard = std::move(guard);
         }
-        void SetColumnData(std::shared_ptr<NArrow::TGeneralContainer>&& data) {
-            AFL_VERIFY(MemoryGuard);
-            AFL_VERIFY(!ColumnData);
-            ColumnData = std::move(data);
-
-            AFL_VERIFY(ColumnData);
-            IntervalOffsets.emplace_back(0);
-            for (ui32 localIntervalIdx = 1; localIntervalIdx < RightIntervalBorders.size(); ++localIntervalIdx) {
-                NArrow::TGeneralContainer keysData = [this]() {
-                    // TODO: optimize?
-                    // TODO: simplify?
-                    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
-                    const auto& pkSchema = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey();
-                    for (const auto& field : pkSchema->fields()) {
-                        columns.emplace_back(ColumnData->GetAccessorByNameOptional(field->name()));
-                    }
-                    return NArrow::TGeneralContainer(
-                        Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
-                }();
-                const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder =
-                    keysData.EqualRange(*RightIntervalBorders[localIntervalIdx - 1].ToBatch(
-                        Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
-                // TODO: hide decision in a class?
-                IntervalOffsets.emplace_back(Source->GetContext()->GetReadMetadata()->IsDescSorted()
-                                                 ? ColumnData->GetRecordsCount() - findLeftBorder.GetBegin()
-                                                 : findLeftBorder.GetEnd());
-            }
-            AFL_VERIFY(IntervalOffsets.size() == IntervalFilters.size());
-        }
+        void SetColumnData(std::shared_ptr<NArrow::TGeneralContainer>&& data);
         void SetSubscriber(const std::shared_ptr<IFilterSubscriber>& subscriber) {
             AFL_VERIFY(!Subscriber);
             Subscriber = subscriber;
@@ -319,100 +319,56 @@ private:
             return Subscriber && ReadyFilterCount == IntervalFilters.size();
         }
 
-        NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const {
-            AFL_VERIFY(!IntervalOffsets.empty());
-            AFL_VERIFY(globalIntervalIdx >= FirstIntervalIdx)("global", globalIntervalIdx)("first", FirstIntervalIdx);
-            const ui32 localIntervalIdx = globalIntervalIdx - FirstIntervalIdx;
-            AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
-                                              "size", IntervalOffsets.size());
-            const NArrow::NAccessor::IChunkedArray::TRowRange localRange =
-                (localIntervalIdx == IntervalOffsets.size() - 1)
-                    ? NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], Source->GetRecordsCount())
-                    : NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1]);
-            if (Source->GetContext()->GetReadMetadata()->IsDescSorted()) {
-                return { Source->GetRecordsCount() - localRange.GetEnd(), Source->GetRecordsCount() - localRange.GetBegin() };
-            } else {
-                return localRange;
-            }
-        }
+        NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const;
 
         void Finish();
         void AbortConstruction(const TString& reason);
     };
 
-    class IAction {
-    public:
-        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) = 0;
-        virtual ~IAction() = default;
-    };
-
-    class TRequestQueue {
+    class TWaitingSourceInfo {
     private:
-        std::deque<ui64> OrderedSourceIds;
-        THashMap<ui64, std::unique_ptr<IAction>> RequestsBySourceId;
+        std::atomic_uint64_t FetchingMemoryGroupId = std::numeric_limits<uint64_t>::max();
+        std::atomic_bool IsFetchingStarted = false;
+        ui32 PortionIdx;
 
     public:
-        void AddRequest(const ui64 sourceId, std::unique_ptr<IAction> action) {
-            AFL_VERIFY(RequestsBySourceId.emplace(sourceId, std::move(action)).second);
+        TWaitingSourceInfo(const ui32 portionIdx)
+            : PortionIdx(portionIdx) {
         }
 
-        [[nodiscard]] std::optional<std::pair<ui64, std::unique_ptr<IAction>>> ExtractNextAction() {
-            if (OrderedSourceIds.empty()) {
-                return std::nullopt;
+        [[nodiscard]] bool SetStartAllocation(const ui64 memoryGroupId) {
+            ui64 oldMemGroup = FetchingMemoryGroupId.load();
+            while (true) {
+                if (oldMemGroup < memoryGroupId) {
+                    return false;
+                }
+                if (FetchingMemoryGroupId.compare_exchange_weak(oldMemGroup, memoryGroupId)) {
+                    break;
+                }
             }
-            auto findNextRequest = RequestsBySourceId.find(OrderedSourceIds.front());
-            if (findNextRequest == RequestsBySourceId.end()) {
-                return std::nullopt;
+
+            AFL_VERIFY(oldMemGroup != memoryGroupId);
+            if (IsFetchingStarted.load()) {
+                return false;
             }
-            OrderedSourceIds.pop_front();
-            std::pair<ui64, std::unique_ptr<IAction>> result(findNextRequest->first, std::move(findNextRequest->second));
-            RequestsBySourceId.erase(findNextRequest);
-            return result;
+            return true;
         }
 
-        bool IsDone() const {
-            return OrderedSourceIds.empty();
+        bool SetStartFetching() {
+            return !IsFetchingStarted.exchange(true);
         }
 
-        TRequestQueue(const TSourceIntervals& intervals)
-            : OrderedSourceIds(intervals.GetSortedSourceIds().begin(), intervals.GetSortedSourceIds().end()) {
-        }
-    };
-
-    class TActionSkip: public IAction {
-    private:
-        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) override {
-            self.DoSkip(sourceId);
-        }
-    };
-
-    class TActionGetFilter: public IAction {
-    private:
-        std::shared_ptr<IFilterSubscriber> Subscriber;
-        ui64 MemoryGroupId;
-
-        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) override {
-            self.DoGetFilter(sourceId, Subscriber, MemoryGroupId);
-        }
-
-    public:
-        TActionGetFilter(const std::shared_ptr<IFilterSubscriber>& subscriber, const std::shared_ptr<NCommon::IDataSource>& source)
-            : Subscriber(subscriber)
-            , MemoryGroupId(source->GetMemoryGroupId()) {
-        }
+        std::shared_ptr<NSimple::TPortionDataSource> Construct(const std::shared_ptr<NSimple::TSpecialReadContext>& context) const;
     };
 
 private:
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
-    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
+    THashMap<ui64, std::shared_ptr<TWaitingSourceInfo>> WaitingSources;
+    THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
 
-    TSourceIntervals Intervals;
-    THashSet<ui64> FinishedSourceIds;
+    const TSourceIntervals Intervals;
     TIntervalCounter NotFetchedSourcesCount;
-    TIntervalsCursor NextIntervalToMerge;
-    THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
-    TRequestQueue RequestsBuffer;
+    TIntervalSet NotFetchedSourcesIndex;
+    THashMap<ui32, std::vector<ui64>> FetchedSourcesByInterval;
 
 private:
     STATEFN(StateMain) {
@@ -420,7 +376,7 @@ private:
             hFunc(TEvRequestFilter, Handle);
             hFunc(TEvDuplicateFilterIntervalResult, Handle);
             hFunc(TEvDuplicateFilterDataFetched, Handle);
-            hFunc(TEvNotifyReadingFinished, Handle);
+            hFunc(TEvDuplicateFilterStartFetching, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
@@ -428,25 +384,20 @@ private:
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
-    void Handle(const TEvDuplicateFilterIntervalResult::TPtr&);
+    void Handle(const TEvDuplicateFilterStartFetching::TPtr&);
     void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
-    void Handle(const TEvNotifyReadingFinished::TPtr&);
+    void Handle(const TEvDuplicateFilterIntervalResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
     void AbortConstruction(const TString& reason);
-    void StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const;
-    void StartMergingColumns(const TIntervalsCursor& interval) const;
-    void FlushFinishedSources();
-
-    void HandleRequest(const ui64 sourceId, std::unique_ptr<IAction> action);
-    void DoSkip(const ui64 sourceId);
-    void DoGetFilter(const ui64 sourceId, const std::shared_ptr<IFilterSubscriber>& subscriber, const ui64 memoryGroupId);
+    void StartAllocation(const ui64 sourceId, const std::shared_ptr<NSimple::IDataSource>& requester);
+    void StartMergingColumns(const ui32 intervalIdx);
 
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
-    TDuplicateFilterConstructor(const std::deque<NSimple::TSourceConstructor>& sources, const std::shared_ptr<NSimple::TSpecialReadContext>& context);
+    TDuplicateFilterConstructor(const std::shared_ptr<NSimple::TSpecialReadContext>& context);
 };
 
 }   // namespace NKikimr::NOlap::NReader

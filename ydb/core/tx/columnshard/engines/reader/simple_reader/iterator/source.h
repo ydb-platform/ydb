@@ -236,17 +236,13 @@ public:
     class TCompareStartForScanSequence {
     public:
         bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
-            return (*this)(l->GetStart(), l->GetSourceId(), r->GetStart(), r->GetSourceId());
-        };
-
-        bool operator()(const TReplaceKeyAdapter& lStart, const ui64 lSourceId, const TReplaceKeyAdapter& rStart, const ui64 rSourceId) const {
-            const std::partial_ordering compareResult = lStart.Compare(rStart);
+            const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
             if (compareResult == std::partial_ordering::equivalent) {
-                return lSourceId < rSourceId;
+                return l->GetSourceId() < r->GetSourceId();
             } else {
                 return Reverse ? compareResult == std::partial_ordering::greater : compareResult == std::partial_ordering::less;
             }
-        }
+        };
     };
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
@@ -503,7 +499,7 @@ public:
     }
 
     bool operator<(const TSourceConstructor& item) const {
-        return !IDataSource::TCompareStartForScanSequence<false>()(Start, SourceId, item.Start, item.SourceId);
+        return item.Start < Start;
     }
 
     std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {

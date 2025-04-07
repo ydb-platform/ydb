@@ -280,7 +280,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     const ui64 sourceId = ev->Get()->GetSource()->GetSourceId();
     const auto range = Intervals.GetRangeBySourceId(sourceId);
 
-    const THashSet<ui64> notFetchedSources = NotFetchedSourcesIndex.GetIntersections(range.GetFirstIdx(), range.GetLastIdx());
+    const THashSet<ui64> notFetchedSources = NotFetchedSourcesIndex.GetPartialIntersections(range.GetFirstIdx(), range.GetLastIdx());
     for (const auto& sourceId : notFetchedSources) {
         StartAllocation(sourceId, ev->Get()->GetSource());
     }
@@ -402,7 +402,7 @@ void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std
     request->AddPortion(source->GetPortionInfoPtr());
     request->SetColumnIds(
         { fetchingContext->GetResultSchema()->GetColumnIds().begin(), fetchingContext->GetResultSchema()->GetColumnIds().end() });
-    request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(fetchingContext, memoryGroupId));
+    request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(fetchingContext));
 
     source->GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
 }

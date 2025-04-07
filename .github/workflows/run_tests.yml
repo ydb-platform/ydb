@@ -83,14 +83,34 @@ on:
         default: '["main"]'
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_array: ${{ steps.set-branches.outputs.branch_array }}
+    steps:
+      - name: Set branches
+        id: set-branches
+        run: |
+          INPUT_BRANCHES='${{ inputs.branches }}'
+          # Check if input is a JSON array
+          if [[ $INPUT_BRANCHES == \[* ]]; then
+            echo "branch_array=$INPUT_BRANCHES" >> $GITHUB_OUTPUT
+          else
+            # If it's a single branch, create a JSON array with one element
+            echo "branch_array=[\"$INPUT_BRANCHES\"]" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Using branches: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+
   run_tests:
+    needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
     runs-on: ${{ inputs.runner_label }}
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ contains(inputs.branches, '[') && fromJson(inputs.branches) || fromJSON(format('["{0}"]', inputs.branches)) }}
+        branch: ${{ fromJson(needs.prepare.outputs.branch_array) }}
     steps:
       - name: Set variables based on build_preset
         id: set-vars

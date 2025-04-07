@@ -897,6 +897,7 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     }
     if (!FromStringWithDefault<bool>(params.Get("ui64"), false)) {
         Proto2JsonConfig.StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
+        Proto2JsonConfig.StringifyNumbersRepeated = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
     }
     Proto2JsonConfig.MapAsObject = true;
     Proto2JsonConfig.ConvertAny = true;

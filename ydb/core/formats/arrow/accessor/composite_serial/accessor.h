@@ -13,6 +13,7 @@ private:
     const TString Data;
     const TStringBuf DataBuffer;
     const bool ForLazyInitialization;
+    mutable TAtomicCounter Counter = 0;
 
 protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {

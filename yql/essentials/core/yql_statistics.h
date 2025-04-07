@@ -27,6 +27,23 @@ enum EStorageType : ui32 {
     ColumnStorage
 };
 
+// Map of table aliases to their original table names
+struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
+private:
+    THashMap<TString, TString> TableToAlias;
+    THashMap<TString, TString> AliasToTable;
+
+    THashMap<TString, TString> BaseColumnByRename;
+public:
+    TTableAliasMap() = default;
+
+    TString GetAlias(const TString& table) const;
+    void AddMapping(const TString& table, const TString& alias);
+
+    TString GetBaseColumnByRename(const TString& rename);
+    void AddRename(const TString& from, const TString& to);
+};
+
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
 struct IProviderStatistics {
@@ -73,8 +90,22 @@ struct TOptimizerStatistics {
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
         TVector<NDq::TJoinColumn> Data;
         TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        TString ToString() {
+            TString result;
+
+            for (const auto& column: Data) {
+                result.append(column.RelName).append(".").append(column.AttributeName).append(", ");
+            }
+            if (!result.empty()) {
+                result.pop_back();
+                result.pop_back();
+            }
+
+            return result;
+        }
     };
 
+    TString SourceTableName;
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
@@ -84,11 +115,13 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
-    EStorageType StorageType = EStorageType::NA;
     TIntrusivePtr<TSortColumns> SortColumns;
+    EStorageType StorageType = EStorageType::NA;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
+
     NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+    std::optional<std::size_t> ShuffleOrderingIdx;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;

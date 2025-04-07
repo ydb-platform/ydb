@@ -5,6 +5,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include "util/string/join.h"
 
 namespace NYql::NDq {
 
@@ -492,6 +493,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         outputStats.SortColumns = inputStats->SortColumns;
         outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
         outputStats.LogicalOrderings = inputStats->LogicalOrderings;
+        outputStats.SourceTableName = inputStats->SourceTableName;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -577,10 +579,10 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
-void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
 
     auto inputNode = TExprBase(input);
-    auto agg = inputNode.Cast<TCoAggregateCombine>();
+    auto agg = inputNode.Cast<TCoAggregateBase>();
     auto aggInput = agg.Input();
 
     auto inputStats = typeCtx->GetStats(aggInput.Raw());
@@ -588,7 +590,26 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));
+    auto aggStats = RemoveOrdering(inputStats);
+    aggStats->ShuffledByColumns = nullptr;
+    auto keysStats = typeCtx->GetStats(agg.Keys().Raw());
+
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
+    }
+
+    if (typeCtx->OrderingsFSM.IsBuilt() && keysStats && keysStats->ShuffleOrderingIdx) {
+        Y_ENSURE(
+            keysStats && keysStats->ShuffleOrderingIdx,
+            TStringBuilder{} << "FSM was built, but orderingIdx wasn' set for aggregation with keys: " << JoinSeq(", ", strKeys);
+        );
+        aggStats->LogicalOrderings = typeCtx->OrderingsFSM.CreateState(*keysStats->ShuffleOrderingIdx);
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
+    typeCtx->SetStats(input.Get(), std::move(aggStats));
 }
 
 /**

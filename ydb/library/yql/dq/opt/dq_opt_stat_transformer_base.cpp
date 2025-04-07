@@ -46,8 +46,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoSkipNullMembers::Match(input.Get())){
         InferStatisticsForSkipNullMembers(input, TypeCtx);
     }
-    else if(TCoAggregateCombine::Match(input.Get())){
-        InferStatisticsForAggregateCombine(input, TypeCtx);
+    else if(auto aggregateBase = TMaybeNode<TCoAggregateBase>(input.Get())){
+        InferStatisticsForAggregateBase(input, TypeCtx);
     }
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
@@ -72,8 +72,40 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
 
-    // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
+    // Collect aliases
     else if(TCoEquiJoin::Match(input.Get())){
+        auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
+
+        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+            auto joinArg = input.List();
+
+            auto stats = TypeCtx->GetStats(joinArg.Raw());
+            if (!stats) {
+                continue;
+            }
+
+            auto scope = input.Scope();
+            if (!scope.Maybe<TCoAtom>()) {
+                continue;
+            }
+            TString label = TString(scope.Cast<TCoAtom>().Value());
+
+            if (!stats->SourceTableName.empty()) {
+                TypeCtx->TableAliases.AddMapping(stats->SourceTableName, label);
+            }
+        }
+
+        for (const auto& option : equiJoin.Arg(equiJoin.ArgCount() - 1).Ref().Children()) {
+            if (option->Head().IsAtom("rename")) {
+                TCoAtom fromName{option->Child(1)};
+                YQL_ENSURE(!fromName.Value().empty());
+                TCoAtom toName{option->Child(2)};
+                if (!toName.Value().empty()) {
+                    TypeCtx->TableAliases.AddRename(fromName.StringValue(), toName.StringValue());
+                }
+            }
+        }
     }
 
     // In case of DqSource, propagate the statistics from the correct argument

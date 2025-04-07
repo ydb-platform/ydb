@@ -4,7 +4,6 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <util/generic/hash.h>
-#include <util/string/join.h>
 
 #include <sstream>
 #include <bit>
@@ -25,6 +24,20 @@
 
 namespace NYql::NDq {
 
+template<typename Sep, typename Container>
+TString JoinSubsequence(const Sep& sep, const Container& container) {
+    std::ostringstream ss;
+    auto it = container.begin();
+    if (it != container.end()) {
+        ss << *it;
+        ++it;
+    }
+    for (; it != container.end(); ++it) {
+        ss << sep << *it;
+    }
+    return ss.str();
+}
+
 struct TOrdering {
     enum EType : uint32_t {
         EShuffle
@@ -35,7 +48,7 @@ struct TOrdering {
     }
 
     std::string ToString() const {
-        return "{" + JoinSeq(", ", Items) + "}";
+        return "{" + JoinSubsequence(", ", Items) + "}";
     }
 
     std::vector<std::size_t> Items;
@@ -75,7 +88,7 @@ struct TFunctionalDependency {
 
     std::string ToString() const {
         std::ostringstream ss;
-        ss << "{" + JoinSeq(", ", AntecedentItems) + "}";
+        ss << "{" + JoinSubsequence(", ", AntecedentItems) + "}";
 
         if (Type == EEquivalence) {
             ss << " = ";
@@ -173,7 +186,7 @@ public:
         return columns;
     }
 
-    std::string ToString() {
+    std::string ToString() const {
         auto toVectorString = [](auto seq) {
             TVector<TString> strVector;
             strVector.reserve(seq.size());
@@ -190,8 +203,8 @@ public:
             ss << "{" << idx << ": " << column << "}, ";
         }
         ss << "\n";
-        ss << "FDs: " << JoinSeq(", ", toVectorString(FDs)) << "\n";
-        ss << "Interesting Orderings: " << JoinSeq(", ", toVectorString(InterestingOrderings)) << "\n";
+        ss << "FDs: " << JoinSubsequence(", ", toVectorString(FDs)) << "\n";
+        ss << "Interesting Orderings: " << JoinSubsequence(", ", toVectorString(InterestingOrderings)) << "\n";
 
         return ss.str();
     }
@@ -238,7 +251,7 @@ private:
             return IdxByColumn[fullPath];
         }
 
-        Y_ENSURE(!column.RelName.empty() && !column.AttributeName.empty());
+        Y_ENSURE(!column.AttributeName.empty());
         Y_ENSURE(createIfNotExists, "There's no such column: " + fullPath);
 
         ColumnByIdx.push_back(column);
@@ -364,7 +377,7 @@ public:
         return TLogicalOrderings(&DFSM);
     }
 
-    TLogicalOrderings CreateState(std::size_t orderingIdx) {
+    TLogicalOrderings CreateState(std::int64_t orderingIdx) {
         auto state = TLogicalOrderings(&DFSM);
         state.SetOrdering(orderingIdx);
         return state;
@@ -407,6 +420,17 @@ public:
         return fdSet;
     }
 
+    std::string ToString() const {
+        std::ostringstream ss;
+        ss << "TOrderingsStateMachine:\n";
+        ss << "Built: " << (Built ? "true" : "false") << "\n";
+        ss << "FdMapping: [" << JoinSubsequence(", ", FdMapping) << "]\n";
+        ss << "FDStorage:\n" << FDStorage.ToString() << "\n";
+        ss << NFSM.ToString();
+        ss << DFSM.ToString(NFSM);
+        return ss.str();
+    }
+
 private:
     void Build(
         const std::vector<TFunctionalDependency>& fds,
@@ -440,6 +464,15 @@ private:
 
             TOrdering Ordering;
             std::int64_t InterestingOrderingIdx; // -1 if node isn't interesting
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Node{Type=" << (Type == EArtificial ? "Artificial" : "Interesting")
+                   << ", Ordering=" << Ordering.ToString()
+                   << ", InterestingOrderingIdx=" << InterestingOrderingIdx
+                   << ", OutgoingEdges=[" << JoinSubsequence(", ", OutgoingEdges) << "]}";
+                return ss.str();
+            }
         };
 
         struct TEdge {
@@ -450,10 +483,33 @@ private:
             enum _ : std::int64_t {
                 EPSILON = -1 // eps edges with give us nodes without applying any FDs.
             };
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Edge{src=" << srcNodeIdx
+                   << ", dst=" << dstNodeIdx
+                   << ", fdIdx=" << (fdIdx == EPSILON ? "EPSILON" : std::to_string(fdIdx))
+                   << "}";
+                return ss.str();
+            }
         };
 
         std::size_t Size() {
             return Nodes.size();
+        }
+
+        std::string ToString() const {
+            std::ostringstream ss;
+            ss << "NFSM:\n";
+            ss << "Nodes (" << Nodes.size() << "):\n";
+            for (std::size_t i = 0; i < Nodes.size(); ++i) {
+                ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+            }
+            ss << "Edges (" << Edges.size() << "):\n";
+            for (std::size_t i = 0; i < Edges.size(); ++i) {
+                ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+            }
+            return ss.str();
         }
 
     public:
@@ -552,16 +608,63 @@ private:
             std::vector<std::size_t> NFSMNodes;
             std::bitset<EMaxFDCount> OutgoingFDs;
             std::bitset<EMaxNFSMStates> NFSMNodesBitset;
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Node{NFSMNodes=[" << JoinSubsequence(", ", NFSMNodes) << "], "
+                   << "OutgoingFDs=" << OutgoingFDs.to_string() << "}";
+                return ss.str();
+            }
         };
 
         struct TEdge {
             std::size_t srcNodeIdx;
             std::size_t dstNodeIdx;
             std::int64_t fdIdx;
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Edge{src=" << srcNodeIdx
+                   << ", dst=" << dstNodeIdx
+                   << ", fdIdx=" << fdIdx
+                   << "}";
+                return ss.str();
+            }
         };
 
         std::size_t Size() {
             return Nodes.size();
+        }
+
+        std::string ToString(const TNFSM& nfsm) const {
+            std::ostringstream ss;
+            ss << "DFSM:\n";
+            ss << "Nodes (" << Nodes.size() << "):\n";
+            for (std::size_t i = 0; i < Nodes.size(); ++i) {
+                ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+                ss << "    NFSMNodes: [";
+                for (std::size_t j = 0; j < Nodes[i].NFSMNodes.size(); ++j) {
+                    std::size_t nfsmNodeIdx = Nodes[i].NFSMNodes[j];
+                    if (j > 0) {
+                        ss << ", ";
+                    }
+                    ss << nfsmNodeIdx;
+                    if (nfsmNodeIdx < nfsm.Nodes.size()) {
+                        ss << "(" << nfsm.Nodes[nfsmNodeIdx].Ordering.ToString() << ")";
+                    }
+                }
+                ss << "]\n";
+            }
+            ss << "Edges (" << Edges.size() << "):\n";
+            for (std::size_t i = 0; i < Edges.size(); ++i) {
+                ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+            }
+            ss << "InitStateByOrderingIdx (" << InitStateByOrderingIdx.size() << "):\n";
+            for (std::size_t i = 0; i < InitStateByOrderingIdx.size(); ++i) {
+                ss << "  " << i << ": StateIdx=" << InitStateByOrderingIdx[i].StateIdx
+                   << ", ShuffleHashFuncArgsCount=" << InitStateByOrderingIdx[i].ShuffleHashFuncArgsCount << "\n";
+            }
+            return ss.str();
         }
 
     public:

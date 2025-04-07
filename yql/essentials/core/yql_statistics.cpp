@@ -45,6 +45,11 @@ TString TOptimizerStatistics::ToString() const {
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
+
+    if (!s.SourceTableName.empty()) {
+        os << ", SourceTable: " << s.SourceTableName;
+    }
+
     if (s.KeyColumns) {
         os << ", keys: ";
 
@@ -74,7 +79,7 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         }
         os << "[" << tmp << "]";
     }
-    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState() << ", ";
+    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState();
 
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
@@ -99,11 +104,39 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
 
         os << tmp;
     }
+
     return os;
 }
 
 bool TOptimizerStatistics::Empty() const {
     return ! (Nrows || Ncols || Cost);
+}
+
+void TTableAliasMap::AddMapping(const TString& table, const TString& alias) {
+    TableToAlias[table] = alias;
+    AliasToTable[alias] = table;
+}
+
+TString TTableAliasMap::GetAlias(const TString& table) const {
+    auto it = TableToAlias.find(table);
+    if (it == TableToAlias.end()) {
+        return table;
+    }
+    return it->second;
+}
+
+TString TTableAliasMap::GetBaseColumnByRename(const TString& rename) {
+    return BaseColumnByRename.contains(rename)? BaseColumnByRename[rename] : "";
+}
+
+void TTableAliasMap::AddRename(const TString& from, const TString& to) {
+    if (from.Contains('.')) {
+        BaseColumnByRename[from] = from;
+        BaseColumnByRename[to] = from;
+        return;
+    }
+
+    BaseColumnByRename[to] = BaseColumnByRename[from];
 }
 
 TOptimizerStatistics::TOptimizerStatistics(
@@ -121,10 +154,15 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Ncols(ncols)
     , ByteSize(byteSize)
     , Cost(cost)
+    , Selectivity(1.0)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , ShuffledByColumns(nullptr)
+    , SortColumns(nullptr)
     , StorageType(storageType)
     , Specific(std::move(specific))
+    , Labels(nullptr)
+    , LogicalOrderings()
 {
 }
 

@@ -12,6 +12,7 @@ private:
     virtual std::shared_ptr<IDataSource> DoExtractNext() = 0;
     virtual bool DoCheckInFlightLimits() const = 0;
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) = 0;
+    virtual void DoOnIntervalResult(const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<IDataSource>& source) = 0;
     virtual void DoClear() = 0;
 
     TPositiveControlInteger SourcesInFlightCount;
@@ -28,6 +29,10 @@ protected:
 public:
     std::shared_ptr<IScanCursor> BuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const {
         return DoBuildCursor(source, readyRecords);
+    }
+
+    void OnIntervalResult(const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<IDataSource>& source) {
+        return DoOnIntervalResult(table, source);
     }
 
     TString DebugString() const {
@@ -87,6 +92,8 @@ private:
     virtual bool DoCheckInFlightLimits() const override {
         return InFlightCount < InFlightLimit;
     }
+    virtual void DoOnIntervalResult(const std::shared_ptr<arrow::Table>& /*table*/, const std::shared_ptr<IDataSource>& /*source*/) override {
+    }
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override {
         if (!source->GetResultRecordsCount() && InFlightLimit * 2 < GetMaxInFlight()) {
             InFlightLimit *= 2;
@@ -103,8 +110,7 @@ public:
     TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
         const std::shared_ptr<IScanCursor>& cursor, const std::optional<ui32> limit)
         : TBase(context)
-        , Limit(limit)
-    {
+        , Limit(limit) {
         if (Limit) {
             InFlightLimit = 1;
         } else {
@@ -140,6 +146,8 @@ private:
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(source->GetStartPKRecordBatch(), source->GetSourceId(), readyRecords);
+    }
+    virtual void DoOnIntervalResult(const std::shared_ptr<arrow::Table>& /*table*/, const std::shared_ptr<IDataSource>& /*source*/) override {
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
         AFL_VERIFY(HeapSources.size());
@@ -192,6 +200,13 @@ private:
             , SourceId(source->GetSourceId())
             , SourceIdx(source->GetSourceIdx()) {
         }
+
+        TFinishedDataSource(const std::shared_ptr<IDataSource>& source, const ui32 partSize)
+            : RecordsCount(partSize)
+            , SourceId(source->GetSourceId())
+            , SourceIdx(source->GetSourceIdx()) {
+            AFL_VERIFY(partSize < source->GetResultRecordsCount());
+        }
     };
 
     std::deque<TSourceConstructor> HeapSources;
@@ -203,6 +218,7 @@ private:
     std::map<TCompareKeyForScanSequence, TFinishedDataSource> FinishedSources;
     std::set<TCompareKeyForScanSequence> FetchingInFlightSources;
 
+    virtual void DoOnIntervalResult(const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<IDataSource>& source) override;
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(source->GetStartPKRecordBatch(), source->GetSourceId(), readyRecords);
     }
@@ -214,7 +230,8 @@ private:
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return (FetchingInFlightCount < GetMaxInFlight()) && (FullIntervalsFetchingCount < InFlightLimit);
+        return (FetchingInFlightCount < InFlightLimit);
+        //&&(FullIntervalsFetchingCount < InFlightLimit);
     }
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;

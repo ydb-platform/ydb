@@ -386,6 +386,22 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT OPTIONAL<"}), expected);
     }
 
+    Y_UNIT_TEST(TypeNameAsArgument) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {TypeName, "Uint64"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT Nothing(Uint"}), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {Keyword, "OPTIONAL<"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT Nothing(Option"}), expected);
+        }
+    }
+
     Y_UNIT_TEST(UTF8Wide) {
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"\xF0\x9F\x98\x8A"}).size(), 0);

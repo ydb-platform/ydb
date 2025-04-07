@@ -6,6 +6,9 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 
+#define DEBUG_SYMBOLIZE_STACK(stack) \
+    auto debug_symbolized_##stack = Symbolized(stack)
+
 namespace NSQLComplete {
 
     const TVector<TRuleId> KeywordRules = {
@@ -23,6 +26,7 @@ namespace NSQLComplete {
 
     const TVector<TRuleId> TypeNameRules = {
         RULE(Type_name_simple),
+        RULE(An_id_or_type),
     };
 
     const TVector<TRuleId> FunctionNameRules = {
@@ -30,6 +34,17 @@ namespace NSQLComplete {
         RULE(An_id_or_type),
         RULE(Id_or_type),
     };
+
+    TVector<std::string> Symbolized(const TParserCallStack& stack) {
+        const ISqlGrammar& grammar = GetSqlGrammar();
+
+        TVector<std::string> symbolized;
+        symbolized.reserve(stack.size());
+        for (const TRuleId& rule : stack) {
+            symbolized.emplace_back(grammar.SymbolizedRule(rule));
+        }
+        return symbolized;
+    }
 
     bool EndsWith(const TParserCallStack& suffix, const TParserCallStack& stack) {
         if (stack.size() < suffix.size()) {
@@ -39,12 +54,21 @@ namespace NSQLComplete {
         return Equal(std::begin(stack) + prefixSize, std::end(stack), std::begin(suffix));
     }
 
+    bool Contains(const TParserCallStack& sequence, const TParserCallStack& stack) {
+        return !std::ranges::search(stack, sequence).empty();
+    }
+
     bool ContainsRule(TRuleId rule, const TParserCallStack& stack) {
         return Find(stack, rule) != std::end(stack);
     }
 
     bool IsLikelyTypeStack(const TParserCallStack& stack) {
-        return EndsWith({RULE(Type_name_simple)}, stack);
+        return EndsWith({RULE(Type_name_simple)}, stack) ||
+               (Contains({RULE(Invoke_expr),
+                          RULE(Named_expr_list),
+                          RULE(Named_expr),
+                          RULE(Expr)}, stack) &&
+                EndsWith({RULE(Atom_expr), RULE(An_id_or_type)}, stack));
     }
 
     bool IsLikelyFunctionStack(const TParserCallStack& stack) {

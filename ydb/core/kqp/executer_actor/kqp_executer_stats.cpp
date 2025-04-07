@@ -942,8 +942,10 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         // TODO(ilezhankin): investigate - for some reason `task.FinishTimeMs` may be large (or small?)
         //      enough to result in an enormous duration - triggering the "long tasks" mode.
 
-        auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() > task.GetStartTimeMs()
-            ? task.GetFinishTimeMs() - task.GetStartTimeMs() : 0);
+        auto taskDuration = TDuration::MilliSeconds(
+            task.GetStartTimeMs() != 0 && task.GetFinishTimeMs() >= task.GetStartTimeMs()
+            ? task.GetFinishTimeMs() - task.GetStartTimeMs()
+            : 0);
         auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
         if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;
@@ -1089,8 +1091,10 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 
         // checking whether the task is long
 
-        auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() > task.GetStartTimeMs()
-            ? task.GetFinishTimeMs() - task.GetStartTimeMs() : 0);
+        auto taskDuration = TDuration::MilliSeconds(
+            task.GetStartTimeMs() != 0 && task.GetFinishTimeMs() >= task.GetStartTimeMs()
+            ? task.GetFinishTimeMs() - task.GetStartTimeMs()
+            : 0);
         auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
         if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;

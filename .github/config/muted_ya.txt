@@ -34,8 +34,6 @@ ydb/core/kqp/ut/query KqpLimits.TooBigColumn+useSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
-ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer
-ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer_QueryService
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
@@ -101,6 +99,12 @@ ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quota
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests [test_sql_logic.py */*] chunk chunk
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
+ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-select.test]
+ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select1-1.test]
+ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-1.test]
+ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-3.test]
+ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-4.test]
+ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select3-9.test]
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select3-13.test]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]

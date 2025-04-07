@@ -243,8 +243,8 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TPrefixKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
-                                                                            << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -298,11 +298,6 @@ protected:
         LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
-    }
-
-    ui64 GetProbability()
-    {
-        return Rng.GenRand64();
     }
 
     bool ShouldWaitUpload()
@@ -382,6 +377,11 @@ protected:
             ++pos;
         }
     }
+
+    ui64 GetProbability()
+    {
+        return Rng.GenRand64();
+    }
 };
 
 template <typename TMetric>
@@ -395,17 +395,13 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
-
     void StartNewPrefix() {
         Parent = Child + K;
         Child = Parent + 1;
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
-        // TODO(mbkkt) Upper or Lower doesn't matter here, because we seek to (prefix, inf)
-        // so we can choose Lower if it's faster.
-        // Exact seek with Lower also possible but needs to rewrite some code in Feed
-        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper);
+        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
         IsFirstPrefixFeed = true;
         IsPrefixRowsValid = true;

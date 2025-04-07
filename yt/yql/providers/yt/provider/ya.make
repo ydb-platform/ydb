@@ -73,6 +73,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson/node
+    library/cpp/json/writer
     library/cpp/disjoint_sets
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface

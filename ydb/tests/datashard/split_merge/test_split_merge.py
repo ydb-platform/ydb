@@ -1,4 +1,3 @@
-import yatest
 import pytest
 import time
 
@@ -77,6 +76,8 @@ class TestSplitMerge(TestBase):
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+        big_line = "a" * 100_000
+        all_types["big_line"] = "'String " + big_line +  "{}'"
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.query(f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")

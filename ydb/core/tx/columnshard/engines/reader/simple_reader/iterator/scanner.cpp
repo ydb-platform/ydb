@@ -65,7 +65,7 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (Context->GetReadMetadata()->IsSorted()) {
+    if (Context->GetReadMetadata()->IsSorted() || Context->GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES) {
         if (Context->GetReadMetadata()->HasLimit()) {
             SourcesCollection =
                 std::make_unique<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());

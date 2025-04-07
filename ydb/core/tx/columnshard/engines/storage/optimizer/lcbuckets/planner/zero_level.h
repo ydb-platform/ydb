@@ -11,6 +11,7 @@ private:
     const TDuration DurationToDrop;
     const ui64 ExpectedBlobsSize;
     const ui64 PortionsCountAvailable;
+    const std::optional<ui64> PortionsCountLimit;
     class TOrderedPortion {
     private:
         YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
@@ -38,6 +39,13 @@ private:
         }
     };
     std::set<TOrderedPortion> Portions;
+
+    virtual bool IsOverloaded() const override {
+        if (!PortionsCountLimit) {
+            return false;
+        }
+        return Portions.size() > *PortionsCountLimit;
+    }
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         return NArrow::NMerger::TIntervalPositions();
@@ -95,7 +103,7 @@ private:
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
-        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable);
+        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::optional<ui64> portionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

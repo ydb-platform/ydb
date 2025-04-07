@@ -141,6 +141,7 @@ TSchemeActualizer::TSchemeActualizer(const TInternalPathId pathId, const TVersio
     : PathId(pathId)
     , VersionedIndex(versionedIndex) {
     Y_UNUSED(PathId);
+    //TargetSchema = VersionedIndex.GetLastCriticalSchema();
 }
 
 }

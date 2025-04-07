@@ -63,7 +63,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
         if (!dWait) {
-            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
+            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());//
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }

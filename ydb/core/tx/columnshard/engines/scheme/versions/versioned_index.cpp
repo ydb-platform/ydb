@@ -13,7 +13,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
         Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo->GetPrimaryKey()));
     }
 
-    const bool needActualization = indexInfo->GetSchemeNeedActualization();
+    const bool needActualization = indexInfo->GetSchemeNeedActualization();//
     auto newVersion = indexInfo->GetVersion();
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {

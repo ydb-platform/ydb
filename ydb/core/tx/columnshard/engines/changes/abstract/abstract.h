@@ -98,7 +98,7 @@ public:
         if (CurrentTierName != TargetTierName) {
             return true;
         }
-        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) { //
             return true;
         }
         AFL_VERIFY(false);

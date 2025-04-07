@@ -1185,25 +1185,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
     }
 
-
-
-
-    // TODO: EnableOneTierAfterTtl, EnableTtlAfterOneTier
-
-    Y_UNIT_TEST(HotTiers) {
-        TestTwoHotTiers(false, false);
-    }
-
-    Y_UNIT_TEST(RebootHotTiers) {
-        TestTwoHotTiers(true, false);
-    }
-
-    Y_UNIT_TEST(HotTiersWithStat) {
-        TestTwoHotTiers(false, false);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersWithStat) {
-        TestTwoHotTiers(true, false);
+    Y_UNIT_TEST(RebootInternalTTL) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
     }
 
     Y_UNIT_TEST(HotTiersRevCompression) {

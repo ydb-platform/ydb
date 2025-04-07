@@ -791,7 +791,7 @@ void TQueryExecutionStats::Prepare() {
     if (CollectFullStats(StatsMode)) {
         // stages
         for (auto& [stageId, info] : TasksGraph->GetStagesInfo()) {
-            auto [it, inserted] = StageStats.try_emplace(stageId.StageId);
+            auto [it, inserted] = StageStats.try_emplace(stageId);
             Y_ENSURE(inserted);
             it->second.StageId = stageId;
         }
@@ -800,14 +800,14 @@ void TQueryExecutionStats::Prepare() {
             auto& info = TasksGraph->GetStageInfo(stageStats.StageId);
             auto& stage = info.Meta.GetStage(info.Id);
             for (const auto& input : stage.GetInputs()) {
-                auto& peerStageStats = StageStats[input.GetStageIndex()];
+                auto& peerStageStats = StageStats[NYql::NDq::TStageId(stageStats.StageId.TxId, input.GetStageIndex())];
                 stageStats.InputStages.push_back(&peerStageStats);
                 peerStageStats.OutputStages.push_back(&stageStats);
             }
         }
         // tasks
         for (auto& task : TasksGraph->GetTasks()) {
-            auto& stageStats = StageStats[task.StageId.StageId];
+            auto& stageStats = StageStats[task.StageId];
             stageStats.Task2Index.emplace(task.Id, stageStats.Task2Index.size());
         }
         for (auto& [_, stageStats] : StageStats) {
@@ -1238,10 +1238,10 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
     Y_ASSERT(taskStats.GetTaskId() == taskId);
-    auto stageId = taskStats.GetStageId();
+    auto stageId = TasksGraph->GetTask(taskId).StageId;
     auto [it, inserted] = StageStats.try_emplace(stageId);
     if (inserted) {
-        it->second.StageId = TasksGraph->GetTask(taskStats.GetTaskId()).StageId;
+        it->second.StageId = stageId;
         it->second.SetHistorySampleCount(HistorySampleCount);
     }
     BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
@@ -1660,7 +1660,7 @@ void TQueryExecutionStats::Finish() {
         }
 
         AdjustBaseTime(stageStats);
-        auto it = StageStats.find(stageId.StageId);
+        auto it = StageStats.find(stageId);
         if (it != StageStats.end()) {
             it->second.ExportHistory(BaseTimeMs, *stageStats);
         }

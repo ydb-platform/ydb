@@ -279,12 +279,12 @@ struct TIngressExternalPartitionStat {
 
 struct TQueryExecutionStats {
 private:
-    std::map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
-    std::map<ui32, bool> UseLlvmByStageId;
-    std::map<ui32, TStageExecutionStats> StageStats;
-    std::map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
+    std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
+    std::unordered_map<ui32, bool> UseLlvmByStageId;
+    THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
+    std::unordered_map<ui32, TIngressExternalPartitionStat> ExternalPartitionStats; // FIXME: several ingresses
     ui64 BaseTimeMs = 0;
-    std::map<ui32, TDuration> LongestTaskDurations;
+    std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
     void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);

@@ -37,6 +37,19 @@ static const TString CLIENTID_WITHOUT_CONSUMER = "$without_consumer";
 
 typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
 
+struct TMessageInfo {
+    TInstant CreateTimestamp;
+    TInstant WriteTimestamp;
+};
+
+struct TConsumerSnapshot {
+    TMessageInfo LastCommittedMessage;
+
+    // Timstamp of the last read
+    TInstant LastReadTimestamp;
+    TMessageInfo LastReadMessage;
+};
+
 struct TUserInfoBase {
     TString User;
     ui64 ReadRuleGeneration = 0;
@@ -339,32 +352,9 @@ struct TUserInfo: public TUserInfoBase {
         return ReadTimestamp;
     }
 
-    TInstant GetWriteTimestamp(i64 endOffset) const {
-        return Offset == endOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
-    }
-
-    TInstant GetCreateTimestamp(i64 endOffset) const {
-        return Offset == endOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
-    }
-
-    TInstant GetReadWriteTimestamp(i64 endOffset) const {
-        if (GetReadOffset() >= endOffset) {
-            return TAppData::TimeProvider->Now();
-        }
-        return ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
-    }
-
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
-
-    TInstant GetReadCreateTimestamp(i64 endOffset) const {
-        if (GetReadOffset() >= endOffset) {
-            return TAppData::TimeProvider->Now();
-        }
-        return ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
-    }
-
 };
 
 class TUsersInfoStorage {

@@ -281,12 +281,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
     if (!ev->Get()->ClientId.empty()) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);
         if (userInfo) {
+            auto snapshot = CreateSnapshot(*userInfo);
             result.SetClientOffset(userInfo->Offset);
-            result.SetWriteTimestampMS(GetWriteTimestamp(*userInfo).MilliSeconds());
-            result.SetCreateTimestampMS(userInfo->GetCreateTimestamp(EndOffset).MilliSeconds());
+            result.SetWriteTimestampMS(snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds());
+            result.SetCreateTimestampMS(snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds());
             result.SetClientReadOffset(userInfo->GetReadOffset());
-            result.SetReadWriteTimestampMS(GetReadWriteTimestamp(*userInfo).MilliSeconds());
-            result.SetReadCreateTimestampMS(GetReadCreateTimestamp(*userInfo).MilliSeconds());
+            result.SetReadWriteTimestampMS(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
+            result.SetReadCreateTimestampMS(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
         }
     }
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));

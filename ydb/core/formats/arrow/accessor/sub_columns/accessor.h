@@ -62,7 +62,11 @@ protected:
             ColumnsData.Slice(offset, count), OthersData.Slice(offset, count, Settings), GetDataType(), count, Settings);
     }
 
+    std::shared_ptr<arrow::Array> BuildBJsonArray(const TColumnConstructionContext& context) const;
+
 public:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const override;
     virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
         AFL_VERIFY(false);
     }

@@ -461,13 +461,10 @@ struct TComputeScheduler::TImpl {
 
     enum : ui32 {
         TotalShare = 1,
-
         PerQueryShare = 2,
-
         ResourceWeight = 3,
         ResourceWeightEnabled = 4,
         TasksCount = 5,
-
         CompositeShare = 6,
         ResourceLimitValue = 7,
     };

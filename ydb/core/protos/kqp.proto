@@ -553,7 +553,7 @@ message TEvStartKqpTasksRequest {
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
     optional string SerializedGUCSettings = 8;
-    optional string SchedulerGroup = 9;
+    optional string PoolName = 9; // TODO: remove and use ExecuterActorId to match the query
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
     optional string DatabaseId = 17;

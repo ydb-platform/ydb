@@ -250,7 +250,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
 
-    request.SetSchedulerGroup(UserRequestContext->PoolId);
+    request.SetPoolName(UserRequestContext->PoolId);
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
     if (UserRequestContext->PoolConfig.has_value()) {

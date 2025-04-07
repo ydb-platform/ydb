@@ -202,9 +202,9 @@ private:
 
         auto schedulerNow = TlsActivationContext->Monotonic();
 
-        TString schedulerGroup = msg.GetSchedulerGroup();
+        TString poolName = msg.GetPoolName();
 
-        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
+        if (SchedulerOptions.Scheduler->Disabled(poolName)) {
             auto share = msg.GetPoolMaxCpuShare();
             if (share <= 0 && msg.HasResourceWeight()) {
                 share = 1.0;
@@ -215,10 +215,10 @@ private:
             }
 
             if (share > 0) {
-                Scheduler->UpdatePoolShare(schedulerGroup, share, schedulerNow, resourceWeight);
-                Send(SchedulerActorId, new NScheduler::TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+                Scheduler->UpdatePoolShare(poolName, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new NScheduler::TEvSchedulerNewPool(msg.GetDatabase(), poolName));
             } else {
-                schedulerGroup = "";
+                poolName = "";
             }
         }
 
@@ -230,7 +230,7 @@ private:
 
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
+            msg.GetPoolName(), msg.GetMemoryPoolPercent(),
             msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
@@ -238,10 +238,9 @@ private:
             NScheduler::TComputeActorOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
-                .Scheduler = Scheduler.get(),
-                .Pool = schedulerGroup,
+                .Pool = poolName,
                 .Weight = 1,
-                .NoThrottle = schedulerGroup.empty(),
+                .NoThrottle = poolName.empty(),
                 .Counters = Counters
             };
 

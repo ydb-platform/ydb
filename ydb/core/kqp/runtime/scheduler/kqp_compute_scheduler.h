@@ -43,7 +43,7 @@ struct TSchedulerEntity {
     TMaybe<TDuration> Delay(TMonotonic now);
 
     void MarkThrottled();
-    void MarkResumed(); // TODO: for temporary resume - for whatever reason
+    void MarkResumed();
     void MarkResumed(TMonotonic now);
 };
 
@@ -57,7 +57,7 @@ public:
     void UpdatePoolShare(TString poolName, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
 
-    void SetMaxDeviation(TDuration);
+    void SetMaxDeviation(TDuration); // for testing
     void SetForgetInterval(TDuration);
     ::NMonitoring::TDynamicCounters::TCounterPtr GetPoolUsageCounter(TString poolName) const;
 
@@ -79,7 +79,6 @@ struct TComputeActorOptions {
     TMonotonic Now;
     NActors::TActorId SchedulerActorId;
     THolder<TSchedulerEntity> Handle;
-    TComputeScheduler* Scheduler;
     TString Pool = "";
     double Weight = 1;
     bool NoThrottle = true;
@@ -136,13 +135,12 @@ public:
         if (!NoThrottle) {
             Y_ABORT_UNLESS(Counters);
             Y_ABORT_UNLESS(SelfHandle);
-            PoolUsage = options.Scheduler->GetPoolUsageCounter(options.Pool);
         } else {
             Y_ABORT_UNLESS(!SelfHandle);
         }
     }
 
-    static constexpr ui64 ResumeWakeupTag = 201;
+    static constexpr ui64 TAG_WAKEUP_RESUME = 201;
 
     TMonotonic Now() {
         return TMonotonic::Now();
@@ -151,7 +149,7 @@ public:
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
         auto tag = ev->Get()->Tag;
         CA_LOG_D("wakeup with tag " << tag);
-        if (tag == ResumeWakeupTag) {
+        if (tag == TAG_WAKEUP_RESUME) {
             TBase::DoExecute();
         } else {
             TBase::HandleExecuteBase(ev);
@@ -226,13 +224,12 @@ protected:
             TrackedWork += passed;
             SelfHandle->UpdateLastExecutionTime(passed);
             SelfHandle->TrackTime(passed, now);
-            PoolUsage->Add(passed.MicroSeconds());
             Counters->ComputeActorExecutions->Collect(passed.MicroSeconds());
         }
         if (delay) {
             Counters->SchedulerDelays->Collect(delay->MicroSeconds());
             CA_LOG_D("schedule wakeup after " << delay->MicroSeconds() << " msec ");
-            this->Schedule(*delay, new NActors::TEvents::TEvWakeup(ResumeWakeupTag));
+            this->Schedule(*delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
         }
 
         if (!executed) {
@@ -262,7 +259,6 @@ protected:
             toAccount -= minTime;
         }
 
-        PoolUsage->Add(toAccount.MicroSeconds());
         SelfHandle->TrackTime(toAccount, now);
         OldActivationStats = newStats;
     }
@@ -286,8 +282,7 @@ protected:
             }
             if (ExecutionTimer) {
                 TDuration passed = TDuration::MicroSeconds(ExecutionTimer->Passed() * SecToUsec);
-                SelfHandle->TrackTime(passed, now);
-                PoolUsage->Add(passed.MicroSeconds());
+                SelfHandle->TrackTime(passed, now); // TODO: account pool usage for |passed|
             }
         }
         if (SelfHandle) {
@@ -309,7 +304,6 @@ private:
     std::optional<ui64> OldActivationStats;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr PoolUsage;
 
     TString Pool;
     double Weight;

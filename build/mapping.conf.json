@@ -1333,6 +1333,7 @@
         "7879860842": "{registry_endpoint}/7879860842",
         "8367004015": "{registry_endpoint}/8367004015",
         "8418036683": "{registry_endpoint}/8418036683",
+        "8435535653": "{registry_endpoint}/8435535653",
         "2980468199": "{registry_endpoint}/2980468199",
         "5562224408": "{registry_endpoint}/5562224408",
         "7663495611": "{registry_endpoint}/7663495611"
@@ -2667,6 +2668,7 @@
         "7879860842": "yt/go/ytrecipe/cmd/ytexec for linux",
         "8367004015": "yt/go/ytrecipe/cmd/ytexec for linux",
         "8418036683": "yt/go/ytrecipe/cmd/ytexec for linux",
+        "8435535653": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
         "7663495611": "ytexec for linux"

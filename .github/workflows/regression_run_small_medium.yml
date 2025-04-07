@@ -25,5 +25,5 @@ jobs:
     with:
       test_targets: ydb/
       test_size: small,medium
-      branches: ${{ github.event.inputs.branches != '' && github.event.inputs.branches || github.env.DEFAULT_BRANCHES }}
+      branches: ${{ github.event.inputs.branches || github.env.DEFAULT_BRANCHES }}
       build_preset: ${{ matrix.build_preset }}

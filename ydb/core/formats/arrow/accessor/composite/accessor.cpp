@@ -110,4 +110,23 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
     return true;
 }
 
+std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    ui32 pos = 0;
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    for (auto&& i : Chunks) {
+        auto sliceCtx = context.Slice(pos, i->GetRecordsCount());
+        if (!sliceCtx) {
+            if (chunks.size()) {
+                break;
+            } else {
+                continue;
+            }
+        }
+        std::shared_ptr<arrow::ChunkedArray> arr = i->GetChunkedArray(*sliceCtx);
+        chunks.insert(chunks.end(), arr->chunks().begin(), arr->chunks().end());
+        pos += i->GetRecordsCount();
+    }
+    return std::make_shared<arrow::ChunkedArray>(std::move(chunks));
+}
+
 }   // namespace NKikimr::NArrow::NAccessor

@@ -43,6 +43,7 @@ private:
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
     std::optional<ui32> RecordsCountActual;
+    const std::optional<ui32> RecordsCountOriginal;
     THashSet<i64> Markers;
 
 public:
@@ -75,9 +76,21 @@ public:
         return *RecordsCountActual;
     }
 
+    ui32 GetRecordsCountRobustVerified() const {
+        if (UseFilter) {
+            AFL_VERIFY(!!RecordsCountActual);
+            return *RecordsCountActual;
+        } else {
+            AFL_VERIFY(!!RecordsCountOriginal);
+            return *RecordsCountOriginal;
+        }
+    }
+
     TAccessorsCollection() = default;
     TAccessorsCollection(const ui32 baseRecordsCount)
-        : RecordsCountActual(baseRecordsCount) {
+        : RecordsCountActual(baseRecordsCount)
+        , RecordsCountOriginal(baseRecordsCount)
+    {
     }
 
     std::optional<TAccessorsCollection> SelectOptional(const std::vector<ui32>& indexes, const bool withFilters) const;

@@ -203,11 +203,20 @@ public:
     }
 };
 
-IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
-    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
-    for (ui32 recordIndex = 0; recordIndex < GetRecordsCount(); ++recordIndex) {
+    const ui32 start = context.GetStartIndex().value_or(0);
+    const ui32 finish = start + context.GetRecordsCount().value_or(GetRecordsCount() - start);
+    std::optional<std::vector<bool>> simpleFilter;
+    if (context.GetFilter()) {
+        simpleFilter = context.GetFilter()->BuildSimpleFilter();
+    }
+    for (ui32 recordIndex = start; recordIndex < finish; ++recordIndex) {
+        if (simpleFilter && !(*simpleFilter)[recordIndex]) {
+            continue;
+        }
+        it.SkipRecordTo(recordIndex);
         TJsonRestorer value;
         auto onStartRecord = [&](const ui32 index) {
             AFL_VERIFY(recordIndex == index)("count", recordIndex)("index", index);
@@ -234,7 +243,21 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
     }
-    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builder)), 0, 0);
+    return NArrow::FinishBuilder(std::move(builder));
+}
+
+std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    auto chunk = BuildBJsonArray(context);
+    if (chunk->length()) {
+        return std::make_shared<arrow::ChunkedArray>(chunk);
+    } else {
+        return std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector(), GetDataType());
+    }
+}
+
+IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    return TLocalDataAddress(BuildBJsonArray(TColumnConstructionContext()), 0, 0);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

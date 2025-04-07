@@ -24,26 +24,7 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
 }
 
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
-    AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
-    ui32 currentOffset = offset;
-    ui32 countLeast = count;
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    auto address = GetChunkSlow(offset);
-    while (countLeast) {
-        address = GetChunk(address.GetAddress(), currentOffset);
-        const ui64 internalPos = address.GetAddress().GetLocalIndex(currentOffset);
-        if (internalPos + countLeast <= (ui64)address.GetArray()->length()) {
-            chunks.emplace_back(address.GetArray()->Slice(internalPos, countLeast));
-            break;
-        } else {
-            const ui32 deltaCount = address.GetArray()->length() - internalPos;
-            chunks.emplace_back(address.GetArray()->Slice(internalPos, deltaCount));
-            AFL_VERIFY(countLeast >= deltaCount);
-            countLeast -= deltaCount;
-            currentOffset += deltaCount;
-        }
-    }
-    return std::make_shared<arrow::ChunkedArray>(chunks, DataType);
+    return GetChunkedArray(TColumnConstructionContext().SetStartIndex(offset).SetRecordsCount(count));
 }
 
 IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
@@ -62,10 +43,10 @@ IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAdd
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
-//        if (chunkCurrent) {
-//            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
-//                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
-//        }
+        //        if (chunkCurrent) {
+        //            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
+        //                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
+        //        }
         auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
@@ -121,8 +102,8 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
 }
 
 std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-    AFL_VERIFY(selfPtr);
     if (filter.IsTotalAllowFilter()) {
+        AFL_VERIFY(selfPtr);
         return selfPtr;
     }
     if (filter.IsTotalDenyFilter()) {
@@ -134,7 +115,7 @@ std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& f
     return result;
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray() const {
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArrayTrivial() const {
     std::vector<std::shared_ptr<arrow::Array>> chunks;
     std::optional<TFullDataAddress> address;
     for (ui32 position = 0; position < GetRecordsCount();) {
@@ -143,6 +124,23 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray() const {
         position += address->GetArray()->length();
     }
     return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
+}
+
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    if (context.GetStartIndex() || context.GetRecordsCount()) {
+        const ui32 start = context.GetStartIndex().value_or(0);
+        const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
+        auto slice = ISlice(start, count);
+        if (context.GetFilter()) {
+            return ApplyFilter(*context.GetFilter(), nullptr)->GetChunkedArrayTrivial();
+        } else {
+            return slice->GetChunkedArrayTrivial();
+        }
+    } else if (context.GetFilter()) {
+        return ApplyFilter(*context.GetFilter(), nullptr)->GetChunkedArrayTrivial();
+    } else {
+        return GetChunkedArrayTrivial();
+    }
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {

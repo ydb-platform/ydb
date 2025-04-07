@@ -155,14 +155,12 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
         AFL_VERIFY(StartIndex == 0);
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
+    contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
-            if (!resultBatch->num_rows()) {
-                resultBatch = nullptr;
-            }
+        if (!resultBatch->num_rows()) {
+            resultBatch = nullptr;
         }
     }
 

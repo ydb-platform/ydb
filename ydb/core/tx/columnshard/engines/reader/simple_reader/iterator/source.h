@@ -48,7 +48,7 @@ public:
 class TReplaceKeyAdapter {
 private:
     bool Reverse = false;
-    NArrow::TReplaceKey Value;
+    NArrow::TComparablePosition Value;
 
 public:
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
@@ -56,9 +56,14 @@ public:
         , Value(rk) {
     }
 
+    TReplaceKeyAdapter(const NArrow::TComparablePosition& pos, const bool reverse)
+        : Reverse(reverse)
+        , Value(pos) {
+    }
+
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
         AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.CompareNotNull(item.Value);
+        const std::partial_ordering result = Value.Compare(item.Value);
         if (result == std::partial_ordering::equivalent) {
             return std::partial_ordering::equivalent;
         } else if (result == std::partial_ordering::less) {

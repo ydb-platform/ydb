@@ -2,25 +2,25 @@
 
 {% note info %}
 
-Before YDB CLI X.X, the `{{ ydb-cli }} admin cluster config` commands had the format `{{ ydb-cli }} admin config`.
+Before YDB CLI 2.20.0, the `{{ ydb-cli }} admin cluster config` commands had the following format: `{{ ydb-cli }} admin config`.
 
 {% endnote %}
 
-This section contains commands for working with the [cluster configuration](../../maintenance/manual/config-overview.md) of {{ ydb-short-name }}.
+This section contains commands for managing the {{ ydb-short-name }} [cluster configuration](../../maintenance/manual/config-overview.md).
 
-- Apply the configuration dynconfig.yaml to the cluster:
+- Apply the `dynconfig.yaml` configuration to the cluster:
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
     ```
 
-- Check if it is possible to apply the configuration dynconfig.yaml to the cluster (validate all validators, version, and cluster match):
+- Check if it is possible to apply the configuration dynconfig.yaml to the cluster (check all validators, the configuration version in the yaml file must be 1 higher than the cluster configuration version, the cluster name must match):
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
     ```
 
-- Apply the configuration dynconfig.yaml to the cluster, ignoring version and cluster checks (version and cluster will still be overwritten with correct ones):
+- Apply the `dynconfig.yaml` configuration to the cluster, ignoring version and cluster checks (the version and cluster values will be overwritten with correct values):
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
@@ -32,19 +32,19 @@ This section contains commands for working with the [cluster configuration](../.
     {{ ydb-cli }} admin cluster config fetch
     ```
 
-- Generate all possible final configurations for dynconfig.yaml:
+- Generate all possible final configurations for `dynconfig.yaml`:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
     ```
 
-- Generate the final configuration for dynconfig.yaml with labels tenant=/Root/test and canary=true:
+- Generate the final configuration for `dynconfig.yaml` with the `tenant=/Root/test` and `canary=true` labels:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
     ```
 
-- Generate the final configuration for dynconfig.yaml for labels from node 100:
+- Generate the final configuration for `dynconfig.yaml` for labels from node 100:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
@@ -70,9 +70,9 @@ This section contains commands for working with the [cluster configuration](../.
 
 ## Working with temporary configuration
 
-This section contains commands for working with [temporary configuration](../../maintenance/manual/dynamic-config-volatile-config.md).
+This section contains commands for managing [temporary configurations](../../maintenance/manual/dynamic-config-volatile-config.md).
 
-- Fetch all temporary configurations of the cluster:
+- Fetch all temporary configurations from the cluster:
 
     ```bash
     {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
@@ -84,7 +84,7 @@ This section contains commands for working with [temporary configuration](../../
     {{ ydb-cli }} admin volatile-config fetch --id 1
     ```
 
-- Apply the temporary configuration volatile.yaml to the cluster:
+- Apply the `volatile.yaml` temporary configuration to the cluster:
 
     ```bash
     {{ ydb-cli }} admin volatile-config add -f volatile.yaml

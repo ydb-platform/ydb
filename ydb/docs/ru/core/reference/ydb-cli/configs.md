@@ -2,25 +2,25 @@
 
 {% note info %}
 
-До версии YDB CLI X.X команды `{{ ydb-cli }} admin cluster config` имели формат `{{ ydb-cli }} admin config`.
+До версии YDB CLI 2.20.0 команды `{{ ydb-cli }} admin cluster config` имели формат `{{ ydb-cli }} admin config`.
 
 {% endnote %}
 
 В этом разделе приведены команды для работы с [конфигурацией кластера](../../maintenance/manual/config-overview.md) {{ ydb-short-name }}. 
 
-- Применение конфигурации dynconfig.yaml на кластер:
+- Применение конфигурации `dynconfig.yaml` на кластер:
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
     ```
 
-- Проверка возможности применения конфигурацию dynconfig.yaml на кластер (проверить все валидаторы, совпадение версий и кластера):
+- Проверка возможности применения конфигурации `dynconfig.yaml` на кластер (проверить все валидаторы, версия конфигурации в yaml-файле должна быть выше на 1, чем версия конфигурации кластера, имя кластера должно совпадать):
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
     ```
 
-- Применение конфигурации dynconfig.yaml на кластер игнорируя проверку версий и кластера (версия и кластер всё равно будут перезаписаны на корректные):
+- Применение конфигурации `dynconfig.yaml` на кластер игнорируя проверку версий и кластера (версия и кластер всё равно будут перезаписаны на корректные):
 
     ```bash
     {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
@@ -32,19 +32,19 @@
     {{ ydb-cli }} admin cluster config fetch
     ```
 
-- Генерация все возможных конечных конфигураций для dynconfig.yaml
+- Генерация всех возможных конечных конфигураций для `dynconfig.yaml`:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
     ```
 
-- Генерация конечной конфигурации для dynconfig.yaml при лейблах tenant=/Root/test и canary=true:
+- Генерация конечной конфигурации для `dynconfig.yaml` при лейблах `tenant=/Root/test` и `canary=true`:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
     ```
 
-- Генерация конечной конфигурации для dynconfig.yaml для лейблов с узла 1003:
+- Генерация конечной конфигурации для `dynconfig.yaml` для лейблов с узла 1003:
 
     ```bash
     {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
@@ -84,7 +84,7 @@
     {{ ydb-cli }} admin volatile-config fetch --id 1
     ```
 
-- Применение временной конфигурации volatile.yaml на кластер:
+- Применение временной конфигурации `volatile.yaml` на кластер:
 
     ```bash
     {{ ydb-cli }} admin volatile-config add -f volatile.yaml

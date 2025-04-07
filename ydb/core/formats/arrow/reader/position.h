@@ -314,15 +314,24 @@ public:
         static TFoundPosition Equal(const ui32 pos) {
             return TFoundPosition(pos);
         }
+
+        TFoundPosition(const ui32 pos, const std::partial_ordering cmp)
+            : Position(pos) {
+            if (cmp == std::partial_ordering::less) {
+                GreaterIfNotEqual = false;
+            } else if (cmp == std::partial_ordering::greater) {
+                GreaterIfNotEqual = true;
+            }
+        }
     };
 
     [[nodiscard]] bool IsAvailablePosition(const i64 position) const {
         return 0 <= position && position < RecordsCount;
     }
 
-    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
+    static std::optional<TFoundPosition> FindBound(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
         const bool needGreater, const std::optional<ui32> includedStartPosition);
-    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart,
+    static std::optional<TSortableBatchPosition::TFoundPosition> FindBound(TRWSortableBatchPosition& position, const ui64 posStart,
         const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {

@@ -533,6 +533,11 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
+    void CreateJoinTestTables(NYdb::NQuery::TSession session) {
+        // Создаем таблицы для тестов пользовательских запросов
+        CreateTables(session, "schema/partition_join_group_by.sql", false);
+    }
+
     Y_UNIT_TEST(Chain65Nodes) {
         TChainTester(65).Test();
     }
@@ -551,8 +556,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-
-        CreateSampleTable(session, useColumnStore);
+        if (queryPath.StartsWith("queries/partition_join_group_by")) {
+            CreateJoinTestTables(session);
+        } else {
+            CreateSampleTable(session, useColumnStore);
+        }
 
         /* join with parameters */
         {
@@ -956,7 +964,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpch8.sql", "stats/tpch1000s.json", "join_order/tpch8_1000s.json", false, true
         );
     }
-
+ 
     Y_UNIT_TEST(CanonizedJoinOrderTPCH9) {
         CanonizedJoinOrderTest(
             "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", false, true
@@ -1071,6 +1079,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(PartitionJoinGroupByTest) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/partition_join_group_by_test.sql",
+            "stats/partition_join_group_by.json",
+            false, // useStreamLookupJoin
+            true   // useColumnStore
+        );
+    }
 }
 }
 }

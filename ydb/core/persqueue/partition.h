@@ -451,6 +451,10 @@ private:
 
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
+    TInstant GetCreateTimestamp(const TUserInfo& userInfo);
+    TInstant GetWriteTimestamp(const TUserInfo& userInfo);
+    TInstant GetReadWriteTimestamp(const TUserInfo& userInfo);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;

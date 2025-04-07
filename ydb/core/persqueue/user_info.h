@@ -334,10 +334,16 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     TInstant GetWriteTimestamp(i64 endOffset) const {
+        if (!ActualTimestamps) {
+            return TInstant::Zero();
+        }
         return Offset == endOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
     }
 
     TInstant GetCreateTimestamp(i64 endOffset) const {
+        if (!ActualTimestamps) {
+            return TInstant::Zero();
+        }
         return Offset == endOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
     }
 

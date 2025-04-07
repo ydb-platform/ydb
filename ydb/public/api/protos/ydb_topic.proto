@@ -1213,7 +1213,7 @@ message DescribeConsumerResult {
         google.protobuf.Duration max_read_time_lag = 6;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 7;
-        // The difference between the create timestamp of the last commited message and the current time.
+        // The difference between the write timestamp of the last commited message and the current time.
         google.protobuf.Duration since_committed_write_time = 13;
 
         // How much bytes were read during several windows statistics from this partition.

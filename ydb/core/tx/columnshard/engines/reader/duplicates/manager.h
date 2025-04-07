@@ -389,7 +389,7 @@ private:
     void Handle(const TEvDuplicateFilterIntervalResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
-    void AbortConstruction(const TString& reason);
+    void AbortAndPassAway(const TString& reason);
     void StartAllocation(const ui64 sourceId, const std::shared_ptr<NSimple::IDataSource>& requester);
     void StartMergingColumns(const ui32 intervalIdx);
 

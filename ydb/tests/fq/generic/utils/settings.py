@@ -51,6 +51,14 @@ class Settings:
     greenplum: Greenplum
 
     @dataclass
+    class MySQL:
+        dbname: str
+        username: str
+        password: str
+
+    mysql: Optional[MySQL] = None
+
+    @dataclass
     class PostgreSQL:
         dbname: str
         username: str

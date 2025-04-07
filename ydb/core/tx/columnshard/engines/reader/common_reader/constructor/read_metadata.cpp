@@ -39,6 +39,7 @@ TConclusionStatus TReadMetadata::Init(
     }
 
     StatsMode = readDescription.StatsMode;
+    DeduplicationPolicy = TReadDescription.DeduplicationPolicy;
     return TConclusionStatus::Success();
 }
 

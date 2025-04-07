@@ -238,11 +238,9 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
-        const ui64 defaultGrpcPort,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
-        , DefaultGrpcPort(defaultGrpcPort)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
@@ -366,11 +364,11 @@ private:
     }
 
     TString GetHttpSolomonEndpoint() const {
-        return (Settings.GetUseSsl() ? "https://" : "http://") + Settings.GetEndpoint();
+        return TStringBuilder() << (Settings.GetUseSsl() ? "https://" : "http://") << Settings.GetHttpEndpoint();
     }
 
     TString GetGrpcSolomonEndpoint() const {
-        return TStringBuilder() << Settings.GetEndpoint() << ":" << DefaultGrpcPort;
+        return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
     template <typename TCallback>
@@ -546,7 +544,6 @@ private:
 
 private:
     const TString DefaultReplica;
-    const ui64 DefaultGrpcPort;
     const ui64 ListSizeLimit = 1ull << 20;
     const ui64 HttpMaxInflight = 200;
     const ui64 GrpcMaxInflight = 2000;
@@ -573,12 +570,7 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    ui64 defaultGrpcPort = 443;
-    if (auto it = settings.find("grpcPort"); it != settings.end()) {
-        defaultGrpcPort = FromString<ui64>(it->second);
-    }
-
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, defaultGrpcPort, std::move(source), credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

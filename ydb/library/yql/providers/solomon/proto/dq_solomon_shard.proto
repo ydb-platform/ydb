@@ -49,7 +49,7 @@ message TDownsampling {
 
 message TDqSolomonSource {
     ESolomonClusterType ClusterType = 1;
-    string Endpoint = 2;
+    reserved 2;
     bool UseSsl = 3;
     string ServiceAccount = 4;
     TToken Token = 5;
@@ -67,4 +67,6 @@ message TDqSolomonSource {
     repeated string LabelNames = 13;
     map<string, string> Settings = 14;
     repeated string RequiredLabelNames = 15;
+    string HttpEndpoint = 16;
+    string GrpcEndpoint = 17;
 }

@@ -87,7 +87,8 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "service_name", // oracle
         "folder_id", // logging
         "use_ssl", // solomon
-        "grpc_port" // solomon
+        "http_endpoint", // solomon
+        "grpc_endpoint" // solomon
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

@@ -264,9 +264,8 @@ public:
             logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                 log(TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
             };
+            ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
         }
-
-        ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
     }
 
     ~TDqTaskRunner() {

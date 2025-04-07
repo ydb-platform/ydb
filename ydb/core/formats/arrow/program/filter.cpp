@@ -12,10 +12,14 @@ namespace NKikimr::NArrow::NSSA {
 class TFilterVisitor: public arrow::ArrayVisitor {
     NArrow::TColumnFilter FiltersMerged = NArrow::TColumnFilter::BuildAllowFilter();
     bool Started = false;
+    YDB_READONLY(ui64, FilteredCount, 0);
 
 public:
     void Add(const bool value, const ui32 count) {
         FiltersMerged.Add(value, count);
+        if (value) {
+            FilteredCount += count;
+        }
     }
 
     NArrow::TColumnFilter ExtractColumnFilter() {
@@ -59,7 +63,9 @@ private:
     arrow::Status VisitImpl(const TArray& array) {
         AFL_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
-            FiltersMerged.Add(!array.IsNull(i) && (bool)array.Value(i));
+            const bool value = !array.IsNull(i) && (bool)array.Value(i);
+            FiltersMerged.Add(value);
+            FilteredCount += value;
         }
         return arrow::Status::OK();
     }
@@ -92,12 +98,14 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
             } else if (*isFalseConclusion) {
                 filterVisitor.Add(false, arr->GetRecordsCount());
             }
+            AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", "first");
         } else {
             auto cArr = arr->GetChunkedArray();
             auto g = filterVisitor.StartVisit();
             for (auto&& i : cArr->chunks()) {
                 NArrow::TStatusValidator::Validate(i->Accept(&filterVisitor));
             }
+            AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", "second");
         }
     }
     NArrow::TColumnFilter filter = filterVisitor.ExtractColumnFilter();
@@ -105,7 +113,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
                                                      "input", inputColumns.front()->GetRecordsCount());
     if (context.GetLimit()) {
         context.GetResources()->AddFilter(
-            filter.Cut(context.GetResources()->GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse()));
+            filter.Cut(filterVisitor.GetFilteredCount(), *context.GetLimit(), context.GetReverse()));
     } else {
         context.GetResources()->AddFilter(filter);
     }

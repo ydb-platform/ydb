@@ -18,12 +18,12 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(TRWSortableBatchPosition& position,
-    const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(TRWSortableBatchPosition& position,
+    const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool upper) {
     ui64 posStart = posStartExt;
     ui64 posFinish = posFinishExt;
     auto guard = position.CreateAsymmetricAccessGuard();
-    const auto cond = greater ?
+    const auto cond = upper ?
         [](const std::partial_ordering cmp) {
             return cmp == std::partial_ordering::greater;
         } :
@@ -62,7 +62,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     return TFoundPosition(posFinish, comparision);
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch,
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(const std::shared_ptr<arrow::RecordBatch>& batch,
     const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
     if (!batch || !batch->num_rows()) {
         return {};
@@ -77,7 +77,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     }
 
     TRWSortableBatchPosition position = forFound.BuildRWPosition(batch, posStart);
-    return FindPosition(position, posStart, posFinish, forFound, greater);
+    return FindBound(position, posStart, posFinish, forFound, greater);
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(const bool needData, const bool deepCopy) const {
@@ -99,7 +99,7 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     const ui32 posStart = Position;
     auto pos = [&]() {
         if (ReverseSort) {
-            auto pos = FindPosition(*this, 0, posStart, forFound, true);
+            auto pos = FindBound(*this, 0, posStart, forFound, true);
             if (!pos) {
                 auto guard = CreateAsymmetricAccessGuard();
                 AFL_VERIFY(guard.InitSortingPosition(posStart));
@@ -111,7 +111,7 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
             }
             return *pos;
         } else {
-            auto pos = FindPosition(*this, posStart, RecordsCount - 1, forFound, false);
+            auto pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
             if (!pos) {
                 auto guard = CreateAsymmetricAccessGuard();
                 AFL_VERIFY(guard.InitSortingPosition(RecordsCount - 1));

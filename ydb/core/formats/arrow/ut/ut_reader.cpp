@@ -42,13 +42,13 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         NMerger::TSortableBatchPosition searchPosition(search, 0, false);
         {
-            auto findPosition = NMerger::TSortableBatchPosition::FindPosition(data, searchPosition, false, std::nullopt);
+            auto findPosition = NMerger::TSortableBatchPosition::FindBound(data, searchPosition, false, std::nullopt);
             UNIT_ASSERT(!!findPosition);
             UNIT_ASSERT_VALUES_EQUAL(findPosition->GetPosition(), 2);
         }
 
         {
-            auto findPosition = NMerger::TSortableBatchPosition::FindPosition(data, searchPosition, true, std::nullopt);
+            auto findPosition = NMerger::TSortableBatchPosition::FindBound(data, searchPosition, true, std::nullopt);
             UNIT_ASSERT(!!findPosition);
             UNIT_ASSERT_VALUES_EQUAL(findPosition->GetPosition(), 4);
         }

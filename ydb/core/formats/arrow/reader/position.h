@@ -329,9 +329,9 @@ public:
         return 0 <= position && position < RecordsCount;
     }
 
-    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
+    static std::optional<TFoundPosition> FindBound(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound,
         const bool needGreater, const std::optional<ui32> includedStartPosition);
-    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TRWSortableBatchPosition& position, const ui64 posStart,
+    static std::optional<TSortableBatchPosition::TFoundPosition> FindBound(TRWSortableBatchPosition& position, const ui64 posStart,
         const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
 
     const TSortableScanData& GetData() const {

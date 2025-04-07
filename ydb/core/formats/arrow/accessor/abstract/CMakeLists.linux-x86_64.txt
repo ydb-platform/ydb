@@ -36,6 +36,7 @@ target_link_libraries(arrow-accessor-abstract PUBLIC
 )
 
 target_sources(arrow-accessor-abstract PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/abstract/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/abstract/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/abstract/request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/abstract/accessor.cpp

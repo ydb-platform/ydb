@@ -59,6 +59,7 @@ target_sources(ydb-core-formats-arrow-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_dictionary.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_column_filter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_hash.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_reader.cpp
 )
 
 

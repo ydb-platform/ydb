@@ -2,6 +2,7 @@
 
 #include "manager.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -9,12 +10,17 @@ namespace NKikimr::NOlap::NReader {
 
 class TColumnFetchingContext {
 private:
+    YDB_READONLY_DEF(ui64, SourceId);
     YDB_READONLY_DEF(TActorId, Owner);
-    YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>, Constructor);
+    YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>, WaitingInfo);
+    std::optional<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocatedMemory;
+    std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor> Constructor;
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
     std::optional<TPortionDataAccessor> PortionAccessor;
     THashMap<TChunkAddress, TString> Blobs;
     bool IsDone = false;
+    YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
 
     void OnDone() {
         AFL_VERIFY(!IsDone);
@@ -22,20 +28,36 @@ private:
     }
 
 public:
-    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor, const TActorId& owner)
-        : Owner(owner)
-        , Constructor(constructor) {
-        std::set<ui32> columnIds = Constructor->GetSource()->GetContext()->GetReadMetadata()->GetPKColumnIds();
-        for (const ui32 columnId : Constructor->GetSource()->GetContext()->GetReadMetadata()->GetIndexInfo().GetSnapshotColumnIds()) {
+    TColumnFetchingContext(const ui64 sourceId, const std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>& info,
+        const TActorId& owner, const std::shared_ptr<NSimple::TSpecialReadContext>& context, const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
+        : SourceId(sourceId)
+        , Owner(owner)
+        , WaitingInfo(info)
+        , Source(info->Construct(context)),
+        MemoryGroupGuard(memoryGroupGuard) {
+        std::set<ui32> columnIds = context->GetReadMetadata()->GetPKColumnIds();
+        for (const ui32 columnId : context->GetReadMetadata()->GetIndexInfo().GetSnapshotColumnIds()) {
             columnIds.emplace(columnId);
         }
-        ResultSchema =
-            std::make_shared<TFilteredSnapshotSchema>(Constructor->GetSource()->GetContext()->GetReadMetadata()->GetResultSchema(), columnIds);
+        ResultSchema = std::make_shared<TFilteredSnapshotSchema>(context->GetReadMetadata()->GetResultSchema(), columnIds);
+    }
+
+    void SetConstructor(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor) {
+        AFL_VERIFY(!Constructor);
+        Constructor = constructor;
+        AFL_VERIFY(Constructor);
+
+        AFL_VERIFY(AllocatedMemory);
+        Constructor->SetMemoryGuard(std::move(*AllocatedMemory));
+        AllocatedMemory->reset();
+    }
+
+    void ContinueFetching(const std::shared_ptr<NBlobOperations::NRead::ITask>& action) {
+        NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(std::move(action)));
     }
 
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(
-            Owner, new TEvDuplicateFilterDataFetched(Constructor->GetSource()->GetSourceId(), TConclusionStatus::Fail(message)));
+        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(SourceId, TConclusionStatus::Fail(message)));
         OnDone();
     }
 
@@ -44,11 +66,14 @@ public:
         PortionAccessor = std::move(portionAccessor);
     }
     void SetResourceGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
-        Constructor->SetMemoryGuard(std::move(guard));
+        AFL_VERIFY(!AllocatedMemory);
+        AFL_VERIFY(!Constructor);
+        AllocatedMemory = std::move(guard);
     }
     void BuildResult() {
         // AFL_VERIFY(result->schema ... )
         AFL_VERIFY(PortionAccessor);
+        AFL_VERIFY(Constructor);
         Constructor->SetColumnData(
             PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Constructor->GetSource()->GetDataSnapshot())
                 .AssembleToGeneralContainer({})
@@ -101,12 +126,12 @@ private:
 
         auto task = std::make_shared<TColumnsAssembleTask>(Context, resourcesGuard);
         for (const auto& [chunk, range] : Chunks) {
-            Context->AddBlobs({ { chunk, blobsData.Extract(Context->GetConstructor()->GetSource()->GetColumnStorageId(chunk.GetColumnId()),
-                                             Context->GetConstructor()->GetSource()->RestoreBlobRange(range)) } });
+            Context->AddBlobs({ { chunk, blobsData.Extract(Context->GetSource()->GetColumnStorageId(chunk.GetColumnId()),
+                                             Context->GetSource()->RestoreBlobRange(range)) } });
         }
         AFL_VERIFY(blobsData.IsEmpty());
         NConveyor::TScanServiceOperator::SendTaskToExecute(
-            task, Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
+            task, Context->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
     }
     virtual bool DoOnError(const TString& /*storageId*/, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         Context->OnError(TStringBuilder() << "Error reading blob range for columns: " << range.ToString() << ", error: "
@@ -117,7 +142,7 @@ private:
 public:
     TColumnsFetcherTask(const TReadActionsCollection& actions, const std::shared_ptr<TColumnFetchingContext>& context,
         THashMap<TChunkAddress, TBlobRangeLink16>&& chunks)
-        : TBase(actions, "DUPLICATES", context->GetConstructor()->GetSource()->GetContext()->GetReadMetadata()->GetScanIdentifier())
+        : TBase(actions, "DUPLICATES", context->GetSource()->GetContext()->GetReadMetadata()->GetScanIdentifier())
         , Context(context)
         , Chunks(std::move(chunks)) {
     }
@@ -132,8 +157,13 @@ private:
 
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+        if (!Context->GetWaitingInfo()->SetStartFetching()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "skip_start_fetching")(
+                "reason", "already_started")("manager", Context->GetOwner());
+            return false;
+        }
         Context->SetResourceGuard(std::move(guard));
-        NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(std::move(Action)));
+        TActorContext::AsActorContext().Send(Context->GetOwner(), new TEvDuplicateFilterStartFetching(Context, Action));
         return true;
     }
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
@@ -155,7 +185,7 @@ private:
     ui64 MemoryGroupId;
 
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetAbortionFlag();
+        return Context->GetSource()->GetContext()->GetCommonContext()->GetAbortionFlag();
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
@@ -177,7 +207,7 @@ private:
                 continue;
             }
 
-            auto source = Context->GetConstructor()->GetSource();
+            auto source = Context->GetSource();
             TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
             auto reading = blobsAction.GetReading(source->GetColumnStorageId(columnId));
             for (auto&& c : columnChunks) {
@@ -194,9 +224,8 @@ private:
 
         const ui64 mem = portionAccessor.GetColumnRawBytes(columnIds, false);
         auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, Context);
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-            Context->GetConstructor()->GetSource()->GetContext()->GetProcessMemoryControlId(),
-            Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetScanId(), MemoryGroupId, { allocationTask },
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetSource()->GetContext()->GetProcessMemoryControlId(),
+            Context->GetSource()->GetContext()->GetCommonContext()->GetScanId(), MemoryGroupId, { allocationTask },
             (ui32)NCommon::EStageFeaturesIndexes::Filter);
     }
 

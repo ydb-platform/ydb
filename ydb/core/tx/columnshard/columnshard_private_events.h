@@ -73,7 +73,7 @@ struct TEvPrivate {
         EvFilterConstructionResult,
         EvDuplicateFilterIntervalResult,
         EvDuplicateFilterDataFetched,
-        EvNotifyReadingFinished,
+        EvDuplicateFilterStartFetching,
 
         EvEnd
     };

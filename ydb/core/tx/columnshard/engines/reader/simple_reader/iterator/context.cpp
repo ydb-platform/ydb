@@ -123,22 +123,9 @@ TString TSpecialReadContext::ProfileDebugString() const {
     return sb;
 }
 
-void TSpecialReadContext::RegisterDuplicatesManager(
-    const std::deque<TSourceConstructor>& sources, const std::shared_ptr<TSpecialReadContext>& self) {
+void TSpecialReadContext::RegisterDuplicatesManager(const std::shared_ptr<TSpecialReadContext>& self) {
     AFL_VERIFY(!DuplicatesManager);
-    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources, self));
-}
-
-void TSpecialReadContext::OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished({ source }));
-    }
-}
-
-void TSpecialReadContext::OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished(sources));
-    }
+    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(self));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -1,4 +1,4 @@
-## Working with configuration
+## Managing  {{ ydb-short-name }} configuration
 
 {% note info %}
 
@@ -68,7 +68,7 @@ This section contains commands for managing the {{ ydb-short-name }} [cluster co
     {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
     ```
 
-## Working with temporary configuration
+## Managing temporary configuration
 
 This section contains commands for managing [temporary configurations](../../maintenance/manual/dynamic-config-volatile-config.md).
 

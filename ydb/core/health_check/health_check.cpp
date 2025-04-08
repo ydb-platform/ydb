@@ -2162,7 +2162,12 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
-            case NKikimrBlobStorage::FAULTY:
+            case NKikimrBlobStorage::FAULTY: {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE,
+                                     TStringBuilder() << "PDisk state is " << statusString,
+                                     ETags::PDiskState);
+                break;
+            }
             case NKikimrBlobStorage::BROKEN:
             case NKikimrBlobStorage::TO_BE_REMOVED: {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
@@ -2265,7 +2270,7 @@ public:
 
         if (status->number() == NKikimrBlobStorage::ERROR) {
             // the disk is not operational at all
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState, {ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -2274,14 +2279,14 @@ public:
             // throttling is active
             auto message = TStringBuilder() << "VDisk is being throttled, rate "
                 << vSlotInfo.GetThrottlingRate() << " per mille";
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, message, ETags::VDiskState);
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, message, ETags::VDiskState, {ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
 
         switch (status->number()) {
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState, {ETags::PDiskState});
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
                 return;
             }
@@ -2298,6 +2303,11 @@ public:
                             {ETags::PDiskSpace});
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
+
+        // we doesn't count this status as a problem, but we want to show it
+        if (context.FindMaxStatus({ETags::PDiskState}) == Ydb::Monitoring::StatusFlag::BLUE) {
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "VDisk awaiting replication", ETags::VDiskState, {ETags::PDiskState});
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
@@ -2593,6 +2603,9 @@ public:
                 } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
+            }
+            if (context.OverallStatus == Ydb::Monitoring::StatusFlag::GREEN && context.FindMaxStatus({ETags::VDiskState}) == Ydb::Monitoring::StatusFlag::BLUE) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group awaiting degration", ETags::GroupState, {ETags::VDiskState});
             }
         }
     };

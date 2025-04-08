@@ -137,7 +137,7 @@ private:
     ui32 MaxIndex = 0;
 
 private:
-    void PropagateDelta(const TPosition& node, TZeroCollector* callback);
+    void PropagateDelta(const TPosition& node);
     void Update(const TPosition& node, const TModification& modification, TZeroCollector* callback);
     void Inc(const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r);
@@ -158,6 +158,9 @@ private:
                                 << ";min=" << GetMinValue(node);
     }
     void OnNodeUpdated(const TPosition& node, TZeroCollector* callback);
+    bool IsLeaf(const TPosition& node) const {
+        return node.GetIndex() >= MaxIndex;
+    }
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);
@@ -293,7 +296,7 @@ private:
         }
     };
 
-    class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor> {
+    class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor>, TMoveOnly {
     private:
         ui32 FirstIntervalIdx;
         YDB_READONLY_DEF(std::vector<std::optional<NArrow::TColumnFilter>>, IntervalFilters);
@@ -317,11 +320,10 @@ private:
         void SetSubscriber(const std::shared_ptr<IFilterSubscriber>& subscriber) {
             AFL_VERIFY(!Subscriber);
             Subscriber = subscriber;
+            AFL_VERIFY(Subscriber);
         }
 
-        bool IsReady() const {
-            return Subscriber && ReadyFilterCount == IntervalFilters.size();
-        }
+        bool IsReady() const;
 
         NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const;
 

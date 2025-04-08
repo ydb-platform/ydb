@@ -289,7 +289,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                     << ", is column=" << isColumnTable << ", is olap=" << isOlapStore
                     << ", RowCount " << newStats.RowCount
                     << ", DataSize " << newStats.DataSize
-                    << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));                    
+                    << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));
 
     NIceDb::TNiceDb db(txc.DB);
 

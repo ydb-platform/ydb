@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }
         }, R"(
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }, {
                 EPathTypeTable,
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                         EPathTypeView,
                         R"(
                             Name: "View"
-                            QueryText: "select * from some_table"
+                            QueryText: "some query"
                         )"
                     }, {
                         EPathTypeTable,
@@ -235,10 +235,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     }
                 )", port));
             }
-
+    
             const ui64 exportId = t.TxId;
             t.TestEnv->TestWaitNotification(runtime, exportId);
-
+    
             {
                 TInactiveZone inactive(activeZone);
                 TestGetExport(runtime, exportId, "/MyRoot");
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }
         }, R"(
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }, {
                 EPathTypeTable,
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }
         }, R"(
@@ -483,7 +483,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 EPathTypeView,
                 R"(
                     Name: "View"
-                    QueryText: "select * from some_table"
+                    QueryText: "some query"
                 )"
             }, {
                 EPathTypeTable,
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     public:
         static const TTypedScheme& Table() {
             return TableScheme;
-        }
+        } 
 
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;

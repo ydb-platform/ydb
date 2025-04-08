@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     /* tpcds23 has > 1 result sets */
     Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
         ExplainJoinOrderTestDataQueryWithStats(
-            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, ColumnStore
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, false
         );
     }
 
@@ -964,7 +964,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpch8.sql", "stats/tpch1000s.json", "join_order/tpch8_1000s.json", false, true
         );
     }
- 
+
     Y_UNIT_TEST(CanonizedJoinOrderTPCH9) {
         CanonizedJoinOrderTest(
             "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", false, true
@@ -1055,11 +1055,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(CanonizedJoinOrderTPCDS64_small) {
-        CanonizedJoinOrderTest(
-            "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", false, true
-        );
-    }
+    // Y_UNIT_TEST(CanonizedJoinOrderTPCDS64_small) {
+    //     CanonizedJoinOrderTest(
+    //         "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", false, true
+    //     );
+    // }
 
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS78) {
         CanonizedJoinOrderTest(

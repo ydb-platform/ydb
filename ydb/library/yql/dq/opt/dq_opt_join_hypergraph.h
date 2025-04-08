@@ -68,8 +68,8 @@ public:
 
         // for interesting orderings framework
         TOrderingsStateMachine::TFDSet FDs;
-        std::int64_t LeftJoinKeysShuffleOrderingIdx;
-        std::int64_t RightJoinKeysShuffleOrderingIdx;
+        std::int64_t LeftJoinKeysShuffleOrderingIdx = -1;
+        std::int64_t RightJoinKeysShuffleOrderingIdx = -1;
 
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
@@ -608,6 +608,10 @@ public:
         };
 
         for (auto& e: edges) {
+            if (e.JoinKind == EJoinKind::Cross) {
+                continue;
+            }
+
             e.LeftJoinKeysShuffleOrderingIdx =
                 fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle);
             Y_ENSURE(

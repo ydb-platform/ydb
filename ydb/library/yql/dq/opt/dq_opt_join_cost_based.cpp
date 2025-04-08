@@ -302,8 +302,6 @@ public:
     ) override {
         auto relsCount = joinTree->Labels().size();
 
-        Y_ENSURE(EnableShuffleElimination && OrderingsFSM != nullptr);
-
         if (EnableShuffleElimination && relsCount <= 14) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
@@ -329,11 +327,12 @@ private:
 
     template <typename TNodeSet, typename TDpHypImpl>
     auto GetDPHypImpl(TJoinHypergraph<TNodeSet>& hypergraph) {
+        TOrderingStatesAssigner<TNodeSet> assigner(hypergraph);
+        assigner.Assign(*OrderingsFSM);
+
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
             return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            TOrderingStatesAssigner<TNodeSet> assigner(hypergraph);
-            assigner.Assign(*OrderingsFSM);
             return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
         } else {
             static_assert(false, "No such DPHyp implementation");
@@ -492,6 +491,42 @@ IOptimizerNew* MakeNativeOptimizerNew(
     return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination, orderingsFSM);
 }
 
+void CollectInterestingOrderingsFromJoinTree(
+    const NYql::NNodes::TExprBase& equiJoinNode,
+    TFDStorage& fdStorage
+) {
+    Y_ENSURE(equiJoinNode.Maybe<TCoEquiJoin>());
+
+    auto equiJoin = equiJoinNode.Cast<TCoEquiJoin>();
+
+    TVector<std::shared_ptr<TRelOptimizerNode>> rels;
+    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+        auto joinArg = input.List();
+
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
+            continue;
+        }
+
+        TStringBuf label = scope.Cast<TCoAtom>();
+        TOptimizerStatistics dummy;
+        rels.emplace_back(std::make_shared<TRelOptimizerNode>(TString(label), dummy));
+    }
+
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+    auto joinTree = ConvertToJoinTree(joinTuple, rels);
+    auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree);
+    for (const auto& edge: hypergraph.GetEdges()) {
+        for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false);
+        }
+
+        fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle);
+        fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle);
+    }
+}
+
 TExprBase DqOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
@@ -548,7 +583,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
 
-    bool allRowStorage = std::all_of(
+    bool allRowStorage = std::any_of(
         rels.begin(),
         rels.end(),
         [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });

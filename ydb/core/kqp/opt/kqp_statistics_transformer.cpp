@@ -5,12 +5,15 @@
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <charconv>
+
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -904,40 +907,7 @@ private:
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
-            auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-            CollectEquiJoinTuple(joinTuple);
-        }
-
-        void CollectEquiJoinTuple(const TCoEquiJoinTuple& joinTuple) {
-            if (joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
-                CollectEquiJoinTuple(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>());
-            }
-
-            if (joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
-                CollectEquiJoinTuple(joinTuple.RightScope().Cast<TCoEquiJoinTuple>());
-            }
-
-            std::vector<TJoinColumn> leftKeys;
-            std::vector<TJoinColumn> rightKeys;
-            size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
-            for (size_t i = 0; i < joinKeysCount; ++i) {
-                size_t keyIndex = i * 2;
-
-                auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
-                auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
-                auto leftJoinColumn = TJoinColumn(leftScope, leftColumn);
-                leftKeys.push_back(leftJoinColumn);
-
-                auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
-                auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
-                auto rightJoinColumn = TJoinColumn(rightScope, rightColumn);
-                rightKeys.push_back(rightJoinColumn);
-
-                FDStorage.AddFD(leftJoinColumn, rightJoinColumn, TFunctionalDependency::EEquivalence, false);
-            }
-
-            FDStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle);
-            FDStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle);
+            CollectInterestingOrderingsFromJoinTree(equiJoin, FDStorage);
         }
 
     private:
@@ -956,6 +926,10 @@ private:
 
     private:
         void CollectAggregateBase(const TCoAggregateBase& aggregateCombine) {
+            if (aggregateCombine.Keys().Empty()) {
+                return;
+            }
+
             std::vector<TJoinColumn> joinColumns;
 
             TString tableName = TryGetTableNameFromAggregationInput(aggregateCombine.Input().Ptr());
@@ -968,8 +942,8 @@ private:
                     tableName = aggregationKey.substr(0, aggregationKey.find('.'));
                     columnName = aggregationKey.substr(aggregationKey.find('.') + 1);
                 } else if (auto baseColumn = TypeCtx.TableAliases.GetBaseColumnByRename(aggregationKey)) {
-                    tableName = baseColumn.substr(0, aggregationKey.find('.'));
-                    columnName = baseColumn.substr(aggregationKey.find('.') + 1);
+                    tableName = baseColumn.substr(0, baseColumn.find('.'));
+                    columnName = baseColumn.substr(baseColumn.find('.') + 1);
                 } else {
                     columnName = std::move(aggregationKey);
                 }

@@ -38,6 +38,11 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints = {}
 );
 
+void CollectInterestingOrderingsFromJoinTree(
+    const NYql::NNodes::TExprBase& equiJoinNode,
+    TFDStorage& fdStorage
+);
+
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& ctx,
     const ui32 maxDPHypDPTableSize,

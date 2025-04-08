@@ -29,6 +29,7 @@ namespace NYdb::NConsoleClient {
         bool Format(IInputStream& input, TString& formatted, TString& error);
 
         TVector<TFsPath> Paths;
+        bool IsChecking;
     };
 
 } // namespace NYdb::NConsoleClient

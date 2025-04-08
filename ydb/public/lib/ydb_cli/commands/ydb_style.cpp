@@ -8,9 +8,46 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
+#include <library/cpp/diff/diff.h>
+
 #include <util/system/file.h>
 
 namespace NYdb::NConsoleClient {
+
+    // FIXME: copy-pasted from the 'library/cpp/testing/unittest/registar.cpp'
+    struct TDiffColorizer {
+        NColorizer::TColors Colors;
+        bool Reverse = false;
+
+        explicit TDiffColorizer(bool reverse = false)
+            : Reverse(reverse)
+        {
+        }
+
+        TString Special(TStringBuf str) const {
+            return ToString(Colors.YellowColor()) + str;
+        }
+
+        TString Common(TArrayRef<const char> str) const {
+            return ToString(Colors.OldColor()) + TString(str.begin(), str.end());
+        }
+
+        TString Left(TArrayRef<const char> str) const {
+            return ToString(GetLeftColor()) + TString(str.begin(), str.end());
+        }
+
+        TString Right(TArrayRef<const char> str) const {
+            return ToString(GetRightColor()) + TString(str.begin(), str.end());
+        }
+
+        TStringBuf GetLeftColor() const {
+            return Reverse ? Colors.RedColor() : Colors.GreenColor();
+        }
+
+        TStringBuf GetRightColor() const {
+            return Reverse ? Colors.GreenColor() : Colors.RedColor();
+        }
+    };
 
     TCommandStyle::TCommandStyle()
         : TYdbCommand("style", {}, "Run SQL styler")
@@ -19,7 +56,13 @@ namespace NYdb::NConsoleClient {
 
     void TCommandStyle::Config(TConfig& config) {
         TYdbCommand::Config(config);
+
         config.NeedToConnect = false;
+
+        config.Opts
+            ->AddLongOption("check", "Do not style inplace, just check")
+            .StoreTrue(&IsChecking);
+
         config.SetFreeArgsMin(0);
         SetFreeArgTitle(0, "<path>", "File or directory path");
     }
@@ -40,6 +83,7 @@ namespace NYdb::NConsoleClient {
         }
         return EXIT_SUCCESS;
     } catch (const yexception& e) {
+        Cout << "Error: " << e.AsStrBuf().After(':').After(':').Skip(1) << Endl;
         return EXIT_FAILURE;
     }
 
@@ -85,7 +129,12 @@ namespace NYdb::NConsoleClient {
         TFile file(path.GetPath(), EOpenModeFlag::RdWr);
         file.Write(formatted.data(), formatted.size());
 
-        Cerr << "Formatted the file '" << path << "'" << Endl;
+        if (IsChecking) {
+            Cerr << "Checked";
+        } else {
+            Cerr << "Formatted";
+        }
+        Cerr << " the file '" << path << "'" << Endl;
     }
 
     void TCommandStyle::FormatDirectory(const TFsPath& path) {
@@ -111,7 +160,24 @@ namespace NYdb::NConsoleClient {
         };
 
         TString text = input.ReadAll();
-        return NSQLFormat::SqlFormatSimple(lexers, parsers, text, formatted, error);
+        if (!NSQLFormat::SqlFormatSimple(lexers, parsers, text, formatted, error)) {
+            return false;
+        }
+
+        if (IsChecking && text != formatted) {
+            TStringStream message;
+            message << "file is not properly formatted\n";
+
+            TVector<NDiff::TChunk<char>> diff;
+            NDiff::InlineDiff(diff, formatted, text);
+            NDiff::PrintChunks(message, TDiffColorizer(), diff);
+
+            error = message.Str();
+
+            return false;
+        }
+
+        return true;
     }
 
 } // namespace NYdb::NConsoleClient

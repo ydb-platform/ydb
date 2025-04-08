@@ -1,4 +1,4 @@
-# Добавление, удаление и переименование вторичного индекса
+# Добавление, удаление и переименование индекса
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -14,7 +14,8 @@
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)
+Могут быть указаны все параметры вторичного индекса, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)
+Могут быть указаны все параметры векторного индекса, описанные в команде [`CREATE TABLE`](../create_table/vector_index.md)
 
 {% if backend_name == "YDB" and oss == true %}
 
@@ -79,7 +80,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if backend_name == "YDB" and oss == true %}
 
-Также удалить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) {{ ydb-short-name }} CLI.
+Также удалить индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) {{ ydb-short-name }} CLI.
 
 {% endif %}
 

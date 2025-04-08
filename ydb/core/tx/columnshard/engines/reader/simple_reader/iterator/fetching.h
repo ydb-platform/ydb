@@ -219,7 +219,7 @@ private:
 
     class TFilterSubscriber: public IFilterSubscriber {
     private:
-        std::shared_ptr<IDataSource> Source;
+        std::weak_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TaskGuard;
 

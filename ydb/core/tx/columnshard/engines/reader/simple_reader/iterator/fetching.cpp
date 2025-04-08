@@ -205,14 +205,21 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
-    Source->MutableStageData().AddFilter(Source->GetStageData().AdaptFullFilter(filter));
-    Step.Next();
-    auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    if (auto source = Source.lock()) {
+        if (source->GetContext()->IsAborted()) {
+            return;
+        }
+        source->MutableStageData().AddFilter(source->GetStageData().AdaptFullFilter(filter));
+        Step.Next();
+        auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    }
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
-    Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+    if (auto source = Source.lock()) {
+        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+    }
 }
 
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)

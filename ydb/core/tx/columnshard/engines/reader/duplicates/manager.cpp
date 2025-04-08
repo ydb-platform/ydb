@@ -10,7 +10,10 @@
 
 namespace NKikimr::NOlap::NReader {
 
-void TIntervalCounter::PropagateDelta(const TPosition& node, TZeroCollector* callback) {
+#define LOCAL_LOG_TRACE \
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
+
+void TIntervalCounter::PropagateDelta(const TPosition& node) {
     AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size())("node", DebugString(node));
     if (!PropagatedDeltas[node.GetIndex()]) {
         return;
@@ -35,10 +38,6 @@ void TIntervalCounter::PropagateDelta(const TPosition& node, TZeroCollector* cal
     Count[node.GetIndex()] += delta;
     MinValue[node.GetIndex()] += PropagatedDeltas[node.GetIndex()];
     PropagatedDeltas[node.GetIndex()] = 0;
-
-    for (const auto& child : { node.LeftChild(), node.RightChild() }) {
-        OnNodeUpdated(child, callback);
-    }
 }
 
 void TIntervalCounter::Update(const TPosition& node, const TModification& modification, TZeroCollector* callback) {
@@ -54,7 +53,7 @@ void TIntervalCounter::Update(const TPosition& node, const TModification& modifi
         }
         OnNodeUpdated(node, callback);
     } else {
-        PropagateDelta(node, callback);
+        PropagateDelta(node);
         if (modification.GetLeft() <= node.LeftChild().GetRight()) {
             Update(node.LeftChild(), modification, callback);
         }
@@ -63,6 +62,13 @@ void TIntervalCounter::Update(const TPosition& node, const TModification& modifi
         }
         Count[node.GetIndex()] = GetCount(node.LeftChild()) + GetCount(node.RightChild());
         MinValue[node.GetIndex()] = Min(GetMinValue(node.LeftChild()), GetMinValue(node.RightChild()));
+    }
+
+    if (IsLeaf(node)) {
+        AFL_VERIFY(Count[node.GetIndex()] == MinValue[node.GetIndex()]);
+    } else {
+        AFL_VERIFY(Count[node.GetIndex()] == GetCount(node.LeftChild()) + GetCount(node.RightChild()));
+        AFL_VERIFY(MinValue[node.GetIndex()] == Min(GetMinValue(node.LeftChild()), GetMinValue(node.RightChild())));
     }
 }
 
@@ -74,7 +80,7 @@ ui64 TIntervalCounter::GetCount(const TPosition& node, const ui32 l, const ui32 
     if (l <= node.GetLeft() && r >= node.GetRight()) {
         return GetCount(node);
     }
-    PropagateDelta(node, nullptr);
+    PropagateDelta(node);
     bool needLeft = node.LeftChild().GetRight() >= l;
     bool needRight = node.RightChild().GetLeft() <= r;
     AFL_VERIFY(needLeft || needRight);
@@ -87,7 +93,10 @@ void TIntervalCounter::OnNodeUpdated(const TPosition& node, TZeroCollector* call
         callback->OnNewZeros(node);
     } else if (GetMinValue(node) == 0) {
         AFL_VERIFY(callback);
-        PropagateDelta(node, callback);
+        PropagateDelta(node);
+        for (const auto& child : { node.LeftChild(), node.RightChild() }) {
+            OnNodeUpdated(child, callback);
+        }
     }
 }
 
@@ -163,6 +172,12 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::SetColumnData(std::s
     AFL_VERIFY(IntervalOffsets.size() == IntervalFilters.size());
 }
 
+bool TDuplicateFilterConstructor::TSourceFilterConstructor::IsReady() const {
+    LOCAL_LOG_TRACE("event", "check_source_ready")
+    ("source", Source->GetSourceId())("has_subscriber", !!Subscriber)("ready_filters", ReadyFilterCount)("intervals", IntervalFilters.size());
+    return !!Subscriber && ReadyFilterCount == IntervalFilters.size();
+}
+
 NArrow::NAccessor::IChunkedArray::TRowRange TDuplicateFilterConstructor::TSourceFilterConstructor::GetIntervalRange(
     const ui32 globalIntervalIdx) const {
     AFL_VERIFY(!IntervalOffsets.empty());
@@ -188,6 +203,7 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::SetFilter(const ui32
 }
 
 void TDuplicateFilterConstructor::TSourceFilterConstructor::Finish() {
+    LOCAL_LOG_TRACE("event", "finish_filter_construction")("source", Source->GetSourceId());
     AFL_VERIFY(IsReady());
     NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
     auto appendFilter = [&result, this](const ui64 i) {
@@ -286,8 +302,8 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
         StartAllocation(sourceId, ev->Get()->GetSource());
     }
 
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "request_filter")("source", sourceId)(
-        "range", range.DebugString())("fetching", TStringBuilder() << '[' << JoinSeq(',', notFetchedSources) << ']');
+    LOCAL_LOG_TRACE("event", "request_filter")
+    ("source", sourceId)("range", range.DebugString())("fetching", TStringBuilder() << '[' << JoinSeq(',', notFetchedSources) << ']');
 
     auto* findConstructor = ActiveSources.FindPtr(sourceId);
     AFL_VERIFY(findConstructor);
@@ -338,6 +354,8 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
     }
 
     auto readyIntervals = NotFetchedSourcesCount.DecAndGetZeros(intervals.GetFirstIdx(), intervals.GetLastIdx());
+    LOCAL_LOG_TRACE("event", "columns_fetched")
+    ("source", ev->Get()->GetSourceId())("new_ready_intervals", TStringBuilder() << '[' << JoinSeq(',', readyIntervals) << ']');
     for (const ui32 interval : readyIntervals) {
         StartMergingColumns(interval);
     }
@@ -348,7 +366,7 @@ void TDuplicateFilterConstructor::Handle(const NActors::TEvents::TEvPoison::TPtr
 }
 
 void TDuplicateFilterConstructor::AbortAndPassAway(const TString& reason) {
-    for (auto [id, constructor] : ActiveSources) {
+    for (const auto& [id, constructor] : ActiveSources) {
         constructor->AbortConstruction(reason);
     }
     ActiveSources.clear();
@@ -376,8 +394,7 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecial
 
 void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std::shared_ptr<NSimple::IDataSource>& requester) {
     const ui64 memoryGroupId = requester->GetMemoryGroupId();
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "start_fetching_columns")("source", sourceId)(
-        "memory_group", memoryGroupId);
+    LOCAL_LOG_TRACE("component", "duplicates_manager")("event", "start_fetching_columns")("source", sourceId)("memory_group", memoryGroupId);
 
     auto findWaiting = WaitingSources.FindPtr(sourceId);
     if (!findWaiting) {
@@ -393,10 +410,8 @@ void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std
 
     std::shared_ptr<NSimple::TPortionDataSource> source =
         (*findWaiting)->Construct(requester->GetContextAsVerified<NSimple::TSpecialReadContext>());
-    auto findConstructor = ActiveSources.FindPtr(sourceId);
-    if (!findConstructor) {
-        findConstructor = &ActiveSources.emplace(sourceId, std::make_shared<TSourceFilterConstructor>(source, Intervals)).first->second;
-    }
+    Y_UNUSED(ActiveSources.emplace(sourceId, std::make_shared<TSourceFilterConstructor>(source, Intervals)).second);
+
     std::shared_ptr<TColumnFetchingContext> fetchingContext = std::make_shared<TColumnFetchingContext>(
         source->GetSourceId(), *findWaiting, SelfId(), source->GetContextAsVerified<NSimple::TSpecialReadContext>(), requester->GetGroupGuard());
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("DUPLICATES");
@@ -414,8 +429,7 @@ void TDuplicateFilterConstructor::StartMergingColumns(const ui32 intervalIdx) {
     std::vector<ui64> sources = std::move(findSources->second);
     FetchedSourcesByInterval.erase(findSources);
 
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "start_merging_columns")(
-        "columns", sources.size())("interval", intervalIdx);
+    LOCAL_LOG_TRACE("event", "start_merging_columns")("columns", sources.size())("interval", intervalIdx);
 
     AFL_VERIFY(!ActiveSources.empty());
     const std::shared_ptr<NCommon::TSpecialReadContext> readContext = ActiveSources.begin()->second->GetSource()->GetContext();

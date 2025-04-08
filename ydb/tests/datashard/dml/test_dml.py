@@ -423,10 +423,10 @@ class TestDML(TestBase):
         elif type == "String" or type == "Yson":
             assert values_from_rows.decode("utf-8") == key[type].replace(
                 "CAST(", "").replace("'", "").replace(f" AS {type})", "").format(values), f"{type}"
-        elif type == "Timestamp":
+        elif type == "Timestamp" or type == "Timestamp64":
             assert values_from_rows == datetime.fromtimestamp(int(key[type].replace("CAST(", "").replace(
                 "'", "").replace(f" AS {type})", "").replace("T", " ").replace("Z", "").format(values))/1_000_000), f"{type}"
-        elif type == "Interval":
+        elif type == "Interval" or type == "Interval64":
             assert values_from_rows == timedelta(microseconds=values)
         elif type == "Float":
             str(round(values_from_rows, 2)) == key[type].replace("CAST(", "").replace("'", "").replace(

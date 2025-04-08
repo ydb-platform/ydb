@@ -82,14 +82,16 @@ void SerializeBinaryProto(const TProto& proto, NJson::TJsonValue& value) {
 
 template <typename TProto>
 void DeserializeBinaryProto(const NJson::TJsonValue& value, TProto& proto) {
-    if (!value.Has("encoded_proto")) {
+    const auto& valueMap = value.GetMap();
+    const auto encodedProto = valueMap.find("encoded_proto");
+    if (encodedProto == valueMap.end()) {
         return NProtobufJson::Json2Proto(value, proto, NProtobufJson::TJson2ProtoConfig());
     }
 
     const auto config = NProtobufJson::TJson2ProtoConfig()
         .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64DecodeBytesTransform>());
 
-    NProtobufJson::Json2Proto(value["encoded_proto"], proto, config);
+    NProtobufJson::Json2Proto(encodedProto->second, proto, config);
 }
 
 

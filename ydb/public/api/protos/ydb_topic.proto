@@ -752,9 +752,10 @@ message CommitOffsetRequest {
     int64 partition_id = 3;
     // Path of consumer.
     string consumer = 4;
-
     // Processed offset.
     int64 offset = 5;
+    // Read session identifier from StreamRead RPC.
+    string read_session_id = 6;
 }
 
 // Commit offset response sent from server to client.

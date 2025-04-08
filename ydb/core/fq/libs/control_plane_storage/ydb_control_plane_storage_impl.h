@@ -641,6 +641,14 @@ protected:
     std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionInternal> GetCreateConnectionProtos(
         const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
 
+    // List connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const;
+
+    // Describe connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const;
+
     // Create binding request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev) const;
@@ -649,6 +657,10 @@ protected:
 
     std::pair<FederatedQuery::Binding, FederatedQuery::Internal::BindingInternal> GetCreateBindingProtos(
         const FederatedQuery::CreateBindingRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
+
+    // List bindings request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev) const;
 
     // Write result data request
 

@@ -36,7 +36,7 @@ SELECT
     END as is_muted_or_skipped
 FROM `test_results/analytics/tests_monitor`
 WHERE date_window >= CurrentUtcDate() - 30 * Interval("P1D")
-and branch = 'main'
+and ( branch = 'main' or branch like 'stable-%')
 and is_test_chunk = 0
 and (CASE 
         WHEN is_muted = 1 OR (state = 'Skipped' AND days_in_state > 14) THEN TRUE

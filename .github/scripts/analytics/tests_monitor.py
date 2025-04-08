@@ -288,7 +288,7 @@ def main():
         type=str,
         help='build : relwithdebinfo or release-asan',
     )
-    parser.add_argument('--branch', default='main', choices=['main'], type=str, help='branch')
+    parser.add_argument('--branch', default='main', type=str, help='branch')
 
     parser.add_argument(
         '--concurent',
@@ -325,7 +325,7 @@ def main():
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
-        default_start_date = datetime.date(2024, 11, 1)
+        default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
         table_path = f'test_results/analytics/tests_monitor'
 

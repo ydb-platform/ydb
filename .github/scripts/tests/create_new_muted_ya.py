@@ -178,8 +178,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >= 3
-            and test.get('fail_count') > 2
+            and (test.get('pass_count') + test.get('fail_count')) >= 2
+            and test.get('fail_count') >= 2
             and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         flaky_tests = sorted(flaky_tests)
@@ -191,8 +191,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) >= 3
-            and test.get('fail_count') > 2
+            and (test.get('pass_count') + test.get('fail_count')) >=2
+            and test.get('fail_count') >= 2
             and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
@@ -356,9 +356,9 @@ def create_mute_issues(all_tests, file_path):
         print(f"Writing results to {file_path}")
         
         with open(file_path, 'w') as f:
-            f.write("```\n")
+            f.write("\n")
             f.write("\n".join(results))
-            f.write("\n```")
+            f.write("\n")
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             gh_out.write(f"created_issues_file={file_path}")
@@ -407,7 +407,7 @@ if __name__ == "__main__":
 
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
-    update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to filter tests by')
+    update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
@@ -416,7 +416,7 @@ if __name__ == "__main__":
     create_issues_parser.add_argument(
         '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
     )
-    create_issues_parser.add_argument('--branch', default='main', help='Branch to filter tests by')
+    create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
 
     args = parser.parse_args()
 

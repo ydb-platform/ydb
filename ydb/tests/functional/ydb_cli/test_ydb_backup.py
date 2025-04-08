@@ -1299,7 +1299,14 @@ class TestRestoreNoData(BaseTestBackupInFiles):
 class BaseTestClusterBackupInFiles(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(
+            extra_feature_flags=[
+                "enable_strict_acl_check",
+                "enable_strict_user_management",
+                "enable_database_admin"
+            ],
+            domain_login_only=False,
+        ))
         cls.cluster.start()
 
         cls.root_dir = "/Root"
@@ -1366,6 +1373,7 @@ class BaseTestClusterBackupInFiles(object):
     def create_cluster_backup(cls, expected_files, additional_args=[]):
         cls.create_backup(
             [
+                "--database", cls.root_dir,
                 "admin", "cluster", "dump",
             ],
             expected_files,

@@ -145,6 +145,15 @@ void PrintPlan(const TString& plan) {
     std::replace(joinOrder.begin(), joinOrder.end(), ']', ')');
     std::replace(joinOrder.begin(), joinOrder.end(), ',', ' ');
     joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\"'), joinOrder.end());
+    joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\\'), joinOrder.end());
+
+
+    size_t pos;
+    std::string tpcdsTablePrefix = "test/ds/";
+    while ((pos = joinOrder.find(tpcdsTablePrefix)) != std::string::npos) {
+        joinOrder.erase(pos, tpcdsTablePrefix.length());
+    }
+
     Cout << "JoinOrder" << joinOrder << Endl;
 }
 
@@ -533,11 +542,6 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    void CreateJoinTestTables(NYdb::NQuery::TSession session) {
-        // Создаем таблицы для тестов пользовательских запросов
-        CreateTables(session, "schema/partition_join_group_by.sql", false);
-    }
-
     Y_UNIT_TEST(Chain65Nodes) {
         TChainTester(65).Test();
     }
@@ -556,11 +560,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-        if (queryPath.StartsWith("queries/partition_join_group_by")) {
-            CreateJoinTestTables(session);
-        } else {
-            CreateSampleTable(session, useColumnStore);
-        }
+
+        CreateSampleTable(session, useColumnStore);
 
         /* join with parameters */
         {
@@ -670,17 +671,17 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(FiveWayJoinWithConstantFold) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", false, true);
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
-    // Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, ColumnStore) {
-    //     ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", false, ColumnStore);
-    // }
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", false, ColumnStore);
+    }
 
-    // Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
-    //     ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
-    // }
+    Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+    }
 
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);
@@ -693,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     /* tpcds23 has > 1 result sets */
     Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
         ExplainJoinOrderTestDataQueryWithStats(
-            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, false
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, ColumnStore
         );
     }
 
@@ -844,6 +845,28 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
             UNIT_ASSERT(!join.LhsShuffled);
+            UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationTpcdsMapJoinBug) {
+        auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+        {
+            auto join = joinFinder.Find({"test/ds/customer", "test/ds/customer_address"});
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+        }
+        {
+            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address"});
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+        }
+        {
+            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address", "test/ds/store_sales"});
+            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
+            UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
     }
@@ -1055,11 +1078,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    // Y_UNIT_TEST(CanonizedJoinOrderTPCDS64_small) {
-    //     CanonizedJoinOrderTest(
-    //         "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", false, true
-    //     );
-    // }
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS64_small) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", false, true
+        );
+    }
 
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS78) {
         CanonizedJoinOrderTest(
@@ -1079,14 +1102,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(PartitionJoinGroupByTest) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/partition_join_group_by_test.sql",
-            "stats/partition_join_group_by.json",
-            false, // useStreamLookupJoin
-            true   // useColumnStore
-        );
-    }
 }
 }
 }

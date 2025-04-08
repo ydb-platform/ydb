@@ -13,12 +13,13 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000) {
+NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000, size_t partitionLimit = 10) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(true);
     app.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);
+    app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(partitionLimit);
     return app;
 }
 
@@ -96,8 +97,8 @@ void TestSimpleOnePartition(size_t maxBatchSize) {
     }
 }
 
-void TestSimplePartitions(size_t maxBatchSize) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+void TestSimplePartitions(size_t maxBatchSize, size_t partitionLimit) {
+    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -186,8 +187,8 @@ void TestSimplePartitions(size_t maxBatchSize) {
     }
 }
 
-void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards) {
-    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards, size_t partitionLimit) {
+    TKikimrRunner kikimr(GetAppConfig(maxBatchSize, partitionLimit));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -269,25 +270,33 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
     Y_UNIT_TEST(SimplePartitions) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestSimplePartitions(size);
+            for (size_t partitionLimit = 1; partitionLimit <= 10; partitionLimit *= 2) {
+                TestSimplePartitions(size, partitionLimit);
+            }
         }
     }
 
     Y_UNIT_TEST(ManyPartitions_1) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestManyPartitions(size, 1000, 10);
+            for (size_t partitionLimit = 1; partitionLimit <= 16; partitionLimit *= 2) {
+                TestManyPartitions(size, 100, 10, partitionLimit);
+            }
         }
     }
 
     Y_UNIT_TEST(ManyPartitions_2) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestManyPartitions(size, 5000, 50);
+            for (size_t partitionLimit = 1; partitionLimit <= 52; partitionLimit *= 4) {
+                TestManyPartitions(size, 500, 50, partitionLimit);
+            }
         }
     }
 
     Y_UNIT_TEST(ManyPartitions_3) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestManyPartitions(size, 10000, 100);
+            for (size_t partitionLimit = 1; partitionLimit <= 128; partitionLimit *= 8) {
+                TestManyPartitions(size, 1000, 100, partitionLimit);
+            }
         }
     }
 

@@ -31,6 +31,166 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationC
     return TExprBase(result);
 }
 
+// Checks if the given EquiJoin is suitable to be fused.
+bool IsSuitableToFuseEquiJoins(const TExprNode::TPtr& node, ui32 &inputIndex) {
+    ui32 inputsCount = node->ChildrenSize() - 2;
+    bool found = false;
+    for (ui32 i = 0; i < inputsCount; ++i) {
+        if (node->Child(i)->Child(0)->IsCallable("EquiJoin")) {
+            found = true;
+            inputIndex = i;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+
+    ui32 countInputLabelsAtomList = 0;
+    const ui32 downstreamInputs = node->ChildrenSize() - 2;
+    for (ui32 i = 0; i < downstreamInputs; ++i) {
+        auto label = node->Child(i)->Child(1);
+        if (auto tuple = TMaybeNode<TCoAtomList>(label)) {
+            ++countInputLabelsAtomList;
+        }
+    }
+    return countInputLabelsAtomList == 1;
+}
+
+// This function fuses given `downstreanJoinTree` and `upstreaJoinTree`.
+// It searches the leaf in `downstreamJoinTree` with the name from `upstreamLabelsList` and inserts an `upstreamJoinTree` at that place.
+TExprNode::TPtr FuseJoinTree(TExprNode::TPtr downstreamJoinTree, TExprNode::TPtr upstreamJoinTree, const THashSet<TStringBuf>& upstreamLabelsList,
+                             TExprContext& ctx) {
+    TExprNode::TPtr left;
+    if (downstreamJoinTree->Child(1)->IsAtom()) {
+        if (!upstreamLabelsList.contains(downstreamJoinTree->Child(1)->Content())) {
+            left = downstreamJoinTree->Child(1);
+        } else {
+            left = upstreamJoinTree;
+        }
+    } else {
+        left = FuseJoinTree(downstreamJoinTree->Child(1), upstreamJoinTree, upstreamLabelsList, ctx);
+        if (!left) {
+            return nullptr;
+        }
+    }
+
+    TExprNode::TPtr right;
+    if (downstreamJoinTree->Child(2)->IsAtom()) {
+        if (!upstreamLabelsList.contains(downstreamJoinTree->Child(2)->Content())) {
+            right = downstreamJoinTree->Child(2);
+        } else {
+            right = upstreamJoinTree;
+        }
+    } else {
+        right = FuseJoinTree(downstreamJoinTree->Child(2), upstreamJoinTree, upstreamLabelsList, ctx);
+        if (!right) {
+            return nullptr;
+        }
+    }
+
+    TExprNode::TListType newChildren(downstreamJoinTree->ChildrenList());
+    newChildren[1] = left;
+    newChildren[2] = right;
+    newChildren[3] = downstreamJoinTree->Child(3);
+    newChildren[4] = downstreamJoinTree->Child(4);
+
+    auto ret = ctx.ChangeChildren(*downstreamJoinTree, std::move(newChildren));
+    return ret;
+}
+
+// This function fuses upstream and downstream EquiJoins without renaming labels.
+// It checks that labels associated with input for upstream and downstream EquiJoin are not the same,
+// except the labels associated with `upstreamIndex`.
+TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, TExprContext& ctx) {
+    const ui32 downstreamInputs = node->ChildrenSize() - 2;
+    auto upstreamEquiJoin = node->Child(upstreamIndex)->Child(0);
+    THashSet<TStringBuf> downstreamLabels;
+    THashSet<TStringBuf> upstreamLabelsAssociatedByIndex;
+
+    const ui32 upstreamInputs = upstreamEquiJoin->ChildrenSize() - 2;
+    THashSet<TStringBuf> upstreamLabels;
+    for (ui32 i = 0; i < upstreamInputs; ++i) {
+        auto label = upstreamEquiJoin->Child(i)->Child(1);
+        if (!label->IsAtom()) {
+            return node;
+        }
+        upstreamLabels.insert(label->Content());
+    }
+
+    for (ui32 i = 0; i < downstreamInputs; ++i) {
+        auto label = node->Child(i)->Child(1);
+        if (auto list = TMaybeNode<TCoAtomList>(label)) {
+            // Fusing more than one input with label list is not supported.
+            if (upstreamLabelsAssociatedByIndex.size()) {
+                return node;
+            }
+            for (auto labelAtom : list.Cast()) {
+                auto label = labelAtom.Value();
+                downstreamLabels.insert(label);
+                upstreamLabelsAssociatedByIndex.insert(label);
+            }
+        } else {
+            // Fusing two EquiJoins with the same labels, which are not related to upstreamIndex, is not supported.
+            if (upstreamLabels.contains(label->Content())) {
+                return node;
+            }
+            downstreamLabels.insert(label->Content());
+        }
+    }
+
+    TExprNode::TListType equiJoinChildren;
+    for (ui32 i = 0; i < downstreamInputs; ++i) {
+        if (i != upstreamIndex) {
+            equiJoinChildren.push_back(node->Child(i));
+        } else {
+            for (ui32 j = 0; j < upstreamInputs; ++j) {
+                equiJoinChildren.push_back(upstreamEquiJoin->Child(j));
+            }
+        }
+    }
+
+    auto downstreamJoinTree = node->Child(downstreamInputs);
+    auto downstreamSettings = node->Children().back();
+    auto upstreamJoinTree = upstreamEquiJoin->Child(upstreamInputs);
+    auto upstreamJoinSettings = upstreamEquiJoin->Children().back();
+
+    // Combine upstream and downstrean join settings together.
+    TExprNode::TListType combinedSettings;
+    for (auto& setting : upstreamJoinSettings->Children()) {
+        combinedSettings.push_back(setting);
+        if (setting->Child(0)->Content() != "rename") {
+            return node;
+        }
+    }
+
+    for (auto& setting : downstreamSettings->Children()) {
+        combinedSettings.push_back(setting);
+        if (setting->Child(0)->Content() != "rename") {
+            return node;
+        }
+    }
+
+    auto joinTree = FuseJoinTree(downstreamJoinTree, upstreamJoinTree, upstreamLabelsAssociatedByIndex, ctx);
+    if (!joinTree) {
+        return node;
+    }
+
+    auto newSettingsNode = ctx.NewList(node->Pos(), std::move(combinedSettings));
+    equiJoinChildren.push_back(joinTree);
+    equiJoinChildren.push_back(newSettingsNode);
+    auto ret = ctx.NewCallable(node->Pos(), "EquiJoin", std::move(equiJoinChildren));
+    return ret;
+}
+
+TExprBase DqFuseEquiJoins(TExprBase node, TExprContext& ctx) {
+    ui32 inputIndex = 0;
+    if (IsSuitableToFuseEquiJoins(node.Ptr(), inputIndex)) {
+        auto result = FuseEquiJoins(node.Ptr(), inputIndex, ctx);
+        return TExprBase(result);
+    }
+    return node;
+}
+
 // Take . Sort -> TopSort
 // Take . Skip . Sort -> Take . Skip . TopSort
 TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TParentsMap& parents) {

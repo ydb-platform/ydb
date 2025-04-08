@@ -58,4 +58,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> ExtractMembersOverDqReadWrapMultiUsage(NNo
 
 NNodes::TMaybeNode<NNodes::TExprBase> UnorderedOverDqReadWrapMultiUsage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const std::function<const TParentsMap*()>& getParents, TTypeAnnotationContext& typeAnnCtx);
 
+NNodes::TExprBase DqFuseEquiJoins(NNodes::TExprBase node, TExprContext& ctx);
+
 } // namespace NYql::NDq

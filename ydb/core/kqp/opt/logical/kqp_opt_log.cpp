@@ -33,60 +33,62 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
-        AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
-        AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
-        AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
-        AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
-        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
-        AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
-        AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
-        AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
-        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverFlatMap));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
-        AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
-        AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
-        AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
-        AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
-        AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
-        AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
-        AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
-        AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
-        AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
-        AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
-        AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
-        AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
-        AddHandler(0, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
-        AddHandler(0, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
-        AddHandler(0, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
-        AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
-        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(FuseEquiJoins));
 
-        AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
-        AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
-        AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
-        AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
+        AddHandler(1, &TCoAggregate::Match, HNDL(RewriteAggregate));
+        AddHandler(1, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
+        AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
+        AddHandler(1, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
+        AddHandler(1, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
+        AddHandler(1, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
+        AddHandler(1, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
+        AddHandler(1, &TDqJoin::Match, HNDL(JoinToIndexLookup));
+        AddHandler(1, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(1, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverFlatMap));
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
+        AddHandler(1, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
+        AddHandler(1, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
+        AddHandler(1, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
+        AddHandler(1, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
+        AddHandler(1, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
+        AddHandler(1, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
+        AddHandler(1, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
+        AddHandler(1, &TCoTop::Match, HNDL(TopSortOverExtend));
+        AddHandler(1, &TCoTopSort::Match, HNDL(TopSortOverExtend));
+        AddHandler(1, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
+        AddHandler(1, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
+        AddHandler(1, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
+        AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
+        AddHandler(1, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(1, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(1, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(1, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(1, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
-        AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
-        AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
-        AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
-        AddHandler(2, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
+        AddHandler(2, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
+        AddHandler(2, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
+        AddHandler(2, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
+        AddHandler(2, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 
-        AddHandler(3, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+        AddHandler(3, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
+        AddHandler(3, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
+        AddHandler(3, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
+        AddHandler(3, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
 
-        AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
-        AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+        AddHandler(4, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+
+        AddHandler(5, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
+        AddHandler(5, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
+        AddHandler(5, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
 
 #undef HNDL
 
-        SetGlobal(4u);
+        SetGlobal(5u);
     }
 
 public:
@@ -106,6 +108,12 @@ protected:
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> FuseEquiJoins(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqFuseEquiJoins(node, ctx);
+        DumpAppliedRule("DqFuseEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

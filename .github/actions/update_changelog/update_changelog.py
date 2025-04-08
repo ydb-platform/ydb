@@ -169,7 +169,7 @@ def fetch_user_details(username):
     response.raise_for_status()
     return response.json()
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) != 5:
         print("Usage: update_changelog.py <pr_data_file> <changelog_path> <base_branch> <suffix>")
         sys.exit(1)
@@ -187,6 +187,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     pr_data = []
+    if not pr_ids:
+        print("::notice::No PR IDs found in the provided file.")
+        return 
+    
     for pr in pr_ids:
         try:
             pr_details = fetch_pr_details(pr["id"])
@@ -222,3 +226,7 @@ if __name__ == "__main__":
     pr_create_command = f"gh pr create --title \"{pr_title}\" --body \"{pr_body}\" --base {base_branch} --head {branch_name}"
     pr_url = run_command(pr_create_command)
     # run_command(f"gh pr edit {pr_url} --add-assignee galnat") # TODO: Make assignee customizable
+
+
+if __name__ == "__main__":
+    main()

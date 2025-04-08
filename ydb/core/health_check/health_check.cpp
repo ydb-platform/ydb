@@ -1722,7 +1722,9 @@ public:
             auto& groupState = GroupState[groupId];
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
-            groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
+            if (group.GetInfo().HasLayoutCorrect()) {
+                groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
+            }
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
@@ -2156,6 +2158,7 @@ public:
                                  TStringBuilder() << "Unknown PDisk state: " << statusString,
                                  ETags::PDiskState);
         }
+
         switch (status->number()) {
             case NKikimrBlobStorage::ACTIVE:
             case NKikimrBlobStorage::INACTIVE: {

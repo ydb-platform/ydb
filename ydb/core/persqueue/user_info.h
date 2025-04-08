@@ -47,12 +47,13 @@ struct TConsumerSnapshot {
 
     TMessageInfo LastCommittedMessage;
 
-    // Timstamp of the last read
+    i64 ReadOffset;
     TInstant LastReadTimestamp;
     TMessageInfo LastReadMessage;
 
     TDuration ReadLag;
     TDuration CommitedLag;
+    TDuration TotalLag;
 };
 
 struct TUserInfoBase {

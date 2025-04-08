@@ -671,9 +671,11 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
         result.LastCommittedMessage.WriteTimestamp = timestamp;
     }
 
+    auto readOffset = userInfo.GetReadOffset();
+
+    result.ReadOffset = readOffset;
     result.LastReadTimestamp = userInfo.ReadTimestamp;
 
-    auto readOffset = userInfo.GetReadOffset();
     if (readOffset >= static_cast<i64>(EndOffset)) {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
@@ -691,8 +693,8 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (readOffset < (i64)EndOffset) {
         result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
     }
-
     result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
+    result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
 
     return result;
 }
@@ -791,9 +793,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             if (IsActive() || readOffset < (i64)EndOffset) {
                 clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
-
-                ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (snapshot.Now - snapshot.LastReadTimestamp).MilliSeconds();
-                clientInfo->SetTotalLagMs(totalLag);
+                clientInfo->SetTotalLagMs(snapshot.TotalLag.MilliSeconds());
             } else {
                 clientInfo->SetReadLagMs(0);
                 clientInfo->SetWriteLagMs(0);
@@ -1586,17 +1586,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Set(readWriteTimestamp.MilliSeconds());
         }
 
-        i64 off = userInfo.GetReadOffset(); //we want to track first not-readed offset
-        TInstant readTimestamp = userInfo.GetReadTimestamp();
-        ui64 readTimeLag = off >= (i64)EndOffset ? 0 : (readTimestamp - readWriteTimestamp).MilliSeconds();
-        ui64 totalLag = userInfo.GetWriteLagMs() + readTimeLag + (now - readTimestamp).MilliSeconds();
-
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Get() != totalLag) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Get() != snapshot.TotalLag.MilliSeconds()) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(totalLag);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(snapshot.TotalLag.MilliSeconds());
         }
 
-        ts = readTimestamp.MilliSeconds();
+        ts = snapshot.LastReadTimestamp.MilliSeconds();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);
@@ -1608,9 +1603,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Set(timeLag);
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != readTimeLag) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != snapshot.ReadLag.MilliSeconds()) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(readTimeLag);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
         }
 
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != EndOffset - userInfo.Offset) {
@@ -1618,10 +1613,10 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(EndOffset - userInfo.Offset);
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != EndOffset - off) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != EndOffset - snapshot.ReadOffset) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(EndOffset - off);
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_MESSAGE_LAG].Set(EndOffset - off);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(EndOffset - snapshot.ReadOffset);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_MESSAGE_LAG].Set(EndOffset - snapshot.ReadOffset);
         }
 
         ui64 sizeLag = GetSizeLag(userInfo.Offset);

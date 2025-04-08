@@ -41,12 +41,6 @@ TStatus RemovePathRecursive(
     const TRemoveDirectoryRecursiveSettings& settings = {}
 );
 
-TStatus RemovePathRecursive(
-    const TDriver& driver,
-    const NScheme::TSchemeEntry& entry,
-    const TRemoveDirectoryRecursiveSettings& settings = {}
-);
-
 namespace NInternal {
 
     using TRemover = std::function<TStatus(const NScheme::TSchemeEntry&)>;

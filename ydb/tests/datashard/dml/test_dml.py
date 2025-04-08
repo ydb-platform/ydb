@@ -424,7 +424,7 @@ class TestDML(TestBase):
                 "CAST(", "").replace("'", "").replace(f" AS {type})", "").format(values), f"{type}"
         elif type == "Timestamp":
             assert values_from_rows == datetime.fromtimestamp(int(key[type].replace("CAST(", "").replace(
-                "'", "").replace(f" AS {type})", "").replace("T", " ").replace("Z", "").format(values))/1_000_000 - 3*60*60), f"{type}"
+                "'", "").replace(f" AS {type})", "").replace("T", " ").replace("Z", "").format(values))/1_000_000), f"{type}"
         elif type == "Interval":
             assert values_from_rows == timedelta(microseconds=values)
         elif type == "Float":

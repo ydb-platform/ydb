@@ -6,11 +6,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_ERASURE=block_4-2)
 
 PEERDIR(
-    ydb/library/testlib/s3_recipe_helper
-    ydb/public/sdk/cpp/src/client/export
-    ydb/public/sdk/cpp/src/client/table
-    ydb/public/sdk/cpp/src/client/operation
-    ydb/public/sdk/cpp/src/client/draft
+    ydb/tests/functional/backup/helpers
 )
 
 SRCS(

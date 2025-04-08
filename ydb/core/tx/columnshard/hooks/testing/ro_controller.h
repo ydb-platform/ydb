@@ -183,6 +183,10 @@ public:
             HeadersSkippingOnSelect.Inc();
         }
     }
+
+    virtual ui64 GetInternalPathIdOffset(const ui64 /* tabletId */) const override {
+        return 1000000; //TODO Do we need different pathId on different shards? tabletId % 1000;
+    }
 };
 
 }

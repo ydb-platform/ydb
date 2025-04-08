@@ -16,7 +16,7 @@ private:
     YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastAccessTime);
     YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastUpdateTime);
 
-    THashMap<TInternalPathId, std::shared_ptr<TSingleColumnTableCounters>> PathIdCounters;
+    THashMap<TLocalPathId, std::shared_ptr<TSingleColumnTableCounters>> PathIdCounters;
 
     friend class TSingleColumnTableCounters;
 
@@ -31,7 +31,7 @@ public:
         output.SetLastUpdateTime(LastUpdateTime->MilliSeconds());
     }
 
-    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(TInternalPathId pathId);
+    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(TLocalPathId pathId);
 };
 
 class TSingleColumnTableCounters {

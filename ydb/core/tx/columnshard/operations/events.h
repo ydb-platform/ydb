@@ -74,9 +74,9 @@ public:
             i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
-                pathId = i.GetWriteMeta().GetTableId();
+                pathId = i.GetWriteMeta().GetPathId().GetInternalPathId();
             } else {
-                AFL_VERIFY(pathId == i.GetWriteMeta().GetTableId());
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetPathId().GetInternalPathId());
             }
         }
         AFL_VERIFY(pathId);

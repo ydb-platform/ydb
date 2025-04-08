@@ -4,9 +4,9 @@
 namespace NKikimr::NColumnShard {
 
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
-    auto it = ActiveCompactionInfo.find(info.GetPathId());
+    auto it = ActiveCompactionInfo.find(info.GetPathId().GetInternalPathId());
     if (it == ActiveCompactionInfo.end()) {
-        it = ActiveCompactionInfo.emplace(info.GetPathId(), info.GetPathId()).first;
+        it = ActiveCompactionInfo.emplace(info.GetPathId().GetInternalPathId(), info.GetPathId()).first;
     }
     it->second.Start();
     return true;

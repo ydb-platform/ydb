@@ -12,9 +12,10 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev)
+    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev, const TInternalPathId internalPathId)
         : TBase(self)
-        , Ev(ev) {
+        , Ev(ev)
+        , InternalPathId(internalPathId) {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -25,6 +26,7 @@ public:
 
 private:
     TEvDataShard::TEvKqpScan::TPtr Ev;
+    const TInternalPathId InternalPathId;
 };
 
 }   // namespace NKikimr::NOlap::NReader

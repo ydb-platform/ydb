@@ -6,8 +6,10 @@
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
 void TStatsIterator::AppendStats(
+    const TUnifiedPathId& pathId,
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portionPtr) const {
     const TPortionInfo& portion = portionPtr.GetPortionInfo();
+    AFL_VERIFY(pathId.GetInternalPathId() == portion.GetPathId());
     auto portionSchema = ReadMetadata->GetLoadSchemaVerified(portion);
     auto it = PortionType.find(portion.GetMeta().Produced);
     if (it == PortionType.end()) {
@@ -35,7 +37,7 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], pathId.GetLocalPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
@@ -92,7 +94,7 @@ void TStatsIterator::AppendStats(
             std::reverse(indexes.begin(), indexes.end());
         }
         for (auto&& r : indexes) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], pathId.GetLocalPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetRecordsCount());
@@ -143,7 +145,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             break;
         }
         recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
-        AppendStats(builders, it->second);
+        AppendStats(granule.GetPathId(), builders, it->second);
         granule.PopFrontPortion();
         FetchedAccessors.erase(it);
         if (recordsCount > 10000) {

@@ -208,6 +208,11 @@ EPDiskStatus TPDiskStatus::GetStatus() const {
     return Current;
 }
 
+EPDiskStatus TPDiskStatus::GetNewStatus() const {
+    TString unused;
+    return Compute(Current, unused);
+}
+
 bool TPDiskStatus::IsNewStatusGood() const {
     TString unused;
     switch (Compute(Current, unused)) {
@@ -268,7 +273,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 {
 }
 
-void TClusterMap::AddPDisk(const TPDiskID& id) {
+void TClusterMap::AddPDisk(const TPDiskID& id, const EPDiskStatus status) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
     const auto& location = State->Nodes[id.NodeId].Location;
 
@@ -276,15 +281,20 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
     NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
+
+    if (status == EPDiskStatus::FAULTY) {
+        FaultyByNode[ToString(id.NodeId)].insert(id);
+    }
 }
 
 /// TGuardian
 
-TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
+TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio, ui32 maxFaultyPDisksPerNode)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
     , RackRatio(rackRatio)
+    , MaxFaultyPDisksPerNode(maxFaultyPDisksPerNode)
 {
 }
 
@@ -344,6 +354,37 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
             });
+        }
+    }
+
+    if (MaxFaultyPDisksPerNode != 0) {
+        for (const auto& kv : FaultyByNode) {
+            if (kv.first) {
+                ui32 changedCount = kv.second.size();
+
+                auto it = all.FaultyByNode.find(kv.first);
+                ui32 currentCount = it != all.FaultyByNode.end() ? it->second.size() : 0;
+    
+                ui32 allowedCount = (MaxFaultyPDisksPerNode > currentCount) ? MaxFaultyPDisksPerNode - currentCount : 0;
+    
+                ui32 counter = 0;
+                for (const auto& pdisk : kv.second) {
+                    if (++counter > allowedCount) {
+                        disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::MAX_FAULTY_PER_NODE);
+                        result.erase(pdisk);
+                    }
+                }
+
+                if (changedCount > allowedCount) {
+                    auto disallowedPdisks = disallowed | std::views::keys;
+                    issuesBuilder
+                        << "Ignore state updates due to MaxFaultyPDisksPerNode" \
+                        << ": changed# " << changedCount \
+                        << ", total# " << currentCount \
+                        << ", allowed# " << allowedCount \
+                        << ", affected pdisks# " << JoinSeq(", ", disallowedPdisks) << Endl;
+                }
+            }
         }
     }
 
@@ -941,7 +982,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         TClusterMap all(SentinelState);
-        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
+        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.MaxFaultyPDisksPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
         for (auto& pdisk : SentinelState->PDisks) {
@@ -956,18 +997,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
+            TMaybe<EPDiskStatus> forcedStatus;
+
             if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
-                info.SetForcedStatus(*Config.EvictVDisksStatus);
+                forcedStatus = *Config.EvictVDisksStatus;
+                info.SetForcedStatus(*forcedStatus);
             } else {
                 info.ResetForcedStatus();
             }
 
-            all.AddPDisk(id);
+            all.AddPDisk(id, forcedStatus.GetOrElse(info.GetStatus()));
             if (info.IsChanged()) {
                 if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
-                    changed.AddPDisk(id);
+                    changed.AddPDisk(id, info.GetNewStatus());
                 }
             } else {
                 info.AllowChanging();

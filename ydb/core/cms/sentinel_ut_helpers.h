@@ -83,7 +83,7 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
-    explicit TTestEnv(ui32 nodeCount, ui32 pdisks)
+    explicit TTestEnv(ui32 nodeCount, ui32 pdisks, const NKikimrCms::TCmsConfig &config = {})
         : TCmsTestEnv(nodeCount, pdisks)
     {
         SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
@@ -123,6 +123,7 @@ public:
         });
 
         State = new TCmsState;
+        State->Config.Deserialize(config);
         MockClusterInfo(State->ClusterInfo);
         State->CmsActorId = GetSender();
 

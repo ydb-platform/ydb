@@ -51,8 +51,20 @@ struct TOrdering {
         return "{" + JoinSubsequence(", ", Items) + "}";
     }
 
+    TOrdering(
+        std::vector<std::size_t> items,
+        EType type,
+        bool isNatural = false
+    )
+        : Items(std::move(items))
+        , Type(type)
+        , IsNatural(isNatural)
+    {}
+
     std::vector<std::size_t> Items;
     EType Type;
+    /* Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping. */
+    bool IsNatural = false;
 };
 
 /*
@@ -170,7 +182,7 @@ public:
             return static_cast<std::size_t>(foundIdx);
         }
 
-        InterestingOrderings.push_back(TOrdering{.Items = std::move(items), .Type = type });
+        InterestingOrderings.emplace_back(std::move(items), type);
         return InterestingOrderings.size() - 1;
     }
 
@@ -225,6 +237,9 @@ private:
         bool createIfNotExists
     ) {
         std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists);
+
+        // std::sort(items.begin(), items.end());
+
         for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
             if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
                 return {items, static_cast<std::int64_t>(i)};

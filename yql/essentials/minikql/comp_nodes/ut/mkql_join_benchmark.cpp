@@ -18,7 +18,7 @@ namespace {
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
 [[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   2 * MB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
 [[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
 
 // -------------------------------------------------------------------
@@ -423,10 +423,15 @@ Query1GenerateData(ui64& datasetSize) {
 
     // Make 5% to match
     for (size_t i = 0; i < leftRowsCount / 20; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -500,10 +505,15 @@ Query2GenerateData(ui64& datasetSize) {
 
     // Make 20% to match
     for (size_t i = 0; i < leftRowsCount / 5; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -577,10 +587,15 @@ Query3GenerateData(ui64& datasetSize) {
 
     // Make 50% to match
     for (size_t i = 0; i < leftRowsCount / 2; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -654,10 +669,15 @@ Query4GenerateData(ui64& datasetSize) {
 
     // Make 70% to match
     for (size_t i = 0; i < leftRowsCount * 7 / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -814,10 +834,15 @@ Query6GenerateData(ui64& datasetSize) {
 
     // Make 10% to match
     for (size_t i = 0; i < leftRowsCount / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -909,10 +934,15 @@ Query7GenerateData(ui64& datasetSize) {
 
     // Make 50% to match
     for (size_t i = 0; i < leftRowsCount / 2; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1004,10 +1034,15 @@ Query8GenerateData(ui64& datasetSize) {
 
     // Make 10% to match
     for (size_t i = 0; i < leftRowsCount / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1065,10 +1100,15 @@ Query9GenerateData(ui64& datasetSize) {
 
     // Make 10% to match
     for (size_t i = 0; i < leftRowsCount / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1126,10 +1166,15 @@ Query10GenerateData(ui64& datasetSize) {
 
     // Make 10% to match
     for (size_t i = 0; i < leftRowsCount / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1140,11 +1185,11 @@ Query10GenerateData(ui64& datasetSize) {
 
 /**
  * Query #11:
- *  - Selectivity: 10%                         <-- Main query characteristic
+ *  - Selectivity: 10%                           <-- Main query characteristic
  *  - Cols 1 and 2 are keys
  *  - Left row max size: 80
  *  - Right row max size: 56
- *  - Left size: 800_000, right size: 300_000  <-- Main query characteristic, grace join oriented sizes
+ *  - Left size: 1_200_000, right size: 600_000  <-- Main query characteristic, grace join oriented sizes
  */
 std::pair<
 std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>, TVector<TString>>,
@@ -1152,8 +1197,8 @@ std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>>
 >
 Query11GenerateData(ui64& datasetSize) {
     std::mt19937 rng(std::random_device{}());
-    const ui64 leftRowsCount = 800'000;
-    const ui64 rightRowsCount = 300'000;
+    const ui64 leftRowsCount = 1'200'000;
+    const ui64 rightRowsCount = 600'000;
 
     datasetSize = leftRowsCount * 32 + rightRowsCount * 24;
 
@@ -1203,10 +1248,15 @@ Query11GenerateData(ui64& datasetSize) {
 
     // Make 10% to match
     for (size_t i = 0; i < leftRowsCount / 10; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1217,11 +1267,11 @@ Query11GenerateData(ui64& datasetSize) {
 
 /**
  * Query #12:
- *  - Selectivity: 50%                          <-- Main query characteristic
+ *  - Selectivity: 25%                            <-- Main query characteristic
  *  - Cols 1 and 2 are keys
  *  - Left row max size: 80
  *  - Right row max size: 56
- *  - Left size: 800_000, right size: 300_000   <-- Main query characteristic, grace join oriented sizes
+ *  - Left size: 1_200_000, right size: 600_000   <-- Main query characteristic, grace join oriented sizes
  */
 std::pair<
 std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>, TVector<TString>>,
@@ -1229,8 +1279,90 @@ std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>>
 >
 Query12GenerateData(ui64& datasetSize) {
     std::mt19937 rng(std::random_device{}());
-    const ui64 leftRowsCount = 800'000;
-    const ui64 rightRowsCount = 300'000;
+    const ui64 leftRowsCount = 1'200'000;
+    const ui64 rightRowsCount = 600'000;
+
+    datasetSize = leftRowsCount * 32 + rightRowsCount * 24;
+
+    TVector<ui64> leftCol1(leftRowsCount);
+    std::iota(leftCol1.begin(), leftCol1.end(), 0);
+    TVector<ui64> leftCol2(leftRowsCount);
+    std::iota(leftCol2.begin(), leftCol2.end(), 0);
+    TVector<ui64> leftCol3(leftRowsCount);
+    std::iota(leftCol3.begin(), leftCol3.end(), 0);
+    TVector<ui64> leftCol4(leftRowsCount);
+    std::iota(leftCol4.begin(), leftCol4.end(), 0);
+    TVector<TString> leftCol5(leftRowsCount);
+    for (auto& s: leftCol5) {
+        auto sz = 8 + rng() % 24;
+        datasetSize += sz;
+        s = GenerateRandomString(sz);
+    }
+    TVector<TString> leftCol6(leftRowsCount);
+    for (auto& s: leftCol6) {
+        auto sz = 6 + rng() % 10;
+        datasetSize += sz;
+        s = GenerateRandomString(sz);
+    }
+    for (size_t i = 0; i < leftRowsCount / 5; i++) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+    }
+
+    TVector<ui64> rightCol1(rightRowsCount);
+    std::iota(rightCol1.begin(), rightCol1.end(), leftRowsCount);
+    TVector<ui64> rightCol2(rightRowsCount);
+    std::iota(rightCol2.begin(), rightCol2.end(), leftRowsCount);
+    TVector<ui64> rightCol3(rightRowsCount);
+    std::iota(rightCol3.begin(), rightCol3.end(), leftRowsCount);
+    TVector<TString> rightCol4(rightRowsCount);
+    for (auto& s: rightCol4) {
+        auto sz = 8 + rng() % 24;
+        datasetSize += sz;
+        s = GenerateRandomString(sz);
+    }
+    for (size_t i = 0; i < rightRowsCount / 5; i++) {
+        size_t lhs = rng() % rightRowsCount;
+        size_t rhs = rng() % rightRowsCount;
+        std::swap(rightCol1[lhs], rightCol1[rhs]);
+    }
+
+    // Make 25% to match
+    for (size_t i = 0; i < leftRowsCount / 4; ++i) {
+        size_t rhs = rng() % rightRowsCount;
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
+    }
+
+    return {
+        std::make_tuple(std::move(leftCol1), std::move(leftCol2), std::move(leftCol3), std::move(leftCol4), std::move(leftCol5), std::move(leftCol6)),
+        std::make_tuple(std::move(rightCol1), std::move(rightCol2), std::move(rightCol3), std::move(rightCol4))
+    };
+}
+
+/**
+ * Query #13:
+ *  - Selectivity: 50%                            <-- Main query characteristic
+ *  - Cols 1 and 2 are keys
+ *  - Left row max size: 80
+ *  - Right row max size: 56
+ *  - Left size: 1_200_000, right size: 600_000   <-- Main query characteristic, grace join oriented sizes
+ */
+std::pair<
+std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>, TVector<TString>>,
+std::tuple<TVector<ui64>, TVector<ui64>, TVector<ui64>, TVector<TString>>
+>
+Query13GenerateData(ui64& datasetSize) {
+    std::mt19937 rng(std::random_device{}());
+    const ui64 leftRowsCount = 1'200'000;
+    const ui64 rightRowsCount = 600'000;
 
     datasetSize = leftRowsCount * 32 + rightRowsCount * 24;
 
@@ -1280,10 +1412,15 @@ Query12GenerateData(ui64& datasetSize) {
 
     // Make 50% to match
     for (size_t i = 0; i < leftRowsCount / 2; ++i) {
-        size_t lhs = rng() % leftRowsCount;
         size_t rhs = rng() % rightRowsCount;
-        leftCol1[lhs] = rightCol1[rhs];
-        leftCol2[lhs] = rightCol2[rhs];
+        leftCol1[i] = rightCol1[rhs];
+        leftCol2[i] = rightCol2[rhs];
+    }
+    for (size_t i = 0; i < leftRowsCount / 2; ++i) {
+        size_t lhs = rng() % leftRowsCount;
+        size_t rhs = rng() % leftRowsCount;
+        std::swap(leftCol1[lhs], leftCol1[rhs]);
+        std::swap(leftCol2[lhs], leftCol2[rhs]);
     }
 
     return {
@@ -1745,6 +1882,43 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
     } // Y_UNIT_TEST(BenchQ12)
+
+    Y_UNIT_TEST(BenchQ13) {
+        ui64 datasetSize = 0;
+        Cerr << ">>> Benchmark Q13:" << Endl;
+        auto [lhs, rhs] = Query13GenerateData(datasetSize);
+
+        for (auto type: {JoinType::BlockGraceJoin_HashJoin,
+                         JoinType::BlockGraceJoin_InMemoryGraceJoin,
+                         JoinType::BlockMapJoin,
+                         JoinType::GraceJoin})
+        {
+            TSetup<false> setup(GetNodeFactory());
+
+            auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+                std::get<0>(lhs), std::get<1>(lhs), std::get<2>(lhs), std::get<3>(lhs), std::get<4>(lhs), std::get<5>(lhs));
+            auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+                std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
+
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
+        }
+
+        Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
+    } // Y_UNIT_TEST(BenchQ13)
 
 } // Y_UNIT_TEST_SUITE
 

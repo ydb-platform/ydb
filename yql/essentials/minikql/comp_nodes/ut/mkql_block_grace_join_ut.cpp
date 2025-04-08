@@ -13,17 +13,17 @@ namespace {
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
 [[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   2 * MB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
 [[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
 
 // -------------------------------------------------------------------
 #define DEFINE_TEST_POLICY(name, useExternal, algo)             \
 struct name : public IBlockGraceJoinPolicy {                    \
     name() {                                                    \
-        SetMaximumInitiallyFetchedData(L3_CACHE_SIZE / 2);      \
+        SetMaximumInitiallyFetchedData(L3_CACHE_SIZE);          \
     }                                                           \
                                                                 \
-    bool UseExternalPayload(EJoinAlgo, size_t) const override { \
+    bool UseExternalPayload(EJoinAlgo, size_t, ui64) const override { \
         return useExternal;                                     \
     }                                                           \
                                                                 \

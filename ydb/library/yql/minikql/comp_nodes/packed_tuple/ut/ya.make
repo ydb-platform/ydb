@@ -17,6 +17,7 @@ SRCS(
     hash_table_ut.cpp
     neumann_hash_table_ut.cpp
     accumulator_ut.cpp
+    cardinality_ut.cpp
 )
 
 PEERDIR(

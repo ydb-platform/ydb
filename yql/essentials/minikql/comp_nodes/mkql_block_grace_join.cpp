@@ -15,10 +15,14 @@
 
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/cardinality.h>
 
 #include <util/generic/serialized_enum.h>
+#include <util/digest/numeric.h>
 
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/udf/arrow/block_item_hasher.h>
+
 #include <arrow/array/data.h>
 #include <arrow/datum.h>
 
@@ -29,12 +33,13 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 using namespace std::chrono_literals;
+using THash = ui64;
 
 // -------------------------------------------------------------------
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
 [[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   2 * MB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
 [[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
 
 // -------------------------------------------------------------------
@@ -51,6 +56,17 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items, bool isBlockType = true)
                 return std::max(max, CalcMaxBlockItemSize(type));
             }
         }));
+}
+
+THash CalculateTupleHash(const TVector<THash>& hashes) {
+    THash hash = 0;
+    for (size_t i = 0; i < hashes.size(); i++) {
+        if (!hashes[i]) {
+            return 0;
+        }
+        hash = CombineHashes(hash, hashes[i]);
+    }
+    return hash;
 }
 
 // -------------------------------------------------------------------
@@ -80,9 +96,12 @@ size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, s
 // Quick start is stage of hash join algo when join compute node is trying to
 // fetch some data from left and right stream and decide what to do: start grace hash join or
 // hash join.
+// Also this class collects some initial statistics about data, like sizes and cardinality.
 class TTempJoinStorage : public TComputationValue<TTempJoinStorage> {
 private:
     using TBase = TComputationValue<TTempJoinStorage>;
+    using THasherPtr = NYql::NUdf::IBlockItemHasher::TPtr;
+    using TReaderPtr = std::unique_ptr<IBlockReader>;
 
 public:
     // Fetched block
@@ -119,13 +138,19 @@ public:
         : TBase(memInfo)
         , LeftStream_(leftStream)
         , LeftInputs_(leftItemTypesArg.size())
+        , LeftKeyColumns_(leftKeyColumns)
         , RightStream_(rightStream)
         , RightInputs_(rightItemTypesArg.size())
+        , RightKeyColumns_(rightKeyColumns)
         , Policy_(policy)
     {
+        TBlockTypeHelper helper;
         TVector<TType*> leftItemTypes;
         for (size_t i = 0; i < leftItemTypesArg.size() - 1; i++) { // ignore last column, because this is block size
-            leftItemTypes.push_back(AS_TYPE(TBlockType, leftItemTypesArg[i])->GetItemType());
+            TType* blockItemType = AS_TYPE(TBlockType, leftItemTypesArg[i])->GetItemType();
+            leftItemTypes.push_back(blockItemType);
+            LeftHashers_.push_back(helper.MakeHasher(blockItemType));
+            LeftReaders_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
         }
         TVector<NPackedTuple::EColumnRole> leftRoles(LeftInputs_.size() - 1, NPackedTuple::EColumnRole::Payload);
         for (auto keyCol: leftKeyColumns) {
@@ -135,7 +160,10 @@ public:
 
         TVector<TType*> rightItemTypes;
         for (size_t i = 0; i < rightItemTypesArg.size() - 1; i++) { // ignore last column, because this is block size
-            rightItemTypes.push_back(AS_TYPE(TBlockType, rightItemTypesArg[i])->GetItemType());
+            TType* blockItemType = AS_TYPE(TBlockType, rightItemTypesArg[i])->GetItemType();
+            rightItemTypes.push_back(blockItemType);
+            RightHashers_.push_back(helper.MakeHasher(blockItemType));
+            RightReaders_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
         }
         TVector<NPackedTuple::EColumnRole> rightRoles(RightInputs_.size() - 1, NPackedTuple::EColumnRole::Payload);
         for (auto keyCol: rightKeyColumns) {
@@ -155,6 +183,7 @@ public:
                 ExtractBlock(LeftInputs_, leftBlock);
                 LeftEstimatedSize_ += EstimateBlockSize(leftBlock, LeftConverter_->GetTupleLayout());
                 LeftFetchedTuples_ += leftBlock.Size;
+                SampleBlock(leftBlock, LeftKeyColumns_, LeftHashers_, LeftReaders_, LeftSamples_);
                 LeftData_.push_back(std::move(leftBlock));
             } else if (resultLeft == NUdf::EFetchStatus::Finish) {
                 LeftIsFinished_ = true;
@@ -169,6 +198,7 @@ public:
                 ExtractBlock(RightInputs_, rightBlock);
                 RightEstimatedSize_ += EstimateBlockSize(rightBlock, RightConverter_->GetTupleLayout());
                 RightFetchedTuples_ += rightBlock.Size;
+                SampleBlock(rightBlock, RightKeyColumns_, RightHashers_, RightReaders_, RightSamples_);
                 RightData_.push_back(std::move(rightBlock));
             } else if (resultRight == NUdf::EFetchStatus::Finish) {
                 RightIsFinished_ = true;
@@ -201,14 +231,22 @@ public:
         return {LeftFetchedTuples_, RightFetchedTuples_};
     }
 
-    std::pair<size_t, size_t> GetFetchedSizes() const {
-        return {LeftEstimatedSize_, RightEstimatedSize_};
-    }
-
     std::pair<size_t, size_t> GetPayloadSizes() const {
         return {
             LeftConverter_->GetTupleLayout()->PayloadSize,
             RightConverter_->GetTupleLayout()->PayloadSize};
+    }
+
+    // This estimation is rough and depends on selectivity, so use it as a bootstrap
+    ui64 EstimateCardinality() const {
+        using std::max;
+
+        // TODO: change this values to stream sizes given from optimizer
+        auto [lTuples, rTuples] = GetFetchedTuples();
+        // Another weird heuristic to get number of buckets for cardinality estimation
+        auto buckets = max<ui64>(max<ui64>(lTuples, rTuples) / 2000, 1); // 1/20 (5%) * 1/100 (step) -> 1/2000
+        NPackedTuple::CardinalityEstimator estimator{buckets};
+        return estimator.Estimate(lTuples, LeftSamples_, rTuples, RightSamples_);
     }
 
     std::pair<bool, bool> IsFinished() const {
@@ -238,22 +276,51 @@ private:
         return block.Size * layout->TotalRowSize;
     }
 
+    // Make and save hashes of given block samples to estimate Join cardinality
+    // Step should be large enough to not affect performance
+    void SampleBlock(
+        const TBlock& block, const TVector<ui32>& keyColumns,
+        TVector<THasherPtr>& hashers, TVector<TReaderPtr>& readers,
+        TVector<THash>& samples, size_t step = 100)
+    {
+        TVector<THash> hashes(keyColumns.size());
+        for (size_t i = 0; i < block.Size; i += step) {
+            for (size_t j = 0; j < keyColumns.size(); ++j) {
+                auto col = keyColumns[j];
+                const auto& reader = readers[col];
+                const auto& hasher = hashers[col];
+                const auto& array = block.Columns[col].array();
+                hashes[j] = hasher->Hash(reader->GetItem(*array, i));
+            }
+            auto keyHash = CalculateTupleHash(hashes);
+            samples.push_back(keyHash);
+        }
+    }
+
 private:
     NUdf::TUnboxedValue LeftStream_;
     TUnboxedValueVector LeftInputs_;
+    TVector<ui32>       LeftKeyColumns_;
     TDeque<TBlock>      LeftData_;
     size_t              LeftFetchedTuples_{0}; // count of fetched tuples
     size_t              LeftEstimatedSize_{0}; // size in tuple layout represenation
     bool                LeftIsFinished_{false};
     IBlockLayoutConverter::TPtr LeftConverter_; // Converters here are used only for size estimation via info in TupleLayout class
+    TVector<THash>      LeftSamples_; // Samples for cardinality estimation
+    TVector<THasherPtr> LeftHashers_; // Hashers to calculate hash of block's key items
+    TVector<TReaderPtr> LeftReaders_; // Readers to read blcok's keu items
 
     NUdf::TUnboxedValue RightStream_;
     TUnboxedValueVector RightInputs_;
+    TVector<ui32>       RightKeyColumns_;
     TDeque<TBlock>      RightData_;
     size_t              RightFetchedTuples_{0}; // count of fetched tuples
     size_t              RightEstimatedSize_{0}; // size in tuple layout represenation
     bool                RightIsFinished_{false};
     IBlockLayoutConverter::TPtr RightConverter_;
+    TVector<THash>      RightSamples_;
+    TVector<THasherPtr> RightHashers_;
+    TVector<TReaderPtr> RightReaders_;
 
     IBlockGraceJoinPolicy*  Policy_;
 };
@@ -278,9 +345,8 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
             , NonClearable_(nonClearable)
         {
             const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-            // WARNING: we can not properly track the number of output rows due to Apply,
+            // WARNING: we can not properly track the number of output rows due to uninterruptible for loop in DoBatchLookup,
             // so add some heuristic to prevent overflow in AddMany builder's method.
-            // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
             auto maxBlockLen = CalcMaxBlockLength(payloadItemTypes, false) * 2;
 
             for (size_t i = 0; i < payloadItemTypes.size(); i++) {
@@ -471,9 +537,8 @@ public:
     }
 
     bool IsNotFull() const {
-        // WARNING: we can not properly track the number of output rows due to Apply,
+        // WARNING: we can not properly track the number of output rows due to uninterruptible for loop in DoBatchLookup,
         // so add some heuristic to prevent overflow in AddMany builder's method.
-        // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
         return OutputRows * 5 < MaxLength_ * 4;
     }
 
@@ -539,12 +604,13 @@ class THashJoin : public TComputationValue<THashJoin> {
 private:
     using TBase = TComputationValue<THashJoin>;
     using TBlock = TTempJoinStorage::TBlock;
-    using TTable = TRobinHoodTable;
+    using TTable = TNeumannTable; // According to benchmarks it is always better to use Neumann HT in HashJoin, due to small build size
 
 public:
     THashJoin(
         TMemoryUsageInfo*       memInfo,
         TComputationContext&    ctx,
+        const char *            joinName,
         const TVector<TType*>*  resultItemTypes,
         NUdf::TUnboxedValue*    leftStream,
         const TVector<TType*>*  leftItemTypesArg,
@@ -559,6 +625,7 @@ public:
     )
         : TBase(memInfo)
         , Ctx_(ctx)
+        , JoinName_(joinName)
         , ResultItemTypes_(resultItemTypes)
     {
         using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
@@ -566,8 +633,9 @@ public:
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
         auto [leftFetchedTuples, rightFetchedTuples] = tempStorage.GetFetchedTuples();
         auto [leftPSz, rightPSz] = tempStorage.GetPayloadSizes();
-        auto [leftData, rightData] = tempStorage.DetachData();
+        auto cardinality = tempStorage.EstimateCardinality(); // bootstrap value, may be far from truth
         auto [isLeftFinished, isRightFinished] = tempStorage.IsFinished();
+        auto [leftData, rightData] = tempStorage.DetachData();
         bool wasSwapped = false;
         // assume that finished stream has less size than unfinished
         if ((!isLeftFinished && isRightFinished) ||
@@ -586,7 +654,8 @@ public:
         BuildKeyColumns_ = leftKeyColumns;
         BuildKeyColumnsSet_ = THashSet<ui32>(BuildKeyColumns_->begin(), BuildKeyColumns_->end());
         // Use or not external payload depends on the policy
-        IsBuildIndirected_ = policy->UseExternalPayload(EJoinAlgo::HashJoin, leftPSz);
+        IsBuildIndirected_ = policy->UseExternalPayload(
+            EJoinAlgo::HashJoin, leftPSz, rightFetchedTuples / cardinality);
 
         ProbeStream_ = *rightStream;
         ProbeData_ = std::move(rightData);
@@ -594,7 +663,8 @@ public:
         ProbeInputs_.resize(rightItemTypesArg->size());
         ProbeKeyColumnsSet_ = THashSet<ui32>(ProbeKeyColumns_->begin(), ProbeKeyColumns_->end());
         // Use or not external payload depends on the policy
-        IsProbeIndirected_ = policy->UseExternalPayload(EJoinAlgo::HashJoin, rightPSz);
+        IsProbeIndirected_ = policy->UseExternalPayload(
+            EJoinAlgo::HashJoin, rightPSz, rightFetchedTuples / cardinality);
 
         // Create converters
         auto pool = &Ctx_.ArrowMemoryPool;
@@ -693,6 +763,14 @@ public:
     }
 
     void BuildIndex() {
+        const auto begin = std::chrono::steady_clock::now();
+        Y_DEFER {
+            const auto end = std::chrono::steady_clock::now();
+            const auto spent =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            globalResourceMeter.UpdateStageSpentTime(JoinName_, "Build", spent);
+        };
+
         auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
         auto payloadStorage = static_cast<TExternalPayloadStorage*>(BuildExternalPayloadStorage_.AsBoxed().Get()); 
 
@@ -713,6 +791,14 @@ public:
     }
 
     NUdf::EFetchStatus DoProbe() {
+        const auto begin = std::chrono::steady_clock::now();
+        Y_DEFER {
+            const auto end = std::chrono::steady_clock::now();
+            const auto spent =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            globalResourceMeter.UpdateStageSpentTime(JoinName_, "Probe", spent);
+        };
+
         NUdf::EFetchStatus status{NUdf::EFetchStatus::Finish};
         auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
@@ -813,26 +899,40 @@ private:
         auto  nTuples = joinState.ProbePackedInput.NTuples;
         auto  overflow = joinState.ProbePackedInput.Overflow.data();
 
-        for (size_t i = 0; i < nTuples; i++, tuple += probeLayout->TotalRowSize) {
-            Table_.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple) {
-                // Copy tuple from build part into output
-                auto prevSize = joinState.BuildPackedOutput.size();
-                joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
-                std::copy(foundTuple, foundTuple + buildLayout->TotalRowSize, joinState.BuildPackedOutput.data() + prevSize);
+        using TIterPair = std::pair<TTable::TIterator, const ui8*>;
+        const auto batchSize = 64;
+        TVector<TIterPair> iterators(batchSize);
 
-                // Copy tuple from probe part into output
-                prevSize = joinState.ProbePackedOutput.size();
-                joinState.ProbePackedOutput.resize(prevSize + probeLayout->TotalRowSize);
-                std::copy(tuple, tuple + probeLayout->TotalRowSize, joinState.ProbePackedOutput.data() + prevSize);
+        for (size_t i = 0; i < nTuples; i += batchSize) {
+            auto remaining = std::min<ui64>(batchSize, nTuples - i);
+            for (size_t offset = 0; offset < remaining; ++offset, tuple += probeLayout->TotalRowSize) {
+                iterators[offset] = {Table_.Find(tuple, overflow), tuple};
+            }
 
-                // New row added
-                joinState.OutputRows++;
-            });
+            for (size_t offset = 0; offset < remaining; ++offset) {
+                auto [it, inTuple] = iterators[offset];
+                const ui8* foundTuple = nullptr;
+                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                    // Copy tuple from build part into output
+                    auto prevSize = joinState.BuildPackedOutput.size();
+                    joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
+                    std::copy(foundTuple, foundTuple + buildLayout->TotalRowSize, joinState.BuildPackedOutput.data() + prevSize);
+
+                    // Copy tuple from probe part into output
+                    prevSize = joinState.ProbePackedOutput.size();
+                    joinState.ProbePackedOutput.resize(prevSize + probeLayout->TotalRowSize);
+                    std::copy(inTuple, inTuple + probeLayout->TotalRowSize, joinState.ProbePackedOutput.data() + prevSize);
+
+                    // New row added
+                    joinState.OutputRows++;
+                }
+            }
         }
     }
 
 private:
     TComputationContext&        Ctx_;
+    const char *                JoinName_;
     const TVector<TType*>*      ResultItemTypes_;
 
     TDeque<TBlock>              BuildData_;
@@ -867,6 +967,7 @@ public:
     TInMemoryGraceJoin(
         TMemoryUsageInfo*       memInfo,
         TComputationContext&    ctx,
+        const char *            joinName,
         const TVector<TType*>*  resultItemTypes,
         const TVector<TType*>*  leftItemTypesArg,
         const TVector<ui32>*    leftKeyColumns,
@@ -879,12 +980,16 @@ public:
     )
         : TBase(memInfo)
         , Ctx_(ctx)
+        , JoinName_(joinName)
         , ResultItemTypes_(resultItemTypes)
     {
         using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
 
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
         auto [leftPSz, rightPSz] = tempStorage.GetPayloadSizes();
+        auto [leftFetchedTuples, rightFetchedTuples] = tempStorage.GetFetchedTuples();
+        auto maxFetchedTuples = std::max(leftFetchedTuples, rightFetchedTuples);
+        auto cardinality = tempStorage.EstimateCardinality(); // bootstrap value, may be far from truth
         auto [leftData, rightData] = tempStorage.DetachData();
         
         size_t leftRowsNum = 0;
@@ -899,11 +1004,13 @@ public:
 
         THashSet<ui32> leftKeyColumnsSet(leftKeyColumns->begin(), leftKeyColumns->end());
         // Use or not external payload depends on the policy
-        bool isLeftIndirected = policy->UseExternalPayload(EJoinAlgo::InMemoryGraceJoin, leftPSz);
+        bool isLeftIndirected = policy->UseExternalPayload(
+            EJoinAlgo::InMemoryGraceJoin, leftPSz, maxFetchedTuples / cardinality);
 
         THashSet<ui32> rightKeyColumnsSet(rightKeyColumns->begin(), rightKeyColumns->end());
         // Use or not external payload depends on the policy
-        bool isRightIndirected = policy->UseExternalPayload(EJoinAlgo::InMemoryGraceJoin, rightPSz);
+        bool isRightIndirected = policy->UseExternalPayload(
+            EJoinAlgo::InMemoryGraceJoin, rightPSz, maxFetchedTuples / cardinality);
 
         // Create converters
         auto pool = &Ctx_.ArrowMemoryPool;
@@ -969,7 +1076,7 @@ public:
         const size_t leftTupleSize = leftRowsNum * LeftConverter_->GetTupleLayout()->TotalRowSize;
         const size_t rightTupleSize = rightRowsNum * RightConverter_->GetTupleLayout()->TotalRowSize;
         const size_t minTupleSize = std::min(leftTupleSize, rightTupleSize);
-        constexpr size_t bucketDesiredSize = L1_CACHE_SIZE;
+        constexpr size_t bucketDesiredSize = L2_CACHE_SIZE;
 
         BucketsLogNum_ = minTupleSize ? sizeof(size_t) * 8 - std::countl_zero((minTupleSize - 1) / bucketDesiredSize) : 0;
         LeftBuckets_.resize(1u << BucketsLogNum_);
@@ -1024,6 +1131,14 @@ public:
     }
 
     NUdf::EFetchStatus DoProbe() {
+        const auto begin = std::chrono::steady_clock::now();
+        Y_DEFER {
+            const auto end = std::chrono::steady_clock::now();
+            const auto spent =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            globalResourceMeter.UpdateStageSpentTime(JoinName_, "Probe", spent);
+        };
+
         if (CurrBucket_ >> BucketsLogNum_) {
             return NUdf::EFetchStatus::Finish;
         }
@@ -1067,6 +1182,14 @@ public:
 
 private:
     void BuildIndex(TJoinState& joinState) {
+        const auto begin = std::chrono::steady_clock::now();
+        Y_DEFER {
+            const auto end = std::chrono::steady_clock::now();
+            const auto spent =
+                std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            globalResourceMeter.UpdateStageSpentTime(JoinName_, "Build", spent);
+        };
+
         auto& leftPack = LeftBuckets_[CurrBucket_];
         auto& rightPack = RightBuckets_[CurrBucket_];
 
@@ -1095,28 +1218,40 @@ private:
         auto *const overflow = joinState.ProbePackedInput.Overflow.data();
         auto *tuple = joinState.ProbePackedInput.PackedTuples.data() + CurrProbeRow_ * probeLayout->TotalRowSize;
 
-        /// TODO: batching
-        // WARNING: we can not properly track the number of output rows due to Apply,
+        using TIterPair = std::pair<TTable::TIterator, const ui8*>;
+        const auto batchSize = 64;
+        TVector<TIterPair> iterators(batchSize);
+
+        // TODO: interrupt this loop when joinState is full as in BlockMapJoin. So track current iterator and save iterators somewhere.
+        // WARNING: we can not properly track the number of output rows due to uninterruptible for loop in DoBatchLookup,
         // so add joinState.IsNotFull() check to prevent overflow in AddMany builder's method.
-        // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
-        for (; CurrProbeRow_ < nTuples && joinState.IsNotFull(); CurrProbeRow_++, tuple += probeLayout->TotalRowSize) {
-            Table_.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple) {
-                // Copy tuple from build part into output
-                auto prevSize = joinState.BuildPackedOutput.size();
-                joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
-                std::copy(foundTuple, foundTuple + buildLayout->TotalRowSize, joinState.BuildPackedOutput.data() + prevSize);
+        for (; CurrProbeRow_ < nTuples && joinState.IsNotFull(); CurrProbeRow_ += batchSize) {
+            auto remaining = std::min<ui64>(batchSize, nTuples - CurrProbeRow_);
+            for (size_t offset = 0; offset < remaining; ++offset, tuple += probeLayout->TotalRowSize) {
+                iterators[offset] = {Table_.Find(tuple, overflow), tuple};
+            }
 
-                // Copy tuple from probe part into output
-                prevSize = joinState.ProbePackedOutput.size();
-                joinState.ProbePackedOutput.resize(prevSize + probeLayout->TotalRowSize);
-                std::copy(tuple, tuple + probeLayout->TotalRowSize, joinState.ProbePackedOutput.data() + prevSize);
+            for (size_t offset = 0; offset < remaining; ++offset) {
+                auto [it, inTuple] = iterators[offset];
+                const ui8* foundTuple = nullptr;
+                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                    // Copy tuple from build part into output
+                    auto prevSize = joinState.BuildPackedOutput.size();
+                    joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
+                    std::copy(foundTuple, foundTuple + buildLayout->TotalRowSize, joinState.BuildPackedOutput.data() + prevSize);
 
-                // New row added
-                joinState.OutputRows++;
-            });
+                    // Copy tuple from probe part into output
+                    prevSize = joinState.ProbePackedOutput.size();
+                    joinState.ProbePackedOutput.resize(prevSize + probeLayout->TotalRowSize);
+                    std::copy(inTuple, inTuple + probeLayout->TotalRowSize, joinState.ProbePackedOutput.data() + prevSize);
+
+                    // New row added
+                    joinState.OutputRows++;
+                }
+            }
         }
 
-        if (CurrProbeRow_ == nTuples) {
+        if (CurrProbeRow_ >= nTuples) { // >= because remaining can be less than batchSize
             NeedNextBucket_ = true;
             ++CurrBucket_;
             CurrProbeRow_ = 0;
@@ -1125,6 +1260,7 @@ private:
 
 private:
     TComputationContext&        Ctx_;
+    const char *                JoinName_;
     const TVector<TType*>*      ResultItemTypes_;
 
     std::unique_ptr<IBlockLayoutConverter> LeftConverter_;
@@ -1225,10 +1361,10 @@ private:
 
             switch (status) {
             case TTempJoinStorage::EStatus::BothStreamsFinished: {
-                auto [lSize, rSize] = tempStorage.GetFetchedSizes();
+                auto [lTuples, rTuples] = tempStorage.GetFetchedTuples();
 
                 // The choice of algorithm depends on the policy. See default policy
-                if (Policy_->PickAlgorithm(lSize, rSize) == EJoinAlgo::HashJoin) {
+                if (Policy_->PickAlgorithm(lTuples, rTuples) == EJoinAlgo::HashJoin) {
                     MakeHashJoin();
                     auto& hashJoin = *GetHashJoin();
                     hashJoin.BuildIndex();
@@ -1241,11 +1377,26 @@ private:
                 goto switch_mode;
             }
             case TTempJoinStorage::EStatus::OneStreamFinished: {
-                MakeHashJoin();
-                auto& hashJoin = *GetHashJoin();
-                hashJoin.BuildIndex();
+                auto [lTuples, rTuples] = tempStorage.GetFetchedTuples();
+                auto [isLeftFinished, isRightFinished] = tempStorage.IsFinished();
+                if (!isLeftFinished) {
+                    lTuples = IBlockGraceJoinPolicy::STREAM_NOT_FETCHED;
+                } else {
+                    rTuples = IBlockGraceJoinPolicy::STREAM_NOT_FETCHED;
+                }
 
-                SwitchModeTo(EMode::HashJoin);
+                // The choice of algorithm depends on the policy. See default policy
+                if (Policy_->PickAlgorithm(lTuples, rTuples) == EJoinAlgo::HashJoin) {
+                    MakeHashJoin();
+                    auto& hashJoin = *GetHashJoin();
+                    hashJoin.BuildIndex();
+                    SwitchModeTo(EMode::HashJoin);
+                } else {
+                    /// TODO: not implemented
+                    Y_ASSERT(false); // Grace hash join not implemented yet
+                    SwitchModeTo(EMode::GraceHashJoin);
+                }
+
                 goto switch_mode;
             }
             case TTempJoinStorage::EStatus::MemoryLimitExceeded: {
@@ -1292,12 +1443,12 @@ private:
     }
 
     void MakeHashJoin() {
+        auto newJoinName = "BlockGraceJoin::HashJoin";
         Join_ = Ctx_.HolderFactory.Create<THashJoin>(
-            Ctx_, &ResultItemTypes_,
+            Ctx_, newJoinName, &ResultItemTypes_,
             &LeftStream_, &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightStream_, &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
             Policy_, std::move(TempStorage_));
-        auto newJoinName = "BlockGraceJoin::HashJoin";
         globalResourceMeter.MergeHistoryPages(JoinName_, newJoinName);
         JoinName_ = newJoinName;
     }
@@ -1307,12 +1458,12 @@ private:
     }
 
     void MakeInMemoryGraceJoin() {
+        auto newJoinName = "BlockGraceJoin::InMemoryGraceJoin";
         Join_ = Ctx_.HolderFactory.Create<TInMemoryGraceJoin>(
-            Ctx_, &ResultItemTypes_,
+            Ctx_, newJoinName, &ResultItemTypes_,
             &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
             Policy_, std::move(TempStorage_));
-        auto newJoinName = "BlockGraceJoin::InMemoryGraceJoin";
         globalResourceMeter.MergeHistoryPages(JoinName_, newJoinName);
         JoinName_ = newJoinName;
     }

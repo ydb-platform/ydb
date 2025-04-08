@@ -7,13 +7,14 @@
 namespace NKikimr::NMiniKQL {
 
 // -------------------------------------------------------------------
-// This class is used for benchmarks only. Doesnt take part in any logic
+// This class is used for benchmarks only. Doesn't take part in any logic
 class TResourceMeter {
 private:
     struct TStatistics {
         std::pair<ui64, ui64>   avgMemoryConsumpted{0, 0};
         ui64                    memoryConsumptionPeak{0};
         ui64                    processedTime{0}; // in microseconds
+        THashMap<TString, ui64> stages; // time spent for concrete stage in microseconds
     };
 
 public:
@@ -26,13 +27,13 @@ public:
     }
 
     // Accumulate time
-    void UpdateSpentTime(TString id, ui64 msec) {
+    void UpdateSpentTime(const char* id, ui64 msec) {
         auto& page = History_.back();
         page[id].processedTime += msec;
     }
 
     // Upate memory consumption stats
-    void UpdateConsumptedMemory(TString id, ui64 memoryConsumpted) {
+    void UpdateConsumptedMemory(const char* id, ui64 memoryConsumpted) {
         using std::max;
         auto& page = History_.back();
         page[id].avgMemoryConsumpted.first += memoryConsumpted;
@@ -40,8 +41,13 @@ public:
         page[id].memoryConsumptionPeak = max(page[id].memoryConsumptionPeak, memoryConsumpted);
     }
 
+    void UpdateStageSpentTime(const char* id, const char* stage, ui64 msec) {
+        auto& page = History_.back();
+        page[id].stages[stage] += msec;
+    }
+
     // Aggragate two pages in "to", "from" page will be removed
-    void MergeHistoryPages(TString from, TString to) {
+    void MergeHistoryPages(const char* from, const char* to) {
         using std::max;
         auto& page = History_.back();
         page[to].avgMemoryConsumpted.first += page[from].avgMemoryConsumpted.first;
@@ -49,6 +55,9 @@ public:
         page[to].memoryConsumptionPeak = max(
             page[to].memoryConsumptionPeak, page[from].memoryConsumptionPeak);
         page[to].processedTime += page[from].processedTime;
+        for (const auto& [stage, t]: page[from].stages) {
+            page[to].stages[stage] += t;
+        }
         page.erase(from);
     }
 
@@ -71,9 +80,12 @@ public:
             out << "---------- Run N. " << i << " begin  -----------\n";
             for (const auto& [id, stats]: page) {
                 out << "Node: " << id << "\n"
-                    << " > Dataset size: " << datasetSize / 1024 << " [KB]\n"
-                    << " > Time spent:   " << stats.processedTime << " [us]\n"
-                    << " > Speed:        " << datasetSize / stats.processedTime << " [MB/s]\n"
+                    << " > Dataset size:     " << datasetSize / 1024 << " [KB]\n"
+                    << " > Total time spent: " << stats.processedTime << " [us]\n";
+                for (const auto& [stage, t]: stats.stages) {
+                    out << "   > \"" << stage << "\": " << t << " [us]\n";
+                }
+                out << " > Speed:            " << datasetSize / stats.processedTime << " [MB/s]\n"
                     << " > Avg. memory consumption: " << stats.avgMemoryConsumpted.first / (stats.avgMemoryConsumpted.second * 1024) << " [KB]\n"
                     << " > Max memory consumption:  " << stats.memoryConsumptionPeak / 1024 << " [KB]\n\n";
             }
@@ -87,7 +99,7 @@ public:
     }
 
 private:
-    std::vector<std::unordered_map<TString, TStatistics>>   History_;
+    TVector<THashMap<TString, TStatistics>>   History_;
 };
 
 // -------------------------------------------------------------------

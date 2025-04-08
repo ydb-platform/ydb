@@ -31,5 +31,7 @@ ENDIF()
 END()
 
 RECURSE(
+    helpers
+    parallel_backup_database
     s3_path_style
 )

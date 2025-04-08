@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -58,6 +59,13 @@ public:
             QueryClient.ConstructInPlace(YdbDriver());
         }
         return *QueryClient;
+    }
+
+    NYdb::NScheme::TSchemeClient& YdbSchemeClient() {
+        if (!SchemeClient) {
+            SchemeClient.ConstructInPlace(YdbDriver());
+        }
+        return *SchemeClient;
     }
 
     NYdb::NOperation::TOperationClient& YdbOperationClient() {
@@ -117,6 +125,7 @@ protected:
     TMaybe<NYdb::NImport::TImportClient> ImportClient;
     TMaybe<NYdb::NOperation::TOperationClient> OperationClient;
     TMaybe<NYdb::NQuery::TQueryClient> QueryClient;
+    TMaybe<NYdb::NScheme::TSchemeClient> SchemeClient;
     TMaybe<Aws::Client::ClientConfiguration> AwsS3ClientConfig;
     TMaybe<Aws::S3::S3Client> AwsS3Client;
 };

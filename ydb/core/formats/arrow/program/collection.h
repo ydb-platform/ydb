@@ -467,7 +467,6 @@ public:
             *Filter = Filter->CombineSequentialAnd(filter);
             for (auto&& i : Accessors) {
                 i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter, i.second.GetData()));
-                AFL_VERIFY(i.second.GetData()->GetRecordsCount() == Filter->GetFilteredCountVerified()); // TODO: remove
             }
         }
         RecordsCountActual = Filter->GetFilteredCount();

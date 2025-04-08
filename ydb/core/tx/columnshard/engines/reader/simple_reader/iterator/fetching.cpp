@@ -222,7 +222,9 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDa
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
-    Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+    if (auto source = Source.lock()) {
+        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+    }
 }
 
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)

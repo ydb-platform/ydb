@@ -20,6 +20,7 @@ namespace NSQLComplete {
 
     enum class ECandidateKind {
         Keyword,
+        PragmaName,
         TypeName,
         FunctionName,
     };

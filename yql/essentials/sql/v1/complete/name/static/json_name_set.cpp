@@ -26,6 +26,10 @@ namespace NSQLComplete {
         return keys;
     }
 
+    TVector<TString> ParsePragmas(NJson::TJsonValue json) {
+        return ParseNames(json.GetArraySafe());
+    }
+
     TVector<TString> ParseTypes(NJson::TJsonValue json) {
         return ParseNames(json.GetArraySafe());
     }
@@ -48,6 +52,7 @@ namespace NSQLComplete {
 
     NameSet MakeDefaultNameSet() {
         return {
+            .Pragmas = ParsePragmas(LoadJsonResource("pragmas_opensource.json")),
             .Types = ParseTypes(LoadJsonResource("types.json")),
             .Functions = Merge(
                 ParseFunctions(LoadJsonResource("sql_functions.json")),

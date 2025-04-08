@@ -10,9 +10,18 @@
 namespace NSQLComplete {
 
     struct TLocalSyntaxContext {
+        struct TPragma {
+            TString Namespace;
+        };
+
+        struct TFunction {
+            TString Namespace;
+        };
+
         TVector<TString> Keywords;
+        std::optional<TPragma> Pragma;
         bool IsTypeName;
-        bool IsFunctionName;
+        std::optional<TFunction> Function;
     };
 
     class ILocalSyntaxAnalysis {

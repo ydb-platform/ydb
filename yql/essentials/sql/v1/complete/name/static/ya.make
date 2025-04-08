@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 RESOURCE(
+    yql/essentials/data/language/pragmas_opensource.json pragmas_opensource.json
     yql/essentials/data/language/types.json types.json
     yql/essentials/data/language/sql_functions.json sql_functions.json
     yql/essentials/data/language/udfs_basic.json udfs_basic.json

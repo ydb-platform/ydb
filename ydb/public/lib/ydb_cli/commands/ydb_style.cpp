@@ -54,15 +54,19 @@ namespace NYdb::NConsoleClient {
         }
     }
 
-    void TCommandStyle::FormatDEntry(const TFsPath& path) {
+    void TCommandStyle::FormatDEntry(const TFsPath& path, bool isSkippingNoSql) {
         if (!path.Exists()) {
             ythrow yexception() << "path '" << path << "' does not exist";
         }
 
         if (path.IsFile()) {
+            if (isSkippingNoSql && !path.GetName().EndsWith(".sql")) {
+                return;
+            }
+
             FormatFile(path);
-        } else if (path.IsDirectory()) {
-            ythrow yexception() << "styling directories is not yet supported";
+        } else if (path.IsDirectory() && !path.IsSymlink()) {
+            FormatDirectory(path);
         } else {
             ythrow yexception() << "unexpected path state: is not a file and is not a directory";
         }
@@ -82,6 +86,17 @@ namespace NYdb::NConsoleClient {
         file.Write(formatted.data(), formatted.size());
 
         Cerr << "Formatted the file '" << path << "'" << Endl;
+    }
+
+    void TCommandStyle::FormatDirectory(const TFsPath& path) {
+        Y_ENSURE(path.IsDirectory());
+
+        TVector<TFsPath> children;
+        path.List(children);
+
+        for (const auto& path : children) {
+            FormatDEntry(path, /* isSkippingNoSql = */ true);
+        }
     }
 
     bool TCommandStyle::Format(IInputStream& input, TString& formatted, TString& error) {

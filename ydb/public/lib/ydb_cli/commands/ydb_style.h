@@ -23,8 +23,9 @@ namespace NYdb::NConsoleClient {
 
     private:
         int RunStd();
-        void FormatDEntry(const TFsPath& path);
+        void FormatDEntry(const TFsPath& path, bool isSkippingNoSql = false);
         void FormatFile(const TFsPath& path);
+        void FormatDirectory(const TFsPath& path);
         bool Format(IInputStream& input, TString& formatted, TString& error);
 
         TVector<TFsPath> Paths;

@@ -1070,8 +1070,8 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     PQ_LOG_D("Reading cookie " << cookie << ". Send blob request.");
     Y_ABORT_UNLESS(res);
 
-    THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition,
-                                                                     std::move(blobs)));
+    auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,
+                                                     std::move(blobs));
 
     ctx.Send(BlobCache, request.Release());
 }

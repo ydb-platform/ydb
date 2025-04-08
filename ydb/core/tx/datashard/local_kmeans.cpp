@@ -393,7 +393,9 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
-        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
+        Lead.Valid = true;
+        Lead.Key = TSerializedCellVec(Prefix.GetCells()); // seek to (prefix, inf)
+        Lead.Relation = NTable::ESeek::Upper;
         Prefix = {};
         IsFirstPrefixFeed = true;
         IsPrefixRowsValid = true;

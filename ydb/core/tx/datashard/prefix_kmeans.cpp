@@ -101,12 +101,12 @@ protected:
     TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse> Response;
 
     // FIXME: save PrefixRows as std::vector<std::pair<TSerializedCellVec, TSerializedCellVec>> to avoid parsing
-    ui32 PrefixColumns;
+    const ui32 PrefixColumns;
     TSerializedCellVec Prefix;
     TBufferData PrefixRows;
     bool IsFirstPrefixFeed = true;
     bool IsPrefixRowsValid = true;
-    
+
     bool IsExhausted = false;
 
 public:
@@ -153,6 +153,7 @@ public:
             (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
         PostingTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns);
+        // prefix types
         {
             auto types = GetAllTypes(table);
 
@@ -242,8 +243,8 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TPrefixKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
-                                                                            << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -297,11 +298,6 @@ protected:
         LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
-    }
-
-    ui64 GetProbability()
-    {
-        return Rng.GenRand64();
     }
 
     bool ShouldWaitUpload()
@@ -381,6 +377,11 @@ protected:
             ++pos;
         }
     }
+
+    ui64 GetProbability()
+    {
+        return Rng.GenRand64();
+    }
 };
 
 template <typename TMetric>
@@ -394,17 +395,13 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
-
     void StartNewPrefix() {
         Parent = Child + K;
         Child = Parent + 1;
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
-        // TODO(mbkkt) Upper or Lower doesn't matter here, because we seek to (prefix, inf)
-        // so we can choose Lower if it's faster.
-        // Exact seek with Lower also possible but needs to rewrite some code in Feed
-        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper);
+        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
         IsFirstPrefixFeed = true;
         IsPrefixRowsValid = true;
@@ -801,6 +798,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
     if (request.GetK() < 2) {
         badRequest("Should be requested partition on at least two rows");
+        return;
+    }
+
+    if (request.GetPrefixColumns() <= 0) {
+        badRequest("Should be requested on at least one prefix column");
         return;
     }
 

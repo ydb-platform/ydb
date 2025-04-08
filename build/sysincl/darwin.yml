@@ -149,6 +149,7 @@
   - sys/filio.h
   - sys/ioccom.h
   - sys/kauth.h
+  - sys/kdebug_signpost.h
   - sys/kern_control.h
   - sys/lock.h
   - sys/malloc.h

@@ -28,9 +28,9 @@ Y_UNIT_TEST_SUITE(SqlReflectTests) {
     }
 
     Y_UNIT_TEST(Other) {
-        UNIT_ASSERT_VALUES_EQUAL(grammar.OtherNames.contains("REAL"), true);
-        UNIT_ASSERT_VALUES_EQUAL(grammar.OtherNames.contains("STRING_VALUE"), true);
-        UNIT_ASSERT_VALUES_EQUAL(grammar.OtherNames.contains("STRING_MULTILINE"), false);
+        UNIT_ASSERT_VALUES_EQUAL(Count(grammar.OtherNames, "REAL"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Count(grammar.OtherNames, "STRING_VALUE"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Count(grammar.OtherNames, "STRING_MULTILINE"), 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
             grammar.BlockByName.at("FLOAT_EXP"),

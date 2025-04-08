@@ -54,7 +54,7 @@ TTextWalker& TTextWalker::Advance(char c) {
     }
 
     ui32 charDistance = 1;
-    if (Utf8Aware && IsUtf8Intermediate(c)) {
+    if (Utf8Aware && IsUTF8ContinuationByte(c)) {
         charDistance = 0;
     }
 

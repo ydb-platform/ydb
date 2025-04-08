@@ -4002,4 +4002,15 @@ void EnumeratePragmas(std::function<void(std::string_view)> callback) {
     callback("yson.DisableCastToString");
 }
 
+void EnumerateStmtContexts(std::function<void(std::string_view)> callback) {
+    callback("read");
+    callback("insert");
+    callback("replace");
+    callback("upsert");
+    callback("update");
+    callback("delete");
+    callback("create_table");
+    callback("create_view");
+}
+
 } // namespace NSQLTranslationV1

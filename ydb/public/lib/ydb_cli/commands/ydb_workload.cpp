@@ -391,6 +391,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
     auto pathsToDelete = workloadGen.GetCleanPaths();
     TRemoveDirectoryRecursiveSettings settings;
     settings.NotExistsIsOk(true);
+    settings.CreateProgressBar(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;
         auto fullPath = config.Database + "/" + path.c_str();

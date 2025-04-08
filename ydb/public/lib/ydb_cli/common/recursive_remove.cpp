@@ -234,12 +234,13 @@ TStatus RemovePathRecursive(
         return entity;
     }
 
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
-    return remover(entity.GetEntry());
+    switch (entity.GetEntry().Type) {
+        case NYdb::NScheme::ESchemeEntryType::ColumnStore:
+        case NYdb::NScheme::ESchemeEntryType::Directory:
+            return RemoveDirectoryRecursive(driver, path, settings);
+        default:
+            return RemovePathRecursive(driver, entity.GetEntry(), settings);
+    }
 }
 
 TStatus RemovePathRecursive(

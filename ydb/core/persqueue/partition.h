@@ -451,7 +451,7 @@ private:
 
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
-    TConsumerSnapshot CreateSnapshot(const TUserInfo& userInfo) const;
+    TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

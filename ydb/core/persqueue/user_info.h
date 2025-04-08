@@ -43,11 +43,16 @@ struct TMessageInfo {
 };
 
 struct TConsumerSnapshot {
+    TInstant Now;
+
     TMessageInfo LastCommittedMessage;
 
     // Timstamp of the last read
     TInstant LastReadTimestamp;
     TMessageInfo LastReadMessage;
+
+    TDuration ReadLag;
+    TDuration CommitedLag;
 };
 
 struct TUserInfoBase {
@@ -67,13 +72,14 @@ struct TUserInfoBase {
 };
 
 struct TUserInfo: public TUserInfoBase {
+    bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message
     TInstant WriteTimestamp;
     // CreateTimestamp of the last committed message
     TInstant CreateTimestamp;
+
     // Timstamp of the last read
     TInstant ReadTimestamp;
-    bool ActualTimestamps = false;
 
     i64 ReadOffset = -1;
 

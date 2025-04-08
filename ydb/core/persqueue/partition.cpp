@@ -651,10 +651,13 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 
 }
 
-TConsumerSnapshot TPartition::CreateSnapshot(const TUserInfo& userInfo) const {
+TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     auto now = TAppData::TimeProvider->Now();
 
+    userInfo.UpdateReadingTimeAndState(EndOffset, now);
+
     TConsumerSnapshot result;
+    result.Now = now;
 
     if (userInfo.Offset >= static_cast<i64>(EndOffset)) {
         result.LastCommittedMessage.CreateTimestamp = now;
@@ -667,6 +670,8 @@ TConsumerSnapshot TPartition::CreateSnapshot(const TUserInfo& userInfo) const {
         result.LastCommittedMessage.CreateTimestamp = timestamp;
         result.LastCommittedMessage.WriteTimestamp = timestamp;
     }
+
+    result.LastReadTimestamp = userInfo.ReadTimestamp;
 
     auto readOffset = userInfo.GetReadOffset();
     if (readOffset >= static_cast<i64>(EndOffset)) {
@@ -682,6 +687,12 @@ TConsumerSnapshot TPartition::CreateSnapshot(const TUserInfo& userInfo) const {
         result.LastCommittedMessage.CreateTimestamp = timestamp;
         result.LastCommittedMessage.WriteTimestamp = timestamp;
     }
+
+    if (readOffset < (i64)EndOffset) {
+        result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
+    }
+
+    result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
 
     return result;
 }
@@ -732,7 +743,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     bool filterConsumers = !ev->Get()->Consumers.empty();
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        const auto& userInfo = userInfoPair.second;
+        auto& userInfo = userInfoPair.second;
         auto& clientId = ev->Get()->ClientId;
         bool consumerShouldBeProcessed = filterConsumers
             ? requiredConsumers.contains(userInfo.User)
@@ -775,19 +786,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             read->SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
             read->SetSize(GetSizeLag(readOffset));
 
-            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
-            if (IsActive() || userInfo.Offset < (i64)EndOffset) {
-                clientInfo->SetSinceCommittedWriteTimeMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
-            } else {
-                clientInfo->SetSinceCommittedWriteTimeMs(0);
-            }
+            clientInfo->SetLastReadTimestampMs(snapshot.LastReadTimestamp.MilliSeconds());
+            clientInfo->SetSinceCommittedWriteTimeMs(snapshot.CommitedLag.MilliSeconds());
             if (IsActive() || readOffset < (i64)EndOffset) {
-                clientInfo->SetReadLagMs(readOffset < (i64)EndOffset
-                                            ? (userInfo.GetReadTimestamp() - snapshot.LastReadMessage.WriteTimestamp).MilliSeconds()
-                                            : 0);
+                clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
 
-                ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (now - userInfo.GetReadTimestamp()).MilliSeconds();
+                ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (snapshot.Now - snapshot.LastReadTimestamp).MilliSeconds();
                 clientInfo->SetTotalLagMs(totalLag);
             } else {
                 clientInfo->SetReadLagMs(0);
@@ -802,18 +807,11 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto* clientInfo = result.AddConsumerResult();
             clientInfo->SetConsumer(userInfo.User);
             clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
-
-            if (IsActive() || userInfo.Offset < (i64)EndOffset) {
-                clientInfo->SetSinceCommittedWriteTimeMs((snapshot.LastCommittedMessage.WriteTimestamp - now).MilliSeconds());
-            } else {
-                clientInfo->SetSinceCommittedWriteTimeMs(0);
-            }
+            clientInfo->SetSinceCommittedWriteTimeMs(snapshot.CommitedLag.MilliSeconds());
 
             auto readOffset = userInfo.GetReadOffset();
             if (IsActive() || readOffset < (i64)EndOffset) {
-                clientInfo->SetReadLagMs(readOffset < (i64)EndOffset
-                                            ? (userInfo.GetReadTimestamp() - snapshot.LastReadMessage.WriteTimestamp).MilliSeconds()
-                                            : 0);
+                clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
             } else {
                 clientInfo->SetReadLagMs(0);
@@ -1569,7 +1567,6 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !userInfo.Important)
             continue;
         bool haveChanges = false;
-        userInfo.UpdateReadingTimeAndState(EndOffset, now);
         auto snapshot = CreateSnapshot(userInfo);
         auto ts = snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds();
         if (ts < MIN_TIMESTAMP_MS) ts = Max<i64>();

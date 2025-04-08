@@ -119,6 +119,7 @@ protected:
     TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> Response;
 
     // FIXME: save PrefixRows as std::vector<std::pair<TSerializedCellVec, TSerializedCellVec>> to avoid parsing
+    const ui32 PrefixColumns;
     TSerializedCellVec Prefix;
     TBufferData PrefixRows;
     bool IsFirstPrefixFeed = true;
@@ -141,6 +142,7 @@ public:
         , Parent{request.GetParentFrom()}
         , Child{request.GetChild()}
         , MaxRounds{request.GetNeedsRounds()}
+        , InitK{request.GetK()}
         , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
@@ -151,11 +153,13 @@ public:
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
+        , PrefixColumns{request.GetParentFrom() == 0 && request.GetParentTo() == 0 ? 0u : 1u}
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
         ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        Lead.SetTags(ScanTags);
         // upload types
         {
             Ydb::Type type;
@@ -385,8 +389,6 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     std::vector<TAggregatedCluster> AggregatedClusters;
 
     void StartNewPrefix() {
-        Parent++;
-        Child += InitK;
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
@@ -438,15 +440,18 @@ public:
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
+        if (PrefixColumns && Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
             if (!FinishPrefix()) {
                 // scan current prefix rows with a new state again
                 return EScan::Reset;
             }
         }
 
-        if (!Prefix) {
+        if (PrefixColumns && !Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
+            auto newParent = key.at(0).template AsValue<ui64>();
+            Child += (newParent - Parent) * InitK;
+            Parent = newParent;
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
@@ -629,6 +634,12 @@ private:
             case EState::KMEANS:
                 FeedKMeans(row);
                 break;
+            case EState::UPLOAD_MAIN_TO_BUILD:
+                FeedUploadMain2Build(key, row);
+                break;
+            case EState::UPLOAD_MAIN_TO_POSTING:
+                FeedUploadMain2Posting(key, row);
+                break;
             case EState::UPLOAD_BUILD_TO_BUILD:
                 FeedUploadBuild2Build(key, row);
                 break;
@@ -642,8 +653,7 @@ private:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
-        Y_ASSERT(row.size() == 1);
-        const auto embedding = row.at(0).AsRef();
+        const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!this->IsExpectedSize(embedding)) {
             return;
         }
@@ -672,7 +682,7 @@ private:
         AggregateToCluster(pos, row.at(EmbeddingPos).Data());
     }
 
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
@@ -680,7 +690,7 @@ private:
         }
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
@@ -688,7 +698,7 @@ private:
         }
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
@@ -696,7 +706,7 @@ private:
         }
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {

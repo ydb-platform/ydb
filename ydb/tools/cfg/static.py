@@ -1389,8 +1389,6 @@ class StaticConfigGenerator(object):
                         for vdisk_location in fail_domain.VDiskLocations:
                             bs_group_node_ids.add(vdisk_location.NodeID)
 
-            print(bs_group_node_ids)
-
             state_storage_cfg.Ring.NToSelect = self.__n_to_select
             state_storage_cfg.Ring.Node.extend(bs_group_node_ids)
         else:

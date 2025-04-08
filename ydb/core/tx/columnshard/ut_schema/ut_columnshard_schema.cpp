@@ -6,6 +6,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -19,24 +20,6 @@
 #include <util/system/hostname.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/hook/hook.h>
-
-#define Y_UNIT_TEST_OCTO(BaseName, Flag1, Flag2, Flag3)                                                                                                                \
-    template<bool, bool, bool> void BaseName(NUnitTest::TTestContext&);                                                                                                \
-    struct TTestRegistration##BaseName {                                                                                                                               \
-        TTestRegistration##BaseName() {                                                                                                                                \
-            TCurrentTest::AddTest(#BaseName "-" #Flag1 "-" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, false, false>), false); \
-            TCurrentTest::AddTest(#BaseName "+" #Flag1 "-" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, false, false>), false);  \
-            TCurrentTest::AddTest(#BaseName "-" #Flag1 "+" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, true, false>), false);  \
-            TCurrentTest::AddTest(#BaseName "+" #Flag1 "+" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, true, false>), false);   \
-            TCurrentTest::AddTest(#BaseName "-" #Flag1 "-" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, false, true>), false);  \
-            TCurrentTest::AddTest(#BaseName "+" #Flag1 "-" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, false, true>), false);   \
-            TCurrentTest::AddTest(#BaseName "-" #Flag1 "+" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, true, true>), false);   \
-            TCurrentTest::AddTest(#BaseName "+" #Flag1 "+" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, true, true>), false);    \
-        }                                                                                                                                                              \
-    };                                                                                                                                                                 \
-    static TTestRegistration##BaseName testRegistration##BaseName;                                                                                                     \
-    template<bool Flag1, bool Flag2, bool Flag3>                                                                                                                       \
-    void BaseName(NUnitTest::TTestContext&)
 
 
 namespace NKikimr {

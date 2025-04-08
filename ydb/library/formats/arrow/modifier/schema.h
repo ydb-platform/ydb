@@ -216,15 +216,6 @@ public:
 
     const std::shared_ptr<arrow::Field>& field(const ui32 index) const;
 
-    std::vector<std::string> GetFieldNames() const {
-        std::vector<std::string> names;
-        names.reserve(IndexByName.size());
-        for (const auto& [name, _] : IndexByName) {
-            names.emplace_back(name);
-        }
-        return names;
-    }
-
 private:
     class TFieldsErasePolicy {
     private:

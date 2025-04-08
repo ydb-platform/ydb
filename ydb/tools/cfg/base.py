@@ -410,10 +410,7 @@ class ClusterDetailsProvider(object):
         if body:
             return str(body)
 
-        hostname = host_description.get("name", host_description.get("host"))
-        port = host_description.get("port", host_description.get("ic_port", DEFAULT_INTERCONNECT_PORT))
-
-        return str(self._host_info_provider.get_body(hostname, port))
+        return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)

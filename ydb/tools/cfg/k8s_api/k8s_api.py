@@ -58,6 +58,6 @@ class K8sApiHostsInformationProvider(HostsInformationProvider):
             return labels[self._k8s_dc_label]
         return ""
 
-    def get_body(self, hostname, port):
-        hash = hashlib.sha256(f'{hostname}:{port}'.encode())
+    def get_body(self, hostname):
+        hash = hashlib.sha256(hostname.encode())
         return int(hash.hexdigest(), 16) % (2**32)

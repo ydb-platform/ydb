@@ -11,7 +11,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -27,70 +27,13 @@ TRequestResult GetStatus(const NYql::TIssues& issues) {
 
 }  // anonymous namespace
 
-class TFqSetup::TImpl {
+class TFqSetup::TImpl : public TKikimrSetupBase {
+    using TBase = TKikimrSetupBase;
     using EVerbose = TFqSetupSettings::EVerbose;
 
 private:
-    TAutoPtr<TLogBackend> CreateLogBackend() const {
-        if (Settings.LogOutputFile) {
-            return NActors::CreateFileBackend(Settings.LogOutputFile);
-        } else {
-            return NActors::CreateStderrBackend();
-        }
-    }
-
-    void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
-        auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
-            InitLogSettings(Settings.LogConfig, runtime);
-            runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
-        };
-
-        serverSettings.SetLoggerInitializer(loggerInitializer);
-    }
-
-    void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
-        if (Settings.FunctionRegistry) {
-            serverSettings.SetFrFactory([this](const NKikimr::NScheme::TTypeRegistry&) {
-                return Settings.FunctionRegistry.Get();
-            });
-        }
-    }
-
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        NKikimr::Tests::TServerSettings serverSettings(PortManager.GetPort());
-
-        serverSettings.SetDomainName(Settings.DomainName);
-        serverSettings.SetVerbose(Settings.VerboseLevel >= EVerbose::InitLogs);
-        serverSettings.SetNeedStatsCollectors(true);
-        serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-
-        NKikimrConfig::TAppConfig config;
-        *config.MutableLogConfig() = Settings.LogConfig;
-        if (Settings.ActorSystemConfig) {
-            *config.MutableActorSystemConfig() = *Settings.ActorSystemConfig;
-        }
-
-        auto& featureFlags = *config.MutableFeatureFlags();
-        featureFlags.SetEnableExternalDataSources(true);
-        featureFlags.SetEnableReplaceIfExistsForExternalEntities(true);
-
-        const auto& allExternalSources = NYql::GetAllExternalDataSourceTypes();
-        config.MutableQueryServiceConfig()->MutableAvailableExternalDataSources()->Assign(allExternalSources.begin(), allExternalSources.end());
-
-        serverSettings.SetAppConfig(config);
-        serverSettings.SetFeatureFlags(config.GetFeatureFlags());
-
-        SetLoggerSettings(serverSettings);
-        SetFunctionRegistry(serverSettings);
-
-        if (Settings.MonitoringEnabled) {
-            serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings.FirstMonitoringPort, true);
-        }
-
-        serverSettings.SetGrpcPort(grpcPort);
-        serverSettings.SetEnableYqGrpc(true);
+        auto serverSettings = TBase::GetServerSettings(grpcPort, Settings.VerboseLevel >= EVerbose::InitLogs);
 
         return serverSettings;
     }
@@ -113,7 +56,7 @@ private:
     }
 
     NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort) const {
-        auto fqConfig = Settings.FqConfig;
+        auto fqConfig = Settings.AppConfig.GetFederatedQueryConfig();
 
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
         fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
@@ -229,25 +172,28 @@ private:
             return;
         }
 
-        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::YQL_PROXY, NActors::NLog::PRI_TRACE}}, Settings.LogConfig);
+        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::YQL_PROXY, NActors::NLog::PRI_TRACE}}, *Settings.AppConfig.MutableLogConfig());
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
 public:
     explicit TImpl(const TFqSetupSettings& settings)
-        : Settings(settings)
+        : TBase(settings)
+        , Settings(settings)
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
+        if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
+        }
+
+        Settings.GrpcEnabled = true;
+
         InitializeYqlLogger();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
 
         if (Settings.MonitoringEnabled && Settings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Monitoring port: " << CoutColors.Default() << GetRuntime()->GetMonPort() << Endl;
-        }
-
-        if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors.Cyan() << "Domain gRPC port: " << CoutColors.Default() << grpcPort << Endl;
         }
     }
 

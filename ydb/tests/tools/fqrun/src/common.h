@@ -51,13 +51,7 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     std::vector<TExternalDatabase> SharedComputeDatabases;
 
     EVerbose VerboseLevel = EVerbose::Info;
-
-    TString YqlToken;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    NFq::NConfig::TConfig FqConfig;
-    NKikimrConfig::TLogConfig LogConfig;
-    std::optional<NKikimrConfig::TActorSystemConfig> ActorSystemConfig;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 

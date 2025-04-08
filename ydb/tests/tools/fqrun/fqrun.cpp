@@ -267,27 +267,12 @@ protected:
                 SetupAcl(binding.mutable_acl());
             });
 
-        options.AddLongOption("fq-cfg", "File with FQ config (NFq::NConfig::TConfig for FQ proxy)")
+        options.AddLongOption("cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
             .RequiredArgument("file")
-            .DefaultValue("./configuration/fq_config.conf")
+            .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.FqConfig)) {
-                    ythrow yexception() << "Bad format of FQ configuration";
-                }
-            });
-
-        options.AddLongOption("as-cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
-            .RequiredArgument("file")
-            .DefaultValue("./configuration/as_config.conf")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                const TString file(option->CurValOrDef());
-                if (file == "-") {
-                    return;
-                }
-
-                RunnerOptions.FqSettings.ActorSystemConfig = NKikimrConfig::TActorSystemConfig();
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &(*RunnerOptions.FqSettings.ActorSystemConfig))) {
-                    ythrow yexception() << "Bad format of actor system configuration";
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.AppConfig)) {
+                    ythrow yexception() << "Bad format of app configuration";
                 }
             });
 
@@ -503,7 +488,7 @@ protected:
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
-        auto& fqConfig = RunnerOptions.FqSettings.FqConfig;
+        auto& fqConfig = *RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig();
         auto& gatewayConfig = *fqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
         FillTokens(gatewayConfig.mutable_s3());
@@ -564,9 +549,7 @@ private:
     }
 
     void SetupLogsConfig() {
-        auto& logConfig = RunnerOptions.FqSettings.LogConfig;
-
-        logConfig.SetDefaultLevel(DefaultLogPriority.value_or(NActors::NLog::EPriority::PRI_CRIT));
+        auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
 
         if (FqLogPriority) {
             std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> fqLogPriorities;

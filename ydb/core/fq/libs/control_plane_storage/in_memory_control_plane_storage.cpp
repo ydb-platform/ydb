@@ -578,10 +578,6 @@ private:
 
     HANDLE_CPS_REQUEST(TEvListConnectionsRequest, TEvListConnectionsResponse, LIST_CONNECTIONS) {
         auto connections = GetEntities(Connections, ctx.Scope, ctx.User);
-        std::sort(connections.begin(), connections.end(), [](const auto& l, const auto& r) {
-            return l.meta().id() < r.meta().id();
-        });
-
         auto& resultConnections = *ctx.Response.mutable_connection();
         const auto& filter = ctx.Request.filter();
 
@@ -692,10 +688,6 @@ private:
 
     HANDLE_CPS_REQUEST(TEvListBindingsRequest, TEvListBindingsResponse, LIST_BINDINGS) {
         auto bindings = GetEntities(Bindings, ctx.Scope, ctx.User);
-        std::sort(bindings.begin(), bindings.end(), [](const auto& l, const auto& r) {
-            return l.meta().id() < r.meta().id();
-        });
-
         auto& resultBindings = *ctx.Response.mutable_binding();
         const auto& filter = ctx.Request.filter();
 

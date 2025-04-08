@@ -217,7 +217,7 @@ private:
             Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
         }
         if (Options.CanonicalOutput) {
-            ast = CanonizeEndpoints(ast, Options.FqSettings.FqConfig.GetGateways());
+            ast = CanonizeEndpoints(ast, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
             ast = CanonizeAstLogicalId(ast);
         }
         Options.AstOutput->Write(ast);
@@ -240,7 +240,7 @@ private:
         plan = NJson::PrettifyJson(plan, false);
 
         if (Options.CanonicalOutput) {
-            plan = CanonizeEndpoints(plan, Options.FqSettings.FqConfig.GetGateways());
+            plan = CanonizeEndpoints(plan, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
         }
 
         Options.PlanOutput->Write(plan);

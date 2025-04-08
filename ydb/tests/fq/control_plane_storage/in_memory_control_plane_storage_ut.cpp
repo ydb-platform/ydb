@@ -42,31 +42,33 @@ public:
         settings.VerboseLevel = TFqSetupSettings::EVerbose::Max;
         settings.EnableYdbCompute = true;
 
-        settings.LogConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
+        auto& logConfig = *settings.AppConfig.MutableLogConfig();
+        logConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
         ModifyLogPriorities({
             {NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG},
             {NKikimrServices::EServiceKikimr::FQ_RUN_ACTOR, NLog::EPriority::PRI_TRACE}
-        }, settings.LogConfig);
+        }, logConfig);
 
-        auto& cpStorageConfig = *settings.FqConfig.MutableControlPlaneStorage();
+        auto& fqConfig = *settings.AppConfig.MutableFederatedQueryConfig();
+        auto& cpStorageConfig = *fqConfig.MutableControlPlaneStorage();
         cpStorageConfig.SetEnabled(true);
         cpStorageConfig.SetUseInMemory(true);
 
-        auto& privateApiConfig = *settings.FqConfig.MutablePrivateApi();
+        auto& privateApiConfig = *fqConfig.MutablePrivateApi();
         privateApiConfig.SetEnabled(true);
         privateApiConfig.SetLoopback(true);
 
-        settings.FqConfig.SetEnableDynamicNameservice(true);
-        settings.FqConfig.MutableControlPlaneProxy()->SetEnabled(true);
-        settings.FqConfig.MutableDbPool()->SetEnabled(true);
-        settings.FqConfig.MutableNodesManager()->SetEnabled(true);
-        settings.FqConfig.MutablePendingFetcher()->SetEnabled(true);
-        settings.FqConfig.MutablePrivateProxy()->SetEnabled(true);
-        settings.FqConfig.MutableGateways()->SetEnabled(true);
-        settings.FqConfig.MutableResourceManager()->SetEnabled(true);
-        settings.FqConfig.MutableCommon()->SetIdsPrefix("ut");
+        fqConfig.SetEnableDynamicNameservice(true);
+        fqConfig.MutableControlPlaneProxy()->SetEnabled(true);
+        fqConfig.MutableDbPool()->SetEnabled(true);
+        fqConfig.MutableNodesManager()->SetEnabled(true);
+        fqConfig.MutablePendingFetcher()->SetEnabled(true);
+        fqConfig.MutablePrivateProxy()->SetEnabled(true);
+        fqConfig.MutableGateways()->SetEnabled(true);
+        fqConfig.MutableResourceManager()->SetEnabled(true);
+        fqConfig.MutableCommon()->SetIdsPrefix("ut");
 
-        auto& computeConfig = *settings.FqConfig.MutableCompute();
+        auto& computeConfig = *fqConfig.MutableCompute();
         computeConfig.SetDefaultCompute(NFq::NConfig::IN_PLACE);
 
         auto& computeMapping = *computeConfig.AddComputeMapping();

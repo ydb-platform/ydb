@@ -26,8 +26,6 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
             {", ".join(create_index)}
             )
     """
-    print(sql_create)
-    print(create_columns)
     return sql_create
 
 

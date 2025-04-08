@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
@@ -46,6 +47,7 @@ class TestDML(TestBase):
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)
+        self.select_all_type(table_name, all_types, pk_types, index, ttl)
         self.select_after_insert(table_name, all_types, pk_types, index, ttl)
         self.update(table_name, all_types, index, ttl, unique)
         self.upsert(table_name, all_types, pk_types, index, ttl)
@@ -78,6 +80,7 @@ class TestDML(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
+            print(count)
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
 
@@ -376,3 +379,63 @@ class TestDML(TestBase):
             DELETE FROM {table_name} WHERE {type_name} = {key.format(value)};
         """
         self.query(delete_sql)
+
+    def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        statements = []
+        for type in all_types.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                statements.append(f"col_{cleanup_type_name(type)}")
+        for type in pk_types.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                statements.append(f"pk_{cleanup_type_name(type)}")
+        for type in index.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                statements.append(f"col_index_{cleanup_type_name(type)}")
+        if ttl != "":
+            statements.append(f"ttl_{cleanup_type_name(ttl)}")
+
+        rows = self.query(f"select {", ".join(statements)} from {table_name}")
+        count = 0
+        for type in all_types.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                for i in range(len(rows)):
+                    self.assert_type(all_types, type, i+1, rows[i][count])
+                count += 1
+        for type in pk_types.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                for i in range(len(rows)):
+                    self.assert_type(pk_types, type, i+1, rows[i][count])
+                count += 1
+        for type in index.keys():
+            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+                for i in range(len(rows)):
+                    self.assert_type(index, type, i+1, rows[i][count])
+                count += 1
+        if ttl != "":
+            for i in range(len(rows)):
+                self.assert_type(ttl_types, ttl, i+1, rows[i][count])
+            count += 1
+
+    def assert_type(self, key, type: str, values: int, values_from_rows):
+        if type == "Bool":
+            assert values_from_rows == bool(values), f"{type}"
+        elif type == "String" or type == "Yson":
+            assert values_from_rows.decode("utf-8") == key[type].replace(
+                "CAST(", "").replace("'", "").replace(f" AS {type})", "").format(values), f"{type}"
+        elif type == "Timestamp":
+            assert values_from_rows == datetime.fromtimestamp(int(key[type].replace("CAST(", "").replace(
+                "'", "").replace(f" AS {type})", "").replace("T", " ").replace("Z", "").format(values))/1_000_000 - 3*60*60), f"{type}"
+        elif type == "Interval":
+            assert values_from_rows == timedelta(microseconds=values)
+        elif type == "Float":
+            str(round(values_from_rows, 2)) == key[type].replace("CAST(", "").replace("'", "").replace(
+                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"
+        elif type == "Json" or type == "JsonDocument":
+            assert str(values_from_rows).replace("'", "\"") == key[type].replace("CAST(", "").replace("'", "").replace(
+                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"
+        elif type == "DyNumber":
+            assert float(values_from_rows) == float(key[type].replace("CAST(", "").replace("'", "").replace(
+                f" AS {type})", "").replace("T", " ").replace("Z", "").replace(".", "").format(values)), f"{type}"
+        else:
+            assert str(values_from_rows) == key[type].replace("CAST(", "").replace("'", "").replace(
+                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"

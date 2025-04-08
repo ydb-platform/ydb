@@ -3,7 +3,7 @@ def cleanup_type_name(type_name):
 
 
 ttl_types = {
-    "DyNumber": "CAST('3742656{:03}' AS DyNumber)",
+    "DyNumber": "CAST('3742656{:03}e10' AS DyNumber)",
     "Uint32": "CAST(3742656{:03} AS Uint32)",
     "Uint64": "CAST(3742656{:03} AS Uint64)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
@@ -24,17 +24,17 @@ index_first_sync = {
 }
 
 index_second_sync = {
-    "DyNumber": "CAST('{}E1' AS DyNumber)",
+    "DyNumber": "CAST('{}e1' AS DyNumber)",
     "String": "'String {}'",
     "Utf8": "'Utf8 {}'",
-    "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "UUID": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
 }
 
 index_three_sync = {
     "Bool": "CAST({} AS Bool)",
-    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
+    "Decimal(15,0)": "CAST('{}' AS Decimal(15,0))",
     "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
     "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
     "Date32": "CAST('2{:03}-01-01' AS Date32)",
@@ -42,7 +42,7 @@ index_three_sync = {
 }
 
 index_three_sync_not_Bool = {
-    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
+    "Decimal(15,0)": "CAST('{}' AS Decimal(15,0))",
     "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
     "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
     "Date32": "CAST('2{:03}-01-01' AS Date32)",
@@ -69,16 +69,16 @@ index_first = {
     "Int8": "CAST({} AS Int8)",
     "Uint8": "CAST({} AS Uint8)",
     "Bool": "CAST({} AS Bool)",
-    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
+    "Decimal(15,0)": "CAST('{}' AS Decimal(15,0))",
     "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
     "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
 }
 
 index_second = {
-    "DyNumber": "CAST('{}E1' AS DyNumber)",
+    "DyNumber": "CAST('{}e1' AS DyNumber)",
     "String": "'String {}'",
     "Utf8": "'Utf8 {}'",
-    "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "UUID": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
     "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)",
@@ -99,14 +99,14 @@ pk_types = {
     "Int8": "CAST({} AS Int8)",
     "Uint8": "CAST({} AS Uint8)",
     "Bool": "CAST({} AS Bool)",
-    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
+    "Decimal(15,0)": "CAST('{}' AS Decimal(15,0))",
     "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
     "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
-    "DyNumber": "CAST('{}E1' AS DyNumber)",
+    "DyNumber": "CAST('{}e1' AS DyNumber)",
 
     "String": "'String {}'",
     "Utf8": "'Utf8 {}'",
-    "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "UUID": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
 
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
@@ -120,8 +120,8 @@ pk_types = {
 non_pk_types = {
     "Float": "CAST('{}.1' AS Float)",
     "Double": "CAST('{}.2' AS Double)",
-    "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
-    "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
+    "Json": "CAST('{{\"another_key\": {}}}' AS Json)",
+    "JsonDocument": "CAST('{{\"another_doc_key\": {}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
 }
 

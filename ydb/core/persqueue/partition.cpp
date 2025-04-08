@@ -656,7 +656,7 @@ TConsumerSnapshot TPartition::CreateSnapshot(const TUserInfo& userInfo) const {
 
     TConsumerSnapshot result;
 
-    if (userInfo.Offset == static_cast<i64>(EndOffset)) {
+    if (userInfo.Offset >= static_cast<i64>(EndOffset)) {
         result.LastCommittedMessage.CreateTimestamp = now;
         result.LastCommittedMessage.WriteTimestamp = now;
     } else if (userInfo.ActualTimestamps) {

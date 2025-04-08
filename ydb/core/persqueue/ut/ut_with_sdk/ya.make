@@ -32,6 +32,7 @@ SRCS(
     autoscaling_ut.cpp
     balancing_ut.cpp
     mirrorer_ut.cpp
+    sdk.cpp
 )
 
 END()

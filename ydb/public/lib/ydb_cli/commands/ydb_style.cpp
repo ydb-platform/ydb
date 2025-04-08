@@ -8,6 +8,8 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
+#include <util/system/file.h>
+
 namespace NYdb::NConsoleClient {
 
     TCommandStyle::TCommandStyle()
@@ -18,14 +20,71 @@ namespace NYdb::NConsoleClient {
     void TCommandStyle::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.NeedToConnect = false;
-        config.SetFreeArgsNum(0);
+        config.SetFreeArgsMin(0);
+        SetFreeArgTitle(0, "<path>", "File or directory path");
     }
 
     void TCommandStyle::Parse(TConfig& config) {
         TClientCommand::Parse(config);
+        for (auto& path : config.ParseResult->GetFreeArgs()) {
+            Paths.emplace_back(std::move(path));
+        }
     }
 
-    int TCommandStyle::Run(TConfig&) {
+    int TCommandStyle::Run(TConfig&) try {
+        if (Paths.empty()) {
+            return RunStd();
+        }
+        for (const auto& path : Paths) {
+            FormatDEntry(path);
+        }
+        return EXIT_SUCCESS;
+    } catch (const yexception& e) {
+        return EXIT_FAILURE;
+    }
+
+    int TCommandStyle::RunStd() {
+        TString formatted, error;
+        if (!Format(Cin, formatted, error)) {
+            Cerr << "Error: " << error << Endl;
+            return EXIT_FAILURE;
+        } else {
+            Cout << formatted;
+            return EXIT_SUCCESS;
+        }
+    }
+
+    void TCommandStyle::FormatDEntry(const TFsPath& path) {
+        if (!path.Exists()) {
+            ythrow yexception() << "path '" << path << "' does not exist";
+        }
+
+        if (path.IsFile()) {
+            FormatFile(path);
+        } else if (path.IsDirectory()) {
+            ythrow yexception() << "styling directories is not yet supported";
+        } else {
+            ythrow yexception() << "unexpected path state: is not a file and is not a directory";
+        }
+    }
+
+    void TCommandStyle::FormatFile(const TFsPath& path) {
+        Y_ENSURE(path.IsFile());
+
+        TUnbufferedFileInput input(path);
+        TString formatted, error;
+        if (!Format(input, formatted, error)) {
+            ythrow yexception() << "styling a file '" << path << "' failed: " << error;
+        }
+        Y_UNUSED(std::move(input));
+
+        TFile file(path.GetPath(), EOpenModeFlag::RdWr);
+        file.Write(formatted.data(), formatted.size());
+
+        Cerr << "Formatted the file '" << path << "'" << Endl;
+    }
+
+    bool TCommandStyle::Format(IInputStream& input, TString& formatted, TString& error) {
         NSQLTranslationV1::TLexers lexers = {
             .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
             .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
@@ -36,18 +95,8 @@ namespace NYdb::NConsoleClient {
             .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(),
         };
 
-        IInputStream& input = Cin;
         TString text = input.ReadAll();
-
-        TString formatted;
-        TString error;
-        if (!NSQLFormat::SqlFormatSimple(lexers, parsers, text, formatted, error)) {
-            Cerr << "Error: " << error << Endl;
-            return EXIT_FAILURE;
-        }
-
-        Cout << formatted;
-        return EXIT_SUCCESS;
+        return NSQLFormat::SqlFormatSimple(lexers, parsers, text, formatted, error);
     }
 
 } // namespace NYdb::NConsoleClient

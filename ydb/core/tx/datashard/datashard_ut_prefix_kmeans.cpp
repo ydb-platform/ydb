@@ -291,19 +291,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
                          VectorIndexSettings::METRIC_UNSPECIFIED);
         }
-        // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans, prefix_kmeans doesn't really check this
-        // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-        //     auto snapshotCopy = snapshot;
-        //     snapshotCopy.Step++;
-        //     DoBadRequest(server, sender, ev);
-        // }
-        // {
-        //     auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-        //     auto snapshotCopy = snapshot;
-        //     snapshotCopy.TxId++;
-        //     DoBadRequest(server, sender, ev);
-        // }
     }
 
     Y_UNIT_TEST (BuildToPosting) {

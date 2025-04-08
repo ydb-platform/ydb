@@ -189,8 +189,8 @@ protected:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TReshuffleKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
-                                                                                << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 

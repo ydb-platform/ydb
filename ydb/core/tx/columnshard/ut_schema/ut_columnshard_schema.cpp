@@ -282,8 +282,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
     planStep = SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 2, spec),
-                         ++txId);
+                         TTestSchema::AlterTableTxBody(tableId, 2, spec), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -306,8 +305,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
     planStep = SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
-                         ++txId);
+                         TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
@@ -939,7 +937,8 @@ void TestDrop(bool reboots) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
     TString data1 = MakeTestBlob({0, PORTION_ROWS}, testYdbSchema);
     UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(data1.size() < 7 * 1024 * 1024);
@@ -1003,7 +1002,8 @@ void TestDropWriteRace() {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
-    auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
@@ -1011,7 +1011,7 @@ void TestDropWriteRace() {
     ++txId;
     AFL_VERIFY(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema));
     planStep = ProposeCommit(runtime, sender, txId, { writeId });
-    auto commitTxId = txId;
+    const auto commitTxId = txId;
 
     // Drop table
     planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
@@ -1040,7 +1040,8 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender,
+        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
     // Set tiering
 
     ui64 ts = 1620000000;

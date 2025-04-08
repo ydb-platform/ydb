@@ -259,9 +259,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2, 3 };
-        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema, 2);
-        Y_UNUSED(schemaPlanStep);
-
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
@@ -274,17 +272,17 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        const auto writePlanStep = writer.StartCommit(txId);
+        planStep = writer.StartCommit(txId);
 
-        PlanWriteTx(runtime, writer.GetSender(), txId, writePlanStep);
+        PlanWriteTx(runtime, writer.GetSender(), txId, planStep);
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, writePlanStep, txId, schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, writePlanStep, txId, schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }

@@ -205,8 +205,6 @@ void InferStatisticsForKqpTable(
         );
     }
 
-    typeCtx->TableAliases.AddMapping(path.StringValue(), path.StringValue());
-
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
     typeCtx->SetStats(input.Get(), stats);
@@ -863,9 +861,13 @@ public:
     ) {
         YQL_CLOG(TRACE, CoreDq) << "Building Orderings FSM";
 
-        VisitExpr(node, [this](const TExprNode::TPtr& node){
-            return this->InterstingOrderingsCollector.Collect(node);
-        });
+        VisitExpr(
+            node,
+            {},
+            [this](const TExprNode::TPtr& node){
+                return this->InterstingOrderingsCollector.Collect(node);
+            }
+        );
 
         auto& fdStorage = InterstingOrderingsCollector.FDStorage;
         auto fsm = TOrderingsStateMachine(std::move(fdStorage));
@@ -876,7 +878,9 @@ public:
     }
 
 private:
-    void LogReport(TOrderingsStateMachine& fsm) {
+    void LogReport(
+        TOrderingsStateMachine& fsm
+    ) {
         YQL_CLOG(TRACE, CoreDq) << fsm.ToString();
     }
 
@@ -907,7 +911,7 @@ private:
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
-            CollectInterestingOrderingsFromJoinTree(equiJoin, FDStorage);
+            CollectInterestingOrderingsFromJoinTree(equiJoin, FDStorage, TypeCtx);
         }
 
     private:
@@ -917,10 +921,7 @@ private:
                 return;
             }
 
-            auto alias = TypeCtx.TableAliases.GetAlias(table.Path().StringValue());
-            for (auto& column: stats->ShuffledByColumns->Data) {
-                column.RelName = alias;
-            }
+            FDStorage.TableAliases.AddMapping(table.Path().StringValue(), table.Path().StringValue());
             FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle);
         }
 
@@ -933,7 +934,6 @@ private:
             std::vector<TJoinColumn> joinColumns;
 
             TString tableName = TryGetTableNameFromAggregationInput(aggregateCombine.Input().Ptr());
-            tableName = TypeCtx.TableAliases.GetAlias(tableName);
             for (const auto& key: aggregateCombine.Keys()) {
                 TString aggregationKey = key.StringValue();
 
@@ -941,9 +941,6 @@ private:
                 if (aggregationKey.find('.') != TString::npos) {
                     tableName = aggregationKey.substr(0, aggregationKey.find('.'));
                     columnName = aggregationKey.substr(aggregationKey.find('.') + 1);
-                } else if (auto baseColumn = TypeCtx.TableAliases.GetBaseColumnByRename(aggregationKey)) {
-                    tableName = baseColumn.substr(0, baseColumn.find('.'));
-                    columnName = baseColumn.substr(baseColumn.find('.') + 1);
                 } else {
                     columnName = std::move(aggregationKey);
                 }

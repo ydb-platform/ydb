@@ -112,33 +112,6 @@ bool TOptimizerStatistics::Empty() const {
     return ! (Nrows || Ncols || Cost);
 }
 
-void TTableAliasMap::AddMapping(const TString& table, const TString& alias) {
-    TableToAlias[table] = alias;
-    AliasToTable[alias] = table;
-}
-
-TString TTableAliasMap::GetAlias(const TString& table) const {
-    auto it = TableToAlias.find(table);
-    if (it == TableToAlias.end()) {
-        return table;
-    }
-    return it->second;
-}
-
-TString TTableAliasMap::GetBaseColumnByRename(const TString& rename) {
-    return BaseColumnByRename.contains(rename)? BaseColumnByRename[rename] : "";
-}
-
-void TTableAliasMap::AddRename(const TString& from, const TString& to) {
-    if (from.Contains('.')) {
-        BaseColumnByRename[from] = from;
-        BaseColumnByRename[to] = from;
-        return;
-    }
-
-    BaseColumnByRename[to] = BaseColumnByRename[from];
-}
-
 TOptimizerStatistics::TOptimizerStatistics(
     EStatisticsType type,
     double nrows,

@@ -120,6 +120,113 @@ struct TFunctionalDependency {
     bool AlwaysActive;
 };
 
+// Map of table aliases to their original table names
+struct TTableAliasMap {
+public:
+    struct TBaseColumn {
+        TBaseColumn() = default;
+
+        TBaseColumn(
+            TString relation,
+            TString column
+        )
+            : Relation(std::move(relation))
+            , Column(std::move(column))
+        {}
+
+        NDq::TJoinColumn ToJoinColumn() {
+            return NDq::TJoinColumn(Relation, Column);
+        }
+
+        operator bool() {
+            return !(Relation.empty() && Column.empty());
+        }
+
+        TString Relation;
+        TString Column;
+    };
+
+    TTableAliasMap() = default;
+
+    void AddMapping(const TString& table, const TString& alias) {
+        AliasesByTable[table].push_back(alias);
+        TableByAlias[alias] = table;
+    }
+
+    void AddRename(const TString& from, const TString& to) {
+        if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
+            TString alias = from.substr(0, pointIdx);
+            TString columnName = from.substr(pointIdx + 1);
+
+            auto fromColumn = TBaseColumn(alias, columnName);
+            auto baseColumn = TBaseColumn(GetBaseTableByAlias(alias), columnName);
+
+            BaseColumnByRename[to] = BaseColumnByRename[from] = baseColumn;
+            return;
+        }
+
+        BaseColumnByRename[to] = BaseColumnByRename[from];
+    }
+
+    TBaseColumn GetBaseColumnByRename(const TString& renamedColumn) {
+        if (BaseColumnByRename.contains(renamedColumn)) {
+            return BaseColumnByRename[renamedColumn];
+        }
+
+        if (auto pointIdx = renamedColumn.find('.'); pointIdx != TString::npos) {
+            TString alias = renamedColumn.substr(0, pointIdx);
+            if (auto baseTable = GetBaseTableByAlias(alias)) {
+                return TBaseColumn(std::move(baseTable), renamedColumn.substr(pointIdx + 1));
+            }
+        }
+
+        return TBaseColumn("", renamedColumn);
+    }
+
+    TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn) {
+        Cout << renamedColumn.RelName << " and " << renamedColumn.AttributeName << Endl;
+        return GetBaseColumnByRename(renamedColumn.RelName + "." + renamedColumn.AttributeName);
+    }
+
+    TString ToString() const {
+        TString result;
+        result += "Table Alias Map:\n";
+
+        for (const auto& [table, aliases] : AliasesByTable) {
+            result += "Table: " + table + "\n";
+            result += "  Aliases: ";
+            for (const auto& alias : aliases) {
+                result += alias + ", ";
+            }
+            if (!aliases.empty()) {
+                result.pop_back();
+                result.pop_back();
+            }
+            result += "\n";
+        }
+
+        if (!BaseColumnByRename.empty()) {
+            result += "Column Renames:\n";
+            for (const auto& [from, to] : BaseColumnByRename) {
+                result += "  " + from + " -> " + to.Relation + "." + to.Column + "\n";
+            }
+        }
+
+        return result;
+    }
+
+private:
+    TString GetBaseTableByAlias(const TString& alias) {
+        return TableByAlias[alias];
+    }
+
+private:
+    THashMap<TString, TVector<TString>> AliasesByTable;
+    THashMap<TString, TString> TableByAlias;
+
+    THashMap<TString, TBaseColumn> BaseColumnByRename;
+};
+
 /*
  * This class contains internal representation of the columns (mapping [column -> int]), FDs and interesting orderings
  */
@@ -211,12 +318,16 @@ public:
         std::stringstream ss;
 
         ss << "Columns mapping: ";
+        TVector<TString> columnsMapping(IdCounter);
         for (const auto& [column, idx]: IdxByColumn) {
-            ss << "{" << idx << ": " << column << "}, ";
+            std::stringstream columnSs;
+            columnSs << "{" << idx << ": " << column << "}, ";
+            columnsMapping[idx] = columnSs.str();
         }
-        ss << "\n";
+        ss << JoinSubsequence(", ", columnsMapping) << "\n";
         ss << "FDs: " << JoinSubsequence(", ", toVectorString(FDs)) << "\n";
         ss << "Interesting Orderings: " << JoinSubsequence(", ", toVectorString(InterestingOrderings)) << "\n";
+        ss << TableAliases.ToString() << "\n";
 
         return ss.str();
     }
@@ -225,6 +336,7 @@ public:
 public:
     std::vector<TFunctionalDependency> FDs;
     std::vector<TOrdering> InterestingOrderings;
+    TTableAliasMap TableAliases;
 
 private:
     /*
@@ -238,8 +350,6 @@ private:
     ) {
         std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists);
 
-        // std::sort(items.begin(), items.end());
-
         for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
             if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
                 return {items, static_cast<std::int64_t>(i)};
@@ -249,7 +359,10 @@ private:
         return {items, -1};
     }
 
-    std::vector<std::size_t> ConvertColumnIntoIndexes(const std::vector<TJoinColumn>& ordering, bool createIfNotExists) {
+    std::vector<std::size_t> ConvertColumnIntoIndexes(
+        const std::vector<TJoinColumn>& ordering,
+        bool createIfNotExists
+    ) {
         std::vector<std::size_t> items;
         items.reserve(ordering.size());
 
@@ -261,15 +374,18 @@ private:
     }
 
     std::size_t GetIdxByColumn(const TJoinColumn& column, bool createIfNotExists) {
-        const std::string fullPath = column.RelName + "." + column.AttributeName;
+        auto baseColumn = TableAliases.GetBaseColumnByRename(column).ToJoinColumn();
+
+        const std::string fullPath = baseColumn.RelName + "." + baseColumn.AttributeName;
+
         if (IdxByColumn.contains(fullPath)) {
             return IdxByColumn[fullPath];
         }
 
-        Y_ENSURE(!column.AttributeName.empty());
+        Y_ENSURE(!baseColumn.AttributeName.empty());
         Y_ENSURE(createIfNotExists, "There's no such column: " + fullPath);
 
-        ColumnByIdx.push_back(column);
+        ColumnByIdx.push_back(baseColumn);
         IdxByColumn[fullPath] = IdCounter++;
         return IdxByColumn[fullPath];
     }

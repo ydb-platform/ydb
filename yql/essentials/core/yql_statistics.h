@@ -27,23 +27,6 @@ enum EStorageType : ui32 {
     ColumnStorage
 };
 
-// Map of table aliases to their original table names
-struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
-private:
-    THashMap<TString, TString> TableToAlias;
-    THashMap<TString, TString> AliasToTable;
-
-    THashMap<TString, TString> BaseColumnByRename;
-public:
-    TTableAliasMap() = default;
-
-    TString GetAlias(const TString& table) const;
-    void AddMapping(const TString& table, const TString& alias);
-
-    TString GetBaseColumnByRename(const TString& rename);
-    void AddRename(const TString& from, const TString& to);
-};
-
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
 struct IProviderStatistics {

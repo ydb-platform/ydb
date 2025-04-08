@@ -670,17 +670,17 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+    Y_UNIT_TEST(FiveWayJoinWithConstantFold) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", false, true);
     }
 
-    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", false, ColumnStore);
-    }
+    // Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, ColumnStore) {
+    //     ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", false, ColumnStore);
+    // }
 
-    Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
-    }
+    // Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
+    //     ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+    // }
 
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);

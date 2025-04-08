@@ -433,7 +433,13 @@ private:
                     joinNode->ShuffleRightSideByOrderingIdx = rightJoinKeysOrderingIdx;
                 }
 
+                Cout << JoinSeq(", ", left->Labels()) << " AND " << JoinSeq(", ", right->Labels()) << Endl;
+                Cout << "left: " << joinNode->ShuffleLeftSideByOrderingIdx << ", right: " << joinNode->ShuffleRightSideByOrderingIdx << Endl;
+                Cout << lhsShuffled << " " << rhsShuffled << Endl;
+
                 joinNode->LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
+
+                Cout << joinNode->LogicalOrderings.GetState() << Endl;
                 break;
             }
             case EJoinAlgoType::MapJoin:
@@ -493,7 +499,8 @@ IOptimizerNew* MakeNativeOptimizerNew(
 
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
-    TFDStorage& fdStorage
+    TFDStorage& fdStorage,
+    TTypeAnnotationContext& typeCtx
 ) {
     Y_ENSURE(equiJoinNode.Maybe<TCoEquiJoin>());
 
@@ -509,9 +516,24 @@ void CollectInterestingOrderingsFromJoinTree(
             continue;
         }
 
-        TStringBuf label = scope.Cast<TCoAtom>();
+        TString label = scope.Cast<TCoAtom>().StringValue();
+        if (auto stats = typeCtx.GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
+            fdStorage.TableAliases.AddMapping(stats->SourceTableName, label);
+        }
+
         TOptimizerStatistics dummy;
-        rels.emplace_back(std::make_shared<TRelOptimizerNode>(TString(label), dummy));
+        rels.emplace_back(std::make_shared<TRelOptimizerNode>(label, std::move(dummy)));
+    }
+
+    for (const auto& option : equiJoin.Arg(equiJoin.ArgCount() - 1).Ref().Children()) {
+        if (option->Head().IsAtom("rename")) {
+            TCoAtom fromName{option->Child(1)};
+            YQL_ENSURE(!fromName.Value().empty());
+            TCoAtom toName{option->Child(2)};
+            if (!toName.Value().empty()) {
+                fdStorage.TableAliases.AddRename(fromName.StringValue(), toName.StringValue());
+            }
+        }
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();

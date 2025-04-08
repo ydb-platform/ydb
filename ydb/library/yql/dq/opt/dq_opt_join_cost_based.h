@@ -40,7 +40,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
 
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
-    TFDStorage& fdStorage
+    TFDStorage& fdStorage,
+    TTypeAnnotationContext& typeCtx
 );
 
 IOptimizerNew* MakeNativeOptimizerNew(

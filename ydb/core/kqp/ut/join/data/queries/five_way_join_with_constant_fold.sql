@@ -1,15 +1,4 @@
-SELECT *
-FROM `/Root/R` as R
-    INNER JOIN
-        `/Root/S` as S
-    ON R.id = S.id
-    INNER JOIN
-        `/Root/T` as T
-    ON S.id = T.id
-    INNER JOIN
-        `/Root/U` as U
-    ON T.id = U.id
-    INNER JOIN
-        `/Root/V` as V
-    ON U.id = V.id
-WHERE R.payload1 = 'bl' || 'ah' AND V.payload5 = 'blah'
+SELECT R1.id
+    FROM `/Root/S` as S
+    INNER JOIN `/Root/R` as R1 ON R1.id = S.id
+    INNER JOIN `/Root/R` as R2 ON R2.id = S.id

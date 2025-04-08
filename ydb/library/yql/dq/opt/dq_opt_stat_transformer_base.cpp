@@ -72,40 +72,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
 
-    // Collect aliases
+    // Do nothing otherwise rule with CBO won't work
     else if(TCoEquiJoin::Match(input.Get())){
-        auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
-
-        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
-            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
-            auto joinArg = input.List();
-
-            auto stats = TypeCtx->GetStats(joinArg.Raw());
-            if (!stats) {
-                continue;
-            }
-
-            auto scope = input.Scope();
-            if (!scope.Maybe<TCoAtom>()) {
-                continue;
-            }
-            TString label = TString(scope.Cast<TCoAtom>().Value());
-
-            if (!stats->SourceTableName.empty()) {
-                TypeCtx->TableAliases.AddMapping(stats->SourceTableName, label);
-            }
-        }
-
-        for (const auto& option : equiJoin.Arg(equiJoin.ArgCount() - 1).Ref().Children()) {
-            if (option->Head().IsAtom("rename")) {
-                TCoAtom fromName{option->Child(1)};
-                YQL_ENSURE(!fromName.Value().empty());
-                TCoAtom toName{option->Child(2)};
-                if (!toName.Value().empty()) {
-                    TypeCtx->TableAliases.AddRename(fromName.StringValue(), toName.StringValue());
-                }
-            }
-        }
     }
 
     // In case of DqSource, propagate the statistics from the correct argument

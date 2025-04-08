@@ -28,7 +28,7 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def execute_query(driver):
+def execute_query(driver, branch='main'):
     query_string = '''
     SELECT * from (
         SELECT data.*,
@@ -101,9 +101,9 @@ def execute_query(driver):
             and data.build_type = deleted.build_type
             and data.branch = deleted.branch
         ) 
-        where date_window = CurrentUtcDate() and branch = 'main'
+        where date_window = CurrentUtcDate() and branch = '{}'
     
-    '''
+    '''.format(branch)
 
     query = ydb.ScanQuery(query_string, {})
     table_client = ydb.TableClient(driver, ydb.TableClientSettings())
@@ -389,7 +389,7 @@ def mute_worker(args):
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
 
-        all_tests = execute_query(driver)
+        all_tests = execute_query(driver, args.branch)
     if args.mode == 'update_muted_ya':
         output_path = args.output_folder
         os.makedirs(output_path, exist_ok=True)
@@ -407,6 +407,7 @@ if __name__ == "__main__":
 
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
+    update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to filter tests by')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
@@ -415,6 +416,7 @@ if __name__ == "__main__":
     create_issues_parser.add_argument(
         '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
     )
+    create_issues_parser.add_argument('--branch', default='main', help='Branch to filter tests by')
 
     args = parser.parse_args()
 

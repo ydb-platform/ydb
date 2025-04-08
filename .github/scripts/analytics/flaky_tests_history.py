@@ -79,7 +79,7 @@ def main():
 
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument('--build_type',choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
-    parser.add_argument('--branch', default='main',choices=['main'], type=str, help='branch')
+    parser.add_argument('--branch', default='main', type=str, help='branch')
 
     args, unknown = parser.parse_known_args()
     history_for_n_day = args.days_window

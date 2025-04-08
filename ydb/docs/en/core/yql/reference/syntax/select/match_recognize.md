@@ -2,7 +2,7 @@
 
 Recognizing patterns in a sequence of rows has been a widely desired feature, but it was not possible until recently with SQL. There were workarounds available, but they were inefficient, difficult to implement and hard to comprehend. Now, the MATCH_RECOGNIZE clause allows you to do this in SQL efficiently.
 
-The ability to detect patterns across multiple rows is important for various business areas, such as fraud detection, pricing analysis in finance, and sensor data processing. This area is known as Complex event processing (CEP), and pattern recognition is a valuable tool for this.
+The ability to recognize patterns across multiple rows is important for various business areas, such as fraud detection, pricing analysis in finance, and sensor data processing. This area is known as Complex event processing (CEP), and pattern recognition is a valuable tool for this.
 
 Here is a hands-on example of pattern recognizing in a data table produced by an IoT device, where pressing its buttons triggers certain events. Let's assume you need to find and process the following sequence of button clicks: `button 1`, `button 2`, and `button 3`.
 
@@ -25,7 +25,7 @@ SELECT * FROM bindings.input_table MATCH_RECOGNIZE ( -- Performing pattern match
         LAST(B1.ts) AS b1, -- Going to get the latest timestamp of clicking button 1 in the query results
         LAST(B3.ts) AS b3  -- Going to get the latest timestamp of clicking button 3 in the query results
     ONE ROW PER MATCH            -- Going to get one result row per match hit
-    AFTER MATCH SKIP TO NEXT ROW -- Going to move to the next row once the pattern match is hit
+    AFTER MATCH SKIP TO NEXT ROW -- Going to move to the next row once the match is found
     PATTERN (B1 B2+ B3) -- Searching for a pattern that includes one button 1 click, one or more button 2 clicks, and one button 3 click
     DEFINE
         B1 AS B1.button = 1, -- Defining the B1 variable as event of clicking button 1 (the button field equals 1)
@@ -34,9 +34,19 @@ SELECT * FROM bindings.input_table MATCH_RECOGNIZE ( -- Performing pattern match
 );
 ```
 
-## Syntax {#syntax}
+## Data processing algorithm
 
-The `MATCH_RECOGNIZE` command searches for data based on a given pattern and returns the hits. Here is the SQL syntax of the `MATCH_RECOGNIZE` command:
+The `MATCH_RECOGNIZE` expression performs the following actions:
+
+1. The input table is divided into partitions. Each partition consists of a set of rows from the input table with identical values in the columns listed after `PARTITION BY`.
+2. Each partition is ordered according to the `ORDER BY` clause.
+3. Recognition of pattern from `PATTERN` is performed independently in each ordered partition.
+4. Pattern search in the sequence of rows is a step-by-step process: rows are checked one by one if they fit the pattern. Among all matches starting in the earliest row, the one consisting of the largest number of rows is selected. If no matches were found starting in the earliest row, the search continues starting from the next row.
+5. After a match is found, the columns defined by expressions in the `MEASURES` block are calculated.
+6. Depending on the `ROWS PER MATCH` mode, one or all rows for the found match are output.
+7. The `AFTER MATCH SKIP` mode determines from which row the pattern recognition will resume.
+
+## Syntax {#syntax}
 
 ```sql
 MATCH_RECOGNIZE (
@@ -185,11 +195,11 @@ The `ids` column contains the list of `zone_id * 10 + device_id` values counted 
 
 ### ROWS PER MATCH {#rows_per_match}
 
-`ROWS PER MATCH` determines the number of pattern matches, as well as the number of columns returned. The default mode is `ONE ROW PER MATCH`.
+`ROWS PER MATCH` determines the number of result rows for each match found, as well as the number of columns returned. The default mode is `ONE ROW PER MATCH`.
 
-`ONE ROW PER MATCH` sets the `ROWS PER MATCH` mode to output one row per recognized pattern. The structure of the returned data corresponds to the columns listed in [`PARTITION BY`](#partition_by) and [`MEASURES`](#measures).
+`ONE ROW PER MATCH` sets the `ROWS PER MATCH` mode to output one row for the match found. The structure of the returned data corresponds to the columns listed in [`PARTITION BY`](#partition_by) and [`MEASURES`](#measures).
 
-`ALL ROWS PER MATCH` sets the `ROWS PER MATCH` mode to output all rows of recognized pattern except explicitly excluded by parentheses. In addition to the columns of the source table, the structure of the returned data includes the columns listed in the [`MEASURES`](#measures).
+`ALL ROWS PER MATCH` sets the `ROWS PER MATCH` mode to output all rows of the match found except explicitly excluded by parentheses. In addition to the columns of the source table, the structure of the returned data includes the columns listed in the [`MEASURES`](#measures).
 
 #### **Examples** {#rows_per_match-examples}
 

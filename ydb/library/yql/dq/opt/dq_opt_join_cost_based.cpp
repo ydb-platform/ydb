@@ -516,7 +516,7 @@ void CollectInterestingOrderingsFromJoinTree(
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
     auto joinTree = ConvertToJoinTree(joinTuple, rels);
-    auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree);
+    auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree, {}, false);
     for (const auto& edge: hypergraph.GetEdges()) {
         for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
             fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false);

@@ -85,7 +85,7 @@ public:
 
 class IColumnEngine {
 protected:
-    virtual void DoRegisterTable(const TInternalPathId pathId) = 0;
+    virtual void DoRegisterTable(const TUnifiedPathId& pathId) = 0;
     virtual void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const = 0;
 
 public:
@@ -140,7 +140,7 @@ public:
     virtual bool HasDataInPathId(const TInternalPathId pathId) const = 0;
     virtual bool ErasePathId(const TInternalPathId pathId) = 0;
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
-    void RegisterTable(const TInternalPathId pathId) {
+    void RegisterTable(const TUnifiedPathId& pathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
         return DoRegisterTable(pathId);
     }

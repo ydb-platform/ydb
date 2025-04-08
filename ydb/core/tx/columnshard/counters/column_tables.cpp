@@ -3,7 +3,7 @@
 
 namespace NKikimr::NColumnShard {
 
-std::shared_ptr<TSingleColumnTableCounters> TColumnTablesCounters::GetPathIdCounter(TInternalPathId pathId) {
+std::shared_ptr<TSingleColumnTableCounters> TColumnTablesCounters::GetPathIdCounter(TLocalPathId pathId) {
     auto findCounter = PathIdCounters.FindPtr(pathId);
     if (findCounter) {
         return *findCounter;

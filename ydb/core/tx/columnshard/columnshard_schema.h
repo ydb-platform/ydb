@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "defs.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -116,6 +117,10 @@ struct Schema : NIceDb::Schema {
         TxEvents = 18
     };
 
+    static constexpr auto InternalPathIdTypeId = NScheme::NTypeIds::Uint64; //Columnshard internal PathId value 
+    static constexpr auto LocalPathIdTypeId = NScheme::NTypeIds::Uint64; //PathId the table is known as at SchemeShard
+
+
     // Tablet tables
 
     struct Value : Table<(ui32)ECommonTables::Value> {
@@ -182,17 +187,18 @@ struct Schema : NIceDb::Schema {
     };
 
     struct TableInfo : Table<(ui32)ECommonTables::TableInfo> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<1, InternalPathIdTypeId> {}; 
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TieringUsage: Column<4, NScheme::NTypeIds::String> {};
+        struct LocalPathId : Column<5, LocalPathIdTypeId> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, LocalPathId>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<1, InternalPathIdTypeId> {}; //Internal columnshard PathId 
         struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TTableVersionInfo
@@ -296,7 +302,7 @@ struct Schema : NIceDb::Schema {
         struct Committed : Column<1, NScheme::NTypeIds::Byte> {};
         struct PlanStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<4, InternalPathIdTypeId> {};
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
         struct BlobId: Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
@@ -314,7 +320,7 @@ struct Schema : NIceDb::Schema {
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
         struct Index : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct PathId : Column<2, NScheme::NTypeIds::Uint64> {};    // Logical table (if many)
+        struct PathId : Column<2, InternalPathIdTypeId> {};    // Logical table (if many)
         struct IndexKey : Column<3, NScheme::NTypeIds::String> {};  // Effective part of PK (serialized)
         struct Granule : Column<4, NScheme::NTypeIds::Uint64> {};   // FK: {Index, Granule} -> TIndexColumns
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
@@ -339,7 +345,7 @@ struct Schema : NIceDb::Schema {
         struct Metadata : Column<11, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
         struct Offset : Column<12, NScheme::NTypeIds::Uint32> {};
         struct Size : Column<13, NScheme::NTypeIds::Uint32> {};
-        struct PathId : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<14, InternalPathIdTypeId> {};
 
         using TKey = TableKey<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk>;
         using TColumns = TableColumns<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk,
@@ -403,7 +409,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct IndexIndexes: NIceDb::Schema::Table<IndexesTableId> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId: Column<1, InternalPathIdTypeId> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct IndexId: Column<3, NScheme::NTypeIds::Uint32> {};
         struct ChunkIdx: Column<4, NScheme::NTypeIds::Uint32> {};
@@ -471,7 +477,7 @@ struct Schema : NIceDb::Schema {
         struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct RangeId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct PathOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct LocalPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId : Column<4, InternalPathIdTypeId> {};
         struct Flags : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Data : Column<6, NScheme::NTypeIds::String> {};
 
@@ -496,7 +502,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId: Column<1, InternalPathIdTypeId> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct SchemaVersion: Column<3, NScheme::NTypeIds::Uint64> {};
         struct XPlanStep: Column<4, NScheme::NTypeIds::Uint64> {};
@@ -527,7 +533,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct ShardingInfo : Table<ShardingInfoTableId> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<1, InternalPathIdTypeId> {};
         struct VersionId : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Snapshot : Column<3, NScheme::NTypeIds::String> {};
         struct Logic : Column<4, NScheme::NTypeIds::String> {};
@@ -559,7 +565,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct IndexColumnsV1: Table<ColumnsV1TableId> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId: Column<1, InternalPathIdTypeId> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct SSColumnId: Column<3, NScheme::NTypeIds::Uint32> {};
         struct ChunkIdx: Column<4, NScheme::NTypeIds::Uint32> {};
@@ -573,7 +579,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct IndexColumnsV2: Table<ColumnsV2TableId> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId: Column<1, InternalPathIdTypeId> {};
         struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct Metadata: Column<3, NScheme::NTypeIds::String> {};
 
@@ -806,6 +812,11 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
+    static void UpdateTableLocalPathId(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TLocalPathId localPathId) {
+        db.Table<TableInfo>().Key(pathId.GetRawValue()).Update(
+            NIceDb::TUpdate<TableInfo::LocalPathId>(localPathId.GetRawValue())
+        );
+    }
 
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, TInternalPathId pathId, const NOlap::TSnapshot& version) {
         db.Table<TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Delete();
@@ -926,7 +937,7 @@ struct Schema : NIceDb::Schema {
 namespace NKikimr::NOlap {
 class TPortionLoadContext {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
     YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
@@ -950,7 +961,7 @@ class TColumnChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
     YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
@@ -1007,7 +1018,7 @@ class TColumnChunkLoadContextV1 {
 private:
     TChunkAddress Address;
     YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
 
@@ -1060,8 +1071,8 @@ public:
 
 class TColumnChunkLoadContextV2 {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId);
-    YDB_READONLY(ui64, PortionId, 0);
+YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(TString, MetadataProto);
 
 public:
@@ -1095,7 +1106,7 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     TChunkAddress Address;
     const ui32 RecordsCount;

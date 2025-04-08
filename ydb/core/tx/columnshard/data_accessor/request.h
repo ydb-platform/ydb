@@ -127,7 +127,7 @@ public:
         return sb;
     }
 
-    TPathFetchingState(const TInternalPathId pathId)
+    explicit TPathFetchingState(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
@@ -290,7 +290,7 @@ public:
         auto it = PathIdStatus.find(portion->GetPathId());
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(portion->GetPathId(), portion->GetPathId()).first;
+            it = PathIdStatus.emplace(portion->GetPathId(), TPathFetchingState{portion->GetPathId()}).first;
         }
         it->second.AddPortion(portion);
     }

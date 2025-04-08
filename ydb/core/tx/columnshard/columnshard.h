@@ -270,17 +270,12 @@ namespace TEvColumnShard {
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
-            : TEvWriteResult(origin, writeMeta, writeMeta.GetWriteId(), status)
-        {
-        }
-
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
+        TEvWriteResult(ui64 origin, const NColumnShard::TLocalPathId& localPathId, TString dedupId, const i64 writeId, ui32 status) {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetTableId().GetRawValue());
-            Record.SetDedupId(writeMeta.GetDedupId());
+            Record.SetTableId(localPathId.GetRawValue());
+            Record.SetDedupId(dedupId);
             Record.SetStatus(status);
         }
 

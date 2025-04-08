@@ -49,12 +49,12 @@ public:
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        auto it = ActiveCompactionInfo.find(info.GetPathId());
+        auto it = ActiveCompactionInfo.find(info.GetPathId().GetInternalPathId());
         AFL_VERIFY(it != ActiveCompactionInfo.end());
         if (it->second.Finish()) {
             ActiveCompactionInfo.erase(it);
         }
-        Counters->OnCompactionFinish(info.GetPathId());
+        Counters->OnCompactionFinish(info.GetPathId().GetLocalPathId());
     }
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();

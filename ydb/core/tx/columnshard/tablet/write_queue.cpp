@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "write_queue.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -22,7 +23,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationInsertionWriteActorId,
         owner->BufferizationPortionsWriteActorId);
-    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.GetInternalPathId())->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }
@@ -62,7 +63,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
 }
 
 void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
-    const TInternalPathId pathId = task.GetPathId();
+    const TInternalPathId pathId = task.GetPathId().GetInternalPathId();
     WriteTasks[pathId].emplace_back(std::move(task));
 }
 

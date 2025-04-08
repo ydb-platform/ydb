@@ -147,12 +147,17 @@ private:
                (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0) * node.IntervalSize();
     }
     ui64 GetMinValue(const TPosition& node) const {
-        AFL_VERIFY(node.GetIndex() < Count.size());
+        AFL_VERIFY(node.GetIndex() < MinValue.size());
         return MinValue[node.GetIndex()] + (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0);
     }
     TPosition GetRoot() const {
         return TPosition(MaxIndex);
     }
+    TString DebugString(const TPosition& node) const {
+        return TStringBuilder() << "node=" << node.GetIndex() << ";max_index=" << MaxIndex << ";count=" << GetCount(node)
+                                << ";min=" << GetMinValue(node);
+    }
+    void OnNodeUpdated(const TPosition& node, TZeroCollector* callback);
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);

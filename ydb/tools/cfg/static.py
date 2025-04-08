@@ -1192,6 +1192,7 @@ class StaticConfigGenerator(object):
                                                                    self.__cluster_details.coordinators_count_optimal,
                                                                    self.__cluster_details.allocators_count_optimal)
 
+        domain.HiveUid.append(domain.DomainId)
         domains_config.HiveConfig.add(HiveUid=domain.DomainId, Hive=self.__tablet_types.FLAT_HIVE.tablet_id_for(0))
 
         if not domains_config.StateStorage:
@@ -1378,19 +1379,22 @@ class StaticConfigGenerator(object):
             state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
             return
 
+        selected_ids = []
         if self.__cluster_details.use_new_style_config_yaml:
-            blobstorage_config = self.__proto_config("bs.txt")
             # By default, we create a set of state storage nodes equal to a set of nodes
             # in static blobstorage groups.
-            bs_group_node_ids = set()
-            for group in blobstorage_config.ServiceSet.Groups:
-                for ring in group.Rings:
-                    for fail_domain in ring.FailDomains:
-                        for vdisk_location in fail_domain.VDiskLocations:
-                            bs_group_node_ids.add(vdisk_location.NodeID)
+            if self.__cluster_details.blob_storage_config:
+                blobstorage_config = self.__cluster_details.blob_storage_config
 
-            state_storage_cfg.Ring.NToSelect = self.__n_to_select
-            state_storage_cfg.Ring.Node.extend(bs_group_node_ids)
+                for group in blobstorage_config['service_set']['groups']:
+                    for ring in group['rings']:
+                        for fail_domain in ring['fail_domains']:
+                            for vdisk_location in fail_domain['vdisk_locations']:
+                                selected_ids.append(int(vdisk_location['node_id']))
+            else:
+                blobstorage_config = self.__proto_config("bs.txt")
+                for pdisk in blobstorage_config.ServiceSet.PDisks:
+                    selected_ids.append(pdisk.NodeID)
         else:
             rack_limit = 1
             dc_limit = None
@@ -1399,7 +1403,6 @@ class StaticConfigGenerator(object):
 
             occupied_dcs = collections.Counter()
             occupied_racks = collections.Counter()
-            selected_ids = []
             hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
             for node_id in self.__cluster_details.state_storage_node_ids:
                 node = hosts_by_node_id.get(node_id)
@@ -1415,11 +1418,11 @@ class StaticConfigGenerator(object):
                 occupied_dcs[node.datacenter] += 1
                 selected_ids.append(node.node_id)
 
-            if len(selected_ids) < self.__n_to_select:
-                raise RuntimeError("Unable to build valid quorum in state storage")
+        if len(selected_ids) < self.__n_to_select:
+            raise RuntimeError("Unable to build valid quorum in state storage")
 
-            state_storage_cfg.Ring.NToSelect = self.__n_to_select
-            state_storage_cfg.Ring.Node.extend(selected_ids)
+        state_storage_cfg.Ring.NToSelect = self.__n_to_select
+        state_storage_cfg.Ring.Node.extend(selected_ids)
 
     def __generate_log_txt(self):
         log_config = self.__cluster_details.log_config

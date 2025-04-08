@@ -1277,6 +1277,16 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             }
             txSourceIds.insert(s.first);
         }
+        auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
+
+        if (!inFlightIter.IsEnd()) {
+            if (s.second.MinSeqNo <= inFlightIter->second) {
+                tx.Predicate = false;
+                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.WriteInfoApplied = true;
+                break;
+            }
+        }
 
         auto existing = knownSourceIds.find(s.first);
         if (existing.IsEnd())
@@ -2385,6 +2395,13 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo) {
         return;
     }
+    for (const auto& s : t.WriteInfo->SrcIdInfo) {
+        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, s.second.SeqNo);
+        if (!ins) {
+            Y_ABORT_UNLESS(iter->second < s.second.SeqNo);
+            iter->second = s.second.SeqNo;
+        }
+    }
     const auto& ctx = ActorContext();
 
     if (!HaveWriteMsg) {
@@ -2399,6 +2416,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+
+    auto oldHeadOffset = NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =
@@ -2486,11 +2505,15 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
             WriteInflightSize += msg.Msg.Data.size();
             ExecRequest(msg, *Parameters, PersistRequest.Get());
-
-            auto& info = TxSourceIdForPostPersist[blob.SourceId];
-            info.SeqNo = blob.SeqNo;
-            info.Offset = NewHead.Offset;
         }
+    }
+    for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
+        auto& sourceIdBatch = Parameters->SourceIdBatch;
+        auto sourceId = sourceIdBatch.GetSource(srcId);
+        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp);
+        auto& persistInfo = TxSourceIdForPostPersist[srcId];
+        persistInfo.SeqNo = info.SeqNo;
+        persistInfo.Offset = info.Offset + oldHeadOffset;
     }
 
     Parameters->FirstCommitWriteOperations = false;

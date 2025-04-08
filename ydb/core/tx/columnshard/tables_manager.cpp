@@ -221,7 +221,12 @@ bool TTablesManager::HasPreset(const ui32 presetId) const {
 }
 
 ui64 TTablesManager::GetMemoryUsage() const {
-    ui64 memory = Tables.size() * sizeof(TTableInfo) + PathsToDrop.size() * sizeof(ui64) + Ttl.GetMemoryUsage();
+    ui64 memory =
+        Tables.size() * sizeof(TTableInfo) +
+        PathsToDrop.size() * sizeof(ui64) +
+        LocalToInternalPathIds.size() * 2 *sizeof(ui64) +
+        RenamingLocalToInternalPathIds.size() * 2 * sizeof(ui64) +
+        Ttl.GetMemoryUsage();
     if (PrimaryIndex) {
         memory += PrimaryIndex->MemoryUsage();
     }

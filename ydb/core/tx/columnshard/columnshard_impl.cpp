@@ -346,6 +346,9 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            return RunMoveTable(body.GetMoveTable(), version, txc);
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -511,6 +514,16 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+}
+
+void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto srcPathId = TLocalPathId::FromRawValue(proto.GetSrcPathId());
+    const auto dstPathId = TLocalPathId::FromRawValue(proto.GetDstPathId());
+    TablesManager.MoveTableProgressOnExecute(db, srcPathId, dstPathId);
+    TablesManager.MoveTableProgressOnComplete(srcPathId, dstPathId); //TODO FIX ME
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {

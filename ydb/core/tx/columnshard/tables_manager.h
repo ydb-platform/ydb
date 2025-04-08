@@ -211,6 +211,7 @@ class TTablesManager {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
     THashMap<TLocalPathId, TInternalPathId> LocalToInternalPathIds;
+    THashMap<TLocalPathId, TInternalPathId> RenamingLocalToInternalPathIds; // Paths that are being renamed
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -295,6 +296,34 @@ public:
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
+
+    void MoveTableProposeOnExecute(const TLocalPathId localPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("local_path_id", localPathId);
+        const auto* p = LocalToInternalPathIds.FindPtr(localPathId);
+        AFL_VERIFY(p);
+        AFL_VERIFY(RenamingLocalToInternalPathIds.emplace(localPathId, *p).second)("internal_path_id", *p);
+        AFL_VERIFY(LocalToInternalPathIds.erase(localPathId));
+    }
+
+    void MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TLocalPathId oldLocalPathId, const TLocalPathId newLocalPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "move_table_progress_on_execute")("old_local_path_id", oldLocalPathId)("new_local_path_id", newLocalPathId);
+        const auto* pathId = RenamingLocalToInternalPathIds.FindPtr(oldLocalPathId);
+        AFL_VERIFY(pathId);
+        auto* table = Tables.FindPtr(*pathId);
+        AFL_VERIFY(pathId);
+        table->UpdateLocalPathIdOnExecute(db, newLocalPathId);
+    }
+
+    void MoveTableProgressOnComplete(const TLocalPathId oldLocalPathId, const TLocalPathId newLocalPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "move_table_progress_on_complete")("old_local_path_id", oldLocalPathId)("new_local_path_id", newLocalPathId);
+        const auto* pathId = RenamingLocalToInternalPathIds.FindPtr(oldLocalPathId);
+        AFL_VERIFY(pathId);
+        auto* table = Tables.FindPtr(*pathId);
+        table->UpdateLocalPathIdOnComplete(newLocalPathId);
+        AFL_VERIFY(RenamingLocalToInternalPathIds.erase(oldLocalPathId));
+        AFL_VERIFY(LocalToInternalPathIds.emplace(newLocalPathId, *pathId).second);
+    }
+
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {
         Y_ABORT_UNLESS(!!PrimaryIndex);

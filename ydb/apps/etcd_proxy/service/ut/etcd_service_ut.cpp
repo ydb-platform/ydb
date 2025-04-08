@@ -105,7 +105,7 @@ void MakeTables(auto &channel) {
     const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
     Ydb::Query::ExecuteQueryRequest request;
     request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
-    request.mutable_query_content()->set_text(std::string("PRAGMA TablePathPrefix='/Root';\n") + NEtcd::GetCreateTablesSQL());
+    request.mutable_query_content()->set_text(NEtcd::GetCreateTablesSQL(std::string("PRAGMA TablePathPrefix='/Root';\n")));
 
     grpc::ClientContext executeCtx;
     Ydb::Query::ExecuteQueryResponsePart response;

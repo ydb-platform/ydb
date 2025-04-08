@@ -296,6 +296,31 @@ private:
         }
     };
 
+    class TRowRange {
+     private:
+         YDB_READONLY_DEF(ui64, Begin);
+         YDB_READONLY_DEF(ui64, End);
+ 
+     public:
+         ui64 Size() const {
+             return End - Begin;
+         }
+ 
+         bool Empty() const {
+             return Begin == End;
+         }
+ 
+         TString DebugString() const {
+             return TStringBuilder() << "[" << Begin << ";" << End << ")";
+         }
+ 
+         TRowRange(const ui64 begin, const ui64 end)
+             : Begin(begin)
+             , End(end) {
+             AFL_VERIFY(Begin <= End)("begin", Begin)("end", End);
+         }
+     };
+
     class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor>, TMoveOnly {
     private:
         ui32 FirstIntervalIdx;
@@ -325,7 +350,7 @@ private:
 
         bool IsReady() const;
 
-        NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const;
+        TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const;
 
         void Finish();
         void AbortConstruction(const TString& reason);

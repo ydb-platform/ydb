@@ -155,19 +155,21 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::SetColumnData(std::s
     AFL_VERIFY(ColumnData);
     IntervalOffsets.emplace_back(0);
     for (ui32 localIntervalIdx = 1; localIntervalIdx < RightIntervalBorders.size(); ++localIntervalIdx) {
-        NArrow::TGeneralContainer keysData = [this]() {
+        const std::vector<std::string>& sortingFields = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()->field_names();
+        std::shared_ptr<NArrow::TGeneralContainer> keysData = [this, &sortingFields]() {
             // TODO: optimize?
             // TODO: simplify?
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
-            const auto& pkSchema = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey();
-            for (const auto& field : pkSchema->fields()) {
-                columns.emplace_back(ColumnData->GetAccessorByNameOptional(field->name()));
+            for (const auto& field : sortingFields) {
+                columns.emplace_back(ColumnData->GetAccessorByNameOptional(field));
             }
-            return NArrow::TGeneralContainer(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
+            return std::make_shared<NArrow::TGeneralContainer>(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
         }();
-        const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = keysData.EqualRange(
-            *RightIntervalBorders[localIntervalIdx - 1].ToBatch(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
-        IntervalOffsets.emplace_back(findLeftBorder.GetEnd());
+        AFL_VERIFY(keysData->GetRecordsCount());
+        auto position = NArrow::NMerger::TRWSortableBatchPosition(keysData, 0, sortingFields, {}, false);
+        const auto border = NArrow::NMerger::TSortableBatchPosition(RightIntervalBorders[localIntervalIdx - 1].ToBatch(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()), 0, sortingFields, {}, false);
+        auto findBorder = position.FindBound(position, 0, keysData->GetRecordsCount() - 1, border, true);
+        IntervalOffsets.emplace_back(findBorder ? findBorder->GetPosition() : keysData->GetRecordsCount());
     }
     AFL_VERIFY(IntervalOffsets.size() == IntervalFilters.size());
 }
@@ -178,17 +180,17 @@ bool TDuplicateFilterConstructor::TSourceFilterConstructor::IsReady() const {
     return !!Subscriber && ReadyFilterCount == IntervalFilters.size();
 }
 
-NArrow::NAccessor::IChunkedArray::TRowRange TDuplicateFilterConstructor::TSourceFilterConstructor::GetIntervalRange(
+TDuplicateFilterConstructor::TRowRange TDuplicateFilterConstructor::TSourceFilterConstructor::GetIntervalRange(
     const ui32 globalIntervalIdx) const {
     AFL_VERIFY(!IntervalOffsets.empty());
     AFL_VERIFY(globalIntervalIdx >= FirstIntervalIdx)("global", globalIntervalIdx)("first", FirstIntervalIdx);
     const ui32 localIntervalIdx = globalIntervalIdx - FirstIntervalIdx;
     AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
                                       "size", IntervalOffsets.size());
-    const NArrow::NAccessor::IChunkedArray::TRowRange localRange =
+    const TRowRange localRange =
         (localIntervalIdx == IntervalOffsets.size() - 1)
-            ? NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], Source->GetRecordsCount())
-            : NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1]);
+            ? TRowRange(IntervalOffsets[localIntervalIdx], Source->GetRecordsCount())
+            : TRowRange(IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1]);
     return localRange;
 }
 
@@ -444,7 +446,7 @@ void TDuplicateFilterConstructor::StartMergingColumns(const ui32 intervalIdx) {
         const auto* findSource = ActiveSources.FindPtr(sourceId);
         AFL_VERIFY(findSource);
         std::shared_ptr<TSourceFilterConstructor> constructionInfo = *findSource;
-        const NArrow::NAccessor::IChunkedArray::TRowRange range = constructionInfo->GetIntervalRange(intervalIdx);
+        const TRowRange range = constructionInfo->GetIntervalRange(intervalIdx);
         if (range.Empty()) {
             emptySources.emplace_back(constructionInfo->GetSource()->GetSourceId());
             continue;

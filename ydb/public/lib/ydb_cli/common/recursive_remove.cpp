@@ -222,28 +222,6 @@ TStatus RemoveDirectoryRecursive(
 
 TStatus RemovePathRecursive(
     const TDriver& driver,
-    const TString& path,
-    const TRemoveDirectoryRecursiveSettings& settings
-) {
-    TSchemeClient schemeClient(driver);
-    auto entity = schemeClient.DescribePath(path).ExtractValueSync();
-    if (!entity.IsSuccess()) {
-        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
-            return TStatus(EStatus::SUCCESS, {});
-        }
-        return entity;
-    }
-
-    TTableClient tableClient(driver);
-    TTopicClient topicClient(driver);
-    NQuery::TQueryClient queryClient(driver);
-    NCoordination::TClient coordinationClient(driver);
-    auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
-    return remover(entity.GetEntry());
-}
-
-TStatus RemovePathRecursive(
-    const TDriver& driver,
     const TSchemeEntry& entry,
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
@@ -254,6 +232,31 @@ TStatus RemovePathRecursive(
     NCoordination::TClient coordinationClient(driver);
     auto remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
     return remover(entry);
+}
+
+TStatus RemovePathRecursive(
+    const TDriver& driver,
+    const TString& path,
+    const TRemoveDirectoryRecursiveSettings& settings
+) {
+    TSchemeClient schemeClient(driver);
+    const auto entity = schemeClient.DescribePath(path).ExtractValueSync();
+    if (!entity.IsSuccess()) {
+        if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
+        return entity;
+    }
+
+    auto entry = entity.GetEntry();
+    entry.Name = path;
+    switch (entry.Type) {
+        case NYdb::NScheme::ESchemeEntryType::ColumnStore:
+        case NYdb::NScheme::ESchemeEntryType::Directory:
+            return RemoveDirectoryRecursive(driver, path, settings);
+        default:
+            return RemovePathRecursive(driver, entity.GetEntry(), settings);
+    }
 }
 
 namespace NInternal {

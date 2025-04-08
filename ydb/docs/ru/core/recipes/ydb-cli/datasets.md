@@ -119,7 +119,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
 ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 ```
 
-5. Чтобы посмотреть, в какой день было больше всего уникальных пользователей, совершавших покупки, Выполните  запрос:
+5. Выполните аналитический запрос для определения самых популярных категорий продуктов 1 ноября 2019 года:
 
 {% list tabs %}
 
@@ -127,13 +127,15 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 
   ```sql
   SELECT 
-      DATE(event_time) AS date,
-      COUNT(DISTINCT user_id) AS unique_users
+      category_code, 
+      COUNT(*) AS view_count
   FROM ecommerce_table
-  WHERE event_type = 'purchase'
-  GROUP BY date
-  ORDER BY unique_users DESC
-  LIMIT 1;
+  WHERE 
+      SUBSTRING(CAST(event_time AS String), 0, 10) = '2019-11-01' 
+      AND event_type = 'view'
+  GROUP BY category_code
+  ORDER BY view_count DESC
+  LIMIT 10;
   ```
 
 - YDB CLI
@@ -141,18 +143,46 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
   ```bash
   ydb sql -s \
   'SELECT 
-      DATE(event_time) AS date,
-      COUNT(DISTINCT user_id) AS unique_users
+      category_code, 
+      COUNT(*) AS view_count
   FROM ecommerce_table
-  WHERE event_type = "purchase"
-  GROUP BY date
-  ORDER BY unique_users DESC
-  LIMIT 1;'
+  WHERE 
+      SUBSTRING(CAST(event_time AS String), 0, 10) = "2019-11-01" 
+      AND event_type = "view"
+  GROUP BY category_code
+  ORDER BY view_count DESC
+  LIMIT 10;'
   ```
 
 {% endlist %}
 
-Этот запрос поможет выявить день с наибольшим количеством уникальных покупателей.
+Пример результата:
+
+```
+┌────────────────────────────────────┬────────────┐
+│ category_code                      │ view_count │
+├────────────────────────────────────┼────────────┤
+│ null                               │ 453024     │
+├────────────────────────────────────┼────────────┤
+│ "electronics.smartphone"           │ 360650     │
+├────────────────────────────────────┼────────────┤
+│ "electronics.clocks"               │ 43581      │
+├────────────────────────────────────┼────────────┤
+│ "computers.notebook"               │ 40878      │
+├────────────────────────────────────┼────────────┤
+│ "electronics.video.tv"             │ 40383      │
+├────────────────────────────────────┼────────────┤
+│ "electronics.audio.headphone"      │ 37489      │
+├────────────────────────────────────┼────────────┤
+│ "apparel.shoes"                    │ 31013      │
+├────────────────────────────────────┼────────────┤
+│ "appliances.kitchen.washer"        │ 28028      │
+├────────────────────────────────────┼────────────┤
+│ "appliances.kitchen.refrigerators" │ 27808      │
+├────────────────────────────────────┼────────────┤
+│ "appliances.environment.vacuum"    │ 26477      │
+└────────────────────────────────────┴────────────┘
+```
 
 ### Video Game Sales
 
@@ -256,6 +286,16 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 {% endlist %}
 
+Пример результата:
+
+```
+┌───────────┬──────────────────┐
+│ Publisher │ average_na_sales │
+├───────────┼──────────────────┤
+│ "Palcom"  │ 3.38             │
+└───────────┴──────────────────┘
+```
+
 Запрос позволит найти, какой издатель достиг наибольшего успеха в Северной Америке по средней продаже.
 
 ### COVID-19 Open Research Dataset
@@ -353,17 +393,21 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 ydb import file csv --header --null-value "" --path covid_research metadata.csv
 ```
 
-5. Чтобы получить количество статей без доступной ссылки на полный текст, выполните запрос:
+5. Выполните аналитический запрос для определения журналов с наибольшим количеством публикаций:
 
-{% list tabs %} 
+{% list tabs %}
 
 - Embedded UI
 
   ```sql
   SELECT 
-      COUNT(*) AS no_full_text_count
+      journal,
+      COUNT(*) AS publication_count
   FROM covid_research
-  WHERE pdf_json_files IS NULL AND pmc_json_files IS NULL;
+  WHERE journal IS NOT NULL AND journal != ''
+  GROUP BY journal
+  ORDER BY publication_count DESC
+  LIMIT 10;
   ```
 
 - YDB CLI
@@ -371,14 +415,44 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
   ```bash
   ydb sql -s \
   'SELECT 
-      COUNT(*) AS no_full_text_count
+      journal,
+      COUNT(*) AS publication_count
   FROM covid_research
-  WHERE pdf_json_files IS NULL AND pmc_json_files IS NULL;'
+  WHERE journal IS NOT NULL AND journal != ""
+  GROUP BY journal
+  ORDER BY publication_count DESC
+  LIMIT 10;'
   ```
 
 {% endlist %}
 
-Этот запрос покажет количество исследований, для которых нет полного текста на платформах PDF и PMC.
+Пример результата:
+
+```
+┌───────────────────────────────────┬───────────────────┐
+│ journal                           │ publication_count │
+├───────────────────────────────────┼───────────────────┤
+│ "PLoS One"                        │ 9953              │
+├───────────────────────────────────┼───────────────────┤
+│ "bioRxiv"                         │ 8961              │
+├───────────────────────────────────┼───────────────────┤
+│ "Int J Environ Res Public Health" │ 8201              │
+├───────────────────────────────────┼───────────────────┤
+│ "BMJ"                             │ 6928              │
+├───────────────────────────────────┼───────────────────┤
+│ "Sci Rep"                         │ 5935              │
+├───────────────────────────────────┼───────────────────┤
+│ "Cureus"                          │ 4212              │
+├───────────────────────────────────┼───────────────────┤
+│ "Reactions Weekly"                │ 3891              │
+├───────────────────────────────────┼───────────────────┤
+│ "Front Psychol"                   │ 3541              │
+├───────────────────────────────────┼───────────────────┤
+│ "BMJ Open"                        │ 3515              │
+├───────────────────────────────────┼───────────────────┤
+│ "Front Immunol"                   │ 3442              │
+└───────────────────────────────────┴───────────────────┘
+```
 
 ### Netflix Movies and TV Shows
 
@@ -453,7 +527,7 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 ```
 
-4. Чтобы определить топ-3 стран с наибольшим количеством фильмов и сериалов, добавленных в 2020 году, выполните запрос:
+4. Выполните аналитический запрос, чтобы определить три страны, из которых было добавлено больше всего контента на Netflix в 2020 году:
 
 {% list tabs %}
 
@@ -464,7 +538,9 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
       country, 
       COUNT(*) AS count
   FROM netflix
-  WHERE EXTRACT(YEAR FROM DATE(date_added)) = 2020
+  WHERE 
+      CAST(SUBSTRING(CAST(date_added AS String), 7, 4) AS Int32) = 2020
+      AND date_added IS NOT NULL
   GROUP BY country
   ORDER BY count DESC
   LIMIT 3;
@@ -478,7 +554,9 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
       country, 
       COUNT(*) AS count
   FROM netflix
-  WHERE EXTRACT(YEAR FROM DATE(date_added)) = 2020
+  WHERE 
+      CAST(SUBSTRING(CAST(date_added AS String), 7, 4) AS Int32) = 2020
+      AND date_added IS NOT NULL
   GROUP BY country
   ORDER BY count DESC
   LIMIT 3;'
@@ -486,7 +564,19 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 {% endlist %}
 
-Этот запрос покажет, из каких стран было добавлено больше всего контента на Netflix в 2020 году.
+Пример результата:
+
+```
+┌─────────────────┬───────┐
+│ country         │ count │
+├─────────────────┼───────┤
+│ "United States" │ 22    │
+├─────────────────┼───────┤
+│ ""              │ 7     │
+├─────────────────┼───────┤
+│ "Canada"        │ 3     │
+└─────────────────┴───────┘
+```
 
 ### Animal Crossing New Horizons Catalog
 
@@ -592,7 +682,7 @@ sed -i '1s/ /_/g' accessories.csv
 ydb import file csv --header --path accessories accessories.csv
 ```
 
-6. Чтобы посмотреть дорогие товары, доступные для покупки за игровые мили, выполните запрос:
+6. Выполните аналитический запрос, чтобы определить пять самых популярных основных цветов аксессуаров:
 
 {% list tabs %}
 
@@ -600,11 +690,11 @@ ydb import file csv --header --path accessories accessories.csv
 
   ```sql
   SELECT 
-      Name, 
-      Miles_Price
+      Color_1,
+      COUNT(*) AS color_count
   FROM accessories
-  WHERE Miles_Price != ''
-  ORDER BY CAST(Miles_Price AS Uint64) DESC
+  GROUP BY Color_1
+  ORDER BY color_count DESC
   LIMIT 5;
   ```
 
@@ -613,17 +703,33 @@ ydb import file csv --header --path accessories accessories.csv
   ```bash
   ydb sql -s \
   'SELECT 
-      Name, 
-      Miles_Price
+      Color_1,
+      COUNT(*) AS color_count
   FROM accessories
-  WHERE Miles_Price != ""
-  ORDER BY CAST(Miles_Price AS Uint64) DESC
+  GROUP BY Color_1
+  ORDER BY color_count DESC
   LIMIT 5;'
   ```
 
 {% endlist %}
 
-Этот запрос поможет узнать, какие товары в игре Animal Crossing: New Horizons стоят больше всего игровых миль.
+Пример результата:
+
+```
+┌──────────┬─────────────┐
+│ Color_1  │ color_count │
+├──────────┼─────────────┤
+│ "Black"  │ 31          │
+├──────────┼─────────────┤
+│ "Green"  │ 27          │
+├──────────┼─────────────┤
+│ "Pink"   │ 20          │
+├──────────┼─────────────┤
+│ "Red"    │ 20          │
+├──────────┼─────────────┤
+│ "Yellow" │ 19          │
+└──────────┴─────────────┘
+```
 
 ## Дополнительные ресурсы
 

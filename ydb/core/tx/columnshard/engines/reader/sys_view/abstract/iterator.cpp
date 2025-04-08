@@ -44,7 +44,8 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
         auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
         {
-            NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(originalBatch);
+            NArrow::TColumnFilter filter =
+                ReadMetadata->GetPKRangesFilter().BuildFilter(std::make_shared<NArrow::TGeneralContainer>(originalBatch));
             filter.Apply(originalBatch);
         }
 

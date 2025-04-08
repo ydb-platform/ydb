@@ -5,7 +5,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -74,11 +73,11 @@ public:
         return *this;
     }
 
-    TShardReader(TTestBasicRuntime& runtime, const ui64 tabletId, const ui64 pathId, const TPlanStep planStep, ui64 txId)
+    TShardReader(TTestBasicRuntime& runtime, const ui64 tabletId, const ui64 pathId, const NOlap::TSnapshot& snapshot)
         : Runtime(runtime)
         , TabletId(tabletId)
         , PathId(pathId)
-        , Snapshot({planStep.Val(), txId}) {
+        , Snapshot(snapshot) {
     }
 
     bool IsFinished() const {

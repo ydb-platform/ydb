@@ -30,10 +30,10 @@ Y_UNIT_TEST_SUITE(Backup) {
         return TPlanStep{res.GetMinStep()};
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const ui64 txId, const TPlanStep planStep, bool waitResult = true) {
-        auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep.Val(), 0, TTestTxConfig::TxTablet0);
+    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
+        auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
-        tx->SetTxId(txId);
+        tx->SetTxId(snap.GetTxId());
         ActorIdToProto(sender, tx->MutableAckTo());
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         if (waitResult) {
             auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
             const auto& res = ev->Get()->Record;
-            UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
+            UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
             UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
             UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
         }
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
 
         TestWaitCondition(runtime, "insert compacted",
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             std::vector<ui64> writeIds;
             WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
             return true;
         }, TDuration::Seconds(1000));
 
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txId, planStep, false);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
         TestWaitCondition(runtime, "export",
             []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
     }

@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, txIds, planStep);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             // emulate timeout
             runtime.UpdateCurrentTime(TInstant::Now());
@@ -943,7 +943,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             ++txId;
             NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(runtime, sender, shardId, { txId }, planStep);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
@@ -1112,7 +1112,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, txIds, planStep);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             WaitTableStats(runtime, shardId);
             CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         Y_UNUSED(delResult);
         planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
         txIds.insert(txId);
-        NTxUT::PlanCommit(runtime, sender, shardId, txIds, planStep);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(60));

@@ -536,11 +536,11 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
             planStep = ProposeCommit(runtime, sender, txId, writeIds, txId);
             txIds.insert(txId);
         }
-        PlanCommit(runtime, sender, txIds, planStep);
+        PlanCommit(runtime, sender, planStep, txIds);
 
         // read
         if (count != 0) {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep - 1, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -585,8 +585,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         return result;
     };
 
-    auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, TPlanStep planStep) {
-        PlanCommit(runtime, sender, txId, planStep);
+    auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, TPlanStep planStep, ui64 txId) {
+        PlanCommit(runtime, sender, planStep, txId);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
@@ -598,7 +598,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     ui64 tableId = 1;
 
     auto planStep = SetupSchema(runtime, sender, tableId, table, codec);
-    const auto schemaPlanStep = planStep;
+
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = table.Schema;
     const std::vector<NArrow::NTest::TTestColumn>& testYdbPk = table.Pk;
 
@@ -619,7 +619,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, schemaPlanStep, 1);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -629,14 +629,14 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ui64 txId = 100;
     planStep = proposeCommit(runtime, sender, txId, intWriteIds);
-    planCommit(runtime, sender, txId, planStep);
+    planCommit(runtime, sender, planStep, txId);
     const auto firstWritePlanStep = planStep;
 
     // read 2 (committed, old snapshot)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, schemaPlanStep, 1);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -646,7 +646,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 3 (committed)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -661,7 +661,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 4 (column by id)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 4);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds({ 1 });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -676,7 +676,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 5);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -702,7 +702,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++txId;
     planStep = proposeCommit(runtime, sender, txId, intWriteIds);
-    planCommit(runtime, sender, txId, planStep);
+    planCommit(runtime, sender, planStep, txId);
 
     // write 3: ins:1, cmt:0, idx:1
 
@@ -710,10 +710,10 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     intWriteIds.clear();
     UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[2], ydbSchema), ydbSchema, intWriteIds));
 
-    // read 6, no writes snapshot
+    // read 6, planstep 0
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 6);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, schemaPlanStep, 1);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(!rb);
@@ -723,7 +723,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 7, first write snapshot
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 7);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, firstWritePlanStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(firstWritePlanStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -740,7 +740,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 8 (full index)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -758,7 +758,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++txId;
     planStep = proposeCommit(runtime, sender, txId, intWriteIds);
-    planCommit(runtime, sender, txId, planStep);
+    planCommit(runtime, sender, planStep, txId);
 
     // write 4: ins:1, cmt:1, idx:1
 
@@ -769,7 +769,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 9 (committed, indexed)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 9);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -788,12 +788,12 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++txId;
     planStep = proposeCommit(runtime, sender, txId, intWriteIds);
-    planCommit(runtime, sender, txId, planStep);
+    planCommit(runtime, sender, planStep, txId);
 
     // read 10
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 10);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -838,7 +838,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 11 (range predicate: closed interval)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         reader.AddRange(MakeTestRange({ 10, 42 }, true, true, testYdbPk));
         auto rb = reader.ReadAll();
@@ -855,7 +855,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 12 (range predicate: open interval)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         reader.AddRange(MakeTestRange({ 10, 42 }, false, false, testYdbPk));
         auto rb = reader.ReadAll();
@@ -900,8 +900,8 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         return result;
     };
 
-    auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, TPlanStep planStep) {
-        PlanCommit(runtime, sender, txId, planStep);
+    auto planCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, TPlanStep planStep, ui64 txId) {
+        PlanCommit(runtime, sender, planStep, txId);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
@@ -947,7 +947,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         }
 
         planStep = proposeCommit(runtime, sender, txId, ids);
-        planCommit(runtime, sender, txId, planStep);
+        planCommit(runtime, sender, planStep, txId);
     }
     std::pair<ui64, ui64> smallWrites = { triggerPortionSize, pos };
 
@@ -960,14 +960,14 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         UNIT_ASSERT(write(runtime, sender, writeId, tableId, triggerData, ydbSchema, writeIds));
 
         planStep = proposeCommit(runtime, sender, txId, writeIds);
-        planCommit(runtime, sender, txId, planStep);
+        planCommit(runtime, sender, planStep, txId);
     }
 
     // TODO: Move tablet's time to the future with mediator timecast instead
     --txId;
 
     for (ui32 i = 0; i < 2; ++i) {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
@@ -1174,7 +1174,7 @@ void TestReadWithProgram(const TestTableDescription& table = {}) {
         bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         planStep = ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, txId, planStep);
+        PlanCommit(runtime, sender, planStep, txId);
     }
 
     ui32 numWrong = 1;
@@ -1205,7 +1205,7 @@ void TestReadWithProgram(const TestTableDescription& table = {}) {
 
     ui32 i = 0;
     for (auto& programText : programs) {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(programText);
         auto rb = reader.ReadAll();
         if (i < numWrong) {
@@ -1257,7 +1257,7 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
         UNIT_ASSERT(ok);
 
         planStep = ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, txId, planStep);
+        PlanCommit(runtime, sender, planStep, txId);
     }
 
     TString pattern = "1";
@@ -1268,7 +1268,7 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
 
     ui32 i = 0;
     for (auto& ssa : ssas) {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(ssa);
         auto rb = reader.ReadAll();
 
@@ -1320,7 +1320,7 @@ void TestSomePrograms(const TestTableDescription& table) {
         UNIT_ASSERT(ok);
 
         planStep = ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, txId, planStep);
+        PlanCommit(runtime, sender, planStep, txId);
     }
 
     std::vector<TString> programs;
@@ -1339,7 +1339,7 @@ void TestSomePrograms(const TestTableDescription& table) {
     // TODO: add programs with bugs here
 
     for (auto& ssaText : programs) {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(ssaText);
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsError());
@@ -1383,7 +1383,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
         UNIT_ASSERT(ok);
 
         planStep = ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, txId, planStep);
+        PlanCommit(runtime, sender, planStep, txId);
     }
 
     // TODO: write some into index
@@ -1444,7 +1444,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     for (auto& programText : programs) {
         Cerr << "-- select program: " << prog << " is filtered: " << (int)isFiltered.count(prog) << "\n";
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(programText);
         auto batch = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1507,12 +1507,12 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             writer.StartCommitFail(444);
         }
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, schemaPlanStep, txId, schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(schemaPlanStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
-            PlanWriteTx(runtime, writer.GetSender(), txId, planStep);
+            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
         }
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, planStep, Max<ui64>(), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(planStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1540,9 +1540,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         AFL_VERIFY(writer.Abort(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
-        PlanWriteTx(runtime, writer.GetSender(), txId + 1, planStep, false);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId + 1), false);
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, planStep, Max<ui64>(), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(planStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
     }
 
@@ -1572,9 +1572,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
 
-        PlanWriteTx(runtime, writer.GetSender(), txId, planStep);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, planStep, Max<ui64>(), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(planStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1602,7 +1602,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
@@ -1616,16 +1616,16 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
         {
             planStep = writer.StartCommit(txId);
-            PlanWriteTx(runtime, writer.GetSender(), txId, planStep);
+            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
         }
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
 }
@@ -1704,9 +1704,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
-            PlanCommit(runtime, sender, txIds, planStep);
+            PlanCommit(runtime, sender, planStep, txIds);
 
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1719,9 +1719,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
-            PlanCommit(runtime, sender, txIds, planStep);
+            PlanCommit(runtime, sender, planStep, txIds);
 
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1735,9 +1735,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
-            PlanCommit(runtime, sender, txIds, planStep);
+            PlanCommit(runtime, sender, planStep, txIds);
 
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1751,9 +1751,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
-            PlanCommit(runtime, sender, txIds, planStep);
+            PlanCommit(runtime, sender, planStep, txIds);
 
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1771,11 +1771,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
-            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
-            PlanCommit(runtime, sender, txIds, planStep);
+            PlanCommit(runtime, sender, planStep, txIds);
 
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -2055,7 +2055,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 const ui64 tableId = 1;
                 std::set<TString> useFields = { "timestamp", "message" };
                 {   // read with predicate (FROM)
-                    TShardReader reader(Owner.Runtime, TTestTxConfig::TxTablet0, tableId, Owner.PlanStep, Owner.TxId);
+                    TShardReader reader(Owner.Runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(Owner.PlanStep, Owner.TxId));
                     reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { "timestamp", "message" }));
                     reader.AddRange(MakeRange(Owner.YdbPk));
                     auto rb = reader.ReadAll();
@@ -2136,7 +2136,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, table.Schema, true, &writeIds));
 
                 planStep = ProposeCommit(runtime, sender, txId, writeIds);
-                PlanCommit(runtime, sender, txId, planStep);
+                PlanCommit(runtime, sender, planStep, txId);
             }
         }
 
@@ -2147,7 +2147,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         for (ui32 i = 0; i < 2; ++i) {
             {
-                TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, txId);
+                TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
                 reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
                 auto rb = reader.ReadAll();
                 UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -2218,7 +2218,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         const TInstant start = TInstant::Now();
         bool success = false;
         while (!success && TInstant::Now() - start < TDuration::Seconds(30)) {   // Get index stats
-            ScanIndexStats(runtime, sender, { tableId, 42 }, planStep, txId, 0);
+            ScanIndexStats(runtime, sender, { tableId, 42 }, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
@@ -2365,7 +2365,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
 
         TDuration staleness = TDuration::Minutes(6);
@@ -2391,12 +2391,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             // Cerr << response << Endl;
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
-            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), TStringBuilder() << "Snapshot too old: {" << planStep.Val() - staleness.MilliSeconds() << ":max}");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), TStringBuilder() << "Snapshot too old: {" << planStep - staleness.MilliSeconds() << ":max}");
         }
 
         // Try to read snapshot that is too old
         {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep - staleness.MilliSeconds(), Max<ui64>());
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - staleness.MilliSeconds(), Max<ui64>()));
             reader.SetReplyColumnIds(TTestSchema::GetColumnIds(ydbSchema, { "timestamp", "message" }));
             reader.ReadAll();
             UNIT_ASSERT(reader.IsError());
@@ -2536,7 +2536,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
@@ -2547,7 +2547,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, smallData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
             ++writeId;
             ++txId;
         }
@@ -2562,7 +2562,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Send a request that reads the latest version
         // This request is expected to read at least 1 committed blob and several index portions
         // These committed blob and portions must not be deleted by the BlobManager until the read request finishes
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, planStep, 0);
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(ydbSchema, { "timestamp", "message" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -2580,7 +2580,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
@@ -2622,7 +2622,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
         csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
@@ -2636,7 +2636,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, txId, planStep);
+            PlanCommit(runtime, sender, planStep, txId);
         }
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);

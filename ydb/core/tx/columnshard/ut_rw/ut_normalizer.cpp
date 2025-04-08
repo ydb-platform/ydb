@@ -273,16 +273,16 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 
-        PlanWriteTx(runtime, writer.GetSender(), txId, planStep);
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, planStep, txId, schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }

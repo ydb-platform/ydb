@@ -45,8 +45,8 @@ class TPositiveIncreasingControlInteger {
     private:
         ui64 Value = 0;
     public:
-        TPositiveIncreasingControlInteger() = default;
-        explicit TPositiveIncreasingControlInteger(const ui64 value)
+        constexpr TPositiveIncreasingControlInteger() = default;
+        explicit constexpr TPositiveIncreasingControlInteger(const ui64 value)
             : Value(value) {
         }
         TPositiveIncreasingControlInteger(const TPositiveIncreasingControlInteger&) = default;

@@ -313,7 +313,6 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
 #endif
     Y_DEBUG_ABORT_UNLESS(state);
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
@@ -326,7 +325,6 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
 #endif
         return ret + 1;
     }
-#endif
 
     auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
     if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
@@ -352,10 +350,7 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
 #endif
     Y_DEBUG_ABORT_UNLESS(state);
 
-    bool useMalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-    useMalloc = useMalloc || TAllocState::IsDefaultAllocatorUsed();
-#endif
+    bool useMalloc = (state->SupportsSizedAllocators && sz > MaxPageUserData) || TAllocState::IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useMalloc)) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
@@ -400,7 +395,6 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
     TlsAllocState->DefaultMemInfo->Return(mem);
 #endif
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         TAllocState *state = TlsAllocState;
         Y_DEBUG_ABORT_UNLESS(state);
@@ -410,7 +404,6 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
         free(entry);
         return;
     }
-#endif
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
@@ -432,10 +425,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     state->DefaultMemInfo->Return(mem, sz);
 #endif
 
-    bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-    useFree = useFree || TAllocState::IsDefaultAllocatorUsed();
-#endif
+    bool useFree = (state->SupportsSizedAllocators && sz > MaxPageUserData) || TAllocState::IsDefaultAllocatorUsed();
 
     if (Y_UNLIKELY(useFree)) {
         auto entry = (TAllocState::TListEntry*)(mem) - 1;

@@ -7,12 +7,6 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/join.h>
 
@@ -52,6 +46,12 @@ public:
 };
 
 class TDataBuilder {
+public:
+    class IBuffers {
+    public:
+        virtual ~IBuffers() = default;
+    };
+
 private:
     class TStorageAddress {
     private:
@@ -82,18 +82,13 @@ private:
     std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
-    std::deque<simdjson::padded_string> PaddedStrings;
-    simdjson::ondemand::parser Parser;
+    std::vector<std::shared_ptr<IBuffers>> Buffers;
 
 public:
-    TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
-        : Type(type)
-        , Settings(settings) {
-    }
+    TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings);
 
-    simdjson::simdjson_result<simdjson::ondemand::document> ParseJsonOnDemand(const TStringBuf sv) {
-        PaddedStrings.emplace_back(simdjson::padded_string(sv.data(), sv.size()));
-        return Parser.iterate(PaddedStrings.back());
+    void StoreBuffer(const std::shared_ptr<IBuffers>& data) {
+        Buffers.emplace_back(data);
     }
 
     void StartNextRecord() {

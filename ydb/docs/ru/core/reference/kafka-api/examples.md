@@ -27,7 +27,7 @@
 
 Поэтому в конфигурации читателя всегда нужно указывать **имя группы читателей** и параметры:
 
-- `check.crc=false`
+- `check.crcs=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Ниже даны примеры чтения по Kafka протоколу для разных приложений, языков программирования и фреймворков подключения без аутентификации.

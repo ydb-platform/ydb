@@ -229,8 +229,8 @@ struct TPDiskConfig : public TThrRefBase {
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "SPDK NVMe driver can be used only with NVMe devices!");
+        Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {

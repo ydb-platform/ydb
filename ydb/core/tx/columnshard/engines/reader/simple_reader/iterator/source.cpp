@@ -138,7 +138,7 @@ bool TPortionDataSource::DoStartFetchingColumns(
 }
 
 std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
-    const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation /*op*/) const {
+    const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& /*op*/) const {
     if (indexes.size() == 0) {
         return nullptr;
     }
@@ -386,6 +386,14 @@ public:
 };
 
 }   // namespace
+
+TCompareKeyForScanSequence TCompareKeyForScanSequence::FromStart(const std::shared_ptr<IDataSource>& src) {
+    return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
+}
+
+TCompareKeyForScanSequence TCompareKeyForScanSequence::FromFinish(const std::shared_ptr<IDataSource>& src) {
+    return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
+}
 
 bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());

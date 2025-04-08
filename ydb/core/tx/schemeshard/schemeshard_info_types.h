@@ -3026,14 +3026,6 @@ private:
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
 
-    struct TLimits {
-        ui32 MaxBatchRows = 100;
-        ui32 MaxBatchBytes = 1 << 20;
-        ui32 MaxShards = 100;
-        ui32 MaxRetries = 50;
-    };
-    TLimits Limits;
-
     enum class EState: ui32 {
         Invalid = 0,
         AlterMainTable = 5,
@@ -3111,6 +3103,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
     TVector<TString> FillDataColumns;
+
+    NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TVector<TColumnBuildInfo> BuildColumns;
 
@@ -3229,18 +3223,18 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             TableSize = tableSize;
         }
 
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
+        NKikimrTxDataShard::EKMeansState GetUpload() const {
             if (Level == 1) {
                 if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
                 } else {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
                 }
             } else {
                 if (NeedsAnotherLevel()) {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
                 } else {
-                    return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
+                    return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
                 }
             }
         }
@@ -3384,13 +3378,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return result;
         }
     };
+    
     TMap<TShardIdx, TShardStatus> Shards;
-
     TDeque<TShardIdx> ToUploadShards;
-
     THashSet<TShardIdx> InProgressShards;
-
     std::vector<TShardIdx> DoneShards;
+    ui32 MaxInProgressShards = 32;
 
     TBillingStats Processed;
     TBillingStats Billed;
@@ -3609,15 +3602,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::InitiateTxDone>(
                 indexInfo->InitiateTxDone);
 
-        indexInfo->Limits.MaxBatchRows =
-            row.template GetValue<Schema::IndexBuild::MaxBatchRows>();
-        indexInfo->Limits.MaxBatchBytes =
-            row.template GetValue<Schema::IndexBuild::MaxBatchBytes>();
-        indexInfo->Limits.MaxShards =
+        indexInfo->ScanSettings.SetMaxBatchRows(
+            row.template GetValue<Schema::IndexBuild::MaxBatchRows>());
+        indexInfo->ScanSettings.SetMaxBatchBytes(
+            row.template GetValue<Schema::IndexBuild::MaxBatchBytes>());
+        indexInfo->MaxInProgressShards =
             row.template GetValue<Schema::IndexBuild::MaxShards>();
-        indexInfo->Limits.MaxRetries =
+        indexInfo->ScanSettings.SetMaxBatchRetries(
             row.template GetValueOrDefault<Schema::IndexBuild::MaxRetries>(
-                indexInfo->Limits.MaxRetries);
+                indexInfo->ScanSettings.GetMaxBatchRetries()));
 
         indexInfo->ApplyTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxId>(

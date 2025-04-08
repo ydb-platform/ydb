@@ -2956,6 +2956,10 @@ public:
         return Source->GetSessionWindowSpec();
     }
 
+    IJoin* GetJoin() override {
+        return Source->GetJoin();
+    }
+
     TNodePtr DoClone() const final {
         return {};
     }

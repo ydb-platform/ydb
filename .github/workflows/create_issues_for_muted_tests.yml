@@ -10,18 +10,19 @@ on:
             description: 'The pull request number'
             required: true
             type: number
-        
+
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/scripts/tests/muted_ya.txt
+  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
 
 jobs:
-  main:
+  create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-        github.event_name == 'pull_request_review' && 
         github.event.review.state == 'approved' && 
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute') 
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute') || 
+        github.event_name == 'workflow_dispatch'
+
     steps:
       - name: Set environment variables for branches
         run: |
@@ -43,19 +44,36 @@ jobs:
         with:
             ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      #- name: Create issues for muted tests
-      #  id: create_issues
-      #  run: |
-      #      .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
-        
-      - name: Create file with debig issues information
+      - name: Create issues for muted tests
+        id: create_issues
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
-          echo "Created issue 'Mute ydb/core/kqp/ut/olap/KqpOlapSysView.StatsSysViewBytesColumnActualization' for TEAM:@ydb-platform/cs, url https://github.com/ydb-platform/ydb/issues/16168" > issues_info.txt
-          echo "Created issue 'Mute ydb/core/mind/hive/ut/TStorageBalanceTest.TestScenario2' for TEAM:@ydb-platform/system-infra, url https://github.com/ydb-platform/ydb/issues/16169" >> issues_info.txt
+            .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
  
       - name: Add issues to PR
         env:
-            GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
-            #python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number }} --body=${{ steps.create_issues.outputs.created_issues_file }}
-            python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=issues_info.txt
+            python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
+      
+      - name: Comment PR
+        uses: actions/github-script@v7
+        
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const filePath = ${{ steps.create_issues.outputs.created_issues_file }}
+            const bodyText = fs.readFileSync(filePath, 'utf8');
+            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
+      
+            github.rest.issues.createComment({
+              issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number  }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: completeBody
+            });

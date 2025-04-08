@@ -182,7 +182,7 @@ void TFetchingScriptBuilder::AddAssembleStep(
             *actualSet = *actualSet - *cross;
         }
         if (!actualSet->IsEmpty()) {
-            AddAllocation(notSequentialColumnIds, stage, EMemType::RawSequential);
+            AddAllocation(actualSet->GetColumnIds(), stage, EMemType::RawSequential);
             AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
         }
     } else {

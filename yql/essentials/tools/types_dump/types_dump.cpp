@@ -11,10 +11,11 @@ int Main(int argc, const char *argv[])
     Y_UNUSED(argc);
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
-    json.BeginObject();
+    json.BeginList();
     EnumerateSimpleTypes([&](auto name, auto kind) {
-        json.WriteKey(name);
         json.BeginObject();
+        json.WriteKey("name");
+        json.WriteString(name);
         json.WriteKey("kind");
         json.WriteString(kind);
         json.EndObject();
@@ -25,19 +26,20 @@ int Main(int argc, const char *argv[])
     });
     Sort(pgNames);
     for (const auto& name : pgNames) {
+        json.BeginObject();
+        json.WriteKey("name");
         if (name.StartsWith('_')) {
-            json.WriteKey("_pg" + name.substr(1));
+            json.WriteString("_pg" + name.substr(1));
         } else {
-            json.WriteKey("pg" + name);
+            json.WriteString("pg" + name);
         }
 
-        json.BeginObject();
         json.WriteKey("kind");
         json.WriteString("Pg");
         json.EndObject();
     }
 
-    json.EndObject();
+    json.EndList();
     Cout << json.Str() << Endl;
 
     return 0;

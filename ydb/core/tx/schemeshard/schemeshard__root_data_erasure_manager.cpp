@@ -165,7 +165,7 @@ void TRootDataErasureManager::ScheduleDataErasureWakeup() {
     IsDataErasureWakeupScheduled = true;
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[RootDataErasureManager] ScheduleDataErasureWakeup: Interval# " << CurrentWakeupInterval);
+        "[RootDataErasureManager] ScheduleDataErasureWakeup: Interval# " << CurrentWakeupInterval << ", Timestamp# " << AppData(ctx)->TimeProvider->Now());
 }
 
 void TRootDataErasureManager::WakeupToRunDataErasure(TEvSchemeShard::TEvWakeupToRunDataErasure::TPtr& ev, const NActors::TActorContext& ctx) {

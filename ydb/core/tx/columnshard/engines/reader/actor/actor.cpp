@@ -172,10 +172,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
     CheckHanging(true);
-    if (!!AckReceivedInstant && TMonotonic::Now() >= GetScanDeadline()) {
-        SendScanError("ColumnShard scanner timeout: HAS_ACK=1");
-        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
-    } else if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
+    if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {

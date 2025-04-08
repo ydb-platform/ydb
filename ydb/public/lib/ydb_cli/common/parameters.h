@@ -10,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/parameter_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -42,7 +43,7 @@ private:
     void SetParamsInput(IInputStream* input);
     void SetParamsInputFromFile(TString& file);
     void SetParamsInputFromStdin();
-    void GetParamTypes(const TDriver& driver, const TString& queryText);
+    void InitParamTypes(const TDriver& driver, const TString& queryText);
 
     TMaybe<TString> ReadData();
 
@@ -69,6 +70,7 @@ protected:
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
     bool ReadingSomethingFromStdin = false;
+    NQuery::ESyntax SyntaxType = NQuery::ESyntax::YqlV1;
 };
 
 }

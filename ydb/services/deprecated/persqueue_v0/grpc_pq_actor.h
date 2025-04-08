@@ -943,6 +943,8 @@ private:
 
     NPersQueue::TTopicsListController TopicsHandler;
     NPersQueue::TTopicsToConverter TopicsList;
+
+    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 };
 
 }

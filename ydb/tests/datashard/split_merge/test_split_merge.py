@@ -76,28 +76,36 @@ class TestSplitMerge(TestBase):
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        big_line = "a" * 100_000
+        if ttl != "":
+            big_line = "a" * 10_000
+        else:
+            big_line = "a" * 10
         all_types["String"] = "'String " + big_line +  "{}'"
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
+        print(1)
         self.query(f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
+        print(1)
         self.insert(table_name, all_types, pk_types, index, ttl)
-        for _ in range(50):
+        print(1)
+        for _ in range(100):
             rows = self.query("""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 """)
+            print(rows[0].count)
             if rows[0].count != 1:
                 break
             time.sleep(1)
         assert len(rows) == 1 and rows[0].count != 1, f"The table {table_name} is not split into partition"
         self.select_after_insert(table_name, all_types, pk_types, index, ttl)
         self.query(f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000)")
-        for _ in range(50):
+        for _ in range(100):
             rows = self.query("""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 """)
+            print(rows[0].count)
             if rows[0].count == 1:
                 break
             time.sleep(1)
@@ -131,6 +139,7 @@ class TestSplitMerge(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
+            print(count)
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
             

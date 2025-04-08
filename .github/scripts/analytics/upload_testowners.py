@@ -95,6 +95,9 @@ def main():
             and job_name in (
                 'Nightly-run',
                 'Regression-run',
+                'Regression-run_Large',
+                'Regression-run_Small_and_Medium',
+                'Regression-run_compatibility',
                 'Regression-whitelist-run',
                 'Postcommit_relwithdebinfo', 
                 'Postcommit_asan'

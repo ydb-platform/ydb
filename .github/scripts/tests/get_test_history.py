@@ -62,6 +62,9 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type):
             where job_name in (
                 'Nightly-run',
                 'Regression-run',
+                'Regression-run_Large',
+                'Regression-run_Small_and_Medium',
+                'Regression-run_compatibility',
                 'Regression-whitelist-run',
                 'Postcommit_relwithdebinfo', 
                 'Postcommit_asan'

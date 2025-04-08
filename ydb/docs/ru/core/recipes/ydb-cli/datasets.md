@@ -17,15 +17,31 @@
 ydb import file csv --header --null-value "" --path <путь_к_таблице> <файл>.csv
 ```
 
-Опция `--header` означает, что в первой строчке файла содержится список имён колонок, а сами данные начинаются со второй строчки.
+Где:
+* `--header` означает, что в первой строке файла содержится список имён колонок, а сами данные начинаются со второй строки;
+* `--null-value` задает строку, которая будет восприниматься как null-значение при импорте.
 
-Опцией `--null-value` можно задать строку, которая будет восприниматься как null-значение при импорте.
+Для импорта данных нужна заранее созданная таблица в {{ ydb-short-name }}. Основной способ создания таблицы - выполнить [YQL-запрос `CREATE TABLE`](../../../core/yql/reference/syntax/create_table/index.md). Чтобы не составлять его полностью вручную, можно попробовать выполнить команду импорта из файла, как в любом примере ниже, не создавая перед этим таблицу. В таком случае CLI предложит текст `CREATE TABLE`, который можно будет взять за основу, при необходимости отредактировать и выполнить.
 
-Для импорта данных нужна заранее созданная таблица в {{ ydb-short-name }}. Основной способ создания таблицы - выполнить YQL-запрос `CREATE TABLE`. Чтобы не составлять его полностью вручную, можно попробовать выполнить команду импорта из файла. В случае отстутствия в базе таблицы, CLI предложит текст `CREATE TABLE`, который можно будет взять за основу и при необходимости отредактировать.
+{% note info "Выбор первичного ключа" %}
 
 В {{ ydb-short-name }} критически важно, чтобы таблица имела первичный ключ. Он существенно влияет на скорость загрузки и обработки данных, а также служит для дедупликации. Строки с идентичными значениями в колонках первичного ключа заменяют друг друга.
 
-## Примеры ипорта датасетов
+{% endnote %}
+
+## Особенности и ограничения
+
+При работе с загрузкой CSV-файлов в {{ ydb-short-name }} следует учитывать следующие моменты:
+
+1. **Имена колонок**: Названия колонок не должны содержать пробелы или специальные символы.
+
+2. **Типы данных**:
+   - Строки в формате даты/времени с указанием временной зоны (например, "2019-11-01 00:00:00 UTC") будут импортированы как тип Text
+   - Тип Bool не поддерживается в качестве типа колонки, используйте Text или Int64
+
+3. **Производительность**: Для больших файлов рекомендуется настраивать [параметры](../../reference/ydb-cli/export-import/import-file.md#optional) `--batch-bytes` и `--max-in-flight` для оптимизации процесса импорта.
+
+## Примеры импорта датасетов
 
 ### E-Commerce Behavior Data
 
@@ -33,7 +49,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
 **Источник**: [Kaggle - E-commerce behavior data](https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store/data)
 
-**Размер**: 8.7 GB
+**Размер**: 9 GB
 
 **Пример загрузки**:
 
@@ -48,9 +64,9 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
 3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+  <summary>Выполнив запрос в Embedded UI</summary>
 
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `ecommerce_table` (
@@ -121,9 +137,9 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+  <summary>Выполнив запрос в Embedded UI</summary>
 
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `vgsales` (
@@ -200,9 +216,9 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+  <summary>Выполнив запрос в Embedded UI</summary>
 
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `covid_research` (
@@ -291,9 +307,9 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+  <summary>Выполнив запрос в Embedded UI</summary>
 
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `netflix` (
@@ -357,7 +373,7 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 **Источник**: [Kaggle - Animal Crossing New Horizons Catalog](https://www.kaggle.com/datasets/jessicali9530/animal-crossing-new-horizons-nookplaza-dataset/)
 
-**Размер**: 3.63 MB (30 файлов)
+**Размер**: 51 KB
 
 **Пример загрузки**:
 
@@ -378,9 +394,9 @@ sed -i '1s/ /_/g' accessories.csv
 4. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+  <summary>Выполнив запрос в Embedded UI</summary>
 
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `accessories` (
@@ -458,34 +474,7 @@ sed -i '1s/ /_/g' accessories.csv
 ydb import file csv --header --path accessories accessories.csv
 ```
 
-## Особенности и ограничения
-
-При работе с загрузкой CSV-файлов в {{ ydb-short-name }} следует учитывать следующие моменты:
-
-1. **Имена колонок**: Названия колонок не должны содержать пробелы или специальные символы.
-
-2. **Типы данных**:
-   - Строки в формате даты/времени с указанием временной зоны (например, "2019-11-01 00:00:00 UTC") будут импортированы как тип Text
-   - Тип Bool не поддерживается в качестве типа колонки, используйте Text или Int64
-
-3. **Производительность**: Для больших файлов рекомендуется настраивать параметры `--batch-bytes` и `--max-in-flight` для оптимизации процесса импорта.
-
-## Часто задаваемые вопросы
-
-### Как обрабатывать NULL-значения?
-
-Используйте параметр `--null-value` для указания строки, которая должна интерпретироваться как NULL. Например: `--null-value ""`.
-
-### Как пропустить заголовок в CSV-файле?
-
-Используйте параметр `--header` для пропуска строки заголовка или `--skip-rows N` для пропуска N строк в начале файла.
-
-### Как выбрать колонки для импорта?
-
-Используйте параметр `--columns` для указания списка имён колонок в файле.
-
 ## Дополнительные ресурсы
 
 - [Документация {{ ydb-short-name }} CLI](https://ydb.tech/ru/docs/reference/ydb-cli/commands/import)
 - [Руководство по работе с {{ ydb-short-name }} SQL](https://ydb.tech/ru/docs/yql/reference/)
-- [GitHub-репозиторий {{ ydb-short-name }}](https://github.com/ydb-platform/ydb)

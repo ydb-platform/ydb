@@ -1124,7 +1124,7 @@ void TSharedMetadaCacheInitializer::InitializeServices( NActors::TActorSystemSet
     if (appData->FeatureFlags.GetEnableSharedMetadataCache()) {
         auto* actor = NKikimr::NOlap::NDataAccessorControl::TNodeActor::CreateActor();
         setup->LocalServices.emplace_back(NKikimr::NOlap::NDataAccessorControl::TNodeActor::MakeActorId(NodeId),
-            TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->IOPoolId));
+            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
     }
 } 
 

@@ -64,6 +64,7 @@ target_proto_messages(libs-config-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/resource_manager.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/row_dispatcher.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/storage.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/task_controller.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/test_connection.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/config/protos/token_accessor.proto
 )
@@ -92,6 +93,7 @@ target_sources(libs-config-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/resource_manager.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/row_dispatcher.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/storage.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/task_controller.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/test_connection.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/config/protos/token_accessor.pb.h
 )

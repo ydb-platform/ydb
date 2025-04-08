@@ -12,6 +12,7 @@ from abc import ABCMeta, abstractmethod
 
 from six.moves.urllib import parse
 
+
 class HostsInformationProvider:
     __metaclass__ = ABCMeta
 

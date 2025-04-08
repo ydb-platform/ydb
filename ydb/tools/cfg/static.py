@@ -394,8 +394,12 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.need_generate_app_config:
             all_configs["app_config.proto"] = utils.message_to_string(self.get_app_config())
-        all_configs["kikimr.cfg"] = self.kikimr_cfg
-        all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
+        # these files are obsolete and not generated with new style config.yaml
+        if not self.__cluster_details.use_new_style_config_yaml:
+            all_configs["kikimr.cfg"] = self.kikimr_cfg
+            all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
         normalized_config = self.get_normalized_config()
 
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
@@ -1189,7 +1193,6 @@ class StaticConfigGenerator(object):
                                                                    self.__cluster_details.allocators_count_optimal)
 
         domains_config.HiveConfig.add(HiveUid=domain.DomainId, Hive=self.__tablet_types.FLAT_HIVE.tablet_id_for(0))
-
 
         if not domains_config.StateStorage:
             self._configure_default_state_storage(domains_config, domain.DomainId)

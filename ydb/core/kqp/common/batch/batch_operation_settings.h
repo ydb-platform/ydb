@@ -10,6 +10,7 @@ struct TBatchOperationSettings {
     ui64 MinBatchSize = 1;
     ui64 MaxRetryDelayMs = 30000;
     ui64 StartRetryDelayMs = 50;
+    ui64 PartitionExecutionLimit = 10;
 };
 
 TBatchOperationSettings SetBatchOperationSettings(const NKikimrConfig::TTableServiceConfig::TBatchOperationSettings& settings);

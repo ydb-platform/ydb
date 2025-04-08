@@ -14,6 +14,8 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
+#include <yql/essentials/public/issue/yql_issue_utils.h>
+
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -23,6 +25,34 @@
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+    size_t GetNestingDepth(const google::protobuf::Message& message) {
+        size_t depth = 0;
+
+        const auto* descriptor = message.GetDescriptor();
+        const auto* reflection = message.GetReflection();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const auto* field = descriptor->field(i);
+            if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                continue;
+            }
+
+            if (field->is_repeated()) {
+                for (int j = 0; j < reflection->FieldSize(message, field); ++j) {
+                    depth = std::max(depth, GetNestingDepth(reflection->GetRepeatedMessage(message, field, j)) + 1);
+                }
+            } else if (reflection->HasField(message, field)) {
+                depth = std::max(depth, GetNestingDepth(reflection->GetMessage(message, field)) + 1);
+            }
+        }
+
+        return depth;
+    }
+
+}  // anonymous namespace
+
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         NYql::TYtNativeServices ytServices;
         ytServices.FunctionRegistry = functionRegistry;
@@ -215,4 +245,28 @@ namespace NKikimr::NKqp {
 
         return false;
     }
+
+    NYql::TIssues TruncateIssues(NYql::TIssues issues, ui32 maxLevels, ui32 keepTailLevels) {
+        const auto options = NYql::TTruncateIssueOpts()
+            .SetMaxLevels(maxLevels)
+            .SetKeepTailLevels(keepTailLevels);
+
+        NYql::TIssues result;
+        result.Reserve(issues.Size());
+        for (const auto& issue : issues) {
+            result.AddIssue(NYql::TruncateIssueLevels(issue, options));
+        }
+        return result;
+    }
+
+    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth) {
+        NYql::TIssues issues;
+        for (const auto& column : columns) {
+            if (const auto depth = GetNestingDepth(column.type()); depth > maxNestingDepth) {
+                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' is " << depth << ", it is large than allowed limit " << maxNestingDepth));
+            }
+        }
+        return issues;
+    }
+
 }  // namespace NKikimr::NKqp

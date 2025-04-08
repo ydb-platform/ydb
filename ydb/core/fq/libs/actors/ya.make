@@ -50,6 +50,7 @@ PEERDIR(
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/util
     ydb/library/mkql_proto

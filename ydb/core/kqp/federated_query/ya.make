@@ -14,6 +14,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/solomon/gateway
     yql/essentials/core/dq_integration/transform
+    yql/essentials/public/issue
     yt/yql/providers/yt/gateway/native
     yt/yql/providers/yt/lib/yt_download
     yt/yql/providers/yt/mkql_dq

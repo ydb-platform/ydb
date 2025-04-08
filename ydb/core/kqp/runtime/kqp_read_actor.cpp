@@ -806,6 +806,8 @@ public:
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
 
+        BatchOperationReadColumns.clear();
+
         auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
         for (size_t i = 0; i < columnsSize; ++i) {
             const auto& column = Settings->GetColumns()[i];
@@ -818,6 +820,8 @@ public:
                 }
             }
         }
+
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -1565,10 +1569,6 @@ private:
     }
 
     void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
-        if (BatchOperationReadColumns.size() < KeyColumnTypes.size()) {
-            return;
-        }
-
         for (size_t row = 0; row < ev->GetRowsCount(); ++row) {
             TConstArrayRef<TCell> cells = ev->GetCells(row);
             if (BatchOperationMaxRow.empty()) {

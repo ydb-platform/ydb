@@ -363,8 +363,8 @@ public:
     virtual void OnDeletePathIdMapping(const ui64 /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TLocalPathId /* localPathId */) {
     }
 
-    virtual ui64 GetInternalPathIdOffset(const ui64 /*tabletId*/) const { //TODO fixme
-        return 1000000; //+ tabletId % 1000);
+    virtual ui64 GetInternalPathIdOffset(const ui64 tabletId) const { //TODO fixme
+        return (1000000 + tabletId % 1000);
     }
 };
 

@@ -63,8 +63,9 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
 
 3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
-<details>
-  <summary>Выполнив запрос в Embedded UI</summary>
+{% list tabs %}
+
+- Embedded UI
 
   Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
@@ -87,11 +88,8 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
       UNIFORM_PARTITIONS = 50
   );
   ```
-</details>
 
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
+- YDB CLI
 
   ```bash
   ydb sql -s \
@@ -113,14 +111,48 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
       UNIFORM_PARTITIONS = 50
   );'
   ```
-</details>
-
+{% endlist %}
 
 4. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 ```
+
+5. Чтобы посмотреть, в какой день было больше всего уникальных пользователей, совершавших покупки, Выполните  запрос:
+
+{% list tabs %}
+
+- Embedded UI
+
+  ```sql
+  SELECT 
+      DATE(event_time) AS date,
+      COUNT(DISTINCT user_id) AS unique_users
+  FROM ecommerce_table
+  WHERE event_type = 'purchase'
+  GROUP BY date
+  ORDER BY unique_users DESC
+  LIMIT 1;
+  ```
+
+- YDB CLI
+
+  ```bash
+  ydb sql -s \
+  'SELECT 
+      DATE(event_time) AS date,
+      COUNT(DISTINCT user_id) AS unique_users
+  FROM ecommerce_table
+  WHERE event_type = "purchase"
+  GROUP BY date
+  ORDER BY unique_users DESC
+  LIMIT 1;'
+  ```
+
+{% endlist %}
+
+Этот запрос поможет выявить день с наибольшим количеством уникальных покупателей.
 
 ### Video Game Sales
 
@@ -136,8 +168,9 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 
 2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
-<details>
-  <summary>Выполнив запрос в Embedded UI</summary>
+{% list tabs %}
+
+- Embedded UI
 
   Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
@@ -160,11 +193,8 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
       STORE = COLUMN
   );
   ```
-</details>
 
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
+- YDB CLI
 
   ```bash
   ydb sql -s \
@@ -186,14 +216,47 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
       STORE = COLUMN
   );'
   ```
-</details>
 
+{% endlist %}
 
 3. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 ```
+
+4. Чтобы определить издателя, у которого наибольшая средняя продажа игр в Северной Америке, выполните запрос:
+
+{% list tabs %}
+
+- Embedded UI
+
+  ```sql
+  SELECT 
+      Publisher, 
+      AVG(NA_Sales) AS average_na_sales
+  FROM vgsales
+  GROUP BY Publisher
+  ORDER BY average_na_sales DESC
+  LIMIT 1;
+  ```
+
+- YDB CLI
+
+  ```bash
+  ydb sql -s \
+  'SELECT 
+      Publisher, 
+      AVG(NA_Sales) AS average_na_sales
+  FROM vgsales
+  GROUP BY Publisher
+  ORDER BY average_na_sales DESC
+  LIMIT 1;'
+  ```
+
+{% endlist %}
+
+Запрос позволит найти, какой издатель достиг наибольшего успеха в Северной Америке по средней продаже.
 
 ### COVID-19 Open Research Dataset
 
@@ -215,8 +278,9 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 
 3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
-<details>
-  <summary>Выполнив запрос в Embedded UI</summary>
+{% list tabs %}
+
+- Embedded UI
 
   Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
@@ -248,11 +312,8 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
       STORE = COLUMN
   );
   ```
-</details>
 
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
+- YDB CLI
 
   ```bash
   ydb sql -s \
@@ -283,14 +344,41 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
       STORE = COLUMN
   );'
   ```
-</details>
 
+{% endlist %}
 
 4. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path covid_research metadata.csv
 ```
+
+5. Чтобы получить количество статей без доступной ссылки на полный текст, выполните запрос:
+
+{% list tabs %} 
+
+- Embedded UI
+
+  ```sql
+  SELECT 
+      COUNT(*) AS no_full_text_count
+  FROM covid_research
+  WHERE pdf_json_files IS NULL AND pmc_json_files IS NULL;
+  ```
+
+- YDB CLI
+
+  ```bash
+  ydb sql -s \
+  'SELECT 
+      COUNT(*) AS no_full_text_count
+  FROM covid_research
+  WHERE pdf_json_files IS NULL AND pmc_json_files IS NULL;'
+  ```
+
+{% endlist %}
+
+Этот запрос покажет количество исследований, для которых нет полного текста на платформах PDF и PMC.
 
 ### Netflix Movies and TV Shows
 
@@ -306,8 +394,9 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 
 2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
-<details>
-  <summary>Выполнив запрос в Embedded UI</summary>
+{% list tabs %}
+
+- Embedded UI
 
   Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
@@ -331,11 +420,8 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
       STORE = COLUMN
   );
   ```
-</details>
 
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
+- YDB CLI
 
   ```bash
   ydb sql -s \
@@ -358,14 +444,49 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
       STORE = COLUMN
   );'
   ```
-</details>
 
+{% endlist %}
 
 3. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 ```
+
+4. Чтобы определить топ-3 стран с наибольшим количеством фильмов и сериалов, добавленных в 2020 году, выполните запрос:
+
+{% list tabs %}
+
+- Embedded UI
+
+  ```sql
+  SELECT 
+      country, 
+      COUNT(*) AS count
+  FROM netflix
+  WHERE EXTRACT(YEAR FROM DATE(date_added)) = 2020
+  GROUP BY country
+  ORDER BY count DESC
+  LIMIT 3;
+  ```
+
+- YDB CLI
+
+  ```bash
+  ydb sql -s \
+  'SELECT 
+      country, 
+      COUNT(*) AS count
+  FROM netflix
+  WHERE EXTRACT(YEAR FROM DATE(date_added)) = 2020
+  GROUP BY country
+  ORDER BY count DESC
+  LIMIT 3;'
+  ```
+
+{% endlist %}
+
+Этот запрос покажет, из каких стран было добавлено больше всего контента на Netflix в 2020 году.
 
 ### Animal Crossing New Horizons Catalog
 
@@ -393,8 +514,9 @@ sed -i '1s/ /_/g' accessories.csv
 
 4. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
-<details>
-  <summary>Выполнив запрос в Embedded UI</summary>
+{% list tabs %}
+
+- Embedded UI
 
   Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
@@ -428,11 +550,8 @@ sed -i '1s/ /_/g' accessories.csv
       STORE = COLUMN
   );
   ```
-</details>
 
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
+- YDB CLI
 
   ```bash
   ydb sql -s \
@@ -465,14 +584,46 @@ sed -i '1s/ /_/g' accessories.csv
       STORE = COLUMN
   );'
   ```
-</details>
-
+{% endlist %}
 
 5. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --path accessories accessories.csv
 ```
+
+6. Чтобы посмотреть дорогие товары, доступные для покупки за игровые мили, выполните запрос:
+
+{% list tabs %}
+
+- Embedded UI
+
+  ```sql
+  SELECT 
+      Name, 
+      Miles_Price
+  FROM accessories
+  WHERE Miles_Price != ''
+  ORDER BY CAST(Miles_Price AS Uint64) DESC
+  LIMIT 5;
+  ```
+
+- YDB CLI
+
+  ```bash
+  ydb sql -s \
+  'SELECT 
+      Name, 
+      Miles_Price
+  FROM accessories
+  WHERE Miles_Price != ""
+  ORDER BY CAST(Miles_Price AS Uint64) DESC
+  LIMIT 5;'
+  ```
+
+{% endlist %}
+
+Этот запрос поможет узнать, какие товары в игре Animal Crossing: New Horizons стоят больше всего игровых миль.
 
 ## Дополнительные ресурсы
 

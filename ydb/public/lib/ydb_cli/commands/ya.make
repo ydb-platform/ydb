@@ -32,6 +32,7 @@ SRCS(
     ydb_service_table.cpp
     ydb_sql.cpp
     ydb_storage_config.cpp
+    ydb_style.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
@@ -76,6 +77,13 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials/login
     ydb/public/sdk/cpp/src/library/operation_id
     yql/essentials/public/decimal
+    yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/format
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb_benchmark.h)

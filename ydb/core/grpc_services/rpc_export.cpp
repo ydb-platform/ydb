@@ -28,6 +28,9 @@ using TEvExportToS3Request = TGrpcRequestOperationCall<Ydb::Export::ExportToS3Re
 
 template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
+    static constexpr bool IsS3Export = std::is_same_v<TEvRequest, TEvExportToS3Request>;
+    static constexpr bool IsYtExport = std::is_same_v<TEvRequest, TEvExportToYtRequest>;
+
     TStringBuf GetLogPrefix() const override {
         return "[CreateExport]";
     }
@@ -46,9 +49,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createExport = *ev->Record.MutableRequest();
         *createExport.MutableOperationParams() = request.operation_params();
-        if constexpr (std::is_same_v<TEvRequest, TEvExportToYtRequest>) {
+        if constexpr (IsYtExport) {
             *createExport.MutableExportToYtSettings() = request.settings();
-        } else if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
+        }
+        if constexpr (IsS3Export) {
             *createExport.MutableExportToS3Settings() = request.settings();
         }
 
@@ -195,8 +199,21 @@ public:
         }
 
         const auto& settings = request.settings();
-        if (settings.items().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+        if constexpr (IsYtExport) {
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
+        }
+        if constexpr (IsS3Export) {
+            const bool commonDestPrefixSpecified = !settings.destination_prefix().empty();
+            if (settings.items().empty() && !commonDestPrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix specified. Don't know where to export");
+            }
+            for (const auto& item : settings.items()) {
+                if (item.destination_prefix().empty() && !commonDestPrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
+                }
+            }
         }
 
         if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {

@@ -26,6 +26,8 @@ using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFrom
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
+    static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
+
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
     }
@@ -44,7 +46,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
-        if (std::is_same_v<TEvRequest, TEvImportFromS3Request>) {
+        if (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
 
@@ -69,8 +71,24 @@ public:
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
-        if (request.settings().items().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+        const auto& settings = request.settings();
+        if (IsS3Import) {
+            const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
+            if (settings.items().empty() && !commonSourcePrefixSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
+            }
+            for (const auto& item : settings.items()) {
+                if (item.source_prefix().empty() && !commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No source prefix or common source prefix specified for item \"" << item.destination_path() << "\"");
+                }
+                if (item.source_prefix().empty() && item.source_path().empty() && item.destination_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
+                }
+            }
+        } else {
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
         }
 
         this->AllocateTxId();

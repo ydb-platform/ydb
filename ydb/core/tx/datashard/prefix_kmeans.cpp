@@ -106,7 +106,7 @@ protected:
     TBufferData PrefixRows;
     bool IsFirstPrefixFeed = true;
     bool IsPrefixRowsValid = true;
-    
+
     bool IsExhausted = false;
 
 public:
@@ -798,6 +798,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
     if (request.GetK() < 2) {
         badRequest("Should be requested partition on at least two rows");
+        return;
+    }
+
+    if (request.GetPrefixColumns() <= 0) {
+        badRequest("Should be requested on at least one prefix column");
         return;
     }
 

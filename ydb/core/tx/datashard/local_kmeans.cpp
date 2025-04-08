@@ -147,6 +147,7 @@ public:
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
+        , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
         , LevelTable{request.GetLevelName()}
         , PostingTable{request.GetPostingName()}
@@ -185,7 +186,7 @@ public:
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
         if (Uploader) {
-            Send(Uploader, new TEvents::TEvPoisonPill);
+            Send(Uploader, new TEvents::TEvPoison);
             Uploader = {};
         }
 
@@ -255,8 +256,8 @@ protected:
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
         LOG_D("Handle TEvUploadRowsResponse " << Debug()
-        << " Uploader: " << (Uploader ? Uploader.ToString() : "<null>")
-        << " ev->Sender: " << ev->Sender.ToString());
+            << " Uploader: " << (Uploader ? Uploader.ToString() : "<null>")
+            << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
             Y_ENSURE(Uploader == ev->Sender, "Mismatch"
@@ -274,7 +275,7 @@ protected:
             UploadRows += UploadBuf.GetRows();
             UploadBytes += UploadBuf.GetBytes();
             UploadBuf.Clear();
-            
+
             TryUpload(LevelBuf, LevelTable, LevelTypes, true)
                 || TryUpload(PostingBuf, PostingTable, PostingTypes, true);
 
@@ -283,13 +284,13 @@ protected:
         }
 
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
+            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
             ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
     }

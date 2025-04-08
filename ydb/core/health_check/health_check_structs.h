@@ -1,5 +1,5 @@
 #pragma once
-#include "health_check_helper.h"
+#include "health_check_utils.h"
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -7,6 +7,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <library/cpp/digest/old_crc/crc.h>
 
@@ -217,6 +218,28 @@ struct TSelfCheckResult {
     struct TIssueRecord {
         Ydb::Monitoring::IssueLog IssueLog;
         ETags Tag;
+
+        int GetIssueCount() {
+            return IssueLog.count() == 0 ? 1 : IssueLog.count();
+        }
+
+        void SetIssueCount(int value) {
+            if (IssueLog.listed() == 0) {
+                IssueLog.set_listed(1);
+            }
+            IssueLog.set_count(value);
+        }
+
+        int GetIssueListed() {
+            return IssueLog.listed() == 0 ? 1 : IssueLog.listed();
+        }
+
+        void SetIssueListed(int value) {
+            if (IssueLog.count() == 0) {
+                IssueLog.set_count(1);
+            }
+            IssueLog.set_listed(value);
+        }
     };
 
     Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
@@ -403,6 +426,107 @@ struct TSelfCheckResult {
             OverallStatus = lower.GetOverallStatus();
         }
         IssueRecords.splice(IssueRecords.end(), std::move(lower.IssueRecords));
+    }
+};
+
+template<typename T>
+struct TRequestResponse {
+    std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
+    NWilson::TSpan Span;
+
+    TRequestResponse() = default;
+    TRequestResponse(NWilson::TSpan&& span)
+        : Span(std::move(span))
+    {}
+
+    TRequestResponse(const TRequestResponse&) = delete;
+    TRequestResponse(TRequestResponse&&) = default;
+    TRequestResponse& operator =(const TRequestResponse&) = delete;
+    TRequestResponse& operator =(TRequestResponse&&) = default;
+
+    void Set(std::unique_ptr<T>&& response) {
+        constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {IsSuccess(r);};
+        if constexpr (hasErrorCheck) {
+            if (!IsSuccess(response)) {
+                Error(GetError(response));
+                return;
+            }
+        }
+        if (!IsDone()) {
+            Span.EndOk();
+        }
+        Response = std::move(response);
+    }
+
+    void Set(TAutoPtr<TEventHandle<T>>&& response) {
+        Set(std::unique_ptr<T>(response->Release().Release()));
+    }
+
+    bool Error(const TString& error) {
+        if (!IsDone()) {
+            Span.EndError(error);
+            Response = error;
+            return true;
+        }
+        return false;
+    }
+
+    bool IsOk() const {
+        return std::holds_alternative<std::unique_ptr<T>>(Response);
+    }
+
+    bool IsError() const {
+        return std::holds_alternative<TString>(Response);
+    }
+
+    bool IsDone() const {
+        return Response.index() != 0;
+    }
+
+    explicit operator bool() const {
+        return IsOk();
+    }
+
+    T* Get() {
+        return std::get<std::unique_ptr<T>>(Response).get();
+    }
+
+    const T* Get() const {
+        return std::get<std::unique_ptr<T>>(Response).get();
+    }
+
+    T& GetRef() {
+        return *Get();
+    }
+
+    const T& GetRef() const {
+        return *Get();
+    }
+
+    T* operator ->() {
+        return Get();
+    }
+
+    const T* operator ->() const {
+        return Get();
+    }
+
+    T& operator *() {
+        return GetRef();
+    }
+
+    const T& operator *() const {
+        return GetRef();
+    }
+
+    TString GetError() const {
+        return std::get<TString>(Response);
+    }
+
+    void Event(const TString& name) {
+        if (Span) {
+            Span.Event(name);
+        }
     }
 };
 }; // NKikimr::NHealthCheck

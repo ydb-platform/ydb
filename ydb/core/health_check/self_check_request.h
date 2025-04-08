@@ -3,15 +3,14 @@
 #include "builder.h"
 #include "log.h"
 #include "health_check.h"
-#include "health_check_data.h"
-#include "health_check_helper.h"
+#include "health_check_structs.h"
+#include "health_check_utils.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/core/util/tuples.h>
@@ -49,7 +48,6 @@ namespace NKikimr::NHealthCheck {
 
 using namespace NActors;
 using namespace Ydb;
-using namespace NSchemeCache;
 using namespace NSchemeShard;
 using namespace NSysView;
 using namespace NConsole;
@@ -114,155 +112,10 @@ public:
         , HealthCheckConfig(config)
     {}
 
-    using TGroupId = ui32;
-
     enum ETimeoutTag {
         TimeoutBSC,
         TimeoutFinal,
     };
-
-    template<typename T>
-    struct TRequestResponse {
-        std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
-        NWilson::TSpan Span;
-
-        TRequestResponse() = default;
-        TRequestResponse(NWilson::TSpan&& span)
-            : Span(std::move(span))
-        {}
-
-        TRequestResponse(const TRequestResponse&) = delete;
-        TRequestResponse(TRequestResponse&&) = default;
-        TRequestResponse& operator =(const TRequestResponse&) = delete;
-        TRequestResponse& operator =(TRequestResponse&&) = default;
-
-        void Set(std::unique_ptr<T>&& response) {
-            constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TSelfCheckRequest::IsSuccess(r);};
-            if constexpr (hasErrorCheck) {
-                if (!TSelfCheckRequest::IsSuccess(response)) {
-                    Error(TSelfCheckRequest::GetError(response));
-                    return;
-                }
-            }
-            if (!IsDone()) {
-                Span.EndOk();
-            }
-            Response = std::move(response);
-        }
-
-        void Set(TAutoPtr<TEventHandle<T>>&& response) {
-            Set(std::unique_ptr<T>(response->Release().Release()));
-        }
-
-        bool Error(const TString& error) {
-            if (!IsDone()) {
-                Span.EndError(error);
-                Response = error;
-                return true;
-            }
-            return false;
-        }
-
-        bool IsOk() const {
-            return std::holds_alternative<std::unique_ptr<T>>(Response);
-        }
-
-        bool IsError() const {
-            return std::holds_alternative<TString>(Response);
-        }
-
-        bool IsDone() const {
-            return Response.index() != 0;
-        }
-
-        explicit operator bool() const {
-            return IsOk();
-        }
-
-        T* Get() {
-            return std::get<std::unique_ptr<T>>(Response).get();
-        }
-
-        const T* Get() const {
-            return std::get<std::unique_ptr<T>>(Response).get();
-        }
-
-        T& GetRef() {
-            return *Get();
-        }
-
-        const T& GetRef() const {
-            return *Get();
-        }
-
-        T* operator ->() {
-            return Get();
-        }
-
-        const T* operator ->() const {
-            return Get();
-        }
-
-        T& operator *() {
-            return GetRef();
-        }
-
-        const T& operator *() const {
-            return GetRef();
-        }
-
-        TString GetError() const {
-            return std::get<TString>(Response);
-        }
-
-        void Event(const TString& name) {
-            if (Span) {
-                Span.Event(name);
-            }
-        }
-    };
-
-    static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
-        return (ev->Request->ResultSet.size() > 0) && (std::find_if(ev->Request->ResultSet.begin(), ev->Request->ResultSet.end(),
-            [](const auto& entry) {
-                return entry.Status == TSchemeCacheNavigate::EStatus::Ok;
-            }) != ev->Request->ResultSet.end());
-    }
-
-    static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev) {
-        if (ev->Request->ResultSet.size() == 0) {
-            return "empty response";
-        }
-        for (const auto& entry : ev->Request->ResultSet) {
-            if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
-                switch (entry.Status) {
-                    case TSchemeCacheNavigate::EStatus::Ok:
-                        return "Ok";
-                    case TSchemeCacheNavigate::EStatus::Unknown:
-                        return "Unknown";
-                    case TSchemeCacheNavigate::EStatus::RootUnknown:
-                        return "RootUnknown";
-                    case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                        return "PathErrorUnknown";
-                    case TSchemeCacheNavigate::EStatus::PathNotTable:
-                        return "PathNotTable";
-                    case TSchemeCacheNavigate::EStatus::PathNotPath:
-                        return "PathNotPath";
-                    case TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                        return "TableCreationNotComplete";
-                    case TSchemeCacheNavigate::EStatus::LookupError:
-                        return "LookupError";
-                    case TSchemeCacheNavigate::EStatus::RedirectLookupError:
-                        return "RedirectLookupError";
-                    case TSchemeCacheNavigate::EStatus::AccessDenied:
-                        return "AccessDenied";
-                    default:
-                        return ::ToString(static_cast<int>(entry.Status));
-                }
-            }
-        }
-        return "no error";
-    }
 
     static bool IsSuccess(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
         return ev->GetRecord().status() == NKikimrScheme::StatusSuccess;
@@ -952,10 +805,6 @@ public:
         RequestDone("TEvNodesInfo");
     }
 
-    bool IsStaticGroup(TGroupId groupId) {
-        return !(groupId & 0x80000000);
-    }
-
     bool NeedWhiteboardForStaticGroupsWithUnknownStatus() {
         return NodeWardenStorageConfig && !IsSpecificDatabaseFilter();
     }
@@ -1414,41 +1263,40 @@ public:
         }
     }
 
-    THolder<TBuilderResult<TBuilderDatabase, TBuilderSystemTablets, TBuilderStorage>> MakeBuilder() {
-        auto builderStoragePDiskWB = MakeHolder<TBuilderStoragePDiskWithWhiteboard>();
-        auto builderStorageVDiskWB = MakeHolder<TBuilderStorageVDiskWithWhiteboard>(builderStoragePDiskWB);
-        auto builderStorageGroupWB = MakeHolder<TBuilderStorageGroupWithWhiteboard>(builderStorageVDiskWB);
+    struct TCtx;
+    using TCtx = TBuilderContext<
+        TBuilderResult<TCtx>,
+        TBuilderDatabase<TCtx>,
+        TBuilderCompute<TCtx>,
+        TBuilderSystemTablets<TCtx>,
+        TBuilderTablets<TCtx>,
+        TBuilderStorage<TCtx>,
+        TBuilderStoragePool<TCtx>,
+        TBuilderStorageGroup<TCtx>,
+        TBuilderStorageVDisk<TCtx>,
+        TBuilderStoragePDisk<TCtx>,
+        TBuilderStorageGroupWithWhiteboard<TCtx>,
+        TBuilderStorageVDiskWithWhiteboard<TCtx>,
+        TBuilderStoragePDiskWithWhiteboard<TCtx>
+    >;
 
-        auto builderStoragePDisk = MakeHolder<TBuilderStoragePDisk>(builderStoragePDiskWB);
-        auto builderStorageVDisk = MakeHolder<TBuilderStorageVDisk>(builderStorageVDiskWB);
-        auto builderStorageGroup = MakeHolder<TBuilderStorageGroup>(builderStorageGroupWB);
-
-        auto builderStoragePool = MakeHolder<TBuilderStoragePool>(builderStorageGroup);
-        auto builderStorage = MakeHolder<TBuilderStorage>(builderStoragePool);
-
-        auto builderComputeNode = MakeHolder<TBuilderComputeNode>();
-        auto builderComputeDatabase = MakeHolder<TBuilderComputeDatabase>(builderComputeNode);
-        auto builderCompute = MakeHolder<TBuilderCompute>(builderComputeDatabase, FilterDomainKey, MergedNodeSystemState);
-
-        auto builderDatabase = MakeHolder<TBuilderDatabase>(builderCompute, builderStorage, IsSpecificDatabaseFilter());
-
-        // root builder
-        auto builder = MakeHolder<TBuilderResult<TBuilderDatabase, TBuilderSystemTablets, TBuilderStorage>>(
-            DomainPath, FilterDatabase, DatabaseState,
-            StoragePoolState, StoragePoolSeen,
-            StoragePoolStateByName, StoragePoolSeenByName,
-            builderDatabase,
-            builderCompute,
-            builderStorage,
-            builderStoragePDisk,
-            builderStorageVDisk,
-            builderStorageGroup,
-            builderStoragePDiskWB,
-            builderStorageVDiskWB,
-            builderStorageGroupWB
-        );
-
-        return builder;
+    THolder<TCtx> MakeBuilderContext() {
+        auto ctx = MakeHolder<TCtx>();
+        ctx->BuilderResult = MakeHolder<TBuilderResult<TCtx>>(*ctx, domainPath, filterDatabase, haveAllBSControllerInfo,
+                                                            databaseState, storagePoolState, storagePoolSeen,
+                                                            storagePoolStateByName, storagePoolSeenByName);
+        ctx->BuilderDatabase = MakeHolder<TBuilderDatabase<TCtx>>(*ctx, isSpecificDatabaseFilter);
+        ctx->BuilderCompute = MakeHolder<TBuilderCompute<TCtx>>(*ctx, filterDomainKey, mergedNodeSystemState);
+        ctx->BuilderSystemTablets = MakeHolder<TBuilderSystemTablets<TCtx>>(*ctx);
+        ctx->BuilderTablets = MakeHolder<TBuilderTablets<TCtx>>(*ctx);
+        ctx->BuilderStorage = MakeHolder<TBuilderStorage<TCtx>>(*ctx);
+        ctx->BuilderStoragePool = MakeHolder<TBuilderStoragePool<TCtx>>(*ctx);
+        ctx->BuilderStorageGroup = MakeHolder<TBuilderStorageGroup<TCtx>>(*ctx);
+        ctx->BuilderStorageVDisk = MakeHolder<TBuilderStorageVDisk<TCtx>>(*ctx);
+        ctx->BuilderStoragePDisk = MakeHolder<TBuilderStoragePDisk<TCtx>>(*ctx);
+        ctx->BuilderStorageGroupWithWhiteboard = MakeHolder<TBuilderStorageGroupWithWhiteboard<TCtx>>(*ctx);
+        ctx->BuilderStorageVDiskWithWhiteboard = MakeHolder<TBuilderStorageVDiskWithWhiteboard<TCtx>>(*ctx);
+        ctx->BuilderStoragePDiskWithWhiteboard = MakeHolder<TBuilderStoragePDiskWithWhiteboard<TCtx>>(*ctx);
     }
 
     void ReplyAndPassAway() {

@@ -41,6 +41,10 @@ public:
         }
     }
 
+    static const inline TString NONE = "none";
+    static const inline TString BLOCK_4_2 = "block-4-2";
+    static const inline TString MIRROR_3_DC = "mirror-3-dc";
+
     void ReportStatus(TSelfCheckResult& context) const {
         context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
         if (!LayoutCorrect) {

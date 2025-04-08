@@ -23,9 +23,9 @@ Table structure:
 
 Column | Description | Data type | Instant/Cumulative
 --- | --- | --- | ---
-`OwnerId` | ID of the SchemeShard table.<br/>Key: `0'. | `Uint64` | Instant
-`PathId` | ID of the SchemeShard path.<br/>Key: `1'. | `Uint64` | Instant
-`PartIdx` | Partition sequence number.<br/>Key: `2'. | `Uint64` | Instant
+`OwnerId` | ID of the SchemeShard table.<br/>Key: `0`. | `Uint64` | Instant
+`PathId` | ID of the SchemeShard path.<br/>Key: `1`. | `Uint64` | Instant
+`PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instant
 `DataSize` | Approximate partition size in bytes. | `Uint64` | Instant
 `RowCount` | Approximate number of rows. | `Uint64` | Instant
 `IndexSize` | Partition index size in bytes. | `Uint64` | Instant

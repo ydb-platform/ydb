@@ -166,6 +166,8 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
+        bool ThrowOnOptsParseError = false;
+
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)
@@ -326,7 +328,30 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
+    public:
+        TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, char* argv[], bool throwOnParseError)
+            : ThrowOnParseError(throwOnParseError) {
+            Init(options, argc, const_cast<const char**>(argv));
+        }
+        virtual ~TCommandOptsParseResult() = default;
+
+        void HandleError() const override {
+            if (ThrowOnParseError) {
+                throw;
+            }
+            NLastGetopt::TOptsParseResult::HandleError();
+        }
+
+    protected:
+        TCommandOptsParseResult(bool throwOnParseError)
+            : ThrowOnParseError(throwOnParseError) {}
+
+    private:
+        bool ThrowOnParseError = false;
+    };
+
+    class TOptsParseOneLevelResult : public TCommandOptsParseResult {
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };

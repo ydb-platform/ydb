@@ -116,7 +116,7 @@ void TScanHead::Abort() {
 }
 
 TScanHead::~TScanHead() {
-    AFL_VERIFY(!IntervalsInFlightCount || !Context->IsActive());
+    AFL_VERIFY((FetchingSources.empty() && SourcesCollection->IsFinished()) || !Context->IsActive());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

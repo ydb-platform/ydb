@@ -376,7 +376,7 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , LastReadTime_(TInstant::Seconds(partitionStats.last_read_time().seconds()))
     , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
     , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
-    , SinceCommitedWriteTime_(TDuration::Seconds(partitionStats.since_committed_write_time().seconds()))
+    , MaxCommittedTimeLag_(TDuration::Seconds(partitionStats.max_committed_time_lag().seconds()))
 {}
 
 uint64_t TPartitionConsumerStats::GetCommittedOffset() const {
@@ -407,8 +407,8 @@ const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
 }
 
-const TDuration& TPartitionConsumerStats::GetSinceCommitedWriteTime() const {
-    return SinceCommitedWriteTime_;
+const TDuration& TPartitionConsumerStats::GetMaxCommittedTimeLag() const {
+    return MaxCommittedTimeLag_;
 }
 
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)

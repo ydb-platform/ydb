@@ -199,10 +199,10 @@ struct TUserInfo: public TUserInfoBase {
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important,
                         readFromTimestamp, partitionSession, pipeClient}
+        , ActualTimestamps(false)
         , WriteTimestamp(TInstant::Zero())
         , CreateTimestamp(TInstant::Zero())
         , ReadTimestamp(TAppData::TimeProvider->Now())
-        , ActualTimestamps(false)
         , ReadOffset(-1)
         , ReadWriteTimestamp(TInstant::Zero())
         , ReadCreateTimestamp(TInstant::Zero())

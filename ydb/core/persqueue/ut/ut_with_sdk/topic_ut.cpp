@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetCommittedOffset());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxWriteTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetSinceCommitedWriteTime());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetLastReadOffset());
         }
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetCommittedOffset());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); // 
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetSinceCommitedWriteTime());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetCommittedOffset());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetSinceCommitedWriteTime());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetCommittedOffset());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetSinceCommitedWriteTime());
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }

@@ -787,7 +787,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             read->SetSize(GetSizeLag(readOffset));
 
             clientInfo->SetLastReadTimestampMs(snapshot.LastReadTimestamp.MilliSeconds());
-            clientInfo->SetSinceCommittedWriteTimeMs(snapshot.CommitedLag.MilliSeconds());
+            clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
             if (IsActive() || readOffset < (i64)EndOffset) {
                 clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
@@ -807,7 +807,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto* clientInfo = result.AddConsumerResult();
             clientInfo->SetConsumer(userInfo.User);
             clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
-            clientInfo->SetSinceCommittedWriteTimeMs(snapshot.CommitedLag.MilliSeconds());
+            clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
 
             auto readOffset = userInfo.GetReadOffset();
             if (IsActive() || readOffset < (i64)EndOffset) {

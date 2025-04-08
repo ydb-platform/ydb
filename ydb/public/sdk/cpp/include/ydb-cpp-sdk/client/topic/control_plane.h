@@ -111,7 +111,7 @@ public:
     const TInstant& GetLastReadTime() const;
     const TDuration& GetMaxReadTimeLag() const;
     const TDuration& GetMaxWriteTimeLag() const;
-    const TDuration& GetSinceCommitedWriteTime() const;
+    const TDuration& GetMaxCommittedTimeLag() const;
 
 private:
     uint64_t CommittedOffset_;
@@ -121,7 +121,7 @@ private:
     TInstant LastReadTime_;
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
-    TDuration SinceCommitedWriteTime_;
+    TDuration MaxCommittedTimeLag_;
 };
 
 // Topic partition location

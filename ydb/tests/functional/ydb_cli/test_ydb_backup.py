@@ -1306,6 +1306,8 @@ class BaseTestClusterBackupInFiles(object):
                 "enable_database_admin"
             ],
             domain_login_only=False,
+            enforce_user_token_requirement=True,
+            default_clusteradmin="root@builtin",
         ))
         cls.cluster.start()
 
@@ -1317,15 +1319,17 @@ class BaseTestClusterBackupInFiles(object):
             storage_pool_units_count={
                 'hdd': 1
             },
-            timeout_seconds=100
+            timeout_seconds=100,
+            token=cls.cluster.config.default_clusteradmin
         )
 
         cls.database_nodes = cls.cluster.register_and_start_slots(cls.database, count=3)
-        cls.cluster.wait_tenant_up(cls.database)
+        cls.cluster.wait_tenant_up(cls.database, cls.cluster.config.default_clusteradmin)
 
         driver_config = ydb.DriverConfig(
             database=cls.database,
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port),
+            credentials=ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin))
         cls.driver = ydb.Driver(driver_config)
         cls.driver.wait(timeout=4)
 
@@ -1340,7 +1344,7 @@ class BaseTestClusterBackupInFiles(object):
         cls.test_name = request.node.name
 
     @classmethod
-    def create_backup(cls, command, expected_files, output, additional_args=[]):
+    def create_backup(cls, command, expected_files, output, additional_args=[], token=""):
         backup_files_dir = output_path(cls.test_name, output)
         execution = yatest.common.execute(
             [
@@ -1350,7 +1354,8 @@ class BaseTestClusterBackupInFiles(object):
             ]
             + command
             + ["--output", backup_files_dir]
-            + additional_args
+            + additional_args,
+            env={"YDB_TOKEN": token}
         )
 
         list_result = fs_recursive_list(backup_files_dir, ListMode.FILES)
@@ -1378,7 +1383,8 @@ class BaseTestClusterBackupInFiles(object):
             ],
             expected_files,
             output,
-            additional_args
+            additional_args,
+            token=cls.cluster.config.default_clusteradmin,
         )
 
     @classmethod
@@ -1417,6 +1423,7 @@ class BaseTestClusterBackupInFiles(object):
             )
 
         create_table_with_data(cls.driver.table_client.session().create(), "db1/table")
+
 
 class TestClusterBackup(BaseTestClusterBackupInFiles):
     def test_cluster_backup(self):
@@ -1470,6 +1477,8 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
             ],
             domain_name="Root2",
             domain_login_only=False,
+            enforce_user_token_requirement=True,
+            default_clusteradmin="root@builtin",
         )
 
         cls.restore_cluster = KiKiMR(
@@ -1491,7 +1500,8 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
             endpoint="%s:%s" % (
                 cls.restore_cluster.nodes[1].host,
                 cls.restore_cluster.nodes[1].port
-            )
+            ),
+            credentials=ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin),
         )
         cls.restore_driver = ydb.Driver(restore_driver_config)
 
@@ -1502,7 +1512,7 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
         super().teardown_class()
 
     @classmethod
-    def restore(cls, command, input, additional_args=[]):
+    def restore(cls, command, input, additional_args=[], token=""):
         backup_files_dir = os.path.join(
             yatest.common.output_path(),
             cls.test_name,
@@ -1517,8 +1527,9 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
                 "--endpoint", f"grpc://localhost:{cls.restore_cluster.nodes[1].grpc_port}",
             ]
             + command
-            + ["--input", backup_files_dir, "-w", "10s"]
+            + ["--input", backup_files_dir, "-w", "60s"]
             + additional_args,
+            env={"YDB_TOKEN": token}
         )
 
     @classmethod
@@ -1529,7 +1540,8 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
                 "admin", "cluster", "restore"
             ],
             input,
-            additional_args
+            additional_args,
+            token=cls.restore_cluster.config.default_clusteradmin,
         )
 
     @classmethod
@@ -1566,7 +1578,7 @@ class TestClusterBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
         self.restore_cluster_backup()
 
-        self.restore_cluster.wait_tenant_up(self.restore_database)
+        self.restore_cluster.wait_tenant_up(self.restore_database, self.cluster.config.default_clusteradmin)
         self.restore_driver.wait(timeout=10)
 
 
@@ -1605,7 +1617,7 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
         self.restore_cluster_backup(input="cluster_backup")
 
-        self.restore_cluster.wait_tenant_up(self.restore_database)
+        self.restore_cluster.wait_tenant_up(self.restore_database, self.cluster.config.default_clusteradmin)
         self.restore_driver.wait(timeout=10)
 
         self.restore_database_backup(input="database_backup")

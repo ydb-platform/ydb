@@ -53,11 +53,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
-<<<<<<< HEAD
-    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows);
-=======
     const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows, arrow::MemoryPool* memoryPool);
->>>>>>> d8282b493c5 ([Stable-25-1] Fixes for EvWrite (#16472))
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
     const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems = 0, const ui32 reserveSize = 0);

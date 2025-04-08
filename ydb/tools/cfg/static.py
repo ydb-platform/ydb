@@ -653,12 +653,19 @@ class StaticConfigGenerator(object):
             for elem in self.__cluster_details.selector_config:
                 dynconfig['selector_config'].append(elem)
 
+            # blob_storage_config is not required in `dynconfig.yaml`
+            del dynconfig['config']['blob_storage_config']
+
         # emulate dumping ordered dict to yaml
         lines = []
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
             lines.append(key + ':')
 
-            substr = utils.dump_yaml(dynconfig[key])
+            # must keep `selector_config` unsorted to keep `!append` and `!inherit` flags
+            # during serialization
+            should_sort = key != "selector_config"
+
+            substr = utils.dump_yaml(dynconfig[key], should_sort)
 
             for line in substr.split('\n'):
                 lines.append('  ' + line)
@@ -1121,6 +1128,7 @@ class StaticConfigGenerator(object):
 
         pool_config.BoxId = 1
         pool_config.Kind = pool_kind
+        pool_config.ErasureSpecies = str(self.__cluster_details.static_erasure)
         pool_config.VDiskKind = "Default"
         pdisk_filter = pool_config.PDiskFilter.add()
         property = pdisk_filter.Property.add()
@@ -1135,6 +1143,15 @@ class StaticConfigGenerator(object):
 
         pool.PoolConfig.CopyFrom(pool_config)
         return pool
+
+    def __generate_explicit_mediators_coordinators_allocators(self, domain, mediators, coordinators, allocators):
+        domain.ExplicitCoordinators.extend(
+            [self.__tablet_types.FLAT_TX_COORDINATOR.tablet_id_for(i) for i in range(int(coordinators))]
+        )
+        domain.ExplicitMediators.extend([self.__tablet_types.TX_MEDIATOR.tablet_id_for(i) for i in range(int(mediators))])
+        domain.ExplicitAllocators.extend(
+            [self.__tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(allocators))]
+        )
 
     def __generate_domains_from_proto(self, domains_config):
         domains = domains_config.Domain
@@ -1165,6 +1182,14 @@ class StaticConfigGenerator(object):
             domain.SchemeRoot = self.__tablet_types.FLAT_SCHEMESHARD.tablet_id_for(0)
         if not domain.SSId:
             domain.SSId.append(domain.DomainId)
+
+        self.__generate_explicit_mediators_coordinators_allocators(domain,
+                                                                   self.__cluster_details.mediators_count_optimal,
+                                                                   self.__cluster_details.coordinators_count_optimal,
+                                                                   self.__cluster_details.allocators_count_optimal)
+
+        domains_config.HiveConfig.add(HiveUid=domain.DomainId, Hive=self.__tablet_types.FLAT_HIVE.tablet_id_for(0))
+
 
         if not domains_config.StateStorage:
             self._configure_default_state_storage(domains_config, domain.DomainId)
@@ -1350,34 +1375,50 @@ class StaticConfigGenerator(object):
             state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
             return
 
-        rack_limit = 1
-        dc_limit = None
-        if self.__n_to_select == 9:
-            dc_limit = 3
+        if self.__cluster_details.use_new_style_config_yaml:
+            blobstorage_config = self.__proto_config("bs.txt")
+            # By default, we create a set of state storage nodes equal to a set of nodes
+            # in static blobstorage groups.
+            bs_group_node_ids = set()
+            for group in blobstorage_config.ServiceSet.Groups:
+                for ring in group.Rings:
+                    for fail_domain in ring.FailDomains:
+                        for vdisk_location in fail_domain.VDiskLocations:
+                            bs_group_node_ids.add(vdisk_location.NodeID)
 
-        occupied_dcs = collections.Counter()
-        occupied_racks = collections.Counter()
-        selected_ids = []
-        hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
-        for node_id in self.__cluster_details.state_storage_node_ids:
-            node = hosts_by_node_id.get(node_id)
-            assert node is not None
+            print(bs_group_node_ids)
 
-            if occupied_racks[node.rack] == rack_limit:
-                continue
+            state_storage_cfg.Ring.NToSelect = self.__n_to_select
+            state_storage_cfg.Ring.Node.extend(bs_group_node_ids)
+        else:
+            rack_limit = 1
+            dc_limit = None
+            if self.__n_to_select == 9:
+                dc_limit = 3
 
-            if occupied_dcs[node.datacenter] == dc_limit:
-                continue
+            occupied_dcs = collections.Counter()
+            occupied_racks = collections.Counter()
+            selected_ids = []
+            hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
+            for node_id in self.__cluster_details.state_storage_node_ids:
+                node = hosts_by_node_id.get(node_id)
+                assert node is not None
 
-            occupied_racks[node.rack] += 1
-            occupied_dcs[node.datacenter] += 1
-            selected_ids.append(node.node_id)
+                if occupied_racks[node.rack] == rack_limit:
+                    continue
 
-        if len(selected_ids) < self.__n_to_select:
-            raise RuntimeError("Unable to build valid quorum in state storage")
+                if occupied_dcs[node.datacenter] == dc_limit:
+                    continue
 
-        state_storage_cfg.Ring.NToSelect = self.__n_to_select
-        state_storage_cfg.Ring.Node.extend(selected_ids)
+                occupied_racks[node.rack] += 1
+                occupied_dcs[node.datacenter] += 1
+                selected_ids.append(node.node_id)
+
+            if len(selected_ids) < self.__n_to_select:
+                raise RuntimeError("Unable to build valid quorum in state storage")
+
+            state_storage_cfg.Ring.NToSelect = self.__n_to_select
+            state_storage_cfg.Ring.Node.extend(selected_ids)
 
     def __generate_log_txt(self):
         log_config = self.__cluster_details.log_config

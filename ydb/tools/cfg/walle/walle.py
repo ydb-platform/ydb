@@ -12,7 +12,6 @@ from abc import ABCMeta, abstractmethod
 
 from six.moves.urllib import parse
 
-
 class HostsInformationProvider:
     __metaclass__ = ABCMeta
 
@@ -25,7 +24,7 @@ class HostsInformationProvider:
         pass
 
     @abstractmethod
-    def get_body(hostname):
+    def get_body(hostname, port):
         pass
 
 
@@ -41,7 +40,7 @@ class NopHostsInformationProvider(HostsInformationProvider):
         # BAD_REQUEST (nameservice validator: node 1 has data center in Wall-E location longer than 4 symbols)
         return "FAKE"
 
-    def get_body(self, hostname):
+    def get_body(self, hostname, port):
         return zlib.crc32(hostname.encode())
 
 
@@ -103,5 +102,5 @@ class WalleHostsInformationProvider(HostsInformationProvider):
         short_dc_name = self._ask_location(hostname)["location"]["short_datacenter_name"]
         return short_dc_name if self._cloud_mode else short_dc_name.upper()
 
-    def get_body(self, hostname):
+    def get_body(self, hostname, port):
         return self._ask_location(hostname)["inv"]

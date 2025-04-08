@@ -71,6 +71,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             ++countNoDeadline;
         }
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "Load")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
         txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
         txInfo.Cookie = rowset.GetValue<Schema::TxInfo::Cookie>();
         txInfo.DeserializeSeqNoFromString(rowset.GetValue<Schema::TxInfo::SeqNo>());
@@ -111,7 +112,7 @@ TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxContro
     auto& txInfo = txOperator->GetTxInfo();
     AFL_VERIFY(txInfo.MaxStep == Max<ui64>());
     AFL_VERIFY(Operators.emplace(txInfo.TxId, txOperator).second);
-
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "RegisterTx")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
     Schema::SaveTxInfo(db, txInfo, txBody);
     Counters.OnRegisterTx(txOperator->GetOpType());
     return txInfo;
@@ -126,7 +127,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
 
     AFL_VERIFY(Operators.emplace(txOperator->GetTxId(), txOperator).second);
-
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "RegisterTxWithDeadline")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
     Schema::SaveTxInfo(db, txInfo, txBody);
     DeadlineQueue.emplace(txInfo.MaxStep, txOperator->GetTxId());
     Counters.OnRegisterTx(txOperator->GetOpType());
@@ -295,6 +296,8 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
             DeadlineQueue.erase(TPlanQueueItem(txInfo.MaxStep, txId));
         }
         return EPlanResult::Planned;
+    } else {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)("schemeshard_plan_step", planStep);
     }
     return EPlanResult::AlreadyPlanned;
 }

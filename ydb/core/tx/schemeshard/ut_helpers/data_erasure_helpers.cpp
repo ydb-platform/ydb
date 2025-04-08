@@ -43,7 +43,7 @@ void TFakeBSController::Handle(NKikimr::TEvBlobStorage::TEvControllerShredReques
     ctx.Send(ev->Sender, new NKikimr::TEvBlobStorage::TEvControllerShredResponse(Generation, Completed, Progress));
 }
 
-ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name) {
+ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name, bool addTable) {
     TestCreateExtSubDomain(runtime, ++(*txId), "/MyRoot", Sprintf(R"(
         Name: "%s"
     )", name.c_str()));
@@ -74,15 +74,17 @@ ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui6
         NLs::ExtractTenantSchemeshard(&schemeshardId)
     });
 
-    TestCreateTable(runtime, schemeshardId, ++(*txId), TStringBuilder() << "/MyRoot/" << name,
-        R"____(
-            Name: "Simple"
-            Columns { Name: "key1"  Type: "Uint32"}
-            Columns { Name: "Value" Type: "Utf8"}
-            KeyColumnNames: ["key1"]
-            UniformPartitionsCount: 2
-        )____");
-    env.TestWaitNotification(runtime, *txId, schemeshardId);
+    if (addTable) {
+        TestCreateTable(runtime, schemeshardId, ++(*txId), TStringBuilder() << "/MyRoot/" << name,
+            R"____(
+                Name: "Simple"
+                Columns { Name: "key1"  Type: "Uint32"}
+                Columns { Name: "Value" Type: "Utf8"}
+                KeyColumnNames: ["key1"]
+                UniformPartitionsCount: 2
+            )____");
+        env.TestWaitNotification(runtime, *txId, schemeshardId);
+    }
 
     return schemeshardId;
 }

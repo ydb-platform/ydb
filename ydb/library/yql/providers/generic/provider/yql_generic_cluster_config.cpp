@@ -8,6 +8,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 #include "yql_generic_cluster_config.h"
 
@@ -213,6 +214,7 @@ namespace NYql {
                 EGenericDataSourceKind::MYSQL,
                 EGenericDataSourceKind::MS_SQL_SERVER,
                 EGenericDataSourceKind::ORACLE,
+                EGenericDataSourceKind::ICEBERG
                 }, 
                clusterConfig.GetKind()
             )) {
@@ -290,6 +292,43 @@ namespace NYql {
         clusterConfig.mutable_datasourceoptions()->insert({"folder_id", TString(it->second)});
     }
 
+    ///
+    /// Extract token from properties and copy it to a cluster's config
+    ///
+    void ParseToken(const THashMap<TString, TString>& properties,
+        NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("token");
+
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.SetToken(it->second);
+    }
+
+    ///
+    /// Fill properties for an iceberg data source
+    ///
+    void ParseIcebergFields(const THashMap<TString, TString>& properties,
+        NYql::TGenericClusterConfig& clusterConfig) {
+
+        if (clusterConfig.GetKind() != NYql::EGenericDataSourceKind::ICEBERG) {
+            return;
+        }
+
+        for (auto f : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
+            auto it = properties.find(f);
+
+            if (properties.end() != it) {
+                clusterConfig.MutableDataSourceOptions()->insert({f, it->second});
+            }
+        }
+    }
+
     using TProtoProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
 
     TString GetPropertyWithDefault(const TProtoProperties& properties, const TString& key) {
@@ -317,7 +356,10 @@ namespace NYql {
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
         ParseServiceAccountIdSignature(properties, clusterConfig);
+        ParseToken(properties, clusterConfig);
         ParseFolderId(properties, clusterConfig);
+
+        ParseIcebergFields(properties, clusterConfig);
 
         return clusterConfig;
     }

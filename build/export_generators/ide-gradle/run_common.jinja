@@ -1,0 +1,11 @@
+{%- if not proto_template and (target.runs|length or target.custom_runs|length) %}
+
+tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
+{%-     if with_kotlin %}
+tasks.getByName("sourcesJar").dependsOn(tasks.compileKotlin)
+{%-     endif %}
+tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)
+{%-     if with_kotlin %}
+tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestKotlin)
+{%-     endif -%}
+{%- endif -%}

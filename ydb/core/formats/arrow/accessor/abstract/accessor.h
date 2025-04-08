@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
@@ -264,6 +266,8 @@ private:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
         const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
         return std::make_shared<arrow::Schema>(fields);
@@ -344,7 +348,6 @@ public:
     }
 
     virtual void Reallocate() {
-
     }
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
@@ -444,7 +447,8 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const;
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;

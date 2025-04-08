@@ -1,4 +1,5 @@
 #include "yql_yt_coordinator_proto_helpers.h"
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
 
@@ -71,6 +72,9 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
     protoStartOperationRequest.SetNumRetries(startOperationRequest.NumRetries);
     auto protoClusterConnection = ClusterConnectionToProto(startOperationRequest.ClusterConnection);
     protoStartOperationRequest.MutableClusterConnection()->Swap(&protoClusterConnection);
+    if (startOperationRequest.FmrOperationSpec) {
+        protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
+    }
     return protoStartOperationRequest;
 }
 
@@ -84,6 +88,9 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     }
     startOperationRequest.NumRetries = protoStartOperationRequest.GetNumRetries();
     startOperationRequest.ClusterConnection = ClusterConnectionFromProto(protoStartOperationRequest.GetClusterConnection());
+    if (protoStartOperationRequest.HasFmrOperationSpec()) {
+        startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
+    }
     return startOperationRequest;
 }
 

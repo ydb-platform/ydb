@@ -16,12 +16,11 @@ PEERDIR(
 
     yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4
     yql/essentials/parser/antlr_ast/gen/v1_antlr4
+    yql/essentials/parser/lexer_common
 
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
-
-    # TODO(YQL-19747): Replace with the sql/v1/reflect to get keywords
-    yql/essentials/sql/v1/format
+    yql/essentials/sql/v1/reflect
 )
 
 END()

@@ -284,6 +284,18 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
     }
 
+    Y_UNIT_TEST_F(NoDiscoveryCommandLine, TCliTestFixture) {
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--no-discovery",
+                "scheme", "ls",
+            }
+        );
+    }
+
     Y_UNIT_TEST_F(EndpointAndDatabaseFromActiveProfile, TCliTestFixture) {
         TString profile = fmt::format(R"yaml(
         profiles:

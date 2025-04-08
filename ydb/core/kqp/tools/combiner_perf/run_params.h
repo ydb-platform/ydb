@@ -2,7 +2,6 @@
 
 #include <util/system/defaults.h>
 
-
 namespace NKikimr {
 namespace NMiniKQL {
 

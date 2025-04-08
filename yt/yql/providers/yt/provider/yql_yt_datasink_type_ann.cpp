@@ -441,19 +441,6 @@ private:
         }
         const bool initialWrite = NYql::HasSetting(settings, EYtSettingType::Initial);
         const bool monotonicKeys = NYql::HasSetting(settings, EYtSettingType::MonotonicKeys);
-        TString columnGroup;
-        TSet<TString> columnGroupAlts;
-        if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
-            if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
-                return TStatus::Error;
-            }
-            columnGroup = setting->Tail().Content();
-            columnGroupAlts.insert(columnGroup);
-            TString exandedSpec;
-            if (ExpandDefaultColumnGroup(setting->Tail().Content(), *itemType->Cast<TStructExprType>(), exandedSpec)) {
-                columnGroupAlts.insert(std::move(exandedSpec));
-            }
-        }
 
         if (!initialWrite && mode != EYtWriteMode::Append) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
@@ -587,8 +574,22 @@ private:
                     << GetTypeDiff(*description.RowType, *itemType)));
                 return TStatus::Error;
             }
+        }
 
-            if (!columnGroupAlts.empty() && !AnyOf(columnGroupAlts, [&](const auto& grp) { return description.ColumnGroupSpecAlts.contains(grp); })) {
+        TString columnGroup;
+        TSet<TString> columnGroupAlts;
+        // Check and expand column groups _after_ type alignment (TryConvertTo)
+        if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
+            if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
+                return TStatus::Error;
+            }
+            columnGroup = setting->Tail().Content();
+            columnGroupAlts.insert(columnGroup);
+            TString exandedSpec;
+            if (ExpandDefaultColumnGroup(setting->Tail().Content(), *itemType->Cast<TStructExprType>(), exandedSpec)) {
+                columnGroupAlts.insert(std::move(exandedSpec));
+            }
+            if (checkLayout && !AnyOf(columnGroupAlts, [&](const auto& grp) { return description.ColumnGroupSpecAlts.contains(grp); })) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "Insert with different "
                     << ToString(EYtSettingType::ColumnGroups).Quote()

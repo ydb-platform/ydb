@@ -22,12 +22,12 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// This scan needed to run kmeans reshuffle which is part of global kmeans run.
+// If less than 1% of vectors are reassigned to new clusters we want to stop
 static constexpr double MinVectorsNeedsReassigned = 0.01;
 
 class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
 protected:
-    using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
+    using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
@@ -38,8 +38,8 @@ protected:
     const ui32 InitK = 0;
     ui32 K = 0;
 
-    EState::EState State;
-    const EState::EState UploadState;
+    EState State;
+    const EState UploadState;
 
     IDriver* Driver = nullptr;
 
@@ -87,7 +87,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
@@ -101,12 +101,12 @@ protected:
     TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse> Response;
 
     // FIXME: save PrefixRows as std::vector<std::pair<TSerializedCellVec, TSerializedCellVec>> to avoid parsing
-    ui32 PrefixColumns;
+    const ui32 PrefixColumns;
     TSerializedCellVec Prefix;
     TBufferData PrefixRows;
     bool IsFirstPrefixFeed = true;
     bool IsPrefixRowsValid = true;
-    
+
     bool IsExhausted = false;
 
 public:
@@ -132,6 +132,7 @@ public:
         , LevelTable{request.GetLevelName()}
         , PostingTable{request.GetPostingName()}
         , PrefixTable{request.GetPrefixName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
@@ -152,6 +153,7 @@ public:
             (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
         PostingTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns);
+        // prefix types
         {
             auto types = GetAllTypes(table);
 
@@ -206,7 +208,7 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -225,18 +227,12 @@ public:
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size()
-            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size();
+            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size() << " RetryCount: " << RetryCount;
     }
 
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        UploadInProgress()
-            || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
-            || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
-            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false);
-
         return EScan::Feed;
     }
 
@@ -247,8 +243,8 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TPrefixKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
-                                                                            << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -292,10 +288,10 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -304,14 +300,9 @@ protected:
         Driver->Touch(EScan::Final);
     }
 
-    ui64 GetProbability()
-    {
-        return Rng.GenRand64();
-    }
-
     bool ShouldWaitUpload()
     {
-        if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings)) {
             return false;
         }
 
@@ -323,11 +314,13 @@ protected:
             || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
             || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
-        return !LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits);
+        return !HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings);
     }
 
     void UploadImpl()
     {
+        LOG_D("Uploading " << Debug());
+
         Y_ASSERT(!UploadBuf.IsEmpty());
         Y_ASSERT(!Uploader);
         auto actor = NTxProxy::CreateUploadRowsInternal(
@@ -363,7 +356,7 @@ protected:
             return true;
         }
 
-        if (!buffer.IsEmpty() && (!byLimit || buffer.IsReachLimits(Limits))) {
+        if (!buffer.IsEmpty() && (!byLimit || HasReachedLimits(buffer, ScanSettings))) {
             buffer.FlushTo(UploadBuf);
             InitUpload(table, types);
             return true;
@@ -384,6 +377,11 @@ protected:
             ++pos;
         }
     }
+
+    ui64 GetProbability()
+    {
+        return Rng.GenRand64();
+    }
 };
 
 template <typename TMetric>
@@ -397,17 +395,13 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
-
     void StartNewPrefix() {
         Parent = Child + K;
         Child = Parent + 1;
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
-        // TODO(mbkkt) Upper or Lower doesn't matter here, because we seek to (prefix, inf)
-        // so we can choose Lower if it's faster.
-        // Exact seek with Lower also possible but needs to rewrite some code in Feed
-        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper);
+        Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
         IsFirstPrefixFeed = true;
         IsPrefixRowsValid = true;
@@ -475,7 +469,7 @@ public:
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
             PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
-            if (PrefixRows.IsReachLimits(Limits)) {
+            if (HasReachedLimits(PrefixRows, ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;
             }
@@ -741,10 +735,10 @@ void TDataShard::Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TA
 
 void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
-    auto& record = ev->Get()->Record;
+    auto& request = ev->Get()->Record;
     TRowVersion rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
 
-    LOG_N("Starting TPrefixKMeansScan " << record.ShortDebugString()
+    LOG_N("Starting TPrefixKMeansScan " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -752,13 +746,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
-    const ui64 id = record.GetId();
+    const ui64 id = request.GetId();
 
     auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
     response->Record.SetId(id);
     response->Record.SetTabletId(TabletID());
 
-    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
@@ -771,12 +765,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         response.Reset();
     };
 
-    if (const ui64 shardId = record.GetTabletId(); shardId != TabletID()) {
+    if (const ui64 shardId = request.GetTabletId(); shardId != TabletID()) {
         badRequest(TStringBuilder() << "Wrong shard " << shardId << " this is " << TabletID());
         return;
     }
 
-    const auto pathId = TPathId::FromProto(record.GetPathId());
+    const auto pathId = TPathId::FromProto(request.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
@@ -802,18 +796,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         return;
     }
 
-    if (record.GetK() < 2) {
+    if (request.GetK() < 2) {
         badRequest("Should be requested partition on at least two rows");
+        return;
+    }
+
+    if (request.GetPrefixColumns() <= 0) {
+        badRequest("Should be requested on at least one prefix column");
         return;
     }
 
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TPrefixKMeansScan<T>{
-            userTable, record, ev->Sender, std::move(response),
+            userTable, request, ev->Sender, std::move(response),
         };
     };
-    MakeScan(record, createScan, badRequest);
+    MakeScan(request, createScan, badRequest);
     if (!scan) {
         Y_ASSERT(!response);
         return;

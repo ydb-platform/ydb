@@ -876,6 +876,16 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     return queryBlocks;
 }
 
+TString GetShowCreateType(const TExprNode& settings) {
+    if (HasSetting(settings, "showCreateTable")) {
+        return "showCreateTable";
+    }
+    if (HasSetting(settings, "showCreateView")) {
+        return "showCreateView";
+    }
+    return "";
+}
+
 } // namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -953,23 +963,23 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         return res;
     }
 
-    TNodeOnNodeOwnedMap showCreateTableReadReplaces;
-    VisitExpr(node.Ptr(), [&showCreateTableReadReplaces](const TExprNode::TPtr& input) -> bool {
+    TNodeOnNodeOwnedMap showCreateReadReplacements;
+    VisitExpr(node.Ptr(), [&showCreateReadReplacements](const TExprNode::TPtr& input) -> bool {
         TExprBase currentNode(input);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
                 auto name = setting.Name().Value();
-                if (name == "showCreateTable") {
-                    showCreateTableReadReplaces[input.Get()] = nullptr;
+                if (name == "showCreateTable" || name == "showCreateView") {
+                    showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
         }
         return true;
     });
 
-    if (!showCreateTableReadReplaces.empty()) {
-        for (auto& [input, _] : showCreateTableReadReplaces) {
+    if (!showCreateReadReplacements.empty()) {
+        for (auto& [input, _] : showCreateReadReplacements) {
             TKiReadTable content(input);
 
             TExprNode::TPtr path = ctx.NewCallable(
@@ -983,6 +993,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             TKikimrKey key(ctx);
             YQL_ENSURE(key.Extract(content.TableKey().Ref()));
 
+            auto type = GetShowCreateType(content.Settings().Ref());
+            YQL_ENSURE(!type.empty());
+
             auto sysViewRewrittenValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
                     .Build("sysViewRewritten")
@@ -991,12 +1004,12 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     .Build()
                 .Done();
 
-            auto showCreateTableValue = Build<TCoNameValueTuple>(ctx, node.Pos())
+            auto showCreateTypeValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
-                    .Build("showCreateTable")
+                    .Build(type)
                 .Done();
 
-            auto showCreateTableRead = Build<TCoRead>(ctx, node.Pos())
+            auto showCreateRead = Build<TCoRead>(ctx, node.Pos())
                 .World<TCoWorld>().Build()
                 .DataSource<TCoDataSource>()
                     .Category(ctx.NewAtom(node.Pos(), KikimrProviderName))
@@ -1009,61 +1022,68 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     .Add(ctx.NewCallable(node.Pos(), "Void", {}))
                     .Add(ctx.NewList(node.Pos(), {}))
                     .Add(sysViewRewrittenValue)
-                    .Add(showCreateTableValue)
+                    .Add(showCreateTypeValue)
                 .Build()
             .Done().Ptr();
 
-            showCreateTableReadReplaces[input] = showCreateTableRead;
+            showCreateReadReplacements[input] = showCreateRead;
         }
-        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), showCreateTableReadReplaces);
+        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), showCreateReadReplacements);
 
         TExprBase resNode(res);
 
-        TNodeOnNodeOwnedMap showCreateTableRightReplaces;
-        VisitExpr(resNode.Ptr(), [&showCreateTableRightReplaces](const TExprNode::TPtr& input) -> bool {
+        TNodeOnNodeOwnedMap showCreateRightReplacements;
+        VisitExpr(resNode.Ptr(), [&showCreateRightReplacements](const TExprNode::TPtr& input) -> bool {
             TExprBase currentNode(input);
             if (auto rightMaybe = currentNode.Maybe<TCoRight>()) {
                 auto right = rightMaybe.Cast();
                 if (auto maybeRead = right.Input().Maybe<TCoRead>()) {
                     auto read = maybeRead.Cast();
                     bool isSysViewRewritten = false;
-                    bool isShowCreateTable = false;
+                    bool isShowCreate = false;
                     for (auto arg : read.FreeArgs()) {
                         if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable") {
-                                isShowCreateTable = true;
+                            } else if (name == "showCreateTable" || name == "showCreateView") {
+                                isShowCreate = true;
                             }
                         }
                     }
-                    if (isShowCreateTable && isSysViewRewritten) {
-                        showCreateTableRightReplaces[input.Get()] = nullptr;
+                    if (isShowCreate && isSysViewRewritten) {
+                        showCreateRightReplacements[input.Get()] = nullptr;
                     }
                 }
             }
             return true;
         });
 
-        for (auto& [input, _] : showCreateTableRightReplaces) {
+        for (auto& [input, _] : showCreateRightReplacements) {
             TCoRight right(input);
             TCoRead read(right.Input().Ptr());
 
-            TString tablePath;
+            TString path;
+            TString pathType;
             for (auto arg : read.FreeArgs()) {
                 if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                     auto name = tuple.Cast().Name().Value();
                     if (name == "sysViewRewritten") {
-                        tablePath = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
+                        path = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
+                    }
+                    if (name == "showCreateTable") {
+                        pathType = "Table";
+                    }
+                    if (name == "showCreateView") {
+                        pathType = "View";
                     }
                 }
             }
-            YQL_ENSURE(!tablePath.empty(), "Unexpected empty table path for SHOW CREATE TABLE");
+            YQL_ENSURE(!path.empty(), "Unexpected empty path for SHOW CREATE " << pathType.to_upper());
 
-            auto tempTablePath = tablesData->GetTempTablePath(tablePath);
+            auto tempTablePath = tablesData->GetTempTablePath(path);
             if (tempTablePath) {
-                tablePath = tempTablePath.value();
+                path = tempTablePath.value();
             }
 
             auto showCreateArg = Build<TCoArgument>(ctx, resNode.Pos())
@@ -1082,7 +1102,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto pathCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
                 .Left(columnPath)
                 .Right<TCoString>()
-                    .Literal().Build(tablePath)
+                    .Literal().Build(path)
                 .Build()
                 .Done();
 
@@ -1095,7 +1115,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto pathTypeCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
                 .Left(columnPathType)
                 .Right<TCoString>()
-                    .Literal().Build("Table")
+                    .Literal().Build(pathType)
                 .Build()
                 .Done();
 
@@ -1121,7 +1141,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                 .Lambda(lambda)
             .Done().Ptr();
 
-            showCreateTableRightReplaces[input] = filterData;
+            showCreateRightReplacements[input] = filterData;
         }
 
         ctx.Step
@@ -1133,7 +1153,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             .Repeat(TExprStep::LoadTablesMetadata)
             .Repeat(TExprStep::RewriteIO);
 
-        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateTableRightReplaces);
+        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateRightReplacements);
     }
 
     TKiExploreTxResults txExplore;

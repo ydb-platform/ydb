@@ -359,7 +359,8 @@ public:
         InsertTable /* "insert_table" */,
         OverloadMetadata /* "overload_metadata" */,
         Disk /* "disk" */,
-        None /* "none" */
+        None /* "none" */,
+        OverloadCompaction /* "overload_compaction" */
     };
 
     // For syslocks

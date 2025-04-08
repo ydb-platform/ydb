@@ -470,6 +470,21 @@ class FederatedQueryClient(object):
         return self.create_connection(request, check_issues)
 
     @retry.retry_intrusive
+    def create_mysql_connection(self, name, database_name, database_id, login, password,
+                                secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        my = request.content.setting.mysql_cluster
+        my.database_name = database_name
+        my.database_id = database_id
+        my.login = login
+        my.password = password
+
+        my.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
     def list_connections(self, visibility, name_substring=None, limit=100, check_issues=True, page_token=""):
         request = fq.ListConnectionsRequest()
         request.filter.visibility = visibility

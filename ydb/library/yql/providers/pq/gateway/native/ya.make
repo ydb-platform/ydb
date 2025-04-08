@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/utils
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/topic
 )
 

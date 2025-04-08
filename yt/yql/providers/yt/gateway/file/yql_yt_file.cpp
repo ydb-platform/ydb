@@ -1593,7 +1593,7 @@ private:
     }
 
     TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
-        ythrow yexception() << "GetClusterConnection should not be called for file gateway";
+        return TClusterConnectionResult();
     }
 
 

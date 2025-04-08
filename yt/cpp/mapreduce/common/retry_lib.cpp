@@ -227,6 +227,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NSequoiaClient::SequoiaRetriableError,
         NRpc::TransientFailure,
         Canceled,
+        Timeout,
     }) {
         if (allCodes.contains(code)) {
             return config->RetryInterval;

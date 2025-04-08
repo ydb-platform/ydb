@@ -11,7 +11,8 @@ class TestYdbWorkload(object):
         config = KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_parameterized_decimal": True,
-                "enable_table_datetime64" : True
+                "enable_table_datetime64": True,
+                "enable_vector_index": True,
             }
         )
         cls.cluster = KiKiMR(config)

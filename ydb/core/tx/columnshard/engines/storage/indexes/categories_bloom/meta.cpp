@@ -166,10 +166,11 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     AFL_VERIFY(!!category);
-    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
+    AFL_VERIFY(op.GetCaseSensitive());
     const ui32 bitsCount = data.GetBitsCount();
     if (!bitsCount) {
         return false;
@@ -185,8 +186,8 @@ bool TIndexMeta::DoCheckValueImpl(
 
 std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) const {
     ui64 result;
-    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     return result;
 }
 

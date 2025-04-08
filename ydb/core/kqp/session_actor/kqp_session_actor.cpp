@@ -1358,7 +1358,6 @@ public:
                     }
                 }
             }
-
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
@@ -1567,14 +1566,13 @@ public:
             }
 
             if (QueryState->ReportStats()) {
-                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                    NKqpProto::TKqpStatsQuery& stats = *ev->Get()->Record.MutableQueryStats();
-                    NKqpProto::TKqpStatsQuery executionStats;
-                    executionStats.Swap(&stats);
-                    stats = QueryState->QueryStats.ToProto();
-                    stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                    ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
-                }
+                NKqpProto::TKqpStatsQuery& stats = *ev->Get()->Record.MutableQueryStats();
+                NKqpProto::TKqpStatsQuery executionStats;
+                executionStats.Swap(&stats);
+                stats = QueryState->QueryStats.ToProto();
+                stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
             }
 
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);

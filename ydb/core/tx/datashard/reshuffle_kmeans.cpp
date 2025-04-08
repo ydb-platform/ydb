@@ -25,14 +25,14 @@ using namespace NKMeans;
 // This scan needed to run kmeans reshuffle which is part of global kmeans run.
 class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
 protected:
-    using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
+    using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
     ui32 K = 0;
 
-    EState::EState UploadState;
+    EState UploadState;
 
     IDriver* Driver = nullptr;
 
@@ -59,7 +59,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     TTags UploadScan;
 
@@ -91,6 +91,7 @@ public:
         , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {
@@ -155,7 +156,7 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -170,20 +171,14 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
         return EScan::Feed;
     }
 
@@ -194,8 +189,8 @@ protected:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("TReshuffleKMeansScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: "
-                                                                                << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -214,8 +209,9 @@ protected:
                                               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
-                                                                     << ev->Sender.ToString() << Debug());
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
+                << " Uploader: " << Uploader.ToString()
+                << " Sender: " << ev->Sender.ToString());
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -227,7 +223,7 @@ protected:
             UploadRows += WriteBuf.GetRows();
             UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload(false);
             }
@@ -236,21 +232,21 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
+            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
+            Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
     }
 
     EScan FeedUpload()
     {
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
         if (!WriteBuf.IsEmpty()) {

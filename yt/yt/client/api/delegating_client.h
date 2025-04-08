@@ -23,7 +23,7 @@ public:
     // IClientBase methods
     DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
 
-    DELEGATE_METHOD(std::optional<std::string>, GetClusterName,
+    DELEGATE_METHOD(TFuture<std::optional<std::string>>, GetClusterName,
         (bool fetchIfNull),
         (fetchIfNull))
 

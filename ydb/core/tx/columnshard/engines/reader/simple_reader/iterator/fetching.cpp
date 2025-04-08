@@ -22,9 +22,10 @@ ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSo
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                                                       source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            source->GetContext()->GetCommonContext()->GetResolver(), true));
+        source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+            source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
+            true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -155,11 +156,12 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
         AFL_VERIFY(StartIndex == 0);
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
+    contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            AFL_VERIFY(filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true)));
+        if (!resultBatch->num_rows()) {
+            resultBatch = nullptr;
         }
     }
 

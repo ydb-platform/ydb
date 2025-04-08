@@ -1,5 +1,4 @@
 PROGRAM(combiner_perf)
-
 ALLOCATOR(LF_DBG)
 
 YQL_LAST_ABI_VERSION()

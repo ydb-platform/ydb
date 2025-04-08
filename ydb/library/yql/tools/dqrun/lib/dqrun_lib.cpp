@@ -90,6 +90,7 @@ TDqRunTool::TDqRunTool()
     GetRunOptions().ResultStream = &Cout;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Text;
     GetRunOptions().CustomTests = true;
+    GetRunOptions().Verbosity = TLOG_INFO;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
 

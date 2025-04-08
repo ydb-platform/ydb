@@ -1,4 +1,4 @@
-# Adding, removing, and renaming a secondary index
+# Adding, removing, and renaming a index
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -14,7 +14,8 @@
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
+You can specify any secondary index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
+You can specify any vector index parameters from the [`CREATE TABLE`](../create_table/vector_index.md) command.
 
 {% if backend_name == "YDB" %}
 
@@ -80,7 +81,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if backend_name == "YDB" %}
 
-You can also remove a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) command.
+You can also remove a index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) command.
 
 {% endif %}
 

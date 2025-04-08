@@ -13,6 +13,7 @@
 - [директория](../../../../concepts/datamodel/dir.md);
 - [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
 - [вторичный индекс](../../../../concepts/secondary_indexes.md).
+- [векторый индекс](../../../../concepts/vector_indexes.md).
 
 {% endnote %}
 

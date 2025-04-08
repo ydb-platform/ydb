@@ -3491,7 +3491,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(PredicateWithLimit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
+        auto runnerSettings = TKikimrSettings()
+                                  .SetAppConfig(appConfig)
+                                  .SetWithSampleTables(true)
+                                  .SetColumnShardAlterObjectEnabled(true)
+                                  .SetColumnShardReaderClassName("SIMPLE");
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
@@ -3504,17 +3508,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "a", "b" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
-
-        {
-            auto result =
-                testHelper.GetKikimr()
-                    .GetQueryClient()
-                    .ExecuteQuery(
-                        "ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)",
-                        NQuery::TTxControl::NoTx())
-                    .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
-        }
 
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

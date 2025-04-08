@@ -523,7 +523,7 @@ namespace NKikimr::NBsController {
                 return;
             }
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr));
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
             CommitInProgress = true;
         } catch (const TExError& error) {
             IssueGRpcResponse(TResponseProto::BSCInvalidConfig, error.ErrorReason);

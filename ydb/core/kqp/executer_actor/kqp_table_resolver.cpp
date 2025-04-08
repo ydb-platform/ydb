@@ -36,11 +36,22 @@ public:
         , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
     void Bootstrap() {
+        FillKqpTasksGraphStages(TasksGraph, Transactions);
         ResolveKeys();
-        Become(&TKqpTableResolver::ResolveKeysState);
     }
 
 private:
+
+    STATEFN(ResolveNamesState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveNames);
+            hFunc(TEvents::TEvPoison, HandleResolveNames);
+            default: {
+                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                GotUnexpectedEvent = ev->GetTypeRewrite();
+            }
+        }
+    }
 
     STATEFN(ResolveKeysState) {
         switch (ev->GetTypeRewrite()) {
@@ -54,7 +65,66 @@ private:
         }
     }
 
+    void HandleResolveNames(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ShouldTerminate) {
+            PassAway();
+            return;
+        }
+        auto& results = ev->Get()->Request->ResultSet;
+        if (results.size() != TableRequestPathes.size()) {
+            // TableRequestPathes is used only for CTAS, so it can't have intersections with TableRequestIds.
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
+            return;
+        }
+        LOG_D("Navigated key sets: " << results.size());
+        for (auto& entry : results) {
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Failed to resolve table with tableId: " << entry.TableId << " status: " << entry.Status << '.'));
+                return;
+            }
+
+            Cerr << "TEST>> " << entry.TableId << " " << CanonizePath(entry.Path) << Endl;
+            auto iterTableRequestPathes = TableRequestPathes.find(CanonizePath(entry.Path));
+            if (iterTableRequestPathes == TableRequestPathes.end()) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Incorrect tableId in reply " << CanonizePath(entry.Path) << '.'));
+                return;
+            }
+
+            if (iterTableRequestPathes != TableRequestPathes.end()) {
+                TVector<TStageId> stageIds(std::move(iterTableRequestPathes->second));
+
+                for (auto stageId : stageIds) {
+                    auto& stageMeta = TasksGraph.GetStageInfo(stageId).Meta;
+                    stageMeta.TableId = entry.TableId;
+                    if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
+                        stageMeta.TableKind = ETableKind::Datashard;
+                    } else {
+                        AFL_ENSURE(entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+                        stageMeta.TableKind = ETableKind::Olap;
+                    }
+
+                    auto& stage = stageMeta.GetStage(stageId);
+                    AFL_ENSURE(stage.GetSinks().size() == 1);
+                    for (const auto& sink : stage.GetSinks()) {
+                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                        NKikimrKqp::TKqpTableSinkSettings settings;
+                        AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
+                        
+                    }
+                }
+            }
+        }
+
+        ResolvingNamesFinished = true;
+        ResolveKeys();
+    }
+
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -66,15 +136,6 @@ private:
         }
         LOG_D("Navigated key sets: " << results.size());
         for (auto& entry : results) {
-            auto iter = TableRequestIds.find(entry.TableId);
-            if (iter == TableRequestIds.end()) {
-                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                        << "Incorrect tableId in reply " << entry.TableId << '.'));
-                return;
-            }
-            TVector<TStageId> stageIds(std::move(iter->second));
-            TableRequestIds.erase(entry.TableId);
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
@@ -82,15 +143,28 @@ private:
                 return;
             }
 
+            auto iterTableRequestIds = TableRequestIds.find(entry.TableId);
+            if (iterTableRequestIds == TableRequestIds.end()) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                    YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
+                        << "Incorrect tableId in reply " << entry.TableId << '.'));
+                return;
+            }
+
+            TVector<TStageId> stageIds(std::move(iterTableRequestIds->second));
+            TableRequestIds.erase(entry.TableId);
+
             for (auto stageId : stageIds) {
                 TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
             }
         }
+
         NavigationFinished = true;
         TryFinish();
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
+        AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -126,7 +200,7 @@ private:
             }
 
             for (auto& partition : entry.KeyDescription->GetPartitions()) {
-                YQL_ENSURE(partition.Range);
+                AFL_ENSURE(partition.Range);
             }
 
             LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
@@ -145,9 +219,12 @@ private:
         ShouldTerminate = true;
     }
 
+    void HandleResolveNames(TEvents::TEvPoison::TPtr&) {
+        ShouldTerminate = true;
+    }
+
 private:
     void ResolveKeys() {
-
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
@@ -155,60 +232,124 @@ private:
             request->UserToken = UserToken;
         }
 
+        bool needToResolveNames = false;
+        if (!ResolvingNamesFinished) {
+            for (const auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
+                if (!stageInfo.Meta.ShardOperations.empty()) {
+                    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+                    if (!tableInfo) {
+                        AFL_ENSURE(!stageInfo.Meta.TableId);
+                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        needToResolveNames = true;
+                    }
+                }
+            }
+            ResolvingNamesFinished = !needToResolveNames;
+        }
+
         for (auto& pair : TasksGraph.GetStagesInfo()) {
             auto& stageInfo = pair.second;
 
             if (!stageInfo.Meta.ShardOperations.empty()) {
-                YQL_ENSURE(stageInfo.Meta.TableId);
-                YQL_ENSURE(!stageInfo.Meta.ShardOperations.empty());
+                //AFL_ENSURE(stageInfo.Meta.TableId);
 
                 for (const auto& operation : stageInfo.Meta.ShardOperations) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-                    Y_ENSURE(tableInfo);
-                    TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
-                    stageInfo.Meta.TableKind = tableInfo->TableKind;
+                    if (tableInfo) {
+                        if (ResolvingNamesFinished) {
+                            AFL_ENSURE(stageInfo.Meta.TableId);
+                            //Y_ENSURE(tableInfo);
+                            TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
+                            stageInfo.Meta.TableKind = tableInfo->TableKind;
 
-                    stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
+                            stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                    if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
-                        continue;
-                    }
+                            if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                                continue;
+                            }
 
-                    if (stageInfo.Meta.TableKind == ETableKind::Olap) {
-                        if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                            if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                                if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                                    auto& entry = requestNavigate->ResultSet.emplace_back();
+                                    entry.TableId = stageInfo.Meta.TableId;
+                                    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                                    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                                }
+
+                                TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
+                            }
+
+                            auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
+                            entry.UserData = EncodeStageInfo(stageInfo);
+                            switch (operation) {
+                                case TKeyDesc::ERowOperation::Read:
+                                    entry.Access = NACLib::EAccessRights::SelectRow;
+                                    break;
+                                case TKeyDesc::ERowOperation::Update:
+                                    entry.Access = NACLib::EAccessRights::UpdateRow;
+                                    break;
+                                case TKeyDesc::ERowOperation::Erase:
+                                    entry.Access = NACLib::EAccessRights::EraseRow;
+                                    break;
+                                default:
+                                    YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                            }
+                        }
+                    } else if (!ResolvingNamesFinished) {
+                        // CTAS 
+                        //AFL_ENSURE(!ResolvingNamesFinished);
+                        AFL_ENSURE(!stageInfo.Meta.TableId);
+                        AFL_ENSURE(stageInfo.Meta.TablePath);
+                        if (TableRequestPathes.find(stageInfo.Meta.TablePath) == TableRequestPathes.end()) {
                             auto& entry = requestNavigate->ResultSet.emplace_back();
-                            entry.TableId = stageInfo.Meta.TableId;
-                            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+
+                            Cerr << "REQ :: " << stageInfo.Meta.TablePath << Endl;
+                            entry.Path = SplitPath(stageInfo.Meta.TablePath);
+                            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
                             entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
                         }
 
-                        TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
-                    }
+                        TableRequestPathes[stageInfo.Meta.TablePath].emplace_back(pair.first);
+                    } else {
+                        // CTAS
+                        AFL_ENSURE(stageInfo.Meta.TableId);
+                        AFL_ENSURE(stageInfo.Meta.TablePath);
 
-                    auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
-                    entry.UserData = EncodeStageInfo(stageInfo);
-                    switch (operation) {
-                        case TKeyDesc::ERowOperation::Read:
-                            entry.Access = NACLib::EAccessRights::SelectRow;
-                            break;
-                        case TKeyDesc::ERowOperation::Update:
-                            entry.Access = NACLib::EAccessRights::UpdateRow;
-                            break;
-                        case TKeyDesc::ERowOperation::Erase:
-                            entry.Access = NACLib::EAccessRights::EraseRow;
-                            break;
-                        default:
-                            YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                        TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
+
+                        auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
+                        entry.UserData = EncodeStageInfo(stageInfo);
+                        switch (operation) {
+                            case TKeyDesc::ERowOperation::Read:
+                                entry.Access = NACLib::EAccessRights::SelectRow;
+                                break;
+                            case TKeyDesc::ERowOperation::Update:
+                                entry.Access = NACLib::EAccessRights::UpdateRow;
+                                break;
+                            case TKeyDesc::ERowOperation::Erase:
+                                entry.Access = NACLib::EAccessRights::EraseRow;
+                                break;
+                            default:
+                                YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                        }
                     }
                 }
             }
         }
+
+        if (!ResolvingNamesFinished) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            Become(&TKqpTableResolver::ResolveNamesState);
+            return;
+        }
+
         if (requestNavigate->ResultSet.size()) {
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
         } else {
             NavigationFinished = true;
         }
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Become(&TKqpTableResolver::ResolveKeysState);
     }
 
 private:
@@ -266,7 +407,9 @@ private:
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
+    THashMap<TString, TVector<TStageId>> TableRequestPathes;
     THashMap<TTableId, TString> TablePathsById;
+    bool ResolvingNamesFinished = false;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
 

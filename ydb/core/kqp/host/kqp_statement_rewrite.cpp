@@ -286,7 +286,7 @@ namespace {
         insertSettings.push_back(
             exprCtx.NewList(pos, {
                 exprCtx.NewAtom(pos, "mode"),
-                exprCtx.NewAtom(pos, "replace"),
+                exprCtx.NewAtom(pos, "fill_table"),
             }));
         insertSettings.push_back(
             exprCtx.NewList(pos, {

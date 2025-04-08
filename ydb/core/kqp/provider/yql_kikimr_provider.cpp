@@ -168,6 +168,8 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
         return desc;
     }
 
+    FormatBackTrace(&Cerr);
+
     ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
         << "Cannot find table '" << NCommon::FullTableName(cluster, tablePath)
         << "' because it does not exist or you do not have access permissions."
@@ -234,6 +236,8 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
 
     auto desc = Tables.FindPtr(std::make_pair(TString(cluster), TString(tablePath)));
     YQL_ENSURE(desc);
+    if (!desc->DoesExist())
+        FormatBackTrace(&Cerr);
     YQL_ENSURE(desc->DoesExist());
 
     return *desc;

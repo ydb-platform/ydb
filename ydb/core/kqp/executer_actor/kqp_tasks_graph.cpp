@@ -90,6 +90,7 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
 }
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs) {
+    Cerr << "TEST " << "TASK GRAPH" << Endl;
     for (size_t txIdx = 0; txIdx < txs.size(); ++txIdx) {
         auto& tx = txs[txIdx];
 
@@ -148,14 +149,17 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     YQL_ENSURE(sink.GetOutputIndex() == 0);
                     YQL_ENSURE(stage.SinksSize() == 1);
-                    meta.TableId = MakeTableId(settings.GetTable());
                     meta.TablePath = settings.GetTable().GetPath();
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                         meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
                     } else {
                         meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
                     }
-                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                    if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                        meta.TableId = MakeTableId(settings.GetTable());
+                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                    }
                 }
             }
 

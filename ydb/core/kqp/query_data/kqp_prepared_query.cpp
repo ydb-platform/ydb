@@ -226,6 +226,9 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
 TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {
     auto info = TableConstInfoById->Map.FindPtr(tableId);
+    if (!info) {
+        FormatBackTrace(&Cerr);
+    }
     MKQL_ENSURE_S(info);
     return *info;
 }
@@ -272,9 +275,11 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                 NKikimrKqp::TKqpTableSinkSettings settings;
                 YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-                auto& info = GetInfo(MakeTableId(settings.GetTable()));
-                for (auto& column : settings.GetColumns()) {
-                    info->AddColumn(column.GetName());
+                if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                    auto& info = GetInfo(MakeTableId(settings.GetTable()));
+                    for (auto& column : settings.GetColumns()) {
+                        info->AddColumn(column.GetName());
+                    }
                 }
             }
         }

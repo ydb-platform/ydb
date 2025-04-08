@@ -459,6 +459,12 @@ private:
             return TStatus::Error;
         }
 
+        auto op = GetTableOp(node);
+        if (op == TYdbOperation::FillTable) {
+            node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+            return TStatus::Ok;
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
             TString(node.Table().Value()), node.Pos(), ctx);
 
@@ -524,7 +530,6 @@ private:
             }
         }
 
-        auto op = GetTableOp(node);
         if (NPgTypeAnn::IsPgInsert(node, op)) {
             TExprNode::TPtr newInput;
             auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, TColumnOrder(table->Metadata->ColumnOrder), ctx, Types);
@@ -592,7 +597,7 @@ private:
         }
 
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
-            op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
+            op == TYdbOperation::Upsert || op == TYdbOperation::Replace) { // NEW TYdbOperation!!!
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {

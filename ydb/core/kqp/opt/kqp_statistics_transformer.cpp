@@ -116,6 +116,10 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     auto readTable = inputNode.Cast<TKqpTable>();
     auto path = readTable.Path();
 
+    if (readTable.PathId() == "") {
+        return;
+    }
+
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
         YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();

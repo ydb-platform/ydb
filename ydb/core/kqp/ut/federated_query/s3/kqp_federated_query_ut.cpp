@@ -785,7 +785,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(InsertIntoBucketWithSelect) {
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeBucket = "test_bucket_write_with_select";
-        const TString writeObject = "test_object_write/";
+        const TString writeObject = TStringBuilder() << "test_object_write/" << TString(512, 'x') << "/";
 
         {
             Aws::S3::S3Client s3Client = MakeS3Client();
@@ -811,6 +811,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
                 INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "csv_with_names")
                 SELECT * FROM AS_TABLE([<|id: 0, payload: "#######"|>]);
 

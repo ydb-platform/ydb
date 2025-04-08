@@ -70,6 +70,28 @@ NYql::TIssues DeserializeIssues(const TString& issuesSerialized) {
     return issues;
 }
 
+template <typename TProto>
+void SerializeBinaryProto(const TProto& proto, NJson::TJsonValue& value) {
+    value.SetType(NJson::EJsonValueType::JSON_MAP);
+
+    const auto config = NProtobufJson::TProto2JsonConfig()
+        .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64EncodeBytesTransform>());
+
+    NProtobufJson::Proto2Json(proto, value["encoded_proto"], config);
+}
+
+template <typename TProto>
+void DeserializeBinaryProto(const NJson::TJsonValue& value, TProto& proto) {
+    if (!value.Has("encoded_proto")) {
+        return NProtobufJson::Json2Proto(value, proto, NProtobufJson::TJson2ProtoConfig());
+    }
+
+    const auto config = NProtobufJson::TJson2ProtoConfig()
+        .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64DecodeBytesTransform>());
+
+    NProtobufJson::Json2Proto(value["encoded_proto"], proto, config);
+}
+
 
 class TQueryBase : public NKikimr::TQueryBase {
 public:
@@ -2272,7 +2294,7 @@ private:
         NJson::TJsonValue::TArray& jsonArray = value.GetArraySafe();
         jsonArray.resize(sinks.size());
         for (size_t i = 0; i < sinks.size(); ++i) {
-            NProtobufJson::Proto2Json(sinks[i], jsonArray[i], NProtobufJson::TProto2JsonConfig());
+            SerializeBinaryProto(sinks[i], jsonArray[i]);
         }
 
         NJsonWriter::TBuf serializedSinks;
@@ -2416,7 +2438,7 @@ public:
                 value.GetValuePointer(i, &serializedSink);
 
                 NKqpProto::TKqpExternalSink sink;
-                NProtobufJson::Json2Proto(*serializedSink, sink);
+                DeserializeBinaryProto(*serializedSink, sink);
                 Response->Sinks.push_back(sink);
             }
         }

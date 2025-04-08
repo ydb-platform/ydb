@@ -26,6 +26,15 @@ namespace NSQLComplete {
         }
 
         TCompletion Complete(TCompletionInput input) {
+            if (
+                input.CursorPosition < input.Text.length() &&
+                    IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
+                input.Text.length() < input.CursorPosition) {
+                ythrow yexception()
+                    << "invalid cursor position " << input.CursorPosition
+                    << " for input size " << input.Text.size();
+            }
+
             auto prefix = input.Text.Head(input.CursorPosition);
             auto completedToken = GetCompletedToken(prefix);
 

@@ -599,6 +599,7 @@ enum EGenericDataSourceKind {
     REDIS = 11;
     PROMETHEUS = 12;
     ICEBERG = 13;
+    OPENSEARCH = 14;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.

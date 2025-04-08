@@ -24,6 +24,7 @@ namespace NKikimr::NKqp::NScheduler {
 
         void AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forgetInterval);
         void UpdateGuarantee(ui64 value);
+        void SetLimit(ui64 value);
 
         const TString& GetName() const;
         bool IsActive() const; // TODO: better name - HasEntities()?

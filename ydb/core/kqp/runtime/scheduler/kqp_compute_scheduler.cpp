@@ -553,6 +553,8 @@ void TComputeScheduler::UpdatePoolShare(TString poolName, double share, TMonoton
                 Impl->Pools.at(name)->UpdateGuarantee(0);
             }
         }
+
+        poolIt->second->SetLimit(shareValue->GetValue() * Impl->SumCores.GetValue() * 1'000'000);
     } else {
         poolIt->second->Enable();
         poolIt->second->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);

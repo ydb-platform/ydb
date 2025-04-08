@@ -75,9 +75,6 @@ void TPool::AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forget
         OldLimit->Add(FromDuration(now - current->LastNowRecalc) * current->Capacity);
         Weight->Set(current->Capacity);
 
-        // TODO: set limit once - somewhere else.
-        // auto* shareValue = WeightsUpdater.FindValue<TParameter<double>>({Name, TImpl::TotalShare});
-        // Limit->Set(shareValue->GetValue() * SumCores.GetValue() * 1'000'000);
         Usage->Set(TrackedMicroSeconds.load());
         Demand->Set(EntitiesCount.load() * 1'000'000);
         Throttle->Set(ThrottledMicroSeconds.load());
@@ -89,6 +86,12 @@ void TPool::AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forget
 void TPool::UpdateGuarantee(ui64 value) {
     if (HasCounters) {
         Guarantee->Set(value);
+    }
+}
+
+void TPool::SetLimit(ui64 value) {
+    if (HasCounters) {
+        Limit->Set(value);
     }
 }
 

@@ -1,8 +1,8 @@
-name: Regression-run
+name: Regression-run_compatibility
 
 on:
   schedule:
-    - cron: "55 23 * * *"  # At 23:55 every day
+    - cron: "0 23 * * *"  # At 23:00 every day
   workflow_dispatch:
     inputs:
       use_default_branches:
@@ -13,7 +13,7 @@ on:
 
 jobs:
   main:
-    name: Regression-run
+    name: Regression-run_compatibility
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
@@ -21,6 +21,6 @@ jobs:
       matrix: 
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
-      test_targets: ydb/
-      branches: ${{ inputs.use_default_branches == true && '["main", "stable-25-1", "stable-25-1-1", "stable-25-1-analytics"]' || github.ref_name }}
+      test_targets: ydb/tests/functional/compatibility/
+      branches: ${{ inputs.use_default_branches == true && '["main", "stable-25-1", "stable-25-1-1"]' || github.ref_name }}
       build_preset: ${{ matrix.build_preset }}

@@ -816,6 +816,7 @@ private:
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
+        sql << Stuff->TablePrefix;
         this->MakeQueryWithParams(sql, params);
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;

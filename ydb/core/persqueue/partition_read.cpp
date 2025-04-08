@@ -1065,7 +1065,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         return;
     }
 
-    const TString user = info.User;
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     PQ_LOG_D("Reading cookie " << cookie << ". Send blob request.");
     Y_ABORT_UNLESS(res);

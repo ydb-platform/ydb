@@ -11,7 +11,7 @@
 namespace NKikimr::NOlap::NReader {
 
 void TIntervalCounter::PropagateDelta(const TPosition& node, TZeroCollector* callback) {
-    AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size());
+    AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size())("node", DebugString(node));
     if (!PropagatedDeltas[node.GetIndex()]) {
         return;
     }
@@ -27,6 +27,8 @@ void TIntervalCounter::PropagateDelta(const TPosition& node, TZeroCollector* cal
         AFL_VERIFY((i64)Count[right] >= -PropagatedDeltas[node.GetIndex()]);
         Count[left] += PropagatedDeltas[node.GetIndex()];
         Count[right] += PropagatedDeltas[node.GetIndex()];
+        MinValue[left] += PropagatedDeltas[node.GetIndex()];
+        MinValue[right] += PropagatedDeltas[node.GetIndex()];
     }
     const i64 delta = PropagatedDeltas[node.GetIndex()] * (node.IntervalSize());
     AFL_VERIFY((i64)Count[node.GetIndex()] >= -delta);
@@ -35,12 +37,7 @@ void TIntervalCounter::PropagateDelta(const TPosition& node, TZeroCollector* cal
     PropagatedDeltas[node.GetIndex()] = 0;
 
     for (const auto& child : { node.LeftChild(), node.RightChild() }) {
-        if (!GetCount(child)) {
-            AFL_VERIFY(callback);
-            callback->OnNewZeros(child);
-        } else if (!GetMinValue(child)) {
-            PropagateDelta(child, callback);
-        }
+        OnNodeUpdated(child, callback);
     }
 }
 
@@ -51,17 +48,11 @@ void TIntervalCounter::Update(const TPosition& node, const TModification& modifi
             AFL_VERIFY((i64)Count[node.GetIndex()] >= -modification.GetDelta());
             Count[node.GetIndex()] += modification.GetDelta();
             MinValue[node.GetIndex()] += modification.GetDelta();
-            if (!GetCount(node)) {
-                AFL_VERIFY(callback);
-                callback->OnNewZeros(node);
-            }
         } else {
             AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size());
             PropagatedDeltas[node.GetIndex()] += modification.GetDelta();
-            if (GetMinValue(node) == 0 && callback) {
-                PropagateDelta(node, callback);
-            }
         }
+        OnNodeUpdated(node, callback);
     } else {
         PropagateDelta(node, callback);
         if (modification.GetLeft() <= node.LeftChild().GetRight()) {
@@ -88,6 +79,16 @@ ui64 TIntervalCounter::GetCount(const TPosition& node, const ui32 l, const ui32 
     bool needRight = node.RightChild().GetLeft() <= r;
     AFL_VERIFY(needLeft || needRight);
     return (needLeft ? GetCount(node.LeftChild(), l, r) : 0) + (needRight ? GetCount(node.RightChild(), l, r) : 0);
+}
+
+void TIntervalCounter::OnNodeUpdated(const TPosition& node, TZeroCollector* callback) {
+    if (GetCount(node) == 0) {
+        AFL_VERIFY(callback);
+        callback->OnNewZeros(node);
+    } else if (GetMinValue(node) == 0) {
+        AFL_VERIFY(callback);
+        PropagateDelta(node, callback);
+    }
 }
 
 TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals) {

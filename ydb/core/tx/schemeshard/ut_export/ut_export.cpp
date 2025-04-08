@@ -2917,4 +2917,41 @@ attributes {
             UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
         }
     }
+
+    Y_UNIT_TEST(AutoDropping) {
+        TTestBasicRuntime runtime;
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        TTestEnv env(runtime);
+        
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot");
+
+        auto desc = DescribePath(runtime, "/MyRoot");
+        UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 1);
+        UNIT_ASSERT_EQUAL(desc.GetPathDescription().GetChildren(0).GetName(), "Table");
+    }
 }

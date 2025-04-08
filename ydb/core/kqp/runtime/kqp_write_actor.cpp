@@ -2802,7 +2802,7 @@ public:
     void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
         BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
             name, NWilson::EFlags::AUTO_END);
-        if (traceId != BufferWriteActorSpan.GetTraceId()) {
+        if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
         }
         for (auto& [_, info] : WriteInfos) {

@@ -134,7 +134,7 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 }
 
 TGranuleMeta::TGranuleMeta(
-    const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+    const TUnifiedPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
@@ -143,12 +143,12 @@ TGranuleMeta::TGranuleMeta(
     , StoragesManager(owner.GetStoragesManager())
     , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
-        PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
+        PathId.GetInternalPathId(), owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
     NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId(), false);
     ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
     AFL_VERIFY(!!OptimizerPlanner);
-    ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
+    ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId.GetInternalPathId(), versionedIndex, StoragesManager);
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
@@ -175,7 +175,7 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
     const NDataAccessorControl::TManagerConstructionContext& context) {
     MetadataMemoryManager = constructor->Build(context).DetachResult();
-    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId), context.IsUpdate());
+    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId.GetInternalPathId()), context.IsUpdate());
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
@@ -183,7 +183,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
         return;
     }
-    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId.GetInternalPathId(), storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
@@ -234,7 +234,7 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
     TInGranuleConstructors constructors;
     {
-        if (!db.LoadPortions(PathId, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+        if (!db.LoadPortions(PathId.GetInternalPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion.GetSchema(versionedIndex)->GetIndexInfo();
                 AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
                 AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
@@ -245,7 +245,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
 
     {
         TPortionInfo::TSchemaCursor schema(versionedIndex);
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
+        if (!db.LoadColumns(PathId.GetInternalPathId(), [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 for (auto&& i : loadContext.BuildRecordsV1()) {
                     constructor->LoadRecord(std::move(i));
@@ -256,7 +256,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     }
 
     {
-        if (!db.LoadIndexes(PathId, [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
+        if (!db.LoadIndexes(PathId.GetInternalPathId(), [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(portionId);
                 constructor->LoadIndex(std::move(loadContext));
             })) {

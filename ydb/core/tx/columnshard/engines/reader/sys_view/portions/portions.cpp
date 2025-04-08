@@ -6,8 +6,9 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
-    NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
+void TStatsIterator::AppendStats(const TUnifiedPathId& pathId, const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
+    AFL_VERIFY(pathId.GetInternalPathId() == portion.GetPathId());
+    NArrow::Append<arrow::UInt64Type>(*builders[0], pathId.GetLocalPathId().GetRawValue());
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
@@ -45,7 +46,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
         recordsCount += 1;
-        AppendStats(builders, *portion);
+        AppendStats(granule.GetPathId(), builders, *portion);
         if (recordsCount >= 10000) {
             break;
         }

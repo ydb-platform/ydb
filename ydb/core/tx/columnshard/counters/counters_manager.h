@@ -84,7 +84,7 @@ public:
         CSCounters.OnWriteOverloadShardWritesSize(size);
     }
 
-    void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+    void FillTableStats(TLocalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         ColumnTablesCounters->GetPathIdCounter(pathId)->FillStats(tableStats);
         BackgroundControllerCounters->FillStats(pathId, tableStats);
     }

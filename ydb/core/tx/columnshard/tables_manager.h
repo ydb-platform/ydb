@@ -17,6 +17,7 @@
 
 namespace NKikimr::NColumnShard {
 
+
 template <class TVersionData>
 class TVersionedSchema {
 private:
@@ -93,8 +94,8 @@ public:
 };
 
 class TTableInfo {
-public:
-    TInternalPathId PathId;
+    const TInternalPathId PathId;
+    TLocalPathId LocalPathId; //path id that the table is known as at SchemeShard
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -105,6 +106,10 @@ public:
 
     TInternalPathId GetPathId() const {
         return PathId;
+    }
+
+    TLocalPathId GetLocalPathId() const {
+        return LocalPathId;
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
@@ -121,6 +126,14 @@ public:
         Versions.insert(snapshot);
     }
 
+    void UpdateLocalPathIdOnExecute(NIceDb::TNiceDb& db, const TLocalPathId newLocalPathId) {
+        Schema::UpdateTableLocalPathId(db, PathId, newLocalPathId);
+    }
+
+    void UpdateLocalPathIdOnComplete(const TLocalPathId newLocalPathId) {
+        GetLocalPathId() = newLocalPathId;
+    }
+
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
         if (!DropVersion) {
             return false;
@@ -131,20 +144,26 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo() = default;
-
-    TTableInfo(const TInternalPathId pathId)
-        : PathId(pathId) {
-    }
+    TTableInfo(const TInternalPathId pathId, const TLocalPathId localPathId)
+        : PathId(pathId)
+        , LocalPathId(localPathId)
+    {}
 
     template <class TRow>
-    bool InitFromDB(const TRow& rowset) {
-        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+    static TTableInfo InitFromDB(const TRow& rowset) {
+        const auto pathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+        AFL_VERIFY(pathId);
+        //const auto localPathId = TLocalPathId::FromRawValue(rowset.template HaveValue<Schema::TableInfo::GetLocalPathId()>() ? rowset.template GetValue<Schema::TableInfo::GetLocalPathId()>() : pathId.GetRawValue());
+        const auto localPathId = TLocalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::LocalPathId>());
+        AFL_VERIFY(localPathId);
+        AFL_VERIFY(localPathId.GetRawValue() != pathId.GetRawValue());
+
+        TTableInfo result(pathId, localPathId);
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
-            DropVersion.emplace(
+            result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
-        return true;
+        return result;
     }
 };
 
@@ -191,6 +210,8 @@ public:
 class TTablesManager {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
+    THashMap<TLocalPathId, TInternalPathId> LocalToInternalPathIds;
+    THashMap<TLocalPathId, TInternalPathId> RenamingLocalToInternalPathIds; // Paths that are being renamed
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -202,6 +223,7 @@ private:
     std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
+    ui64 InternalPathIdOffset;
 
 public:
     friend class TTxInit;
@@ -250,8 +272,21 @@ public:
         return result;
     }
 
-    const THashMap<TInternalPathId, TTableInfo>& GetTables() const {
-        return Tables;
+    size_t GetTableCount() const {
+        return Tables.size();
+    }
+
+    NColumnShard::TLocalPathId GetTableLocalPathIdVerified(const TInternalPathId pathId) const {
+        const auto* t = Tables.FindPtr(pathId);
+        AFL_VERIFY(t);
+        return t->GetLocalPathId();
+    }
+
+    template<typename F> 
+    void ForEachPathId(F&& f) const {
+        for (const auto& [pathId, t]: Tables) {
+            f(TUnifiedPathId{pathId, t.GetLocalPathId()});
+        }
     }
 
     const THashSet<ui32>& GetSchemaPresets() const {
@@ -261,6 +296,34 @@ public:
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
+
+    void MoveTableProposeOnExecute(const TLocalPathId localPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("local_path_id", localPathId);
+        const auto* p = LocalToInternalPathIds.FindPtr(localPathId);
+        AFL_VERIFY(p);
+        AFL_VERIFY(RenamingLocalToInternalPathIds.emplace(localPathId, *p).second)("internal_path_id", *p);
+        AFL_VERIFY(LocalToInternalPathIds.erase(localPathId));
+    }
+
+    void MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TLocalPathId oldLocalPathId, const TLocalPathId newLocalPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "move_table_progress_on_execute")("old_local_path_id", oldLocalPathId)("new_local_path_id", newLocalPathId);
+        const auto* pathId = RenamingLocalToInternalPathIds.FindPtr(oldLocalPathId);
+        AFL_VERIFY(pathId);
+        auto* table = Tables.FindPtr(*pathId);
+        AFL_VERIFY(pathId);
+        table->UpdateLocalPathIdOnExecute(db, newLocalPathId);
+    }
+
+    void MoveTableProgressOnComplete(const TLocalPathId oldLocalPathId, const TLocalPathId newLocalPathId) {
+        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "move_table_progress_on_complete")("old_local_path_id", oldLocalPathId)("new_local_path_id", newLocalPathId);
+        const auto* pathId = RenamingLocalToInternalPathIds.FindPtr(oldLocalPathId);
+        AFL_VERIFY(pathId);
+        auto* table = Tables.FindPtr(*pathId);
+        table->UpdateLocalPathIdOnComplete(newLocalPathId);
+        AFL_VERIFY(RenamingLocalToInternalPathIds.erase(oldLocalPathId));
+        AFL_VERIFY(LocalToInternalPathIds.emplace(newLocalPathId, *pathId).second);
+    }
+
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {
         Y_ABORT_UNLESS(!!PrimaryIndex);
@@ -309,12 +372,12 @@ public:
 
     bool InitFromDB(NIceDb::TNiceDb& db);
 
-    const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
-
-    bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
-    bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
-    bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;
+    std::optional<TInternalPathId> ResolveInternalPathId(const TLocalPathId localPathId) const;
+    bool HasTable(const TInternalPathId internalPathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot>& minReadSnapshot = {}) const;
+    TInternalPathId CreateInternalPathId(const TLocalPathId localPathId);
+    bool IsReadyForStartWrite(const TUnifiedPathId& pathId, const bool withDeleted) const;
+    bool IsReadyForFinishWrite(const TUnifiedPathId& pathId, const NOlap::TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);

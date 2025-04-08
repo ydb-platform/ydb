@@ -30,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_columnshard_schema.cpp
+    ut_columnshard_move_table.cpp
 )
 
 END()

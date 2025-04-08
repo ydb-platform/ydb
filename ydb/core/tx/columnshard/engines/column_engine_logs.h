@@ -125,7 +125,7 @@ public:
         return LastSnapshot;
     }
 
-    virtual void DoRegisterTable(const TInternalPathId pathId) override;
+    virtual void DoRegisterTable(const TUnifiedPathId& pathId) override;
     void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
         GranulesStorage->FetchDataAccessors(request);
     }
@@ -207,7 +207,7 @@ public:
         return GranulesStorage->GetGranuleOptional(pathId);
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TLocalPathId> pathIdFrom, const std::optional<TLocalPathId> pathIdTo) const {
         return GranulesStorage->GetTables(pathIdFrom, pathIdTo);
     }
 

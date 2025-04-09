@@ -10,8 +10,6 @@
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
-#include <dlfcn.h>
-
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
@@ -234,14 +232,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             FillCircle(0.4, 14000);
         }
 
-        static bool IsAsanEnabled() {
-            return (dlsym(RTLD_DEFAULT, "__asan_init") != nullptr);
-        }
-
         void ExecuteMultiColumn() {
-            if (IsAsanEnabled()) {
-                MultiColumnRepCount = 30;
-            }
+#ifdef address_sanitizer_enabled
+            MultiColumnRepCount = 30;
+#endif
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));

@@ -719,25 +719,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    Y_UNIT_TEST(YellowGroupIssueOnYellowSpace) {
+    Y_UNIT_TEST(OnlyDiskIssueOnSpaceIssues) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
     }
 
-    Y_UNIT_TEST(RedGroupIssueOnRedSpace) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.95);
-        Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(YellowIssueReadyVDisksOnFaultyPDisks) {
+    Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
     }
 
     /* HC currently infers group status on its own, so it's never unknown

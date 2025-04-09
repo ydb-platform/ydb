@@ -1,6 +1,7 @@
 #pragma once
 
 #include "txn_actor_response_builder.h"
+#include "kafka_init_producer_id_actor.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -46,7 +47,7 @@ namespace NKafka {
                 COMMIT // request commit txn to kqp
             };
 
-            TKafkaTransactionActor(const TString& DatabasePath, const TString& transactionalId, i64 producerId, i16 producerEpoch) : 
+            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath) : 
                 TransactionalId(transactionalId),
                 ProducerId(producerId),
                 ProducerEpoch(producerEpoch),
@@ -87,6 +88,7 @@ namespace NKafka {
             // Transaction commit logic
             void StartKqpSession(const TActorContext& ctx);
             void SendToKqpValidationRequests(const TActorContext& ctx);
+            void SendCommitTxnRequest(const TActorContext& ctx);
 
             // Response senders
             template<class ErrorResponseType, class EventType>
@@ -97,13 +99,21 @@ namespace NKafka {
             void SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle);
 
             // helper methods
+            void Die(const TActorContext &ctx);
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
-            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp();
-            void Die(const TActorContext &ctx);
             TString GetFullTopicPath(const TString& topicName);
             TString GetYqlWithTablesNames(const TString& templateStr);
             NYdb::TParams BuildSelectParams();
+            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp();
+            void HandleSelectResponse(const NKikimrKqp::TEvQueryResponse& response, const TActorContext& ctx);
+            void HandleCommitResponse(const TActorContext& ctx);
+            TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
+            TMaybe<TProducerState> ParseProducerState(const NKikimrKqp::TEvQueryResponse& response);
+            TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
+            std::unordered_map<TString, i32> ParseConsumersGenerations(const NKikimrKqp::TEvQueryResponse& response);
+            TMaybe<TString> GetErrorInConsumersStates(const std::unordered_map<TString, i32>& consumerGenerationByName);
+            TString GetAsStr(EKafkaTxnKqpRequests request);
 
             // data from fields below will be sent to KQP on END_TXN request
             std::unordered_map<TTopicPartition, TPartitionCommit, TopicPartitionHashFn> OffsetsToCommit = {};
@@ -115,11 +125,15 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             NKafkaTransactions::ResponseBuilder ResponseBuilder;
+            // This field need to preserve request details between several requests to KQP
+            // In case something goes off road, we can always send error back to client
+            TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
 
             // communication with KQP
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
             TString KqpSessionId;
             ui64 KqpCookie = 0;
+            TString KqpTxnId;
             EKafkaTxnKqpRequests LastSentToKqpRequest;
     };
 } // namespace NKafka

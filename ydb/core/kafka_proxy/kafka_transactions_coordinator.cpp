@@ -94,7 +94,7 @@ namespace NKafka {
         if (TxnActorByTransactionalId.contains(ev->Request->TransactionalId->c_str())) {
             txnActorId = TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()];
         } else {
-            txnActorId = ctx.Register(new TKafkaTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch));
+            txnActorId = ctx.Register(new TKafkaTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath));
             TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
             KAFKA_LOG_D(TStringBuilder() << "Registered TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         }

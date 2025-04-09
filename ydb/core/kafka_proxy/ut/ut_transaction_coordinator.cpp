@@ -15,6 +15,7 @@ namespace {
         public:
             TMaybe<NKikimr::NPQ::TTestContext> Ctx;
             TActorId ActorId;
+            const TString Database = "/Root/PQ";
             
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
@@ -50,7 +51,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -69,7 +70,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -78,7 +79,7 @@ namespace {
                 message->TransactionalId = txnId;
                 message->ProducerId = producerId;
                 message->ProducerEpoch = producerEpoch;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
     };

@@ -3,6 +3,8 @@
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <regex>
 
 namespace NKafka {
 
@@ -76,6 +78,7 @@ namespace NKafka {
         if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
         } else {
+            EndTxnRequestPtr = std::move(ev);
             StartKqpSession(ctx);
         }
     }
@@ -91,9 +94,9 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        if (auto error = GetErrorFromYdbResponse()) {
+        if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(ev, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
             Die(ctx);
             return;
         }
@@ -104,7 +107,7 @@ namespace NKafka {
                 HandleSelectResponse(record, ctx);
                 break;
             case EKafkaTxnKqpRequests::COMMIT:
-                HandleCommitResponse(record);
+                HandleCommitResponse(ctx);
                 break;
             default:
                 Y_FAIL("Unexpected KQP request");
@@ -129,12 +132,9 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::SendCommitTxnRequest(const TActorContext& ctx) {
-        // Kqp->SendYqlRequest(
-        //     GetYqlWithTablesNames(NKafkaTransactionSql::SELECT_FOR_VALIDATION), 
-        //     BuildSelectParams(), 
-        //     ++KqpCookie, 
-        //     ctx
-        // );
+        auto request = BuildCommitTxnRequestToKqp();
+
+        ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, ++KqpCookie);
         
         LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
@@ -153,7 +153,7 @@ namespace NKafka {
     }
 
     template<class ErrorResponseType, class EventType>
-    void TKafkaTransactionActor::SendResponseFail(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage = {}) {
+    void TKafkaTransactionActor::SendResponseFail(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
             KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
         }
@@ -180,8 +180,11 @@ namespace NKafka {
         TBase::Die(ctx);
     }
 
-    THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TKafkaTransactionActor::BuildCommitTxnRequestToKqp() {
-        
+    template<class EventType>
+    bool TKafkaTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
+        return kafkaRequest->TransactionalId->c_str() == TransactionalId 
+            && kafkaRequest->ProducerId == ProducerId 
+            && kafkaRequest->ProducerEpoch == ProducerEpoch;
     }
 
     TString TKafkaTransactionActor::GetFullTopicPath(const TString& topicName) {
@@ -195,7 +198,7 @@ namespace NKafka {
             NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
         );
         TString templateWithConsumerStateTable = std::regex_replace(
-            templateWithProducerStateTable,
+            templateWithProducerStateTable.c_str(),
             std::regex("<consumer_state_table_name>"), 
             NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
         );
@@ -224,24 +227,89 @@ namespace NKafka {
         return params.Build();
     }
 
+    THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TKafkaTransactionActor::BuildCommitTxnRequestToKqp() {
+        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
+        ev->Record.MutableRequest()->SetDatabase(DatabasePath);
+        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+
+        ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(KqpTxnId);
+
+        ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+
+        auto* kafkaApiOperations = ev->Record.MutableRequest()->MutableKafkaApiOperations();
+        kafkaApiOperations->set_transactionalid(TransactionalId);
+        kafkaApiOperations->set_producerid(ProducerId);
+        kafkaApiOperations->set_producerepoch(ProducerEpoch);
+
+        for (auto& partition : PartitionsInTxn) {
+            auto* partitionInRequest = kafkaApiOperations->AddPartitionsInTxn();
+            partitionInRequest->set_topicpath(partition.TopicPath);
+            partitionInRequest->set_partitionid(partition.PartitionId);
+        }
+
+        for (auto& [partition, offsetDetails] : OffsetsToCommit) {
+            auto* offsetInRequest = kafkaApiOperations->AddOffsetsInTxn();
+            offsetInRequest->set_topicpath(partition.TopicPath);
+            offsetInRequest->set_partitionid(partition.PartitionId);
+            offsetInRequest->set_consumername(offsetDetails.ConsumerName);
+            offsetInRequest->set_consumergeneration(offsetDetails.ConsumerGeneration);
+            offsetInRequest->set_offset(offsetDetails.Offset);
+        }
+        
+        return ev;
+    }
+
     void TKafkaTransactionActor::HandleSelectResponse(const NKikimrKqp::TEvQueryResponse& response, const TActorContext& ctx) {
-        ValidateResponse(response);
-        auto producerState = KqpResponseParser.ParseProducerState(response);
-        ValidateProducerStateBeforeCommit(producerState);
-        auto consumersStates = KqpResponseParser.ParseConsumersStates(response);
-        ValidateConsumersStatesBeforeCommit(producerState);
+        // YDB should return exactly two result sets for two queries: to producer and consumer state tables
+        if (response.GetResponse().GetYdbResults().size() != 2) {
+            TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.GetResponse().GetYdbResults().size() << ".";
+            KAFKA_LOG_W(error);
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            Die(ctx);
+            return;
+        }
+
+        // parse and validate producer state
+        TMaybe<TProducerState> producerState;
+        try {
+            producerState = ParseProducerState(response);
+        } catch (const yexception& y) {
+            TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
+            KAFKA_LOG_W(error);
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            Die(ctx);
+            return;
+        }
+        if (auto error = GetErrorInProducerState(producerState)) {
+            KAFKA_LOG_W(error);
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            Die(ctx);
+            return;
+        }
+        
+
+        // parse and validate consumers
+        std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
+        if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
+            KAFKA_LOG_W(error);
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            Die(ctx);
+            return;
+        }
+
+        KqpTxnId = response.GetResponse().GetTxMeta().id();
+        // finally everything is valid and we can attempt to commit
         SendCommitTxnRequest(ctx);
     }
 
-    void TKafkaTransactionActor::HandleCommitResponse(const NKikimrKqp::TEvQueryResponse& response) {
-        SendOkResponse<TEndTxnResponseData>(EndTxnRequest); // ToDo: save EndTxnRequest in previous steps
-    }
-
-    template<class EventType>
-    bool TKafkaTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
-        return kafkaRequest->TransactionalId->c_str() == TransactionalId 
-            && kafkaRequest->ProducerId == ProducerId 
-            && kafkaRequest->ProducerEpoch == ProducerEpoch;
+    void TKafkaTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
+        KAFKA_LOG_D("Successfully committed transaction. Sending ok and dying.");
+        SendOkResponse<TEndTxnResponseData>(EndTxnRequestPtr);
+        Die(ctx);
     }
 
     TMaybe<TString> TKafkaTransactionActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -255,20 +323,78 @@ namespace NKafka {
         }
     }
 
-    bool TKafkaTransactionActor::ResponseHasValidNumberOfResultsSets(const NKikimrKqp::TEvQueryResponse& response) {
+    TMaybe<TProducerState> TKafkaTransactionActor::ParseProducerState(const NKikimrKqp::TEvQueryResponse& response) {
+        auto& resp = response.GetResponse();
 
+        NYdb::TResultSetParser parser(resp.GetYdbResults(NKafkaTransactionSql::PRODUCER_STATE_REQUEST_INDEX));
+
+        // for this transactional id there is no rows
+        if (parser.RowsCount() == 0) {
+            return {};
+        } 
+        // there are multiple rows for this transactional id. This is unexpected and should not happen
+        else if (parser.RowsCount() > 1) {
+            throw yexception() << "Request returned more than one row: " << resp.GetYdbResults().size();
+        } else {
+            parser.TryNextRow();
+
+            TProducerState result; 
+
+            result.TransactionalId = parser.ColumnParser("transactional_id").GetUtf8();
+            result.ProducerId = parser.ColumnParser("producer_id").GetInt64();
+            result.ProducerEpoch = parser.ColumnParser("producer_epoch").GetInt16();
+
+            return result;
+        }
     }
 
-    TString TKafkaTransactionActor::GetErrorInProducerState(const TProducerState& producerState) {
-
+    TMaybe<TString> TKafkaTransactionActor::GetErrorInProducerState(const TMaybe<TProducerState>& producerState) {
+        if (!producerState) {
+            return "No producer state found. May be it has expired";
+        } else if (producerState->TransactionalId != TransactionalId || producerState->ProducerId != ProducerId || producerState->ProducerEpoch != ProducerEpoch) {
+            return TStringBuilder() << "Producer state in producers_state table is different from the one in this actor. Producer state in table: "
+            << "transactionalId=" << producerState->TransactionalId 
+            << ", producerId=" << producerState->ProducerId
+            << ", producerEpoch=" << producerState->ProducerEpoch;
+        } else {
+            return {};
+        }
     }
 
-    TString TKafkaTransactionActor::GetErrorInConsumersState(const std::vector<TConsumerState>& consumerState) {
-
+    std::unordered_map<TString, i32> TKafkaTransactionActor::ParseConsumersGenerations(const NKikimrKqp::TEvQueryResponse& response) {
+        std::unordered_map<TString, i32> generationByConsumerName;
+    
+        NYdb::TResultSetParser parser(response.GetResponse().GetYdbResults(NKafkaTransactionSql::CONSUMER_STATES_REQUEST_INDEX));
+        while (parser.TryNextRow()) {
+            TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();;
+            i32 generation = (i32)parser.ColumnParser("generation").GetUint64();
+            generationByConsumerName[consumerName] = generation;
+        }
+    
+        return generationByConsumerName;
     }
 
-    bool TKafkaTransactionActor::ValidateProducerStateBeforeCommit(const TProducerState& response) {
+    TMaybe<TString> TKafkaTransactionActor::GetErrorInConsumersStates(const std::unordered_map<TString, i32>& consumerGenerationByName) {
+        TStringBuilder builder;
+        bool foundError = false;
+        for (auto& [topicPartition, offsetCommit] : OffsetsToCommit) {
+            if (consumerGenerationByName.contains(offsetCommit.ConsumerName)) {
+                i32 consumerGenerationInTable = consumerGenerationByName.at(offsetCommit.ConsumerName);
+                if (consumerGenerationInTable != offsetCommit.ConsumerGeneration) {
+                    foundError = true;
+                    builder << "Consumer " << offsetCommit.ConsumerName << " has different generation in table than requested in transaction. Generation in table: " << consumerGenerationInTable << ", Generation requested in txn: " << offsetCommit.ConsumerGeneration << ".";
+                }
+            } else {
+                foundError = true;
+                builder << "There is no consumer state in table for group " << offsetCommit.ConsumerName;
+            }
+        }
 
+        if (foundError) {
+            return builder;
+        } else {
+            return {};
+        }
     }
 
     TString TKafkaTransactionActor::GetAsStr(EKafkaTxnKqpRequests request) {

@@ -6,6 +6,9 @@ namespace NKafka {
 
     namespace NKafkaTransactionSql {
 
+        constexpr ui32 PRODUCER_STATE_REQUEST_INDEX = 0;
+        constexpr ui32 CONSUMER_STATES_REQUEST_INDEX = 1;
+
         static const TString SELECT_FOR_VALIDATION = R"sql(
             --!syntax_v1
             DECLARE $Database AS Utf8;

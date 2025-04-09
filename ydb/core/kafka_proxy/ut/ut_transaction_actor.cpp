@@ -38,7 +38,12 @@ namespace {
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
-                ActorId = Ctx->Runtime->Register(new TKafkaTransactionActor());
+                ActorId = Ctx->Runtime->Register(new TKafkaTransactionActor(
+                    TransactionalId,
+                    ProducerId,
+                    ProducerEpoch,
+                    Database
+                ));
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
@@ -58,7 +63,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -79,7 +84,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -88,7 +93,7 @@ namespace {
                 message->TransactionalId = TransactionalId;
                 message->ProducerId = ProducerId;
                 message->ProducerEpoch = ProducerEpoch;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -134,7 +139,7 @@ namespace {
             }
 
             void MatchOffsetsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request, const TQueryRequestMatcher& matcher) {
-                std::unordered_map<TKafkaTransactionActor::TTopicPartition, KafkaApiOffsetInTxn, TopicPartitionHashFn> offsetsInRequest;
+                std::unordered_map<TKafkaTransactionActor::TTopicPartition, KafkaApiOffsetInTxn, TKafkaTransactionActor::TopicPartitionHashFn> offsetsInRequest;
                 for (auto& offsetInTxn : request.Record.GetRequest().GetKafkaApiOperations().GetOffsetsInTxn()) {
                     offsetsInRequest[ConstructTopicPartition(offsetInTxn.GetTopicPath(), offsetInTxn.GetPartitionId())] = offsetInTxn;
                 }
@@ -244,7 +249,7 @@ namespace {
         }
 
         Y_UNIT_TEST(OnTxnOffsetCommit_shouldReturnOkToSDK) {
-            std::unordered_map<TString, std::vector<TPartitionCommit>> offsetsToCommitByTopic;
+            std::unordered_map<TString, std::vector<TKafkaTransactionActor::TPartitionCommit>> offsetsToCommitByTopic;
             offsetsToCommitByTopic["topic1"] = {{0, 0, "my-consumer", 0}};
             offsetsToCommitByTopic["topic2"] = {{0, 10, "my-consumer", 0}, {1, 5, "my-consumer", 0}};
             ui64 correlationId = 123;
@@ -281,7 +286,7 @@ namespace {
             auto request = std::make_shared<NKafka::TEndTxnRequestData>();
             request->Committed = false;
             ui64 correlationId = 123;
-            auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, request), Ctx->Edge);
+            auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, request), Ctx->Edge, Database);
             Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();

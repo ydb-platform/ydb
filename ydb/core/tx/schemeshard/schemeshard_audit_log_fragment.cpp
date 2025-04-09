@@ -678,7 +678,7 @@ struct TChangeLogin {
     TString LoginUser;
     TString LoginGroup;
     TString LoginMember;
-    TString Details;
+    TVector<TString> LoginModifyUserChange;
 };
 
 TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
@@ -697,13 +697,15 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 result.LoginUser = modify.GetUser();
 
                 if (modify.HasPassword()) { // there is no difference beetwen password and password's hash
-                    result.Details = "Changing the password";
-                } else if (modify.HasCanLogin() && modify.GetCanLogin()) {
-                    result.Details = "Unblocking the user";
-                } else if (modify.HasCanLogin() && !modify.GetCanLogin()) {
-                    result.Details = "Blocking the user";
-                } else {
-                    Y_UNREACHABLE();
+                    result.LoginModifyUserChange.push_back("password");
+                }
+
+                if (modify.HasCanLogin() && modify.GetCanLogin()) {
+                    result.LoginModifyUserChange.push_back("unblocking");
+                }
+
+                if (modify.HasCanLogin() && !modify.GetCanLogin()) {
+                    result.LoginModifyUserChange.push_back("blocking");
                 }
 
                 break;
@@ -757,11 +759,10 @@ namespace NKikimr::NSchemeShard {
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx) {
     auto [aclAdd, aclRemove] = ExtractACLChange(tx);
     auto [userAttrsAdd, userAttrsRemove] = ExtractUserAttrChange(tx);
-    auto [loginUser, loginGroup, loginMember, details] = ExtractLoginChange(tx);
+    auto [loginUser, loginGroup, loginMember, loginModifyUserChange] = ExtractLoginChange(tx);
 
     return {
         .Operation = DefineUserOperationName(tx),
-        .OperationDetails = details,
         .Paths = ExtractChangingPaths(tx),
         .NewOwner = ExtractNewOwner(tx),
         .ACLAdd = aclAdd,
@@ -771,6 +772,7 @@ TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx)
         .LoginUser = loginUser,
         .LoginGroup = loginGroup,
         .LoginMember = loginMember,
+        .LoginModifyUserChange = loginModifyUserChange
     };
 }
 

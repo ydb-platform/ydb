@@ -2114,10 +2114,7 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-namespace
-{
-    template<typename TInitiator>
-    void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, TInitiator&& initiator) {
+    void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(database);
@@ -2131,7 +2128,6 @@ namespace
         TAutoPtr<IEventHandle> handle;
         [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()        
     }
-} // anonymous namespace    
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {
         ModifyUser(runtime, txId, database, [user, isEnabled](auto* alterUser) {

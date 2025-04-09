@@ -551,6 +551,8 @@ namespace NSchemeShardUT_Private {
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
 
+    void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator);
+
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, bool isEnabled);
 

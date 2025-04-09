@@ -12,7 +12,6 @@ namespace NKikimr::NSchemeShard {
 
 struct TAuditLogFragment {
     TString Operation;
-    TString OperationDetails; // Currently in use only for MODIFY USER
     TVector<TString> Paths;
     TString NewOwner;
     TVector<TString> ACLAdd;
@@ -22,6 +21,7 @@ struct TAuditLogFragment {
     TString LoginUser;
     TString LoginGroup;
     TString LoginMember;
+    TVector<TString> LoginModifyUserChange;
 };
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);

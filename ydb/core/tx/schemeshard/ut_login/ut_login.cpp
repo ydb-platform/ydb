@@ -1813,13 +1813,19 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         }
         )";
 
-        auto check = [&](const TString& operation, const TString& details) {
+        auto check = [&](const TString& operation, const TVector<TString>& details = {}) {
+            auto render = [](const TVector<TString>& list) {
+                auto result = TStringBuilder();
+                result << "[" << JoinStrings(list.begin(), list.end(), ", ") << "]";
+                return result;
+            };
+
             auto last = FindAuditLine(lines, Sprintf("tx_id=%u", txId));
 
             UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation=%s", operation.c_str()));
 
-            if (details) {
-                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation_details=%s", details.c_str()));
+            if (!details.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_modify_user_change=%s", render(details).c_str()));
             }
 
             UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
@@ -1833,31 +1839,41 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         CreateAlterLoginCreateUser(runtime, ++txId, database, user, password);
         {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
-            check("CREATE USER", "");
+            check("CREATE USER");
         }
 
         ChangePasswordUser(runtime, ++txId, database, user, newPassword);
         {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
-            check("MODIFY USER", "Changing the password");
+            check("MODIFY USER", {"password"});
         }
 
         ChangeIsEnabledUser(runtime, ++txId, database, user, false);
         {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
-            check("MODIFY USER", "Blocking the user");
+            check("MODIFY USER", {"blocking"});
         }
 
         ChangeIsEnabledUser(runtime, ++txId, database, user, true);
         {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 5);
-            check("MODIFY USER", "Unblocking the user");
+            check("MODIFY USER", {"unblocking"});
         }
 
         ChangePasswordHashUser(runtime, ++txId, database, user, hash);
         {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 6);
-            check("MODIFY USER", "Changing the password");
+            check("MODIFY USER", {"password"});
+        }
+
+        ModifyUser(runtime, ++txId, database, [user, password, isEnabled = false](auto* alterUser) {
+            alterUser->SetUser(std::move(user));
+            alterUser->SetCanLogin(isEnabled);
+            alterUser->SetPassword(std::move(password));
+        });
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 7);
+            check("MODIFY USER", {"password", "blocking"});
         }
     }
 }

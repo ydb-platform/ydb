@@ -10,22 +10,19 @@ namespace NKikimrRun {
 
 class TKikimrSetupBase {
 public:
-    TKikimrSetupBase(const TServerSettings& settings);
+    TKikimrSetupBase() = default;
 
-    TAutoPtr<TLogBackend> CreateLogBackend() const;
+    TAutoPtr<TLogBackend> CreateLogBackend(const TServerSettings& settings) const;
 
-    NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort, bool verbose);
+    NKikimr::Tests::TServerSettings GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbose);
 
 private:
-    void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const;
+    void SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const;
 
-    void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const;
+    void SetFunctionRegistry(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const;
 
 protected:
     TPortManager PortManager;
-
-private:
-    const TServerSettings& Settings;
 };
 
 }  // namespace NKikimrRun

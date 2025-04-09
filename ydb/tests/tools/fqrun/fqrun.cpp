@@ -551,6 +551,10 @@ private:
     void SetupLogsConfig() {
         auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
 
+        if (DefaultLogPriority) {
+            logConfig.SetDefaultLevel(*DefaultLogPriority);
+        }
+
         if (FqLogPriority) {
             std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> fqLogPriorities;
             std::unordered_set<TString> prefixes = {

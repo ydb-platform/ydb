@@ -17,6 +17,7 @@
 * Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
 * Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
 * Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
+* Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
 
 ## 2.19.0 ##
 

@@ -21,6 +21,14 @@ namespace NKqp {
 
 namespace {
 
+#define PE_LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+#define PE_LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, LogPrefix() << msg)
+
 /*
     TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
     with idempotent set of updates (except primary key), without RETURNING
@@ -62,7 +70,6 @@ public:
         TIntrusivePtr<IRandomProvider> randomProvider,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        const TIntrusivePtr<TKqpCounters>& counters,
         TKqpRequestCounters::TPtr requestCounters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
@@ -80,7 +87,6 @@ public:
         , RandomProvider(randomProvider)
         , Database(database)
         , UserToken(userToken)
-        , Counters(counters)
         , RequestCounters(requestCounters)
         , TableServiceConfig(tableServiceConfig)
         , UserRequestContext(userRequestContext)
@@ -218,7 +224,7 @@ public:
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
                 partInfo->RetryDelayMs = BatchOperationSettings.StartRetryDelayMs;
-                partInfo->LimitSize = BatchOperationSettings.MaxBatchSize;
+                partInfo->LimitSize = std::min(partInfo->LimitSize * 2, BatchOperationSettings.MaxBatchSize);
                 return OnSuccessResponse(partInfo, ev->Get());
             case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
             case Ydb::StatusIds::ABORTED:
@@ -371,6 +377,18 @@ private:
         NKikimrKqp::TKqpTableSinkSettings settings;
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
+        switch (settings.GetType()) {
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+                OperationType = TKeyDesc::ERowOperation::Update;
+                break;
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
+                OperationType = TKeyDesc::ERowOperation::Erase;
+                break;
+            default:
+                break;
+        }
+
         KeyColumnInfo.reserve(settings.GetKeyColumns().size());
         for (int i = 0; i < settings.GetKeyColumns().size(); ++i) {
             const auto& column = settings.GetKeyColumns()[i];
@@ -380,7 +398,6 @@ private:
         }
 
         TableId = MakeTableId(settings.GetTable());
-        TablePath = settings.GetTable().GetPath();
     }
 
     void SendRequestGetPartitions() {
@@ -396,8 +413,7 @@ private:
             keyColumnTypes.push_back(info.Type);
         }
 
-        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Update,
-            keyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
+        auto keyRange = MakeHolder<TKeyDesc>(TableId, range, OperationType, keyColumnTypes, TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->ResultSet.emplace_back(std::move(keyRange));
@@ -465,7 +481,7 @@ private:
             .SessionActorId = SelfId(),
             .TxManager = txManager,
             .TraceId = PhysicalRequest.TraceId.GetTraceId(),
-            .Counters = Counters,
+            .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc)
         };
@@ -941,8 +957,8 @@ private:
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterToPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferToPartition;
 
+    TKeyDesc::ERowOperation OperationType;
     TTableId TableId;
-    TString TablePath;
 
     IKqpGateway::TExecPhysicalRequest LiteralRequest;
     IKqpGateway::TExecPhysicalRequest PhysicalRequest;
@@ -956,7 +972,6 @@ private:
     // The next variables are only for DEA and BWA
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TIntrusivePtr<TKqpCounters> Counters;
     TKqpRequestCounters::TPtr RequestCounters;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
@@ -977,15 +992,15 @@ NActors::IActor* CreateKqpPartitionedExecuter(
     NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
     const TActorId sessionActorId, const NMiniKQL::IFunctionRegistry* funcRegistry, TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters, NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
-    ui32 statementResultIndex, const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
+    NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
     const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo,
     ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit)
 {
     return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, funcRegistry,
-        timeProvider, randomProvider, database, userToken, counters, requestCounters, tableServiceConfig,
+        timeProvider, randomProvider, database, userToken, requestCounters, tableServiceConfig,
         std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext, statementResultIndex, federatedQuerySetup,
         GUCSettings, shardIdToTableInfo, writeBufferInitialMemoryLimit, writeBufferMemoryLimit);
 }

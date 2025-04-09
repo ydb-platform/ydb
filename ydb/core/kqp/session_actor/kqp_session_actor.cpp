@@ -1533,7 +1533,7 @@ public:
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest),
             SelfId(), AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider,
-            Settings.Database, QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
+            Settings.Database, QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo,

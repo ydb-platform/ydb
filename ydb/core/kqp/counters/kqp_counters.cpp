@@ -893,7 +893,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     BatchOperationUpdateBytes = KqpGroup->GetCounter("BatchOperation/Update/Bytes", true);
 
     BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
-    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
+    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Bytes", true);
 
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }

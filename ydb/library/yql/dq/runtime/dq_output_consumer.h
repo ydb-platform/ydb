@@ -28,7 +28,7 @@ public:
         IsFinishingFlag = true;
         return DoTryFinish();
     }
-    virtual bool IsFull() const = 0;
+    virtual EDqFillLevel GetFillLevel() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
     virtual void WideConsume(NKikimr::NUdf::TUnboxedValue values[], ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;

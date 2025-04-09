@@ -976,7 +976,7 @@ private:
         if (isWide) {
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
-        while (!AllocatedHolder->Output->IsFull()) {
+        while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus;
             if (isWide) {

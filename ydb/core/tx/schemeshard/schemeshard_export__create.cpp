@@ -1377,7 +1377,7 @@ private:
                 item.WaitTxId = InvalidTxId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                if (exportInfo->AllItemsAreDropped()) {
+                if (exportInfo->AllItemsAreDropped() || exportInfo->State == EState::AutoDropping) {
                     AllocateTxId(exportInfo);
                 }
             } else {

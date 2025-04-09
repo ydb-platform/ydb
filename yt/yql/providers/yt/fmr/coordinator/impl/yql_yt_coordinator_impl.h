@@ -14,6 +14,7 @@ struct TFmrCoordinatorSettings {
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TDuration IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TDuration TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
+    TMaybe<NYT::TNode> DefaultFmrOperationSpec = Nothing();
 };
 
 IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings = {.WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2)});

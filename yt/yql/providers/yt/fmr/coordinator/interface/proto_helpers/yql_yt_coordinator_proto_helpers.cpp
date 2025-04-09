@@ -70,8 +70,10 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         protoStartOperationRequest.SetIdempotencyKey(*startOperationRequest.IdempotencyKey);
     }
     protoStartOperationRequest.SetNumRetries(startOperationRequest.NumRetries);
-    auto protoClusterConnection = ClusterConnectionToProto(startOperationRequest.ClusterConnection);
-    protoStartOperationRequest.MutableClusterConnection()->Swap(&protoClusterConnection);
+    auto clusterConnections = *protoStartOperationRequest.MutableClusterConnections();
+    for (auto& [tableName, conn]: startOperationRequest.ClusterConnections) {
+        clusterConnections[tableName] = ClusterConnectionToProto(conn);
+    }
     if (startOperationRequest.FmrOperationSpec) {
         protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
     }
@@ -87,7 +89,11 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
         startOperationRequest.IdempotencyKey = protoStartOperationRequest.GetIdempotencyKey();
     }
     startOperationRequest.NumRetries = protoStartOperationRequest.GetNumRetries();
-    startOperationRequest.ClusterConnection = ClusterConnectionFromProto(protoStartOperationRequest.GetClusterConnection());
+    std::unordered_map<TString, TClusterConnection> startOperationRequestClusterConnections;
+    for (auto& [tableName, conn]: protoStartOperationRequest.GetClusterConnections()) {
+        startOperationRequestClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    startOperationRequest.ClusterConnections = startOperationRequestClusterConnections;
     if (protoStartOperationRequest.HasFmrOperationSpec()) {
         startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
     }

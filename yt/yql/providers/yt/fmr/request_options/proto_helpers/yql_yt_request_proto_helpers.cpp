@@ -39,6 +39,9 @@ NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
     NProto::TYtTableRef protoYtTableRef;
     protoYtTableRef.SetPath(ytTableRef.Path);
     protoYtTableRef.SetCluster(ytTableRef.Cluster);
+    if (ytTableRef.FilePath) {
+        protoYtTableRef.SetFilePath(*ytTableRef.FilePath);
+    }
     return protoYtTableRef;
 }
 
@@ -46,6 +49,9 @@ TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     TYtTableRef ytTableRef;
     ytTableRef.Path = protoYtTableRef.GetPath();
     ytTableRef.Cluster = protoYtTableRef.GetCluster();
+    if (protoYtTableRef.HasFilePath()) {
+        ytTableRef.FilePath = protoYtTableRef.GetFilePath();
+    }
     return ytTableRef;
 }
 
@@ -398,8 +404,10 @@ NProto::TTask TaskToProto(const TTask& task) {
     protoTask.MutableTaskParams()->Swap(&taskParams);
     protoTask.SetSessionId(task.SessionId);
     protoTask.SetNumRetries(task.NumRetries);
-    auto clusterConnection = ClusterConnectionToProto(task.ClusterConnection);
-    protoTask.MutableClusterConnection()->Swap(&clusterConnection);
+    auto clusterConnections = *protoTask.MutableClusterConnections();
+    for (auto& [tableName, conn]: task.ClusterConnections) {
+        clusterConnections[tableName] = ClusterConnectionToProto(conn);
+    }
     if (task.JobSettings) {
         protoTask.SetJobSettings(NYT::NodeToYsonString(*task.JobSettings));
     }
@@ -413,7 +421,11 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     task.TaskParams = TaskParamsFromProto(protoTask.GetTaskParams());
     task.SessionId = protoTask.GetSessionId();
     task.NumRetries = protoTask.GetNumRetries();
-    task.ClusterConnection = ClusterConnectionFromProto(protoTask.GetClusterConnection());
+    std::unordered_map<TString, TClusterConnection> taskClusterConnections;
+    for (auto& [tableName, conn]: protoTask.GetClusterConnections()) {
+        taskClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    task.ClusterConnections = taskClusterConnections;
     if (protoTask.HasJobSettings()) {
         task.JobSettings = NYT::NodeFromYsonString(protoTask.GetJobSettings());
     }

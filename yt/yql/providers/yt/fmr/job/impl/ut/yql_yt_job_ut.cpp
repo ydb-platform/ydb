@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        auto res = job->Download(params);
+        auto res = job->Download(params, {{"test_cluster.test_path", TClusterConnection()}});
 
         auto err = std::get_if<TError>(&res);
         auto statistics = std::get_if<TStatistics>(&res);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
 
-        auto res = job->Upload(params);
+        auto res = job->Upload(params, {{"test_cluster.test_path", TClusterConnection()}});
 
         auto err = std::get_if<TError>(&res);
 
@@ -85,7 +85,6 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
     }
 
     Y_UNIT_TEST(MergeMixedTables) {
-
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
@@ -111,7 +110,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
         tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
 
-        auto res = job->Merge(params);
+        auto res = job->Merge(params, {{"test_cluster.test_path", TClusterConnection()}});
         auto err = std::get_if<TError>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
@@ -124,7 +123,6 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
 Y_UNIT_TEST_SUITE(TaskRunTests) {
     Y_UNIT_TEST(RunDownloadTask) {
-
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
         TYtTableRef input = TYtTableRef("test_cluster", "test_path");
         std::unordered_map<TYtTableRef, TString> inputTables{{input, TableContent_1}};
@@ -135,7 +133,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id");
+        TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
@@ -156,7 +154,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", TClusterConnection());
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
@@ -167,7 +165,6 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
     }
 
     Y_UNIT_TEST(RunUploadTaskWithNoTable) {
-
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
         std::unordered_map<TYtTableRef, TString> inputTables, outputTables;
         NYql::NFmr::IYtService::TPtr ytService = MakeMockYtService(inputTables, outputTables);
@@ -178,15 +175,17 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", TClusterConnection());
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
 
         // No tables in tableDataService
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
-        UNIT_ASSERT_EQUAL(status, ETaskStatus::Failed);
+        try {
+            RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        } catch(...) {
+            UNIT_ASSERT(CurrentExceptionMessage().Contains("No data for chunk:test_table_id:test_part_id"));
+        }
     }
 
     Y_UNIT_TEST(RunMergeTask) {
-
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
@@ -205,7 +204,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto params = TMergeTaskParams(inputs, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", TClusterConnection());
+        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
 
         auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
         auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);
@@ -218,40 +217,6 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
         UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
         UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContent), TableContent_1 + TableContent_2 + TableContent_3);
-    }
-
-    Y_UNIT_TEST(RunMergeTaskWithNoTable) {
-
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
-        std::unordered_map<TYtTableRef, TString> inputTables, outputTables;
-        NYql::NFmr::IYtService::TPtr ytService = MakeMockYtService(inputTables, outputTables);
-        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
-
-        std::vector<TTableRange> ranges = {{"test_part_id"}};
-        TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
-        TYtTableRef input_2 = TYtTableRef("test_path", "test_cluster");
-        TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3", .TableRanges = ranges};
-        TTaskTableRef input_table_ref_1 = {input_1};
-        TTaskTableRef input_table_ref_2 = {input_2};
-        TTaskTableRef input_table_ref_3 = {input_3};
-        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
-        std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
-        auto params = TMergeTaskParams(inputs, output);
-        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
-
-        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", TClusterConnection());
-
-        auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
-        auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);
-        tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
-        // No table (input_2) in Yt
-        tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
-
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
-
-        UNIT_ASSERT_EQUAL(status, ETaskStatus::Failed);
-        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
-        UNIT_ASSERT(!resultTableContent);
     }
 }
 

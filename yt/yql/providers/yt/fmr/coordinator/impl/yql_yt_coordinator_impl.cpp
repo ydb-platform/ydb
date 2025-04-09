@@ -1,4 +1,5 @@
 #include <thread>
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_coordinator_impl.h"
@@ -37,7 +38,8 @@ public:
         RandomProvider_(settings.RandomProvider),
         StopCoordinator_(false),
         TimeToSleepBetweenClearKeyRequests_(settings.TimeToSleepBetweenClearKeyRequests),
-        IdempotencyKeyStoreTime_(settings.IdempotencyKeyStoreTime)
+        IdempotencyKeyStoreTime_(settings.IdempotencyKeyStoreTime),
+        DefaultFmrOperationSpec_(settings.DefaultFmrOperationSpec)
     {
         StartClearingIdempotencyKeys();
     }
@@ -62,15 +64,9 @@ public:
         }
 
         TString taskId = GenerateId();
-
         auto taskParams = MakeDefaultTaskParamsFromOperation(request.OperationParams);
-        TMaybe<NYT::TNode> jobSettings = Nothing();
-        auto fmrOperationSpec = request.FmrOperationSpec;
-        if (fmrOperationSpec && fmrOperationSpec->IsMap() && fmrOperationSpec->HasKey("job_settings")) {
-            jobSettings = (*fmrOperationSpec)["job_settings"];
-        }
-        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, taskParams, request.SessionId, request.ClusterConnection, jobSettings);
 
+        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, taskParams, request.SessionId, request.ClusterConnections, GetJobSettings(request.FmrOperationSpec));
         Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId};
 
         Operations_[operationId] = {.TaskIds = {taskId}, .OperationStatus = EOperationStatus::Accepted, .SessionId = request.SessionId};
@@ -138,6 +134,8 @@ public:
 
         for (auto& requestTaskState: request.TaskStates) {
             auto taskId = requestTaskState->TaskId;
+            auto operationId = Tasks_[taskId].OperationId;
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
             YQL_ENSURE(Tasks_.contains(taskId));
             auto taskStatus = requestTaskState->TaskStatus;
             YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
@@ -156,6 +154,10 @@ public:
                         tableStats.Rows >= curTableStats.Stats.Rows
                     );
                     YQL_ENSURE(fmrTableId.PartId == curTableStats.PartId);
+                    if (taskStatus == ETaskStatus::Completed) {
+                        YQL_CLOG(DEBUG, FastMapReduce) << "Current statistic from table with id" << fmrTableId.TableId << "_" << fmrTableId.PartId << ": " << tableStats;
+                        Cerr << "Current statistic from table with id" << fmrTableId.TableId << "_" << fmrTableId.PartId << ": " << tableStats;
+                    }
                 }
                 FmrTableStatistics_[fmrTableId.TableId] = TCoordinatorFmrTableStats{
                     .Stats = tableStats,
@@ -170,10 +172,6 @@ public:
                 SetUnfinishedTaskStatus(taskToRunInfo.first, ETaskStatus::InProgress);
                 tasksToRun.emplace_back(taskToRunInfo.second.Task);
             }
-        }
-
-        for (auto& taskId: TaskToDeleteIds_) {
-            SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed);
         }
         return NThreading::MakeFuture(THeartbeatResponse{.TasksToRun = tasksToRun, .TaskToDeleteIds = TaskToDeleteIds_});
     }
@@ -323,6 +321,28 @@ private:
         }
     }
 
+    TMaybe<NYT::TNode> GetJobSettings(const TMaybe<NYT::TNode>& currentFmrOperationSpec) {
+        // TODO - check this works
+        TMaybe<NYT::TNode> defaultJobSettings = Nothing(), currentJobSettings = Nothing();
+        if (currentFmrOperationSpec && currentFmrOperationSpec->HasKey("job_settings")) {
+            currentJobSettings = (*currentFmrOperationSpec)["job_settings"];
+        }
+        if (DefaultFmrOperationSpec_ && DefaultFmrOperationSpec_->HasKey("job_settings")) {
+            defaultJobSettings = (*DefaultFmrOperationSpec_)["job_settings"];
+        }
+        if (defaultJobSettings && !currentJobSettings) {
+            return defaultJobSettings;
+        }
+        if (currentJobSettings && !defaultJobSettings) {
+            return currentJobSettings;
+        }
+        if (!currentJobSettings && !defaultJobSettings) {
+            return Nothing();
+        }
+        NYT::MergeNodes(*currentJobSettings, *defaultJobSettings);
+        return currentJobSettings;
+    }
+
     std::unordered_map<TString, TCoordinatorTaskInfo> Tasks_; // TaskId -> current info about it
     std::unordered_set<TString> TaskToDeleteIds_; // TaskIds we want to pass to worker for deletion
     std::unordered_map<TString, TOperationInfo> Operations_; // OperationId -> current info about it
@@ -337,6 +357,7 @@ private:
     TDuration TimeToSleepBetweenClearKeyRequests_;
     TDuration IdempotencyKeyStoreTime_;
     std::unordered_map<TString, TCoordinatorFmrTableStats> FmrTableStatistics_; // TableId -> Statistics
+    TMaybe<NYT::TNode> DefaultFmrOperationSpec_;
 };
 
 } // namespace

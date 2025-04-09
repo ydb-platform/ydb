@@ -21,7 +21,7 @@ public:
     {
     }
 
-    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const TClusterConnection& clusterConnection) override {
+    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
         try {
             const auto ytTable = params.Input;
             const auto cluster = params.Input.Cluster;
@@ -31,8 +31,8 @@ public:
             const auto partId = output.PartId;
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Downloading " << cluster << '.' << path;
-
-            auto ytTableReader = YtService_->MakeReader(ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
+            YQL_ENSURE(clusterConnections.size() == 1);
+            auto ytTableReader = YtService_->MakeReader(ytTable, clusterConnections.begin()->second);  // TODO - pass YtReader settings from Gateway
             auto tableDataServiceWriter = TFmrTableDataServiceWriter(tableId, partId, TableDataService_, GetFmrTableDataServiceWriterSettings());
 
             ParseRecords(*ytTableReader, tableDataServiceWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
@@ -46,7 +46,7 @@ public:
         }
     }
 
-    virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const TClusterConnection& clusterConnection) override {
+    virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
         try {
             const auto ytTable = params.Output;
             const auto cluster = params.Output.Cluster;
@@ -57,7 +57,8 @@ public:
             YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
 
             auto tableDataServiceReader = TFmrTableDataServiceReader(tableId, tableRanges, TableDataService_, GetFmrTableDataServiceReaderSettings());
-            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnection);
+            YQL_ENSURE(clusterConnections.size() == 1);
+            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnections.begin()->second);
             ParseRecords(tableDataServiceReader, *ytTableWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
             ytTableWriter->Flush();
 
@@ -67,8 +68,7 @@ public:
         }
     }
 
-    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const TClusterConnection& clusterConnection) override {
-        // TODO - unordered_map<ClusterConnection>
+    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
         // расширить таск парамс. добавить туда мету
         try {
             const auto inputs = params.Input;
@@ -81,7 +81,7 @@ public:
                 if (CancelFlag_->load()) {
                     return TError("Canceled");
                 }
-                auto inputTableReader = GetTableInputStream(inputTableRef, clusterConnection);
+                auto inputTableReader = GetTableInputStream(inputTableRef, clusterConnections);
                 ParseRecords(*inputTableReader, tableDataServiceWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
             }
             tableDataServiceWriter.Flush();
@@ -93,10 +93,12 @@ public:
     }
 
 private:
-    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const TClusterConnection& clusterConnection) {
+    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const std::unordered_map<TString, TClusterConnection>& clusterConnections) const {
         auto ytTable = std::get_if<TYtTableRef>(&tableRef);
         auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
         if (ytTable) {
+            TString tableId = ytTable->Cluster + "." + ytTable->Path;
+            auto clusterConnection = clusterConnections.at(tableId);
             return YtService_->MakeReader(*ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
         } else if (fmrTable) {
             return MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, GetFmrTableDataServiceReaderSettings());
@@ -105,15 +107,15 @@ private:
         }
     }
 
-    TParseRecordSettings GetParseRecordSettings() {
+    TParseRecordSettings GetParseRecordSettings() const {
         return Settings_ ? Settings_->ParseRecordSettings : TParseRecordSettings();
     }
 
-    TFmrTableDataServiceReaderSettings GetFmrTableDataServiceReaderSettings() {
+    TFmrTableDataServiceReaderSettings GetFmrTableDataServiceReaderSettings() const {
         return Settings_ ? Settings_->FmrTableDataServiceReaderSettings : TFmrTableDataServiceReaderSettings();
     }
 
-    TFmrTableDataServiceWriterSettings GetFmrTableDataServiceWriterSettings() {
+    TFmrTableDataServiceWriterSettings GetFmrTableDataServiceWriterSettings() const {
         return Settings_ ? Settings_->FmrTableDataServiceWriterSettings : TFmrTableDataServiceWriterSettings();
     }
 
@@ -147,27 +149,23 @@ TJobResult RunJob(
         using T = std::decay_t<decltype(taskParams)>;
 
         if constexpr (std::is_same_v<T, TUploadTaskParams>) {
-            return job->Upload(taskParams, task->ClusterConnection);
+            return job->Upload(taskParams, task->ClusterConnections);
         } else if constexpr (std::is_same_v<T, TDownloadTaskParams>) {
-            return job->Download(taskParams, task->ClusterConnection);
+            return job->Download(taskParams, task->ClusterConnections);
         } else if constexpr (std::is_same_v<T, TMergeTaskParams>) {
-            return job->Merge(taskParams, task->ClusterConnection);
+            return job->Merge(taskParams, task->ClusterConnections);
         } else {
             throw std::runtime_error{"Unsupported task type"};
         }
     };
 
     std::variant<TError, TStatistics> taskResult = std::visit(processTask, task->TaskParams);
-
     auto err = std::get_if<TError>(&taskResult);
-
     if (err) {
-        YQL_CLOG(ERROR, FastMapReduce) << "Task failed: " << err->ErrorMessage;
-        return {ETaskStatus::Failed, TStatistics()};
+        ythrow yexception() << "Job failed with error: " << err->ErrorMessage;
     }
 
     auto statistics = std::get_if<TStatistics>(&taskResult);
-
     return {ETaskStatus::Completed, *statistics};
 };
 

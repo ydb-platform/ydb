@@ -16,6 +16,7 @@ Y_UNIT_TEST_SUITE(ParseRecordTests) {
         std::unordered_map<TYtTableRef, TString> outputTables;
 
         auto ytService = MakeMockYtService(inputTables, outputTables);
+
         auto reader = ytService->MakeReader(testYtTable, TClusterConnection());
         auto writer = ytService->MakeWriter(testYtTable, TClusterConnection());
         ParseRecords(*reader, *writer, 1, 10);

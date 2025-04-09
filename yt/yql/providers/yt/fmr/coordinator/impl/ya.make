@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/threading/future
     library/cpp/yson/node
+    yt/cpp/mapreduce/common
     yt/yql/providers/yt/fmr/coordinator/interface
     yql/essentials/utils/log
     yql/essentials/utils

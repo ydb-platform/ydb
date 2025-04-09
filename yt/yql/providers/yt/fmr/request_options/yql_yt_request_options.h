@@ -57,6 +57,8 @@ struct TError {
 struct TYtTableRef {
     TString Path;
     TString Cluster;
+    TMaybe<TString> FilePath = Nothing();
+
     bool operator == (const TYtTableRef&) const = default;
 };
 
@@ -168,8 +170,8 @@ struct TClusterConnection {
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), JobSettings(jobSettings), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TString, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnections(clusterConnections), JobSettings(jobSettings), NumRetries(numRetries)
     {
     }
 
@@ -177,7 +179,7 @@ struct TTask: public TThrRefBase {
     TString TaskId;
     TTaskParams TaskParams = {};
     TString SessionId;
-    TClusterConnection ClusterConnection = {};
+    std::unordered_map<TString, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> JobSettings = {};
     ui32 NumRetries; // Not supported yet
 
@@ -199,7 +201,7 @@ struct TTaskState: public TThrRefBase {
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TString, TClusterConnection>& clusterConnections = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
 

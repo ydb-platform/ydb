@@ -20,7 +20,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
         .TaskType = taskType,
         .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+        .ClusterConnections = {{"Cluster.Path", TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
 }
 

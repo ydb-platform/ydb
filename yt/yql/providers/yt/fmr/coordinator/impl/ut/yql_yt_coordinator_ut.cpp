@@ -54,7 +54,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
         .TaskType = taskType,
         .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+        .ClusterConnections = {{"Cluster.Path", TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
 }
 
@@ -67,7 +67,7 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
             .TaskType = taskType,
             .OperationParams = operationParams,
             .IdempotencyKey = "IdempotencyKey_" + ToString(i),
-            .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn", .Token = "token"}
+            .ClusterConnections = {{"Cluster.Path", TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
         };
     }
     return startOperationRequests;

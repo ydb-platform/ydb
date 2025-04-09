@@ -5798,12 +5798,20 @@ private:
             TClusterConnectionResult clusterConnectionResult{};
             clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
             clusterConnectionResult.YtServerName = ytServer;
-            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            auto auth = options.Config()->Auth.Get();
+            if (!auth || auth->empty()) {
+                auth = Clusters_->GetAuth(options.Cluster());
+            }
+            clusterConnectionResult.Token = auth;
             clusterConnectionResult.SetSuccess();
             return clusterConnectionResult;
         } catch (...) {
             return ResultFromCurrentException<TClusterConnectionResult>({}, true);
         }
+    }
+
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&&) override {
+        return Nothing();
     }
 
     static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {

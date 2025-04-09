@@ -12,8 +12,6 @@
 
 namespace NYql {
 
-constexpr TStringBuf FastMapReduceGatewayName = "fmr";
-
 class TYtRunTool: public TFacadeRunner {
 public:
     TYtRunTool(TString name = "ytrun");

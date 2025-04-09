@@ -12,6 +12,8 @@ SRCS(
     util.cpp
     rows_proto_splitter.cpp
     rows_proto_splitter.h
+    iceberg_processor.cpp
+    iceberg_processor.h
 )
 
 PEERDIR(

@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -311,6 +312,13 @@ TString MakeCreateExternalDataSourceQuery(
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
         }
         break;
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            auto useTls = common.GetDisableSslForGenericDataSources();
+            auto settings = connectionContent.setting().iceberg();
+
+            properties = NFq::MakeIcebergCreateExternalDataSourceProperties(settings, useTls);
+            break;
+        }
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {
             properties = fmt::format(
                 R"(

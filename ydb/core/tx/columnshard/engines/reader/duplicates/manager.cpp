@@ -400,13 +400,11 @@ void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std
 
     auto findWaiting = WaitingSources.FindPtr(sourceId);
     if (!findWaiting) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "skip_start_allocation")(
-            "reason", "already_allocated")("source", sourceId)("memory_group", memoryGroupId);
+        LOCAL_LOG_TRACE("event", "skip_start_allocation")("reason", "already_allocated")("source", sourceId)("memory_group", memoryGroupId);
         return;
     }
     if (!(*findWaiting)->SetStartAllocation(memoryGroupId)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "skip_start_allocation")(
-            "reason", "allocation_started")("source", sourceId)("memory_group", memoryGroupId);
+        LOCAL_LOG_TRACE("event", "skip_start_allocation")("reason", "allocation_started")("source", sourceId)("memory_group", memoryGroupId);
         return;
     }
 

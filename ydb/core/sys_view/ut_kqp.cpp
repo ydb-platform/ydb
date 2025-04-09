@@ -5800,6 +5800,34 @@ Y_UNIT_TEST(WithTablePathPrefix) {
     );
 }
 
+Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            -- the case of the pragma identifier does not matter
+            pragma tabLEpathPRefix = '/Root/a/b';
+            CREATE VIEW `../../test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM `c/t`;
+        )",
+        "test_view",
+        R"(-- the case of the pragma identifier does not matter
+            pragma tabLEpathPRefix = '/Root/a/b';)"
+        "CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS\n"
+        "SELECT * FROM `c/t`;\n"
+    );
+}
+
 Y_UNIT_TEST(WithPairedTablePathPrefix) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
     NQuery::TQueryClient queryClient(env.GetDriver());

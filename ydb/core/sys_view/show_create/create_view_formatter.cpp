@@ -101,7 +101,7 @@ TString GetTokens(const NProtoBuf::Message& message) {
 }
 
 TString TrimQuotes(TString&& s) {
-    if (s.StartsWith("\"") && s.EndsWith("\"")) {
+    if ((s.StartsWith('"') && s.EndsWith('"')) || (s.StartsWith('\'') && s.EndsWith('\''))) {
         return s.substr(1, s.size() - 2);
     }
     return s;
@@ -133,11 +133,11 @@ bool GetTablePathPrefix(const TString& query, const TParsers& parsers, const TTr
 }
 
 TString GetRelativePath(const TFsPath& prefix, const TFsPath& absolutePath) {
-    if (absolutePath.IsSubpathOf(prefix)) {
-        return absolutePath.RelativeTo(prefix);
+    try {
+        return absolutePath.RelativePath(prefix);
+    } catch (...) {
+        return absolutePath;
     }
-    // This should never be the case! Fallback to the absolute path.
-    return absolutePath;
 }
 
 }

@@ -120,7 +120,8 @@ std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSinglet
     return SingletonCredentialsProviderFactory;
 }
 
-TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config)
+    : TCommandOptsParseResult(config.ThrowOnOptsParseError) {
     int _argc = 1;
     int levels = 1;
 
@@ -204,7 +205,7 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+    ParseResult = std::make_shared<TCommandOptsParseResult>(config.Opts, config.ArgC, config.ArgV, config.ThrowOnOptsParseError);
 }
 
 void TClientCommand::Prepare(TConfig& config) {

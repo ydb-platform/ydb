@@ -181,7 +181,9 @@ public:
 
     TLogger() = default;
     TLogger(const TLogger& other) = default;
+    TLogger(TLogger&& other) = default;
     TLogger& operator=(const TLogger& other) = default;
+    TLogger& operator=(TLogger&& other) = default;
 
     TLogger(ILogManager* logManager, TStringBuf categoryName);
     explicit TLogger(TStringBuf categoryName);
@@ -224,18 +226,26 @@ public:
 
     void AddStructuredValidator(TStructuredValidator validator);
 
-    TLogger WithRawTag(const std::string& tag) const;
+    TLogger WithRawTag(const std::string& tag) const &;
+    TLogger WithRawTag(const std::string& tag) &&;
     template <class... TArgs>
-    TLogger WithTag(const char* format, TArgs&&... args) const;
+    TLogger WithTag(const char* format, TArgs&&... args) const &;
+    template <class... TArgs>
+    TLogger WithTag(const char* format, TArgs&&... args) &&;
 
     template <class TType>
-    TLogger WithStructuredTag(TStringBuf key, TType value) const;
+    TLogger WithStructuredTag(TStringBuf key, TType value) const &;
+    template <class TType>
+    TLogger WithStructuredTag(TStringBuf key, TType value) &&;
 
-    TLogger WithStructuredValidator(TStructuredValidator validator) const;
+    TLogger WithStructuredValidator(TStructuredValidator validator) const &;
+    TLogger WithStructuredValidator(TStructuredValidator validator) &&;
 
-    TLogger WithMinLevel(ELogLevel minLevel) const;
+    TLogger WithMinLevel(ELogLevel minLevel) const &;
+    TLogger WithMinLevel(ELogLevel minLevel) &&;
 
-    TLogger WithEssential(bool essential = true) const;
+    TLogger WithEssential(bool essential = true) const &;
+    TLogger WithEssential(bool essential = true) &&;
 
     const std::string& GetTag() const;
     const TStructuredTags& GetStructuredTags() const;

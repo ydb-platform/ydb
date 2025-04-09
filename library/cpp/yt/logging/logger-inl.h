@@ -35,19 +35,33 @@ void TLogger::AddStructuredTag(TStringBuf key, TType value)
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(const char* format, TArgs&&... args) const
+TLogger TLogger::WithTag(const char* format, TArgs&&... args) const &
 {
     auto result = *this;
     result.AddTag(format, std::forward<TArgs>(args)...);
     return result;
 }
 
+template <class... TArgs>
+TLogger TLogger::WithTag(const char* format, TArgs&&... args) &&
+{
+    AddTag(format, std::forward<TArgs>(args)...);
+    return std::move(*this);
+}
+
 template <class TType>
-TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) const
+TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) const &
 {
     auto result = *this;
     result.AddStructuredTag(key, value);
     return result;
+}
+
+template <class TType>
+TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) &&
+{
+    AddStructuredTag(key, value);
+    return std::move(*this);
 }
 
 Y_FORCE_INLINE ELogLevel TLogger::GetEffectiveLoggingLevel(ELogLevel level, const TLoggingAnchor& anchor)

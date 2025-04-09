@@ -186,6 +186,7 @@ message TPDiskInfo {
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
     optional string State = 19;
+    optional uint32 SlotUnitSizeInt = 20;
     // metrics ?
     // physical location ?
     // config ?

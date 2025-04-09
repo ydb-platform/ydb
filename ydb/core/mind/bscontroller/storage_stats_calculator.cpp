@@ -143,6 +143,7 @@ public:
                                 .Usable = usable,
                                 .NumSlots = pdisk.GetNumActiveSlots(),
                                 .MaxSlots = pdisk.GetExpectedSlotCount(),
+                                .SlotUnitSizeInt = pdisk.GetSlotUnitSizeInt(),
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,

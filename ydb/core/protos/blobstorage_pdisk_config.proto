@@ -1,6 +1,19 @@
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TPDiskSlotUnitSize {
+    // Wrapping enum in a message works around the restriction of protobuf
+    // which forbids using proto2 enums in proto3 messages.
+    // Using proto2 message in proto3 message is just fine.
+    enum E {
+        kSlotUnitUnspecified = 0; // defaults to kSlotUnitSingle
+        kSlotUnitSingle = 1;
+        kSlotUnitDouble = 2;
+    }
+
+    optional E Value = 1;
+}
+
 // sets the parameters of PDisk
 message TPDiskConfig {
     enum ESwitch {
@@ -94,4 +107,6 @@ message TPDiskConfig {
 
     optional uint32 CompletionThreadsCount = 2003;
     optional bool UseNoopScheduler = 2004;
+
+    optional TPDiskSlotUnitSize.E SlotUnitSize = 2005;
 };

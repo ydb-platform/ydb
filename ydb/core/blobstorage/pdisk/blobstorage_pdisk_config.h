@@ -137,6 +137,8 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
+    NKikimrBlobStorage::TPDiskSlotUnitSize::E SlotUnitSize =
+        NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -314,6 +316,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " SlotUnitSize# " << NKikimrBlobStorage::TPDiskSlotUnitSize::E_Name(SlotUnitSize) << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -416,6 +419,20 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+
+        if (cfg->HasSlotUnitSize()) {
+            SlotUnitSize = cfg->GetSlotUnitSize();
+        }
+    }
+
+    static ui32 SlotUnitSizeEnumToInt(NKikimrBlobStorage::TPDiskSlotUnitSize::E enum_value) {
+        switch (enum_value) {
+            case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified:
+            case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitSingle:
+                return 1;
+            case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitDouble:
+                return 2;
         }
     }
 };

@@ -132,6 +132,10 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+
+            // TODO
+            // require certain PDiskSlotUnitSize preventing suboptimal fitting cases
+            // NKikimrBlobStorage.TPDiskSlotUnitSize SlotUnitSize = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
@@ -163,6 +167,13 @@ message TDefineStoragePool {
 
     // encryption mode: 0 for none, 1 for the current mode (chacha8)
     uint32 EncryptionMode = 101;
+
+    // Every VDisk of the storage group will occupy at least this count of PDisk slot units.
+    // Group fitting may be suboptimal in the following cases:
+    // - A single-unit VDisk fits onto a double-unit PDisk slot (wasting a slot unit)
+    // - A double-unit VDisk occupies 2 single-unit PDisk slots (wasting extra slot)
+    // Using PDiskFilter prevents it strictly.
+    NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 102;
 }
 
 message TReadStoragePool {

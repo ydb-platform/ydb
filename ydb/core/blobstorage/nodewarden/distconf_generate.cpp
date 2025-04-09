@@ -148,6 +148,18 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        // case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSlotUnitSize: {
+                        //     const auto& p_slot_unit_size = p.GetSlotUnitSize().GetValue();
+                        //     if (p_slot_unit_size == NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified) {
+                        //         Y_DEBUG_ABORT("Invalid PDiskFilter with SlotUnitSize value unspecified");
+                        //         break;
+                        //     }
+                        //     if (slotUnitSize == NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified) {
+                        //         slotUnitSize = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitSingle;
+                        //     }
+                        //     pMatch = p_slot_unit_size == slotUnitSize;
+                        //     break;
+                        // }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }
@@ -389,11 +401,13 @@ namespace NKikimr::NStorage {
                 throw TExConfigError() << "no location for node";
             }
 
+            ui32 slotUnitSizeInt = 1;
             ui32 maxSlots = defaultMaxSlots;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
+                    slotUnitSizeInt = TPDiskConfig::SlotUnitSizeEnumToInt(pdiskConfig.GetSlotUnitSize());
                 }
             }
 
@@ -403,6 +417,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotUnitSizeInt = slotUnitSizeInt,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

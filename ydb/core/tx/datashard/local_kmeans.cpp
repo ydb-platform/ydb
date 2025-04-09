@@ -791,14 +791,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
     }
     if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
+        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
     }
     const auto pathId = TPathId::FromProto(request.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
-        auto sent = trySendBadRequest();
-        Y_ENSURE(sent);
+    }
+    if (trySendBadRequest()) {
         return;
     }
     const auto& userTable = **userTableIt;

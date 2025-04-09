@@ -377,14 +377,20 @@ void TDataShard::Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const
 
 void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
-    auto& record = ev->Get()->Record;
-    const bool needsSnapshot = record.HasSnapshotStep() || record.HasSnapshotTxId();
-    TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
-    if (!needsSnapshot) {
-        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
-    }
+    auto& request = ev->Get()->Record;
+    const ui64 id = request.GetId();
+    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
+        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
-    LOG_N("Starting TReshuffleKMeansScan " << record.ShortDebugString()
+    auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+    response->Record.SetId(id);
+    response->Record.SetTabletId(TabletID());
+    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+    response->Record.SetRequestSeqNoRound(seqNo.Round);
+
+    LOG_N("Starting TReshuffleKMeansScan " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -392,38 +398,99 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
-    const ui64 id = record.GetId();
-
-    auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
-    response->Record.SetId(id);
-    response->Record.SetTabletId(TabletID());
-
-    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
-    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-    response->Record.SetRequestSeqNoRound(seqNo.Round);
 
     auto badRequest = [&](const TString& error) {
         response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
-        ctx.Send(ev->Sender, std::move(response));
-        response.Reset();
+    };
+    auto trySendBadRequest = [&] {
+        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+            LOG_E("Rejecting TReshuffleKMeansScan bad request " << request.ShortDebugString()
+                << " with response " << response->Record.ShortDebugString());
+            ctx.Send(ev->Sender, std::move(response));
+            return true;
+        } else {
+            return false;
+        }
     };
 
-    if (const ui64 shardId = record.GetTabletId(); shardId != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << shardId << " this is " << TabletID());
-        return;
+    // 1. Validating table and path existence
+    if (request.GetTabletId() != TabletID()) {
+        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
     }
-
-    const auto pathId = TPathId::FromProto(record.GetPathId());
+    if (!IsStateActive()) {
+        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+    }
+    const auto pathId = TPathId::FromProto(request.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
+    }
+    if (trySendBadRequest()) {
         return;
     }
-    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
+
+    // 2. Validating request fields
+    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+        }
+    }
+
+    if (request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
+        && request.GetUpload() != NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+    {
+        badRequest("Wrong upload");
+    }
+
+    if (request.ClustersSize() < 1) {
+        badRequest("Should be requested at least single cluster");
+    }
+
+    TCell from, to;
+    const auto range = CreateRangeFrom(userTable, request.GetParent(), from, to);
+    if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
+        badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
+    }
+
+    if (!request.HasPostingName()) {
+        badRequest(TStringBuilder() << "Empty posting table name");
+    }
+
+    auto tags = GetAllTags(userTable);
+    if (!tags.contains(request.GetEmbeddingColumn())) {
+        badRequest(TStringBuilder() << "Unknown embedding column: " << request.GetEmbeddingColumn());
+    }
+    for (auto dataColumn : request.GetDataColumns()) {
+        if (!tags.contains(dataColumn)) {
+            badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
+        }
+    }
+
+    if (trySendBadRequest()) {
+        return;
+    }
+
+    // 3. Validating vector index settings
+    TAutoPtr<NTable::IScan> scan;
+    auto createScan = [&]<typename T> {
+        scan = new TReshuffleKMeansScan<T>{
+            userTable, CreateLeadFrom(range), request, ev->Sender, std::move(response),
+        };
+    };
+    MakeScan(request, createScan, badRequest);
+    if (!scan) {
+        auto sent = trySendBadRequest();
+        Y_ENSURE(sent);
+        return;
+    }
 
     if (const auto* recCard = ScanManager.Get(id)) {
         if (recCard->SeqNo == seqNo) {
@@ -435,43 +502,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
             CancelScan(userTable.LocalTid, scanId);
         }
         ScanManager.Drop(id);
-    }
-
-    TCell from, to;
-    const auto range = CreateRangeFrom(userTable, record.GetParent(), from, to);
-    if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-        return;
-    }
-
-    const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
-                                    << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
-                                    << " , snapshot tx is " << snapshotKey.TxId);
-        return;
-    }
-
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
-        return;
-    }
-
-    if (record.ClustersSize() < 1) {
-        badRequest("Should be requested at least single cluster");
-        return;
-    }
-
-    TAutoPtr<NTable::IScan> scan;
-    auto createScan = [&]<typename T> {
-        scan = new TReshuffleKMeansScan<T>{
-            userTable, CreateLeadFrom(range), record, ev->Sender, std::move(response),
-        };
-    };
-    MakeScan(record, createScan, badRequest);
-    if (!scan) {
-        Y_ASSERT(!response);
-        return;
     }
 
     TScanOptions scanOpts;

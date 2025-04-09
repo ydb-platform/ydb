@@ -222,6 +222,7 @@ private:
                 std::end(operations),
                 [this](const auto& operation) {
                     if (operation.Operation() == "FillTable") {
+                        // FillTable operation compiles without existing table.
                         return false;
                     }
                     const auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());

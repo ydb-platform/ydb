@@ -58,75 +58,71 @@ private:
 
 }  // anonymous namespace
 
-TKikimrSetupBase::TKikimrSetupBase(const TServerSettings& settings)
-    : Settings(settings)
-{}
-
-TAutoPtr<TLogBackend> TKikimrSetupBase::CreateLogBackend() const {
-    if (Settings.LogOutputFile) {
-        return NActors::CreateFileBackend(Settings.LogOutputFile);
+TAutoPtr<TLogBackend> TKikimrSetupBase::CreateLogBackend(const TServerSettings& settings) const {
+    if (settings.LogOutputFile) {
+        return NActors::CreateFileBackend(settings.LogOutputFile);
     } else {
         return NActors::CreateStderrBackend();
     }
 }
 
-NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(ui32 grpcPort, bool verbose) {
+NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServerSettings& settings, ui32 grpcPort, bool verbose) {
     const ui32 msgBusPort = PortManager.GetPort();
 
-    NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings.AppConfig.GetAuthConfig(), Settings.AppConfig.GetPQConfig());
-    serverSettings.SetNodeCount(Settings.NodeCount);
+    NKikimr::Tests::TServerSettings serverSettings(msgBusPort, settings.AppConfig.GetAuthConfig(), settings.AppConfig.GetPQConfig());
+    serverSettings.SetNodeCount(settings.NodeCount);
 
-    serverSettings.SetDomainName(TString(NKikimr::ExtractDomain(NKikimr::CanonizePath(Settings.DomainName))));
-    serverSettings.SetAppConfig(Settings.AppConfig);
-    serverSettings.SetFeatureFlags(Settings.AppConfig.GetFeatureFlags());
-    serverSettings.SetControls(Settings.AppConfig.GetImmediateControlsConfig());
-    serverSettings.SetCompactionConfig(Settings.AppConfig.GetCompactionConfig());
-    serverSettings.PQClusterDiscoveryConfig = Settings.AppConfig.GetPQClusterDiscoveryConfig();
-    serverSettings.NetClassifierConfig = Settings.AppConfig.GetNetClassifierConfig();
+    serverSettings.SetDomainName(TString(NKikimr::ExtractDomain(NKikimr::CanonizePath(settings.DomainName))));
+    serverSettings.SetAppConfig(settings.AppConfig);
+    serverSettings.SetFeatureFlags(settings.AppConfig.GetFeatureFlags());
+    serverSettings.SetControls(settings.AppConfig.GetImmediateControlsConfig());
+    serverSettings.SetCompactionConfig(settings.AppConfig.GetCompactionConfig());
+    serverSettings.PQClusterDiscoveryConfig = settings.AppConfig.GetPQClusterDiscoveryConfig();
+    serverSettings.NetClassifierConfig = settings.AppConfig.GetNetClassifierConfig();
 
-    const auto& kqpSettings = Settings.AppConfig.GetKQPConfig().GetSettings();
+    const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
     serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
-    serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings.YqlToken));
-    serverSettings.SetComputationFactory(Settings.ComputationFactory);
-    serverSettings.SetYtGateway(Settings.YtGateway);
+    serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken));
+    serverSettings.SetComputationFactory(settings.ComputationFactory);
+    serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbose);
     serverSettings.SetNeedStatsCollectors(true);
 
-    SetLoggerSettings(serverSettings);
-    SetFunctionRegistry(serverSettings);
+    SetLoggerSettings(settings, serverSettings);
+    SetFunctionRegistry(settings, serverSettings);
 
-    if (Settings.MonitoringEnabled) {
+    if (settings.MonitoringEnabled) {
         serverSettings.InitKikimrRunConfig();
-        serverSettings.SetMonitoringPortOffset(Settings.FirstMonitoringPort, true);
+        serverSettings.SetMonitoringPortOffset(settings.FirstMonitoringPort, true);
     }
 
-    if (Settings.GrpcEnabled) {
+    if (settings.GrpcEnabled) {
         serverSettings.SetGrpcPort(grpcPort);
     }
 
     return serverSettings;
 }
 
-void TKikimrSetupBase::SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
-    auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
-        InitLogSettings(Settings.AppConfig.GetLogConfig(), runtime);
-        runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
+void TKikimrSetupBase::SetLoggerSettings(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {
+    auto loggerInitializer = [this, settings](NActors::TTestActorRuntime& runtime) {
+        InitLogSettings(settings.AppConfig.GetLogConfig(), runtime);
+        runtime.SetLogBackendFactory([this, settings]() { return CreateLogBackend(settings); });
     };
 
     serverSettings.SetLoggerInitializer(loggerInitializer);
 }
 
-void TKikimrSetupBase::SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
-    if (!Settings.FunctionRegistry) {
+void TKikimrSetupBase::SetFunctionRegistry(const TServerSettings& settings, NKikimr::Tests::TServerSettings& serverSettings) const {
+    if (!settings.FunctionRegistry) {
         return;
     }
 
-    auto functionRegistryFactory = [this](const NKikimr::NScheme::TTypeRegistry&) {
-        return Settings.FunctionRegistry.Get();
+    auto functionRegistryFactory = [settings](const NKikimr::NScheme::TTypeRegistry&) {
+        return settings.FunctionRegistry.Get();
     };
 
     serverSettings.SetFrFactory(functionRegistryFactory);

@@ -177,7 +177,7 @@ private:
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
 
         SetStorageSettings(serverSettings);
 
@@ -364,8 +364,7 @@ private:
 
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
-        : TBase(settings)
-        , Settings_(settings)
+        : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
         InitializeYqlLogger();
@@ -501,7 +500,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend());
+        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings_));
     }
 
     static void StopTraceOpt() {

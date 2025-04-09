@@ -33,7 +33,9 @@ class TFqSetup::TImpl : public TKikimrSetupBase {
 
 private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(grpcPort, Settings.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerboseLevel >= EVerbose::InitLogs);
+
+        serverSettings.SetEnableYqGrpc(true);
 
         return serverSettings;
     }
@@ -178,8 +180,7 @@ private:
 
 public:
     explicit TImpl(const TFqSetupSettings& settings)
-        : TBase(settings)
-        , Settings(settings)
+        : Settings(settings)
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
         if (Settings.GrpcEnabled && Settings.VerboseLevel >= EVerbose::Info) {
@@ -270,7 +271,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend());
+        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings));
     }
 
     static void StopTraceOpt() {

@@ -8,39 +8,6 @@ from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, pk_typ
 
 
 class TestSplitMerge(TestBase):
-    def test_t(self):
-        p = 30
-        self.query(
-            "create table a(pk Int64, big_line string, primary key(pk)) with (AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
-        big_line = "a" * 1_000_000
-        for i in range(p):
-            self.query(
-                f"insert into a(pk, big_line) values({i}, 'String {big_line}')")
-        rows = self.query("select count(*) as count from a")
-        print((self.driver.scheme_client.list_directory(
-            f"{self.get_database()}/a")))
-        assert len(rows) == 1 and rows[0].count == p, "cdscscsc"
-        for _ in range(50):
-            rows = self.query("""SELECT
-                count(*) as count
-                FROM `.sys/partition_stats`
-                """)
-            if rows[0].count != 1:
-                break
-            time.sleep(1)
-        print(rows)
-        self.query(
-            "alter table a set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000)")
-        for _ in range(50):
-            rows = self.query("""SELECT
-                count(*) as count
-                FROM `.sys/partition_stats`
-                """)
-            if rows[0].count == 1:
-                break
-            time.sleep(1)
-        print(rows)
-
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
@@ -77,44 +44,36 @@ class TestSplitMerge(TestBase):
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        if ttl != "":
-            big_line = "a" * 10_000
-        else:
-            big_line = "a" * 10
+        big_line = "a" * 100_000
         all_types["String"] = "'String " + big_line + "{}'"
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
-        print(1)
         self.query(
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
-        print(1)
         self.insert(table_name, all_types, pk_types, index, ttl)
-        print(1)
-        for _ in range(100):
+        for _ in range(150):
             rows = self.query("""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 """)
-            print(rows[0].count)
-            if rows[0].count != 1:
+            if rows[0].count != 1 + len(index):
                 break
             time.sleep(1)
         assert len(
-            rows) == 1 and rows[0].count != 1, f"The table {table_name} is not split into partition"
+            rows) == 1 and rows[0].count != 1 + len(index), f"The table {table_name} is not split into partition"
         self.select_after_insert(table_name, all_types, pk_types, index, ttl)
         self.query(
-            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000)")
-        for _ in range(100):
+            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
+        for _ in range(150):
             rows = self.query("""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 """)
-            print(rows[0].count)
-            if rows[0].count == 1:
+            if rows[0].count == 1 + len(index):
                 break
             time.sleep(1)
         assert len(
-            rows) == 1 and rows[0].count == 1, f"the table {table_name} is not merge into one partition"
+            rows) == 1 and rows[0].count == 1 + len(index), f"the table {table_name} is not merge into one partition"
         self.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
@@ -144,7 +103,6 @@ class TestSplitMerge(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
-            print(count)
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
 
@@ -166,12 +124,10 @@ class TestSplitMerge(TestBase):
         self.query(insert_sql)
 
     def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-
         number_of_columns = len(pk_types) + len(all_types) + len(index)
 
         if ttl != "":
             number_of_columns += 1
-
         for count in range(1, number_of_columns + 1):
             create_all_type = []
             for type_name in all_types.keys():

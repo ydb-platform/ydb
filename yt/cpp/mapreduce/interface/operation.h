@@ -2858,6 +2858,45 @@ enum class EJobSortDirection : int
 };
 
 ///
+/// @brief Attributes to request for a job.
+enum class EJobAttribute : int
+{
+    Id                /* "id" */,
+    Type              /* "type" */,
+    State             /* "state" */,
+    Address           /* "address" */,
+    TaskName          /* "task_name" */,
+    StartTime         /* "start_time" */,
+    FinishTime        /* "finish_time" */,
+    Progress          /* "progress" */,
+    StderrSize        /* "stderr_size" */,
+    Error             /* "error" */,
+    Result            /* "result" */,
+    BriefStatistics   /* "brief_statistics" */,
+    InputPaths        /* "input_paths" */,
+    CoreInfos         /* "core_infos" */,
+};
+
+///
+/// @brief A class that specifies which attributes to request when using @ref NYT::IClient::GetJob or @ref NYT::IClient::ListJobs.
+struct TJobAttributeFilter
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TJobAttributeFilter;
+    /// @endcond
+
+    THashSet<EJobAttribute> Attributes_;
+
+    ///
+    /// @brief Add attribute to the filter. Calls are supposed to be chained.
+    TSelf& Add(EJobAttribute attribute)
+    {
+        Attributes_.insert(attribute);
+        return *this;
+    }
+};
+
+///
 /// @brief Options for @ref NYT::IClient::ListJobs.
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list_jobs
@@ -2920,6 +2959,10 @@ struct TListJobsOptions
     ///
     /// @brief Search for jobs with filters encoded in token.
     FLUENT_FIELD_OPTION(TString, ContinuationToken);
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 
     /// @}
 
@@ -3065,6 +3108,10 @@ struct TGetJobOptions
     /// @cond Doxygen_Suppress
     using TSelf = TGetJobOptions;
     /// @endcond
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 };
 
 ///

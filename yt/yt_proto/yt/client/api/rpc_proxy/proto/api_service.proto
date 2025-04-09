@@ -2479,6 +2479,8 @@ message TReqListJobs
 
     optional bool with_interruption_info = 26;
 
+    optional NYT.NYTree.NProto.TAttributeFilter attributes = 27;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 
@@ -3216,6 +3218,8 @@ message TJob
     optional string operation_incarnation = 31;
     optional NYT.NProto.TGuid allocation_id = 32;
     optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
+    optional bytes events = 34; // YSON
+    optional bytes statistics = 35; // YSON
 }
 
 message TListJobsStatistics

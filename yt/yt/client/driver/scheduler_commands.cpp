@@ -585,6 +585,13 @@ void TListJobsCommand::Register(TRegistrar registrar)
             return command->Options.RunningJobsLookbehindPeriod;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListJobsCommand::DoExecute(ICommandContextPtr context)

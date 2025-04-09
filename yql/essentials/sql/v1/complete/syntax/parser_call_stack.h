@@ -4,6 +4,8 @@
 
 namespace NSQLComplete {
 
+    bool IsLikelyPragmaStack(const TParserCallStack& stack);
+
     bool IsLikelyTypeStack(const TParserCallStack& stack);
 
     bool IsLikelyFunctionStack(const TParserCallStack& stack);

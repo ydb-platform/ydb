@@ -891,6 +891,15 @@ struct TUserJobSpec
     /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
     FLUENT_FIELD_OPTION(TDiskRequest, DiskRequest);
 
+    ///
+    /// @brief Activates the RPC proxy within the job proxy.
+    ///
+    /// By enabling this option, the environment variable YT_JOB_PROXY_SOCKET_PATH will be set.
+    /// You can use this variable to obtain the unix domain socket path and then construct a client for sending requests.
+    ///
+    /// @note Do not enable this option without prior discussion with the YTsaurus team.
+    FLUENT_FIELD_DEFAULT(bool, EnableRpcProxyInJobProxy, false);
+
 private:
     TVector<std::tuple<TLocalFilePath, TAddLocalFileOptions>> LocalFiles_;
     TJobBinaryConfig JobBinary_;

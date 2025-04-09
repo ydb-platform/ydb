@@ -6,6 +6,7 @@
 namespace NSQLComplete {
 
     struct TFrequencyData {
+        THashMap<TString, size_t> Pragmas;
         THashMap<TString, size_t> Types;
         THashMap<TString, size_t> Functions;
     };

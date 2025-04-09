@@ -35,10 +35,10 @@ namespace NSQLComplete {
                     << " for input size " << input.Text.size();
             }
 
-            auto prefix = input.Text.Head(input.CursorPosition);
-            auto completedToken = GetCompletedToken(prefix);
+            TLocalSyntaxContext context = SyntaxAnalysis->Analyze(input);
 
-            auto context = SyntaxAnalysis->Analyze(input);
+            TStringBuf prefix = input.Text.Head(input.CursorPosition);
+            TCompletedToken completedToken = GetCompletedToken(prefix);
 
             TVector<TCandidate> candidates;
             EnrichWithKeywords(candidates, std::move(context.Keywords), completedToken);
@@ -85,12 +85,20 @@ namespace NSQLComplete {
                 .Limit = Configuration.Limit - candidates.size(),
             };
 
-            if (context.IsTypeName) {
-                request.Constraints.TypeName = TTypeName::TConstraints();
+            if (context.Pragma) {
+                TPragmaName::TConstraints constraints;
+                constraints.Namespace = context.Pragma->Namespace;
+                request.Constraints.Pragma = std::move(constraints);
             }
 
-            if (context.IsFunctionName) {
-                request.Constraints.Function = TFunctionName::TConstraints();
+            if (context.IsTypeName) {
+                request.Constraints.Type = TTypeName::TConstraints();
+            }
+
+            if (context.Function) {
+                TFunctionName::TConstraints constraints;
+                constraints.Namespace = context.Function->Namespace;
+                request.Constraints.Function = std::move(constraints);
             }
 
             if (request.IsEmpty()) {
@@ -107,6 +115,9 @@ namespace NSQLComplete {
             for (auto& name : names) {
                 candidates.emplace_back(std::visit([](auto&& name) -> TCandidate {
                     using T = std::decay_t<decltype(name)>;
+                    if constexpr (std::is_base_of_v<TPragmaName, T>) {
+                        return {ECandidateKind::PragmaName, std::move(name.Indentifier)};
+                    }
                     if constexpr (std::is_base_of_v<TTypeName, T>) {
                         return {ECandidateKind::TypeName, std::move(name.Indentifier)};
                     }
@@ -161,6 +172,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
     switch (kind) {
         case NSQLComplete::ECandidateKind::Keyword:
             out << "Keyword";
+            break;
+        case NSQLComplete::ECandidateKind::PragmaName:
+            out << "PragmaName";
             break;
         case NSQLComplete::ECandidateKind::TypeName:
             out << "TypeName";

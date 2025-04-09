@@ -59,6 +59,12 @@ namespace NSQLComplete {
 
                 auto identifier = ToLowerUTF8(ContentView(name));
 
+                if constexpr (std::is_same_v<T, TPragmaName>) {
+                    if (auto weight = Frequency_.Pragmas.FindPtr(identifier)) {
+                        return *weight;
+                    }
+                }
+
                 if constexpr (std::is_same_v<T, TFunctionName>) {
                     if (auto weight = Frequency_.Functions.FindPtr(identifier)) {
                         return *weight;

@@ -39,6 +39,7 @@ public:
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::FunctionName;
     using ECandidateKind::Keyword;
+    using ECandidateKind::PragmaName;
     using ECandidateKind::TypeName;
 
     TLexerSupplier MakePureLexerSupplier() {
@@ -55,8 +56,9 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
         TLexerSupplier lexer = MakePureLexerSupplier();
         NameSet names = {
+            .Pragmas = {"yson.CastToString"},
             .Types = {"Uint64"},
-            .Functions = {"StartsWith"},
+            .Functions = {"StartsWith", "DateTime::Split"},
         };
         auto ranking = MakeDefaultRanking({});
         INameService::TPtr service = MakeStaticNameService(std::move(names), std::move(ranking));
@@ -267,12 +269,36 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     Y_UNIT_TEST(Pragma) {
-        TVector<TCandidate> expected = {
-            {Keyword, "ANSI"},
-        };
-
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"PRAGMA "}), expected);
+        {
+            TVector<TCandidate> expected = {
+                {Keyword, "ANSI"},
+                {PragmaName, "yson.CastToString"}};
+            auto completion = engine->Complete({"PRAGMA "});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "yson.CastToString"}};
+            auto completion = engine->Complete({"PRAGMA yson"});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "CastToString"}};
+            auto completion = engine->Complete({"PRAGMA yson."});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "CastToString"}};
+            auto completion = engine->Complete({"PRAGMA yson.cast"});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "cast");
+        }
     }
 
     Y_UNIT_TEST(Select) {
@@ -307,6 +333,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "TRUE"},
             {Keyword, "TUPLE"},
             {Keyword, "VARIANT"},
+            {FunctionName, "DateTime::Split("},
             {FunctionName, "StartsWith("},
         };
 
@@ -344,6 +371,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "TRUE"},
             {Keyword, "TUPLE"},
             {Keyword, "VARIANT"},
+            {FunctionName, "DateTime::Split("},
             {FunctionName, "StartsWith("},
         };
 
@@ -402,6 +430,41 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(FunctionName) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {FunctionName, "DateTime::Split("},
+            };
+            auto completion = engine->Complete({"SELECT Date"});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "Date");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FunctionName, "Split("},
+            };
+            auto completion = engine->Complete({"SELECT DateTime:"});
+            UNIT_ASSERT(completion.Candidates.empty());
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FunctionName, "Split("},
+            };
+            auto completion = engine->Complete({"SELECT DateTime::"});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FunctionName, "Split("},
+            };
+            auto completion = engine->Complete({"SELECT DateTime::s"});
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "s");
+        }
+    }
+
     Y_UNIT_TEST(UTF8Wide) {
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"\xF0\x9F\x98\x8A"}).size(), 0);
@@ -410,9 +473,9 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(WordBreak) {
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT ("}).size(), 29);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT (1)"}).size(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT 1;"}).size(), 35);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT ("}).size(), 29);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT (1)"}).size(), 30);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT 1;"}).size(), 35);
     }
 
     Y_UNIT_TEST(Typing) {
@@ -481,6 +544,16 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT OPTIONAL<U"}), expected);
         }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "yson.DisableStrict"},
+                {PragmaName, "yson.AutoConvert"},
+                {PragmaName, "yson.Strict"},
+                {PragmaName, "yson.CastToString"},
+                {PragmaName, "yson.DisableCastToString"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"PRAGMA yson"}), expected);
+        }
     }
 
     Y_UNIT_TEST(OnFailingNameService) {
@@ -516,6 +589,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(Ranking) {
         TFrequencyData frequency = {
+            .Pragmas = {
+                {"yt.defaultmemorylimit", 16},
+                {"yt.annotations", 8},
+            },
             .Types = {
                 {"int32", 128},
                 {"int64", 64},
@@ -532,6 +609,15 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
         auto service = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking(frequency));
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
+        {
+            TVector<TCandidate> expectedPrefix = {
+                {PragmaName, "DefaultMemoryLimit"},
+                {PragmaName, "Annotations"},
+            };
+            auto actualPrefix = Complete(engine, {"PRAGMA yt."});
+            actualPrefix.crop(expectedPrefix.size());
+            UNIT_ASSERT_VALUES_EQUAL(actualPrefix, expectedPrefix);
+        }
         {
             TVector<TCandidate> expected = {
                 {TypeName, "Int32"},

@@ -7,6 +7,7 @@
 namespace NSQLComplete {
 
     struct NameSet {
+        TVector<TString> Pragmas;
         TVector<TString> Types;
         TVector<TString> Functions;
     };

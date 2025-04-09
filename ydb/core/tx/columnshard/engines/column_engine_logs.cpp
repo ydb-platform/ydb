@@ -506,7 +506,7 @@ void TColumnEngineForLogs::OnTieringModified(const THashMap<TInternalPathId, NOl
     }
 }
 
-void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId) {
+void TColumnEngineForLogs::DoRegisterTable(const TUnifiedPathId& pathId) {
     std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
     if (ActualizationStarted) {
         g->StartActualizationIndex();

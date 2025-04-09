@@ -785,6 +785,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(InsertIntoBucketWithSelect) {
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeBucket = "test_bucket_write_with_select";
+
+        // Also tests large object path with size >= 128 
+        // for atomic upload commit case
         const TString writeObject = TStringBuilder() << "test_object_write/" << TString(512, 'x') << "/";
 
         {

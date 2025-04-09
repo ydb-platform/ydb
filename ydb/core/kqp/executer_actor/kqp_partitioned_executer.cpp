@@ -379,7 +379,6 @@ private:
 
         switch (settings.GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:
-            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:

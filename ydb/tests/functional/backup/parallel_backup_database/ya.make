@@ -6,6 +6,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_ERASURE=block_4-2)
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/tests/functional/backup/helpers
 )
 

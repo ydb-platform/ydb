@@ -2,35 +2,51 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <fmt/format.h>
+
 #include <vector>
 
 using namespace NYdb;
+using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
 {
     Y_UNIT_TEST(ParallelBackupWholeDatabase)
     {
+        auto listDir = [&](const TString& path) -> TString {
+            auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            TStringBuilder l;
+            for (const auto& entry : res.GetChildren()) {
+                if (l) {
+                    l << ", ";
+                }
+                l << "\"" << entry.Name << "\"";
+            }
+            return l;
+        };
+
         {
             auto res = YdbQueryClient().ExecuteQuery(R"sql(
                 CREATE TABLE `/local/Table0` (
-                    Key Uint32,
+                    Key Uint32 NOT NULL,
                     PRIMARY KEY (Key)
                 );
                 CREATE TABLE `/local/dir1/Table1` (
-                    Key Uint32,
+                    Key Uint32 NOT NULL,
                     PRIMARY KEY (Key)
                 );
                 CREATE TABLE `/local/dir1/dir2/Table2` (
-                    Key Uint32,
+                    Key Uint32 NOT NULL,
                     PRIMARY KEY (Key)
                 );
             )sql", NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
             auto res2 = YdbQueryClient().ExecuteQuery(R"sql(
-                INSERT INTO `/local/Table0` (Key) VALUES (0);
-                INSERT INTO `/local/dir1/Table1` (Key) VALUES (1);
-                INSERT INTO `/local/dir1/dir2/Table2` (Key) VALUES (2);
+                INSERT INTO `/local/Table0` (Key) VALUES (1);
+                INSERT INTO `/local/dir1/Table1` (Key) VALUES (2);
+                INSERT INTO `/local/dir1/dir2/Table2` (Key) VALUES (3);
             )sql", NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res2.IsSuccess(), res.GetIssues().ToString());
         }
@@ -71,6 +87,8 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
                     WaitOp<NExport::TExportToS3Response>(op);
                     UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
                 }
+                auto forgetResult = YdbOperationClient().Forget(val.Id()).GetValueSync();
+                UNIT_ASSERT_C(forgetResult.IsSuccess(), forgetResult.GetIssues().ToString());
             }
         }
 
@@ -105,7 +123,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
                         tableIndex = i;
                     }
                 }
-                UNIT_ASSERT_VALUES_EQUAL(tablesFound, 1);
+                UNIT_ASSERT_VALUES_EQUAL_C(tablesFound, 1, "Current directory children: " << listDir(TStringBuilder() << "/local/Restored_" << i << "/" << dir));
                 UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[tableIndex].Name, name);
             };
             checkOneTableInDirectory("", "Table0");
@@ -114,5 +132,73 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
         }
 
         // Test restore to database root
+        {
+            // Remove all contents from database
+            auto removeTable = [&](const TString& path) {
+                auto session = YdbTableClient().GetSession().GetValueSync();
+                UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+                auto res = session.GetSession().DropTable(path).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            };
+            auto removeDirectory = [&](const TString& path) {
+                auto res = YdbSchemeClient().RemoveDirectory(path).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString() << ". Current directory children: " << listDir(path));
+            };
+            auto remove = [&](const TString& root, bool removeRoot = true) {
+                removeTable(TStringBuilder() << root << "/Table0");
+                removeTable(TStringBuilder() << root << "/dir1/Table1");
+                removeTable(TStringBuilder() << root << "/dir1/dir2/Table2");
+                removeDirectory(TStringBuilder() << root << "/dir1/dir2");
+                removeDirectory(TStringBuilder() << root << "/dir1");
+                if (removeRoot) {
+                    removeDirectory(root);
+                }
+            };
+            for (size_t i = 0; i < parallelExportsCount; ++i) {
+                remove(TStringBuilder() << "/local/Restored_" << i);
+            }
+            remove("/local", false);
+            auto listResult = YdbSchemeClient().ListDirectory("/local").GetValueSync();
+            UNIT_ASSERT_C(listResult.IsSuccess(), listResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetChildren().size(), 2, "Current database directory children: " << listDir("/local"));
+
+            // Import to database root
+            NImport::TImportFromS3Settings settings;
+            fillS3Settings(settings);
+
+            settings.SourcePrefix(TStringBuilder() << "ParallelBackupWholeDatabasePrefix_0");
+
+            const auto restoreOp = YdbImportClient().ImportFromS3(settings).GetValueSync();
+
+            if (restoreOp.Ready()) {
+                UNIT_ASSERT_C(restoreOp.Status().IsSuccess(), restoreOp.Status().GetIssues().ToString());
+            } else {
+                TMaybe<TOperation> op = restoreOp;
+                WaitOp<NImport::TImportFromS3Response>(op);
+                UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
+            }
+
+            // Check data
+            auto checkTableData = [&](const TString& path, ui32 data) {
+                auto result = YdbQueryClient().ExecuteQuery(
+                    fmt::format(R"sql(
+                        SELECT Key FROM `{table_path}`;
+                    )sql",
+                    "table_path"_a = path
+                    ),
+                    NQuery::TTxControl::BeginTx().CommitTx()
+                ).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto resultSet = result.GetResultSetParser(0);
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+                UNIT_ASSERT(resultSet.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint32(), data);
+            };
+
+            checkTableData("/local/Table0", 1);
+            checkTableData("/local/dir1/Table1", 2);
+            checkTableData("/local/dir1/dir2/Table2", 3);
+        }
     }
 }

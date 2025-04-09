@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
@@ -434,11 +435,12 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(ok);
 }
 
-void TestWriteOverload(const TestTableDescription& table) {
+void TestWriteOverload(const TestTableDescription& table, bool WritePortionsOnInsert) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(WritePortionsOnInsert);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
+    csDefaultControllerGuard->SetOverrideBlobSplitSettings(std::nullopt);
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -462,26 +464,31 @@ void TestWriteOverload(const TestTableDescription& table) {
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
-            Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
-            if (toCatch && msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
-                capturedWrites.push_back(ev.Release());
+        if (toCatch) {
+            TAutoPtr<IEventHandle> eventToCapture;
+            if (WritePortionsOnInsert) {
+                if (auto* msg = TryGetPrivateEvent<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(ev)) {
+                    Cerr << "CATCH TEvWritePortionResult, status " << msg->GetWriteStatus() << Endl;
+                    if (msg->GetWriteStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
+                        eventToCapture = ev.Release();
+                    }
+                }
+             } else {
+                if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
+                    Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
+                    if (msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
+                        eventToCapture = ev.Release();
+                    }
+                }
+            }
+            if (eventToCapture) {
                 --toCatch;
+                capturedWrites.push_back(std::move(eventToCapture));
                 return true;
-            } else {
-                return false;
             }
         }
         return false;
     };
-
-    auto resendOneCaptured = [&]() {
-        UNIT_ASSERT(capturedWrites.size());
-        Cerr << "RESEND TEvWrite" << Endl;
-        runtime.Send(capturedWrites.front().Release());
-        capturedWrites.pop_front();
-    };
-
     runtime.SetEventFilter(captureEvents);
 
     const ui32 toSend = toCatch + 1;
@@ -492,7 +499,8 @@ void TestWriteOverload(const TestTableDescription& table) {
     UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
 
     while (capturedWrites.size()) {
-        resendOneCaptured();
+        runtime.Send(capturedWrites.front().Release());
+        capturedWrites.pop_front();
         UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
@@ -1665,15 +1673,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWrite(table);
     }
 
-    Y_UNIT_TEST(WriteOverload) {
+    Y_UNIT_TEST_QUATRO(WriteOverload, InStore, WithWritePortionsOnInsert) {
         TestTableDescription table;
-        TestWriteOverload(table);
-    }
-
-    Y_UNIT_TEST(WriteStandaloneOverload) {
-        TestTableDescription table;
-        table.InStore = false;
-        TestWriteOverload(table);
+        table.InStore = InStore;
+        TestWriteOverload(table, WithWritePortionsOnInsert);
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

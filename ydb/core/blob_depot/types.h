@@ -153,7 +153,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         TString MakeObjectName(const TString& basePath) const {
-            const size_t hash = THash()(*this);
+            const size_t hash = MultiHash(Generation, KeyId);
             const size_t a = hash % 36;
             const size_t b = hash / 36 % 36;
             static const char vec[] = "0123456789abcdefghijklmnopqrstuvwxyz";

@@ -224,27 +224,6 @@
                 ]
             },
             {
-                "Node Type": "Precompute_0_1",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 3,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Collect",
-                        "PlanNodeId": 2,
-                        "Plans": [
-                            {
-                                "CTE Name": "Stage_5",
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 1,
-                                "PlanNodeType": "Connection"
-                            }
-                        ]
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_1"
-            },
-            {
                 "Node Type": "Precompute_0_0",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 8,
@@ -298,6 +277,27 @@
                     }
                 ],
                 "Subplan Name": "CTE precompute_0_0"
+            },
+            {
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 3,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "CTE Name": "Stage_5",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 1,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute_0_1"
             }
         ],
         "Stats": {

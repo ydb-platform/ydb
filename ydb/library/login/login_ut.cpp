@@ -109,8 +109,7 @@ Y_UNIT_TEST_SUITE(Login) {
             .MinLowerCaseCount = 2,
             .MinUpperCaseCount = 2,
             .MinNumbersCount = 2,
-            .MinSpecialCharsCount = 2,
-            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS
+            .MinSpecialCharsCount = 2
         });
 
         provider.UpdatePasswordCheckParameters(passwordComplexity);
@@ -690,6 +689,108 @@ Y_UNIT_TEST_SUITE(Login) {
                 auto loginResponse = provider.LoginUser(loginRequest);
                 UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
             }
+        }
+    }
+
+    Y_UNIT_TEST(CheckThatCacheDoesNotHoldOldPassword) {
+        TLoginProvider provider(TPasswordComplexity(), TAccountLockout::TInitializer(), [] () {return true;}, {});
+        provider.RotateKeys();
+
+        {
+            TLoginProvider::TCreateUserRequest createRequest {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto createResponse = provider.CreateUser(createRequest);
+            UNIT_ASSERT(!createResponse.Error);
+        }
+
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT(!loginResponse.Error);
+        }
+
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "pass1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
+        }
+
+        // Try login with credentials from cache
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT(!loginResponse.Error);
+        }
+
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "pass1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
+        }
+
+        // Change password for user1
+        {
+            TLoginProvider::TModifyUserRequest alterRequest {
+                .User = "user1",
+                .Password = "pass1"
+            };
+            auto alterResponse = provider.ModifyUser(alterRequest);
+            UNIT_ASSERT(!alterResponse.Error);
+        }
+
+        // Cannot login with old password
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
+        }
+
+        // Can login with new password
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "pass1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT(!loginResponse.Error);
+        }
+
+        // Try login with credentials from cache
+        // Cannot login with old password
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "password1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT_STRING_CONTAINS(loginResponse.Error, "Invalid password");
+        }
+
+        // Can login with new password
+        {
+            TLoginProvider::TLoginUserRequest loginRequest {
+                .User = "user1",
+                .Password = "pass1"
+            };
+            auto loginResponse = provider.LoginUser(loginRequest);
+            UNIT_ASSERT(!loginResponse.Error);
         }
     }
 }

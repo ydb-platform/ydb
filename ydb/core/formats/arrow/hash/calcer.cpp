@@ -87,32 +87,6 @@ ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui
     return result;
 }
 
-void TXX64::CalcForAll(
-    const std::shared_ptr<arrow::Array>& array, const ui64 seed, const std::function<void(const ui64 hash, const ui32 idx)>& action) {
-    AFL_VERIFY(array);
-    NArrow::SwitchType(array->type_id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using T = typename TWrap::T;
-        using TArray = typename arrow::TypeTraits<T>::ArrayType;
-        for (ui32 idx = 0; idx < array->length(); ++idx) {
-            if (array->IsNull(idx)) {
-                continue;
-            }
-            auto& typedArray = static_cast<const TArray&>(*array);
-            auto value = typedArray.GetView(idx);
-            if constexpr (arrow::has_string_view<T>()) {
-                action(CalcSimple(value.data(), value.size(), seed), idx);
-            } else if constexpr (arrow::has_c_type<T>()) {
-                action(CalcSimple(&value, sizeof(value), seed), idx);
-            } else {
-                static_assert(arrow::is_decimal_type<T>());
-                AFL_VERIFY(false);
-            }
-        }
-        return true;
-    });
-}
-
 void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
     AppendFieldImpl(scalar, hashCalcer);
 }

@@ -21,6 +21,7 @@ struct TEvExecution {
     private:
         YDB_READONLY_DEF(ITask::TPtr, Task);
         YDB_READONLY(ui64, ProcessId, 0);
+        YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
     public:
         TEvNewTask() = default;
 

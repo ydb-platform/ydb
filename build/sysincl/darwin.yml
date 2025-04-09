@@ -149,6 +149,7 @@
   - sys/filio.h
   - sys/ioccom.h
   - sys/kauth.h
+  - sys/kdebug_signpost.h
   - sys/kern_control.h
   - sys/lock.h
   - sys/malloc.h
@@ -216,6 +217,7 @@
   - CoreServices/CoreServices.h
   - CoreTelephony/CTCarrier.h
   - CoreTelephony/CTTelephonyNetworkInfo.h
+  - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
   - DeviceCheck/DCAppAttestService.h
@@ -285,6 +287,7 @@
   - UIKit/UIScreen.h
   - UIKit/UIView.h
   - UIKit/UIWebView.h
+  - UserNotifications/UserNotifications.h
   - VideoDecodeAcceleration/VDADecoder.h
   - VideoToolbox/VideoToolbox.h
   - XCTest/XCTest.h

@@ -20,9 +20,15 @@ private:
     YDB_READONLY(TAtomicCounter, CleaningStartedCounter, 0);
 
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
+
+    YDB_READONLY(TAtomicCounter, HeadersSkippingOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, HeadersApprovedOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, HeadersSkippedNoData, 0);
+
     YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
     YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
+
     YDB_READONLY(TAtomicCounter, TieringUpdates, 0);
     YDB_READONLY(TAtomicCounter, NeedActualizationCount, 0);
 
@@ -165,6 +171,16 @@ public:
             IndexesApprovedOnSelect.Inc();
         } else {
             IndexesSkippingOnSelect.Inc();
+        }
+    }
+
+    virtual void OnHeaderSelectProcessed(const std::optional<bool> result) override {
+        if (!result) {
+            HeadersSkippedNoData.Inc();
+        } else if (*result) {
+            HeadersApprovedOnSelect.Inc();
+        } else {
+            HeadersSkippingOnSelect.Inc();
         }
     }
 };

@@ -16,13 +16,15 @@ struct TRootCause {
         ui64 TransferCycles;
         ui64 VDiskReplyCycles;
         bool IsAccelerate;
+        TString RequestType;
 
-        TRootCauseItem(ui64 causeIdx, ui64 startCycles, bool isAccelerate)
+        TRootCauseItem(ui64 causeIdx, ui64 startCycles, bool isAccelerate, const TString& requestType)
             : CauseIdx(causeIdx)
             , StartCycles(startCycles)
             , TransferCycles(startCycles)
             , VDiskReplyCycles(startCycles)
             , IsAccelerate(isAccelerate)
+            , RequestType(requestType)
         {}
     };
     static constexpr ui64 InvalidCauseIdx = 255;
@@ -34,9 +36,6 @@ struct TRootCause {
 
     // Walk the cause tree from leaf to root and output it as an LWTRACK
     void RenderTrack(NLWTrace::TOrbit &orbit) {
-#ifdef LWTRACE_DISABLE
-        Y_UNUSED(orbit);
-#else //LWTRACE_DISABLE
         if (HasShuttles(orbit)) {
             if (CurrentCauseIdx < Items.size()) {
                 const TRootCauseItem &item = Items[CurrentCauseIdx];
@@ -48,6 +47,7 @@ struct TRootCause {
                 }
                 NLWTrace::TParams params;
                 if (item.IsAccelerate) {
+                    params.Param[1].CopyConstruct<TString>(item.RequestType);
                     orbit.AddProbe(&LWTRACE_GET_NAME(DSProxyScheduleAccelerate).Probe, params, item.StartCycles);
                 } else {
                     orbit.AddProbe(&LWTRACE_GET_NAME(DSProxyStartTransfer).Probe, params, item.StartCycles);
@@ -56,21 +56,20 @@ struct TRootCause {
                 }
             }
         }
-#endif //LWTRACE_DISABLE
     }
 
-    ui64 RegisterCause() {
+    ui64 RegisterCause(const TString& requestType = "") {
         if (IsOn && Items.size() < InvalidCauseIdx - 1) {
-            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false);
+            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), false, requestType);
             return Items.size() - 1;
         } else {
             return InvalidCauseIdx;
         }
     }
 
-    ui64 RegisterAccelerate() {
+    ui64 RegisterAccelerate(const TString& requestType) {
         if (IsOn && Items.size() < InvalidCauseIdx - 1) {
-            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true);
+            Items.emplace_back(CurrentCauseIdx, GetCycleCountFast(), true, requestType);
             return Items.size() - 1;
         } else {
             return InvalidCauseIdx;
@@ -101,4 +100,3 @@ struct TRootCause {
 };
 
 }//NKikimr
-

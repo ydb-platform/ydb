@@ -3,7 +3,7 @@
 #include "federated_read_session.h"
 #include "federated_write_session.h"
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
@@ -47,6 +47,40 @@ void TFederatedTopicClient::TImpl::InitObserver() {
         Observer = std::make_shared<TFederatedDbObserver>(Connections, ClientSettings);
         Observer->Start();
     }
+}
+
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
+    InitObserver();
+    return Observer->WaitForFirstState().Apply(
+            [weakObserver = std::weak_ptr(Observer)] (const auto& ) {
+                std::vector<TClusterInfo> result;
+                auto observer = weakObserver.lock();
+                if (!observer) {
+                    return result;
+                }
+                auto state = observer->GetState();
+                result.reserve(state->DbInfos.size());
+                for (const auto& db: state->DbInfos) {
+                    auto& dbinfo = result.emplace_back();
+                    switch (db->status()) {
+#define TRANSLATE_STATUS(NAME) \
+                    case TDbInfo::Status::DatabaseInfo_Status_##NAME: \
+                        dbinfo.Status = TClusterInfo::EStatus::NAME; \
+                        break
+                    TRANSLATE_STATUS(STATUS_UNSPECIFIED);
+                    TRANSLATE_STATUS(AVAILABLE);
+                    TRANSLATE_STATUS(READ_ONLY);
+                    TRANSLATE_STATUS(UNAVAILABLE);
+                    default:
+                        Y_ENSURE(false /* impossible status */);
+                    }
+#undef TRANSLATE_STATUS
+                    dbinfo.Name = db->name();
+                    dbinfo.Endpoint = db->endpoint();
+                    dbinfo.Path = db->path();
+                }
+                return result;
+            });
 }
 
 auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {

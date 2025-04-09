@@ -149,6 +149,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -759,8 +760,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxies,
-                hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, AppData->InFlightLimiterRegistry,
+                grpcRequestProxies, hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasClickhouseInternal) {
@@ -946,6 +947,40 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
+        switch(grpcConfig.GetDefaultCompressionAlgorithm()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_NONE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_NONE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_DEFLATE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_DEFLATE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_GZIP: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+                break;
+            }
+        }
+
+        switch(grpcConfig.GetDefaultCompressionLevel()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_NONE: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_NONE);
+                break;
+            }
+
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_LOW: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_LOW);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_MED: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_MED);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_HIGH: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_HIGH);
+                break;
+            }
+        }
 
         if (appConfig.HasDomainsConfig() &&
             appConfig.GetDomainsConfig().HasSecurityConfig() &&
@@ -1092,6 +1127,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
+    if (ModuleFactories) {
+        AppData->TransferWriterFactory = ModuleFactories->TransferWriterFactory;
+    }
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1203,6 +1241,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasReplicationConfig()) {
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
     }
 
     // setup resource profiles
@@ -1938,6 +1980,10 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {

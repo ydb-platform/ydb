@@ -239,6 +239,7 @@ public:
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
+    std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
@@ -275,7 +276,6 @@ public:
         ui32 DefaultRowsCount = 0;
         std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
-        const bool NeedCache = true;
 
     public:
         ui32 GetExpectedRowsCountVerified() const {
@@ -291,10 +291,9 @@ public:
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
             : DefaultRowsCount(rowsCount)
-            , DefaultValue(defValue)
-            , NeedCache(needCache) {
+            , DefaultValue(defValue) {
             AFL_VERIFY(DefaultRowsCount);
         }
 
@@ -320,7 +319,7 @@ public:
         }
 
         TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
     class TPreparedColumn {
@@ -347,7 +346,7 @@ public:
             AFL_VERIFY(Loader);
         }
 
-        std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
         TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
     };
 

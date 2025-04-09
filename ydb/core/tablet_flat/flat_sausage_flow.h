@@ -2,6 +2,7 @@
 
 #include "flat_sausage_misc.h"
 #include "flat_sausage_solid.h"
+#include "util_fmt_abort.h"
 #include <util/generic/deque.h>
 
 namespace NKikimr {
@@ -12,7 +13,7 @@ namespace NPageCollection {
     public:
         struct TReadPortion {
 
-            void Describe(IOutputStream &out) const noexcept
+            void Describe(IOutputStream &out) const
             {
                 out
                     << "{" << Slot << "p +" << Skip << "b " << Size << "b}";
@@ -55,7 +56,7 @@ namespace NPageCollection {
             return Tail >= Slice.size();
         }
 
-        TReadPortionRange Grow(ui64 bytes) noexcept
+        TReadPortionRange Grow(ui64 bytes)
         {
             const ui32 from = Queue.size();
             const ui64 limit = OnHold + Min(Max<ui64>() - OnHold, bytes);
@@ -76,7 +77,7 @@ namespace NPageCollection {
                     if (was == Glob.Group || was == TLargeGlobId::InvalidGroup) {
 
                     } else if (it != bound.Lo.Blob) {
-                        Y_ABORT("Page placed over different groups");
+                        Y_TABLET_ERROR("Page placed over different groups");
                     } else if (from < Queue.size()) {
                         /* Have to do each grow over the same group */
 

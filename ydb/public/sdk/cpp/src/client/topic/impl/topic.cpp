@@ -1,15 +1,15 @@
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#include <src/client/topic/impl/topic_impl.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TCommonCodecsProvider {
 public:
@@ -376,6 +376,7 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , LastReadTime_(TInstant::Seconds(partitionStats.last_read_time().seconds()))
     , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
     , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
+    , MaxCommittedTimeLag_(TDuration::Seconds(partitionStats.max_committed_time_lag().seconds()))
 {}
 
 uint64_t TPartitionConsumerStats::GetCommittedOffset() const {
@@ -404,6 +405,10 @@ const TDuration& TPartitionConsumerStats::GetMaxReadTimeLag() const {
 
 const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
     return MaxWriteTimeLag_;
+}
+
+const TDuration& TPartitionConsumerStats::GetMaxCommittedTimeLag() const {
+    return MaxCommittedTimeLag_;
 }
 
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)

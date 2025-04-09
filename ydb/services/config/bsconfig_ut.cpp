@@ -9,7 +9,7 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -297,13 +297,12 @@ config:
     port: 12001
     host_config_id: 2
 )";
-        TString yamlConfigExpected = SubstGlobalCopy(yamlConfig, "version: 0", "version: 1");
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false);
         std::optional<TString> yamlConfigFetched, storageYamlConfigFetched;
         FetchConfig(server.GetChannel(), false, false, yamlConfigFetched, storageYamlConfigFetched);
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
-        UNIT_ASSERT_VALUES_EQUAL(yamlConfigExpected, *yamlConfigFetched);
+        UNIT_ASSERT_VALUES_EQUAL(yamlConfig, *yamlConfigFetched);
     }
 
     Y_UNIT_TEST(FetchConfig) {

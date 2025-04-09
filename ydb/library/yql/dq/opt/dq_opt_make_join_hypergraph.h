@@ -8,7 +8,7 @@
 
 #include <memory.h>
 
-/* 
+/*
  * This header contains MakeJoinHypergraph function to construct the hypergraph from inner optimizer nodes.
  * Pipeline works as follows:
  *      1) MakeJoinHypergraph calls MakeJoinHypergraphRec recursively.
@@ -63,12 +63,12 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
 
     TNodeSet left = TES & subtreeNodes[joinNode->LeftArg];
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
-    
+
     bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
     return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys);
 }
 
-/* 
+/*
  * In this routine we decompose AND condition for equijoin into many edges, instead of one hyperedge.
  * We group conditions with same relations into one (for example A.id = B.id, A.z = B.z).
  */
@@ -148,7 +148,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         YQL_CLOG(TRACE, CoreDq) << graph.String();
     }
 
-    if (!hints.JoinOrderHints->Hints.empty()) { 
+    if (!hints.JoinOrderHints->Hints.empty()) {
         TJoinOrderHintsApplier joinHints(graph);
         joinHints.Apply(*hints.JoinOrderHints);
         if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

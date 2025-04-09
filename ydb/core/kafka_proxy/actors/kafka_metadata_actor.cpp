@@ -230,8 +230,8 @@ void TKafkaMetadataActor::AddTopicResponse(
 void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, const TActorContext& ctx) {
     --PendingResponses;
 
-    auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
+    TSimpleSharedPtr<TEvLocationResponse> locationResponse{ev->Release()};
 
     Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd());
     Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
@@ -248,12 +248,12 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 
     for (auto index : actorIter->second) {
         auto& topic = Response->Topics[index];
-        if (r->Status == Ydb::StatusIds::SUCCESS) {
+        if (locationResponse->Status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
-            PendingTopicResponses.insert(std::make_pair(index, ev->Release()));
+            PendingTopicResponses.emplace(index, locationResponse);
         } else {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << r->Status << ", Issues=" << r->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(r->Status));
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         }
     }
     RespondIfRequired(ctx);
@@ -307,7 +307,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
 
     if (NeedAllNodes) {
         for (const auto& [id, nodeInfo] : Nodes)
-        AddBroker(id, nodeInfo.Host, nodeInfo.Port);
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
     }
 
     Respond();

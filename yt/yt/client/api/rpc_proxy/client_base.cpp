@@ -69,6 +69,17 @@ std::string SanitizeTracingTag(TStringBuf originalTag)
     return Format("%v ... TRUNCATED", originalTag.substr(0, MaxTracingTagLength));
 }
 
+void EnrichTracingForLookupRequest(NTracing::TTraceContext::TTagList& tagList, TStringBuf path, const auto& columns)
+{
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        tagList.emplace_back("yt.table_path", path);
+        std::string columnsTag = columns.empty()
+            ? "universal"
+            : SanitizeTracingTag(ConvertToYsonString(columns).ToString());
+        tagList.emplace_back("yt.column_filter", std::move(columnsTag));
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 IConnectionPtr TClientBase::GetConnection()
@@ -243,7 +254,7 @@ TFuture<TYsonString> TClientBase::GetNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
@@ -279,7 +290,7 @@ TFuture<TYsonString> TClientBase::ListNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
@@ -838,13 +849,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
             req->add_columns(TString(columnName));
         }
     }
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-        std::string columnsTag = options.ColumnFilter.IsUniversal()
-            ? "universal"
-            : SanitizeTracingTag(ConvertToYsonString(req->columns()).ToString());
-        req->TracingTags().emplace_back("yt.column_filter", std::move(columnsTag));
-    }
+    EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
     req->set_timestamp(options.Timestamp);
     req->set_retention_timestamp(options.RetentionTimestamp);
     req->set_keep_missing_rows(options.KeepMissingRows);
@@ -888,14 +893,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
             req->add_columns(TString(nameTable->GetName(id)));
         }
     }
-    if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().emplace_back("yt.table_path", path);
-
-        std::string columnsTag = options.ColumnFilter.IsUniversal()
-            ? "universal"
-            : SanitizeTracingTag(ConvertToYsonString(req->columns()).ToString());
-        req->TracingTags().emplace_back("yt.column_filter", std::move(columnsTag));
-    }
+    EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
     req->set_timestamp(options.Timestamp);
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);

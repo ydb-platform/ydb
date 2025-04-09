@@ -28,6 +28,11 @@ private:
 
 public:
 
+    bool HasSubColumn(const TString& subColumnName) const {
+        return ColumnStats.GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OtherStats.GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+    }
+
     TConstructorContainer GetAccessorConstructor(const ui32 colIndex) const {
         return ColumnStats.GetAccessorConstructor(colIndex);
     }

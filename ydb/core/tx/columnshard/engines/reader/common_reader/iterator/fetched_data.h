@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -28,17 +29,29 @@ private:
     TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
     YDB_READONLY(bool, Aborted, false);
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
+    THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
+    void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
+        AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
+    }
+
+    std::shared_ptr<NIndexes::IIndexMeta> GetRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr) const {
+        auto it = DataAddrToIndex.find(addr);
+        AFL_VERIFY(it != DataAddrToIndex.end());
+        return it->second;
+    }
+
     void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
     void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
 
-    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 columnId) {
-        auto it = Fetchers.find(columnId);
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 entityId) {
+        auto it = Fetchers.find(entityId);
         if (it == Fetchers.end()) {
             return nullptr;
         } else {
@@ -48,9 +61,9 @@ public:
         }
     }
 
-    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 columnId) {
-        auto result = ExtractFetcherOptional(columnId);
-        AFL_VERIFY(!!result)("column_id", columnId);
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
+        auto result = ExtractFetcherOptional(entityId);
+        AFL_VERIFY(!!result)("column_id", entityId);
         return result;
     }
 
@@ -69,6 +82,7 @@ public:
     TFetchedData(const bool useFilter, const ui32 recordsCount) {
         Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
         Table->SetFilterUsage(useFilter);
+        Indexes = std::make_shared<NIndexes::TIndexesCollection>();
     }
 
     void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -118,7 +132,8 @@ public:
         return result;
     }
 
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
+    void AddBatch(
+        const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
         Table->AddBatch(container, resolver, withFilter);
     }
 

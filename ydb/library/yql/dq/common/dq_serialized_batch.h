@@ -29,7 +29,7 @@ struct TDqSerializedBatch {
     }
 
     ui32 RowCount() const {
-        return Proto.GetChunks(); // FIXME with Rows
+        return Proto.GetRows() ? Proto.GetRows() : Proto.GetChunks();
     }
 
     void Clear() {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
@@ -9,11 +8,6 @@
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
 
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
-
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-
-#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 
 namespace NKqpRun {
@@ -39,7 +33,6 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
         Max
     };
 
-    ui32 NodeCount = 1;
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
@@ -52,12 +45,6 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
 
     bool TraceOptEnabled = false;
     EVerbose VerboseLevel = EVerbose::Info;
-
-    TString YqlToken;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
-    TIntrusivePtr<NYql::IYtGateway> YtGateway;
-    NKikimrConfig::TAppConfig AppConfig;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
@@ -83,6 +70,7 @@ struct TRunnerOptions {
     std::optional<size_t> TraceOptScriptId;
 
     TDuration ScriptCancelAfter;
+    std::unordered_set<Ydb::StatusIds::StatusCode> RetryableStatuses;
 
     TYdbSetupSettings YdbSettings;
 };

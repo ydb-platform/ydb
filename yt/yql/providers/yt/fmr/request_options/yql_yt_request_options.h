@@ -1,8 +1,10 @@
 #pragma once
 
+#include <library/cpp/yson/node/node.h>
 #include <util/digest/numeric.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <vector>
 
 namespace NYql::NFmr {
@@ -45,6 +47,7 @@ struct TFmrError {
     TMaybe<ui32> WorkerId;
     TMaybe<TString> TaskId;
     TMaybe<TString> OperationId;
+    TMaybe<TString> JobId;
 };
 
 struct TError {
@@ -54,6 +57,7 @@ struct TError {
 struct TYtTableRef {
     TString Path;
     TString Cluster;
+    bool operator == (const TYtTableRef&) const = default;
 };
 
 struct TFmrTableRef {
@@ -63,7 +67,15 @@ struct TFmrTableRef {
 struct TTableRange {
     TString PartId;
     ui64 MinChunk = 0;
-    ui64 MaxChunk;
+    ui64 MaxChunk = 1;
+};
+
+struct TFmrChunkMeta {
+    TString TableId;
+    TString PartId;
+    ui64 Chunk = 0;
+
+    TString ToString() const;
 };
 
 struct TFmrTableInputRef {
@@ -75,13 +87,14 @@ struct TFmrTableOutputRef {
     TString TableId;
     TString PartId;
 
-    bool operator==(const TFmrTableOutputRef&) const = default;
+    bool operator == (const TFmrTableOutputRef&) const = default;
 };
 
 struct TTableStats {
     ui64 Chunks = 0;
-    ui64 Rows;
-    ui64 DataWeight;
+    ui64 Rows = 0;
+    ui64 DataWeight = 0;
+    bool operator == (const TTableStats&) const = default;
 };
 
 } // namespace NYql::NFmr
@@ -93,6 +106,13 @@ namespace std {
             return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
         }
     };
+
+    template<>
+    struct hash<NYql::NFmr::TYtTableRef> {
+        size_t operator()(const NYql::NFmr::TYtTableRef& ref) const {
+            return CombineHashes(hash<TString>()(ref.Cluster), hash<TString>()(ref.Path));
+        }
+    };
 }
 
 namespace NYql::NFmr {
@@ -101,24 +121,16 @@ struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableStats> OutputTables;
 };
 
-//пока оставляем и со старым названием, чтобы тесты не падали, но после рефактора надо будет убрать
-using TTableRef = std::variant<TYtTableRef, TFmrTableRef>;
-
 using TOperationTableRef = std::variant<TYtTableRef, TFmrTableRef>;
 
-using TTaskTableRef = std::variant<TYtTableRef, TFmrTableInputRef, TFmrTableOutputRef>;
+using TTaskTableRef = std::variant<TYtTableRef, TFmrTableInputRef>;
 
 struct TUploadOperationParams {
     TFmrTableRef Input;
     TYtTableRef Output;
 };
 
-struct TUploadTaskParams { // DEPRECATED TODO REMOVE
-    TFmrTableRef Input;
-    TYtTableRef Output;
-};
-
-struct TUploadTaskParamsNew {
+struct TUploadTaskParams {
     TFmrTableInputRef Input;
     TYtTableRef Output;
 };
@@ -128,12 +140,7 @@ struct TDownloadOperationParams {
     TFmrTableRef Output;
 };
 
-struct TDownloadTaskParams { // DEPRECATED TODO REMOVE
-    TYtTableRef Input;
-    TFmrTableRef Output;
-};
-
-struct TDownloadTaskParamsNew {
+struct TDownloadTaskParams {
     TYtTableRef Input;
     TFmrTableOutputRef Output;
 };
@@ -143,21 +150,14 @@ struct TMergeOperationParams {
     TFmrTableRef Output;
 };
 
-struct TMergeTaskParams { // DEPRECATED TODO REMOVE
-    std::vector<TOperationTableRef> Input;
-    TFmrTableRef Output;
-};
-
-struct TMergeTaskParamsNew {
+struct TMergeTaskParams {
     std::vector<TTaskTableRef> Input;
     TFmrTableOutputRef Output;
 };
 
 using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>; // DEPRECATED TODO REMOVE
-
-using TTaskParamsNew = std::variant<TUploadTaskParamsNew, TDownloadTaskParamsNew, TMergeTaskParamsNew>;
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
 
 struct TClusterConnection {
     TString TransactionId;
@@ -165,13 +165,11 @@ struct TClusterConnection {
     TMaybe<TString> Token;
 };
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
-
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), JobSettings(jobSettings), NumRetries(numRetries)
     {
     }
 
@@ -180,6 +178,7 @@ struct TTask: public TThrRefBase {
     TTaskParams TaskParams = {};
     TString SessionId;
     TClusterConnection ClusterConnection = {};
+    TMaybe<NYT::TNode> JobSettings = {};
     ui32 NumRetries; // Not supported yet
 
     using TPtr = TIntrusivePtr<TTask>;
@@ -188,8 +187,8 @@ struct TTask: public TThrRefBase {
 struct TTaskState: public TThrRefBase {
     TTaskState() = default;
 
-    TTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& errorMessage = Nothing())
-        : TaskStatus(taskStatus), TaskId(taskId), TaskErrorMessage(errorMessage)
+    TTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& errorMessage = Nothing(), const TStatistics& stats = TStatistics())
+        : TaskStatus(taskStatus), TaskId(taskId), TaskErrorMessage(errorMessage), Stats(stats)
     {
     }
 
@@ -200,23 +199,8 @@ struct TTaskState: public TThrRefBase {
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
-struct TTaskResult: public TThrRefBase {
-    TTaskResult(ETaskStatus taskStatus, const TMaybe<TFmrError>& errorMessage = Nothing())
-        : TaskStatus(taskStatus), TaskErrorMessage(errorMessage)
-    {
-    }
-
-    ETaskStatus TaskStatus;
-    TMaybe<TFmrError> TaskErrorMessage;
-
-    using TPtr = TIntrusivePtr<TTaskResult>;
-};
-
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{});
-
-TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing());
-
-TTaskResult::TPtr MakeTaskResult(ETaskStatus taskStatus, const TMaybe<TFmrError>& taskErrorMessage = Nothing());
+TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
 
 } // namespace NYql::NFmr

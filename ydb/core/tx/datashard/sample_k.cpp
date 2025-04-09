@@ -38,7 +38,6 @@ protected:
         ui64 P = 0;
         ui64 I = 0;
 
-        bool operator==(const TProbability&) const noexcept = default;
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
@@ -81,23 +80,23 @@ public:
         , MaxProbability(maxProbability)
         , Rng(seed) {
         Y_ASSERT(MaxProbability != 0);
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
     ~TSampleKScan() final = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        Y_ABORT_UNLESS(seq == 0);
+    EScan Seek(TLead& lead, ui64 seq) final {
+        Y_ENSURE(seq == 0);
         LOG_D("Seek " << Debug());
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
@@ -116,7 +115,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
@@ -148,8 +147,8 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        Y_ABORT_UNLESS(Response);
+    TAutoPtr<IDestructable> Finish(EAbort abort) final {
+        Y_ENSURE(Response);
         Response->Record.SetReadRows(ReadRows);
         Response->Record.SetReadBytes(ReadBytes);
         if (abort == EAbort::None) {
@@ -157,31 +156,32 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_D("Finish " << Debug());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const final {
         out << Debug();
     }
 
-    EScan Exhausted() noexcept final {
+    EScan Exhausted() final {
         return EScan::Final;
     }
 
     TString Debug() const {
-        return TStringBuilder() << " TSampleKScan Id: " << BuildId
-            << " K: " << K << " Clusters: " << MaxRows.size() << " ";
+        return TStringBuilder() << "TSampleKScan Id: " << BuildId
+            << " K: " << K << " Clusters: " << MaxRows.size();
     }
 
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                LOG_E("TSampleKScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString() << " " << Debug());
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -273,7 +273,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

@@ -216,6 +216,7 @@
             "curl",
             "Custom-clarified-artistic-proofread",
             "Custom-eigen",
+            "Custom-epsg-database-license",
             "Custom-fft2d",
             "Custom-fft4g",
             "Custom-Oasis-Pkcs11",
@@ -262,6 +263,7 @@
             "libtiff",
             "LicenseRef-scancode-ams-fonts",
             "LicenseRef-scancode-bitstream",
+            "LicenseRef-scancode-happy-bunny",
             "LicenseRef-scancode-mit-no-advert-export-control",
             "LicenseRef-scancode-oasis-ws-security-spec",
             "LicenseRef-scancode-paul-mackerras-binary",
@@ -361,7 +363,9 @@
     "REQUIRE_MODIFICATIONS_DISCLOSURE": {
         "default": [
             "CDDL-1.0",
-            "CDDL-1.1"
+            "CDDL-1.1",
+            "EPL-1.0",
+            "EPL-2.0"
         ]
     },
     "SERVICE": {
@@ -413,14 +417,6 @@
         "LGPL-3.0-or-later": {
             "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
             "dynamic": [ "REQUIRE_CITATION" ]
-        },
-        "EPL-1.0": {
-            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
-            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
-        },
-        "EPL-2.0": {
-            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
-            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
         }
     }
 }

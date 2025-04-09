@@ -66,6 +66,27 @@ TTopicDescription TTopicSdkTestSetup::DescribeTopic(const TString& path)
     return status.GetTopicDescription();
 }
 
+TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const TString& path, const TString& consumer)
+{
+    TTopicClient client(MakeDriver());
+
+    TDescribeConsumerSettings settings;
+    settings.IncludeStats(true);
+    settings.IncludeLocation(true);
+
+    auto status = client.DescribeConsumer(path, consumer, settings).GetValueSync();
+    UNIT_ASSERT(status.IsSuccess());
+
+    return status.GetConsumerDescription();
+}
+
+TStatus TTopicSdkTestSetup::Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset) {
+    TTopicClient client(MakeDriver());
+
+    return client.CommitOffset(path, partitionId, consumerName, offset).GetValueSync();
+}
+
+
 TString TTopicSdkTestSetup::GetEndpoint() const {
     return "localhost:" + ToString(Server.GrpcPort);
 }

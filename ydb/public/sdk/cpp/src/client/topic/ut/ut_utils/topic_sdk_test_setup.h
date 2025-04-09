@@ -1,8 +1,8 @@
 #pragma once
 
-#include <src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
-#include <src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -22,6 +22,9 @@ public:
                      size_t maxPartitionCount = 100);
 
     TTopicDescription DescribeTopic(const TString& path = TString{TEST_TOPIC});
+    TConsumerDescription DescribeConsumer(const TString& path = TString{TEST_TOPIC}, const TString& consumer = TString{TEST_CONSUMER});
+
+    TStatus Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset);
 
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TString{TEST_TOPIC}) const;

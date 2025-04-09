@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
@@ -434,11 +435,12 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(ok);
 }
 
-void TestWriteOverload(const TestTableDescription& table) {
+void TestWriteOverload(const TestTableDescription& table, bool WritePortionsOnInsert) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(WritePortionsOnInsert);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
+    csDefaultControllerGuard->SetOverrideBlobSplitSettings(std::nullopt);
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -462,26 +464,31 @@ void TestWriteOverload(const TestTableDescription& table) {
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
-            Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
-            if (toCatch && msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
-                capturedWrites.push_back(ev.Release());
+        if (toCatch) {
+            TAutoPtr<IEventHandle> eventToCapture;
+            if (WritePortionsOnInsert) {
+                if (auto* msg = TryGetPrivateEvent<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(ev)) {
+                    Cerr << "CATCH TEvWritePortionResult, status " << msg->GetWriteStatus() << Endl;
+                    if (msg->GetWriteStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
+                        eventToCapture = ev.Release();
+                    }
+                }
+             } else {
+                if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
+                    Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
+                    if (msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
+                        eventToCapture = ev.Release();
+                    }
+                }
+            }
+            if (eventToCapture) {
                 --toCatch;
+                capturedWrites.push_back(std::move(eventToCapture));
                 return true;
-            } else {
-                return false;
             }
         }
         return false;
     };
-
-    auto resendOneCaptured = [&]() {
-        UNIT_ASSERT(capturedWrites.size());
-        Cerr << "RESEND TEvWrite" << Endl;
-        runtime.Send(capturedWrites.front().Release());
-        capturedWrites.pop_front();
-    };
-
     runtime.SetEventFilter(captureEvents);
 
     const ui32 toSend = toCatch + 1;
@@ -492,7 +499,8 @@ void TestWriteOverload(const TestTableDescription& table) {
     UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
 
     while (capturedWrites.size()) {
-        resendOneCaptured();
+        runtime.Send(capturedWrites.front().Release());
+        capturedWrites.pop_front();
         UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
@@ -1665,15 +1673,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWrite(table);
     }
 
-    Y_UNIT_TEST(WriteOverload) {
+    Y_UNIT_TEST_QUATRO(WriteOverload, InStore, WithWritePortionsOnInsert) {
         TestTableDescription table;
-        TestWriteOverload(table);
-    }
-
-    Y_UNIT_TEST(WriteStandaloneOverload) {
-        TestTableDescription table;
-        table.InStore = false;
-        TestWriteOverload(table);
+        table.InStore = InStore;
+        TestWriteOverload(table, WithWritePortionsOnInsert);
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {
@@ -2264,7 +2267,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
-                    ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
+                    const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
                     const TString kindStr(kind.data(), kind.size());
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
@@ -2277,7 +2280,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " " << pathId << " " << kindStr
                          << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
-                    if (pathId == tableId) {
+                    if (pathId.GetRawValue() == tableId) {
                         if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) ||
                             kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;
@@ -2484,10 +2487,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ++compactionsHappened;
                     TStringBuilder sb;
                     sb << "Compaction old portions:";
-                    ui64 srcPathId{ 0 };
+                    std::optional<TInternalPathId> srcPathId;
                     for (const auto& portionInfo : compact->GetSwitchedPortions()) {
-                        const ui64 pathId = portionInfo->GetPathId();
-                        UNIT_ASSERT(!srcPathId || srcPathId == pathId);
+                        const TInternalPathId pathId = portionInfo->GetPathId();
+                        UNIT_ASSERT(!srcPathId || *srcPathId == pathId);
                         srcPathId = pathId;
                         oldPortions.insert(portionInfo->GetPortionId());
                         sb << portionInfo->GetPortionId() << ",";
@@ -2537,17 +2540,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             return false;
         };
         runtime.SetEventFilter(captureEvents);
-
-        // Disable GC batching so that deleted blobs get collected without a delay
-        {
-            TAtomic unusedPrev;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unusedPrev);
-        }
-
-        {
-            TAtomic unusedPrev;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxPortionsInGranule", 10, unusedPrev);
-        }
 
         // Write different keys: grow on compaction
 

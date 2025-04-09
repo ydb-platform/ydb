@@ -84,4 +84,7 @@ private:
     const bool TopLevel;
 };
 
+void EnumeratePragmas(std::function<void(std::string_view)> callback);
+void EnumerateStmtContexts(std::function<void(std::string_view)> callback);
+
 } // namespace NSQLTranslationV1

@@ -96,6 +96,12 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+void FillIndexTableColumns(
+    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc);
+
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
@@ -143,6 +149,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         //We have already checked this in IsCompatibleIndex
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+
+        if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            return false;
+        }
 
         const TString& indexColumnName = indexKeys.KeyColumns.back();
         Y_ABORT_UNLESS(baseColumnTypes.contains(indexColumnName));

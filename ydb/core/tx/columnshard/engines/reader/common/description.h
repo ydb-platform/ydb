@@ -1,10 +1,17 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 namespace NKikimr::NOlap::NReader {
+
+enum class ERequestSorting {
+    NONE = 0 /* "not_sorted" */,
+    ASC /* "ascending" */,
+    DESC /* "descending" */,
+};
 
 // Describes read/scan request
 struct TReadDescription {
@@ -13,12 +20,13 @@ private:
     TProgramContainer Program;
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
+    YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
 
 public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both
@@ -30,8 +38,7 @@ public:
     // List of columns
     std::vector<ui32> ColumnIds;
 
-    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
-        AFL_VERIFY(ScanCursor);
+    const std::shared_ptr<IScanCursor>& GetScanCursorOptional() const {
         return ScanCursor;
     }
 
@@ -40,9 +47,10 @@ public:
         ScanCursor = cursor;
     }
 
-    TReadDescription(const TSnapshot& snapshot, const bool isReverse)
+    TReadDescription(const TSnapshot& snapshot, const ERequestSorting sorting)
         : Snapshot(snapshot)
-        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>(isReverse)) {
+        , Sorting(sorting)
+        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>()) {
     }
 
     void SetProgram(TProgramContainer&& value) {
@@ -58,4 +66,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader

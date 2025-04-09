@@ -23,6 +23,8 @@
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
+
 namespace NYT::NDriver {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,6 +79,9 @@ struct TDriverRequest
     //! Invoked after driver is done producing response parameters and
     //! before first write to output stream.
     std::function<void()> ResponseParametersFinishedCallback;
+
+    //! Memory usage tracker.
+    IMemoryUsageTrackerPtr MemoryUsageTracker = GetNullMemoryUsageTracker();
 
     void Reset();
 

@@ -176,10 +176,14 @@ public:
         if (RequestEv->GetRequestCtx() == nullptr) {
             return false;
         }
-        if (ParticipantNodes.size() == 1) {
+        if (IsSingleNodeExecution()) {
             return *ParticipantNodes.begin() == nodeId;
         }
         return false;
+    }
+
+    bool IsSingleNodeExecution() const {
+        return ParticipantNodes.size() == 1;
     }
 
     NKikimrKqp::EQueryAction GetAction() const {
@@ -328,7 +332,7 @@ public:
         return RequestEv->GetQuery();
     }
 
-    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperations() const {
+    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperationsFromRequest() const {
         return RequestEv->GetTopicOperations();
     }
 

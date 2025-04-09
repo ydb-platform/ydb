@@ -4,15 +4,15 @@
 
 #include "stats.h"
 
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 enum class ESyntax {
     Unspecified = 0,
@@ -185,4 +185,4 @@ private:
 using TAsyncFetchScriptResultsResult = NThreading::TFuture<TFetchScriptResultsResult>;
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
 
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

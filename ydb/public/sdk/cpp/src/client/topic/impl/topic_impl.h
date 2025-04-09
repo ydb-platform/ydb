@@ -2,18 +2,18 @@
 
 #include "transaction.h"
 
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 struct TOffsetsRange {
     ui64 Start;
     ui64 End;
@@ -282,7 +282,9 @@ public:
         request.set_partition_id(partitionId);
         request.set_consumer(TStringType{consumerName});
         request.set_offset(offset);
-
+        if (settings.ReadSessionId_) {
+            request.set_read_session_id(*settings.ReadSessionId_);
+        }
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,

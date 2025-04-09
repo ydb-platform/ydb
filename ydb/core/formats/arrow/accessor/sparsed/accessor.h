@@ -17,7 +17,7 @@ class TColumnFilter;
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TSparsedArrayChunk: public TMoveOnly {
+class TSparsedArrayChunk {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Records);
@@ -50,11 +50,25 @@ private:
             return StartExt < item.StartExt;
         }
     };
-
     std::vector<TInternalChunkInfo> RemapExternalToInternal;
     std::shared_ptr<arrow::Array> DefaultsArray;
+    TSparsedArrayChunk(const TSparsedArrayChunk&) = default;
+
+    TSparsedArrayChunk(const ui32 recordsCount, const TSparsedArrayChunk& original)
+        : TSparsedArrayChunk(original) {
+        AFL_VERIFY(!original.GetNotDefaultRecordsCount());
+        RecordsCount = recordsCount;
+        AFL_VERIFY(RemapExternalToInternal.size() == 1);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartExt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartInt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetIsDefault());
+        RemapExternalToInternal[0] = TInternalChunkInfo(0, 0, recordsCount, true);
+    }
 
 public:
+    TSparsedArrayChunk& operator=(TSparsedArrayChunk&&) noexcept = default;
+    TSparsedArrayChunk(TSparsedArrayChunk&&) = default;
+
     void VisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
         visitor(ColValue);
         visitor(DefaultsArray);
@@ -99,6 +113,9 @@ public:
 
     TSparsedArrayChunk ApplyFilter(const TColumnFilter& filter) const;
     TSparsedArrayChunk Slice(const ui32 offset, const ui32 count) const;
+    TSparsedArrayChunk MakeCopy(const ui32 recordsCount) const {
+        return TSparsedArrayChunk(recordsCount, *this);
+    }
 };
 
 class TSparsedArray: public IChunkedArray {
@@ -110,6 +127,15 @@ private:
 
     virtual void DoVisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const override {
         Record.VisitValues(visitor);
+    }
+
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
+        if (Record.GetNotDefaultRecordsCount()) {
+            return false;
+        } else {
+            value = DefaultValue;
+            return true;
+        }
     }
 
 protected:
@@ -149,10 +175,19 @@ protected:
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& type) {
-        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-            std::make_shared<arrow::Field>("value", type) };
-        return std::make_shared<arrow::Schema>(fields);
+    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& typePtr) {
+        std::shared_ptr<arrow::Schema> result;
+        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
+            static const std::shared_ptr<arrow::Schema> schemaResult = [&]() {
+                std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+                    std::make_shared<arrow::Field>("value", typePtr) };
+                return std::make_shared<arrow::Schema>(fields);
+            }();
+            result = schemaResult;
+            return true;
+        });
+        AFL_VERIFY(result);
+        return result;
     }
 
     static TSparsedArrayChunk MakeDefaultChunk(
@@ -160,6 +195,20 @@ protected:
 
 public:
     virtual void Reallocate() override;
+
+    static std::shared_ptr<TSparsedArray> BuildFalseArrayUI8(const ui32 recordsCount) {
+        static const std::shared_ptr<TSparsedArray> preResult(
+            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), 1));
+        return std::shared_ptr<NAccessor::TSparsedArray>(
+            new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
+    }
+
+    static std::shared_ptr<TSparsedArray> BuildTrueArrayUI8(const ui32 recordsCount) {
+        static const std::shared_ptr<TSparsedArray> preResult(
+            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), 1));
+        return std::shared_ptr<NAccessor::TSparsedArray>(
+            new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
+    }
 
     static std::shared_ptr<TSparsedArray> Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
 
@@ -189,7 +238,7 @@ public:
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
         const std::shared_ptr<arrow::Scalar> DefaultValue;
-
+        std::optional<ui32> LastRecordIndex;
     public:
         TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
             : DefaultValue(defaultValue) {
@@ -198,9 +247,24 @@ public:
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
             AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
             AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
             ++RecordsCount;
+        }
+
+        void AddNull(const ui32 recordIndex) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
+            if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
+                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                TStatusValidator::Validate(ValueBuilder->AppendNull());
+            }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {

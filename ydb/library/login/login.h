@@ -10,6 +10,7 @@
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/password_checker/hash_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/cache/lru.h>
 
 namespace NLogin {
 
@@ -28,6 +29,9 @@ public:
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
+
+    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
+    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
 
     struct TBasicRequest {};
 
@@ -170,6 +174,11 @@ public:
         std::chrono::system_clock::time_point LastSuccessfulLogin;
     };
 
+    struct TCacheSettings {
+        size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
+        size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
+    };
+
     // our current audience (database name)
     TString Audience;
 
@@ -206,13 +215,17 @@ public:
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
+    void UpdateCacheSettings(const TCacheSettings& settings);
 
     TLoginProvider();
     TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
-    TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer);
+    TLoginProvider(const TPasswordComplexity& passwordComplexity,
+        const TAccountLockout::TInitializer& accountLockoutInitializer,
+        const std::function<bool()>& isCacheUsed,
+        const TCacheSettings& cacheSettings);
     ~TLoginProvider();
 
-    std::vector<TString> GetGroupsMembership(const TString& member);
+    std::vector<TString> GetGroupsMembership(const TString& member) const;
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);

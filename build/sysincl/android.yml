@@ -5,6 +5,7 @@
   - android/asset_manager_jni.h
   - android/bitmap.h
   - android/dlext.h
+  - android/hardware_buffer.h
   - android/log.h
   - android/native_window.h
   - android/native_window_jni.h

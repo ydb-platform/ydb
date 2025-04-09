@@ -29,7 +29,6 @@ TClientWriter::TClientWriter(
         RawWriter_.Reset(new TRetrylessWriter(
             context,
             transactionId,
-            GetWriteTableCommand(context.Config->ApiVersion),
             format,
             path,
             BufferSize_,

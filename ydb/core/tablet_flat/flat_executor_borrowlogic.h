@@ -23,7 +23,7 @@ class TExecutorBorrowLogic {
             TVector<TLogoBlobID> Keep;
             ui64 KeepBytes = 0;
 
-            bool HasKeep(const TLogoBlobID &blob) const noexcept
+            bool HasKeep(const TLogoBlobID &blob) const
             {
                 return std::find(Keep.begin(), Keep.end(), blob) != Keep.end();
             }

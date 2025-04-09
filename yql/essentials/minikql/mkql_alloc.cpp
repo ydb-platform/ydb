@@ -27,9 +27,15 @@ void TAllocState::TListEntry::Unlink() noexcept {
 
 TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
     : TAlignedPagePool(location, counters)
+#ifndef NDEBUG
+    , DefaultMemInfo(MakeIntrusive<TMemoryUsageInfo>("default"))
+#endif
     , SupportsSizedAllocators(supportsSizedAllocators)
     , CurrentPAllocList(&GlobalPAllocList)
 {
+#ifndef NDEBUG
+    ActiveMemInfo.emplace(DefaultMemInfo.Get(), DefaultMemInfo);
+#endif
     GetRoot()->InitLinks();
     OffloadedBlocksRoot.InitLinks();
     GlobalPAllocList.InitLinks();
@@ -51,17 +57,13 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 void TAllocState::CleanupArrowList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
         if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
             free(curr);
         } else {
-#endif
             auto size = ((TMkqlArrowHeader*)curr)->Size;
             auto fullSize = size + sizeof(TMkqlArrowHeader);
             ReleaseAlignedPage(curr, fullSize);
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
         }
-#endif
 
         curr = next;
     }
@@ -298,8 +300,10 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
 }
 
 void* MKQLArrowAllocate(ui64 size) {
-    if (size <= ArrowSizeForArena) {
-        return MKQLArrowAllocateOnArena(size);
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+        if (size <= ArrowSizeForArena) {
+            return MKQLArrowAllocateOnArena(size);
+        }
     }
 
     TAllocState* state = TlsAllocState;
@@ -310,18 +314,14 @@ void* MKQLArrowAllocate(ui64 size) {
     }
 
     void* ptr;
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         ptr = malloc(fullSize);
         if (!ptr) {
             throw TMemoryLimitExceededException();
         }
     } else {
-#endif
         ptr = GetAlignedPage(fullSize);
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
-#endif
 
     auto* header = (TMkqlArrowHeader*)ptr;
     header->Offset = 0;
@@ -366,8 +366,10 @@ void MKQLArrowFreeOnArena(const void* ptr) {
 }
 
 void MKQLArrowFree(const void* mem, ui64 size) {
-    if (size <= ArrowSizeForArena) {
-        return MKQLArrowFreeOnArena(mem);
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+        if (size <= ArrowSizeForArena) {
+            return MKQLArrowFreeOnArena(mem);
+        }
     }
 
     auto fullSize = size + sizeof(TMkqlArrowHeader);
@@ -384,12 +386,11 @@ void MKQLArrowFree(const void* mem, ui64 size) {
 
     Y_ENSURE(size == header->Size);
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         free(header);
         return;
     }
-#endif
+
     ReleaseAlignedPage(header, fullSize);
 }
 
@@ -400,21 +401,23 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
         return;
     }
 
-    if (size <= ArrowSizeForArena) {
-        auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+        if (size <= ArrowSizeForArena) {
+            auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
 
-        auto it = state->ArrowBuffers.find(page);
-        if (it == state->ArrowBuffers.end()) {
+            auto it = state->ArrowBuffers.find(page);
+            if (it == state->ArrowBuffers.end()) {
+                return;
+            }
+
+            if (!page->Entry.IsUnlinked()) {
+                page->Entry.Unlink(); // unlink page immediately so we don't accidentally free untracked memory within `TAllocState`
+                state->ArrowBuffers.erase(it);
+                state->OffloadFree(page->Size);
+            }
+
             return;
         }
-
-        if (!page->Entry.IsUnlinked()) {
-            page->Entry.Unlink(); // unlink page immediately so we don't accidentally free untracked memory within `TAllocState`
-            state->ArrowBuffers.erase(it);
-            state->OffloadFree(page->Size);
-        }
-
-        return;
     }
 
     auto it = state->ArrowBuffers.find(mem);

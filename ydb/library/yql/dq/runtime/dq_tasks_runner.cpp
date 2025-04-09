@@ -188,9 +188,9 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
             return CreateOutputHashPartitionConsumer(
-                std::move(outputs), 
-                std::move(keyColumns), 
-                type, holderFactory, 
+                std::move(outputs),
+                std::move(keyColumns),
+                type, holderFactory,
                 minFillPercentage,
                 outputDesc.GetHashPartition(),
                 pgBuilder
@@ -259,6 +259,13 @@ public:
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
 
+        NUdf::TLogProviderFunc logProviderFunc = nullptr;
+        if (LogFunc) {
+            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                log(TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
+            };
+            ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
+        }
     }
 
     ~TDqTaskRunner() {
@@ -318,7 +325,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr);
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, ComputationLogProvider.Get());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -448,21 +455,6 @@ public:
         std::shared_ptr<TPatternCacheEntry> entry;
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
-#if !defined(NEW_PATTERN_CACHE_IN_MKQL)
-            auto& cache = Context.PatternCache;
-            auto ticket = cache->FindOrSubscribe(program.GetRaw());
-            if (!ticket.HasFuture()) {
-                entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
-                if (canBeCached && entry->Pattern->GetSuitableForCache()) {
-                    cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
-                    ticket.Close();
-                } else {
-                    cache->IncNotSuitablePattern();
-                }
-            } else {
-                entry = ticket.GetValueSync();
-            }
-#else
             auto& cache = Context.PatternCache;
             auto future = cache->FindOrSubscribe(program.GetRaw());
             if (!future.HasValue()) {
@@ -482,7 +474,6 @@ public:
             } else {
                 entry = future.GetValueSync();
             }
-#endif
         }
 
         if (!entry) {
@@ -681,11 +672,18 @@ public:
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
+                    settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                    }
+
+                    if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
+                        const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();
+                        const auto dstNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId()).NodeId();
+                        settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
                     auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
@@ -725,13 +723,6 @@ public:
         }
 
         auto prepareTime = TInstant::Now() - startTime;
-        if (LogFunc) {
-            TLogFunc logger = [taskId = TaskId, log = LogFunc](const TString& message) {
-                log(TStringBuilder() << "Run task: " << taskId << ", " << message);
-            };
-            LogFunc = logger;
-
-        }
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {
@@ -994,6 +985,7 @@ private:
 private:
     std::shared_ptr<ISpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
+    NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;

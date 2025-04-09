@@ -1,8 +1,6 @@
 #include "agent_impl.h"
 #include "blocks.h"
 
-#include <ydb/core/wrappers/s3_wrapper.h>
-
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -14,6 +12,7 @@ namespace NKikimr::NBlobDepot {
             ConnectToBlobDepot();
         } else {
             PipeServerId = msg.ServerId;
+            SwitchMode(EMode::Registering);
         }
     }
 
@@ -34,6 +33,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (AgentId, LogId), (PipeId, PipeId), (RequestId, id));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
         RegisterRequest(id, this, nullptr, {}, true);
+        SwitchMode(EMode::ConnectPending);
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
@@ -97,14 +97,9 @@ namespace NKikimr::NBlobDepot {
             S3WrapperId = {};
         }
 
-        if (S3BackendSettings) {
-            auto& settings = S3BackendSettings->GetSettings();
-            ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
-            S3WrapperId = Register(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
-            S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << msg.GetName();
-        } else {
-            ExternalStorageConfig = {};
-        }
+#ifndef KIKIMR_DISABLE_S3_OPS
+        InitS3(msg.GetName());
+#endif
 
         OnConnect();
     }
@@ -147,10 +142,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::OnConnect() {
         IsConnected = true;
+        SwitchMode(EMode::Connected);
+
         HandlePendingEvent();
     }
 
     void TBlobDepotAgent::OnDisconnect() {
+        ++ConnectionInstance;
+
         while (!TabletRequestInFlight.empty()) {
             auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
             auto& requestInFlight = node.value();
@@ -163,6 +162,7 @@ namespace NKikimr::NBlobDepot {
 
         ClearPendingEventQueue("BlobDepot tablet disconnected");
 
+        SwitchMode(EMode::None);
         IsConnected = false;
     }
 

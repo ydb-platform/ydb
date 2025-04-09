@@ -22,7 +22,9 @@ namespace {
 struct TExecutionOptions {
     enum class EExecutionCase {
         Stream,
-        AsyncStream
+        Analytics,
+        AsyncStream,
+        AsyncAnalytics
     };
 
     TString Query;
@@ -34,15 +36,30 @@ struct TExecutionOptions {
     bool ContinueAfterFail = false;
 
     EExecutionCase ExecutionCase = EExecutionCase::Stream;
+    FederatedQuery::ExecuteMode QueryAction;
+    TString Scope;
 
     bool HasResults() const {
-        return !Query.empty();
+        return !Query.empty() && (ExecutionCase == EExecutionCase::Stream || ExecutionCase == EExecutionCase::Analytics);
+    }
+
+    bool IsAnalitycsQuery() const {
+        return ExecutionCase == EExecutionCase::Analytics || ExecutionCase == EExecutionCase::AsyncAnalytics;
+    }
+
+    TFqOptions GetFqOptions() const {
+        return {
+            .Scope = Scope
+        };
     }
 
     TRequestOptions GetQueryOptions(ui64 queryId) const {
         return {
             .Query = Query,
-            .QueryId = queryId
+            .Action = QueryAction,
+            .Type = IsAnalitycsQuery() ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
+            .QueryId = queryId,
+            .FqOptions = GetFqOptions()
         };
     }
 
@@ -92,8 +109,9 @@ void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, T
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.ExecutionCase) {
+        case TExecutionOptions::EExecutionCase::Analytics:
         case TExecutionOptions::EExecutionCase::Stream: {
-            if (!runner.ExecuteStreamQuery(executionOptions.GetQueryOptions(queryId))) {
+            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(queryId))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching query results..." << colors.Default() << Endl;
@@ -103,6 +121,7 @@ void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, T
             break;
         }
 
+        case TExecutionOptions::EExecutionCase::AsyncAnalytics:
         case TExecutionOptions::EExecutionCase::AsyncStream: {
             runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(queryId));
             break;
@@ -115,14 +134,14 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
 
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
-        if (!runner.CreateConnections(executionOptions.Connections)) {
+        if (!runner.CreateConnections(executionOptions.Connections, executionOptions.GetFqOptions())) {
             ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections";
         }
     }
 
     if (!executionOptions.Bindings.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating bindings..." << colors.Default() << Endl;
-        if (!runner.CreateBindings(executionOptions.Bindings)) {
+        if (!runner.CreateBindings(executionOptions.Bindings, executionOptions.GetFqOptions())) {
             ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings";
         }
     }
@@ -154,6 +173,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
             }
         }
     }
+    runner.FinalizeRunner();
 
     if (executionOptions.HasResults()) {
         try {
@@ -247,27 +267,12 @@ protected:
                 SetupAcl(binding.mutable_acl());
             });
 
-        options.AddLongOption("fq-cfg", "File with FQ config (NFq::NConfig::TConfig for FQ proxy)")
+        options.AddLongOption("cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
             .RequiredArgument("file")
-            .DefaultValue("./configuration/fq_config.conf")
+            .DefaultValue("./configuration/app_config.conf")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.FqConfig)) {
-                    ythrow yexception() << "Bad format of FQ configuration";
-                }
-            });
-
-        options.AddLongOption("as-cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
-            .RequiredArgument("file")
-            .DefaultValue("./configuration/as_config.conf")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                const TString file(option->CurValOrDef());
-                if (file == "-") {
-                    return;
-                }
-
-                RunnerOptions.FqSettings.ActorSystemConfig = NKikimrConfig::TActorSystemConfig();
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &(*RunnerOptions.FqSettings.ActorSystemConfig))) {
-                    ythrow yexception() << "Bad format of actor system configuration";
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(option->CurValOrDef())), &RunnerOptions.FqSettings.AppConfig)) {
+                    ythrow yexception() << "Bad format of app configuration";
                 }
             });
 
@@ -331,11 +336,25 @@ protected:
             .Choices(resultFormat.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutputFormat, resultFormat);
 
+        options.AddLongOption("ast-file", "File with query ast (use '-' to write in stdout)")
+            .RequiredArgument("file")
+            .StoreMappedResultT<TString>(&RunnerOptions.AstOutput, &GetDefaultOutput);
+
+        options.AddLongOption("plan-file", "File with query plan (use '-' to write in stdout)")
+            .RequiredArgument("file")
+            .StoreMappedResultT<TString>(&RunnerOptions.PlanOutput, &GetDefaultOutput);
+
+        options.AddLongOption("canonical-output", "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.CanonicalOutput);
+
         // Pipeline settings
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
             {"stream", TExecutionOptions::EExecutionCase::Stream},
-            {"async-stream", TExecutionOptions::EExecutionCase::AsyncStream}
+            {"analytics", TExecutionOptions::EExecutionCase::Analytics},
+            {"async-stream", TExecutionOptions::EExecutionCase::AsyncStream},
+            {"async-analytics", TExecutionOptions::EExecutionCase::AsyncAnalytics}
         });
         options.AddLongOption('C', "execution-case", "Type of query for -p argument")
             .RequiredArgument("query-type")
@@ -369,6 +388,20 @@ protected:
             .DefaultValue(100)
             .StoreMappedResultT<ui64>(&RunnerOptions.PingPeriod, &TDuration::MilliSeconds<ui64>);
 
+        TChoices<FederatedQuery::ExecuteMode> queryAction({
+            {"save", FederatedQuery::ExecuteMode::SAVE},
+            {"parse", FederatedQuery::ExecuteMode::PARSE},
+            {"compile", FederatedQuery::ExecuteMode::COMPILE},
+            {"validate", FederatedQuery::ExecuteMode::VALIDATE},
+            {"explain", FederatedQuery::ExecuteMode::EXPLAIN},
+            {"run", FederatedQuery::ExecuteMode::RUN}
+        });
+        options.AddLongOption('A', "action", "Query execute action")
+            .RequiredArgument("action")
+            .DefaultValue("run")
+            .Choices(queryAction.GetChoices())
+            .StoreMappedResultT<TString>(&ExecutionOptions.QueryAction, queryAction);
+
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")
             .RequiredArgument("uint")
             .DefaultValue(ExecutionOptions.LoopCount)
@@ -383,9 +416,13 @@ protected:
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
 
+        options.AddLongOption('S', "scope-id", "Query scope id")
+            .RequiredArgument("scope")
+            .StoreResult(&ExecutionOptions.Scope);
+
         // Cluster settings
 
-        options.AddLongOption("cp-storage", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
+        options.AddLongOption("cp-storage-db", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCpStorage = true;
@@ -394,7 +431,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("checkpoints", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
+        options.AddLongOption("checkpoints-db", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCheckpoints = true;
@@ -403,7 +440,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("quotas", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
+        options.AddLongOption("quotas-db", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableQuotas = true;
@@ -412,7 +449,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("row-dispatcher", TStringBuilder() << "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
+        options.AddLongOption("row-dispatcher-db", "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableRemoteRd = true;
@@ -421,16 +458,37 @@ protected:
                 }
             });
 
+        options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
+            .OptionalArgument("database@endpoint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.FqSettings.EnableYdbCompute = true;
+                if (const auto value = option->CurVal()) {
+                    RunnerOptions.FqSettings.SingleComputeDatabase = TExternalDatabase::Parse(value, "YDB_COMPUTE_TOKEN");
+                }
+            });
+
+        options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
+            .RequiredArgument("database@endpoint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.FqSettings.EnableYdbCompute = true;
+                RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
+            });
+        options.MutuallyExclusive("single-compute-db", "shared-compute-db");
+
         RegisterKikimrOptions(options, RunnerOptions.FqSettings);
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
 
+        if (ExecutionOptions.IsAnalitycsQuery()) {
+            RunnerOptions.FqSettings.EnableYdbCompute = true;
+        }
+
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
-        auto& fqConfig = RunnerOptions.FqSettings.FqConfig;
+        auto& fqConfig = *RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig();
         auto& gatewayConfig = *fqConfig.mutable_gateways();
         FillTokens(gatewayConfig.mutable_pq());
         FillTokens(gatewayConfig.mutable_s3());
@@ -491,9 +549,11 @@ private:
     }
 
     void SetupLogsConfig() {
-        auto& logConfig = RunnerOptions.FqSettings.LogConfig;
+        auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
 
-        logConfig.SetDefaultLevel(DefaultLogPriority.value_or(NActors::NLog::EPriority::PRI_CRIT));
+        if (DefaultLogPriority) {
+            logConfig.SetDefaultLevel(*DefaultLogPriority);
+        }
 
         if (FqLogPriority) {
             std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> fqLogPriorities;

@@ -65,7 +65,7 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
-# ydb_fixtures.ydb_cluster_configuration local override
+# fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration(enable_alter_database_create_hive_first):
     conf = copy.deepcopy(CLUSTER_CONFIG)

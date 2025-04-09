@@ -33,6 +33,8 @@ public:
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
+        AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<false>));
+        AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<false>));
         AddHandler(0, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<false>));
@@ -73,6 +75,8 @@ public:
         }
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
+        AddHandler(1, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<true>));
+        AddHandler(1, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoAssumeUnique::Match, HNDL(PushAssumeUniqueToStage<true>));
         AddHandler(1, &TCoAssumeDistinct::Match, HNDL(PushAssumeDistinctToStage<true>));
@@ -124,6 +128,16 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushPruneKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneAdjacentKeysToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqPushPruneAdjacentKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

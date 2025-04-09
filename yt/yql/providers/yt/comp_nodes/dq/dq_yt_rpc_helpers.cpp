@@ -45,6 +45,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         client->InitStreamingRequest(*request);
         request->ServerAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
         request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(timeout);
+        request->ClientAttachmentsStreamingParameters().WriteTimeout = TDuration::MilliSeconds(timeout);
 
         TString ppath;
         auto tableYPath = ConvertYPathFromOld(richYPath);

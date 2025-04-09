@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -136,7 +137,7 @@ private:
     std::shared_ptr<TVersionCounters> VersionCounters;
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
-    THashMap<ui64, TPathInfo> PathInfo;
+    THashMap<TInternalPathId, TPathInfo> PathInfo;
     void RemovePriority(const TPathInfo& pathInfo) noexcept;
     void AddPriority(const TPathInfo& pathInfo) noexcept;
 
@@ -154,7 +155,7 @@ public:
     {
     }
 
-    bool HasPathIdData(const ui64 pathId) const {
+    bool HasPathIdData(const TInternalPathId pathId) const {
         auto it = PathInfo.find(pathId);
         if (it == PathInfo.end()) {
             return false;
@@ -162,7 +163,7 @@ public:
         return !it->second.IsEmpty();
     }
 
-    void ErasePath(const ui64 pathId) {
+    void ErasePath(const TInternalPathId pathId) {
         auto it = PathInfo.find(pathId);
         if (it == PathInfo.end()) {
             return;
@@ -208,25 +209,25 @@ public:
     const NColumnShard::TInsertTableCounters& GetCounters() const {
         return Counters;
     }
-    NKikimr::NOlap::TPathInfo& RegisterPathInfo(const ui64 pathId);
-    TPathInfo* GetPathInfoOptional(const ui64 pathId);
-    const TPathInfo* GetPathInfoOptional(const ui64 pathId) const;
-    TPathInfo& GetPathInfoVerified(const ui64 pathId) {
+    NKikimr::NOlap::TPathInfo& RegisterPathInfo(const TInternalPathId pathId);
+    TPathInfo* GetPathInfoOptional(const TInternalPathId pathId);
+    const TPathInfo* GetPathInfoOptional(const TInternalPathId pathId) const;
+    TPathInfo& GetPathInfoVerified(const TInternalPathId pathId) {
         auto* result = GetPathInfoOptional(pathId);
         AFL_VERIFY(result);
         return *result;
     }
-    const TPathInfo& GetPathInfoVerified(const ui64 pathId) const {
+    const TPathInfo& GetPathInfoVerified(const TInternalPathId pathId) const {
         auto* result = GetPathInfoOptional(pathId);
         AFL_VERIFY(result);
         return *result;
     }
 
-    const THashMap<ui64, TPathInfo>& GetPathInfo() const {
+    const THashMap<TInternalPathId, TPathInfo>& GetPathInfo() const {
         return PathInfo;
     }
 
-    bool IsOverloaded(const ui64 pathId) const;
+    bool IsOverloaded(const TInternalPathId pathId) const;
 
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;

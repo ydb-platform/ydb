@@ -322,6 +322,7 @@ TString MakeCreateExternalDataSourceQuery(
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().mysql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
+            break;
         }
         case FederatedQuery::ConnectionSetting::kLogging: {
             properties = fmt::format(

@@ -20,16 +20,16 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Execute");
 
-        if (!Self->DbLoadState(txc, ctx))
+        if (!Self->Dirty.DbLoadState(txc, ctx))
             return false;
 
         // Move epoch if required.
         auto now = ctx.Now();
-        while (now > Self->Epoch.End) {
+        while (now > Self->Dirty.Epoch.End) {
             TStateDiff diff;
-            Self->ComputeNextEpochDiff(diff);
-            Self->DbApplyStateDiff(diff, txc);
-            Self->ApplyStateDiff(diff);
+            Self->Dirty.ComputeNextEpochDiff(diff);
+            Self->Dirty.DbApplyStateDiff(diff, txc);
+            Self->Dirty.ApplyStateDiff(diff);
         }
 
         return true;
@@ -39,12 +39,12 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Complete");
 
+        Self->Committed = Self->Dirty;
         Self->Become(&TNodeBroker::StateWork);
         Self->SubscribeForConfigUpdates(ctx);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
         Self->SignalTabletActive(ctx);
-        Self->TxCompleted(this, ctx);
     }
 
 private:

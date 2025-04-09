@@ -26,6 +26,7 @@ PEERDIR(
     library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/control/lib
+    ydb/core/mon
     ydb/library/actors/core
     ydb/library/actors/prof
     ydb/library/services

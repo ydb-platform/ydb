@@ -17,7 +17,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 
@@ -156,7 +156,7 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
 
 void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
     Y_UNUSED(key);
-    Y_ABORT();
+    Y_ENSURE(false);
 }
 
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
@@ -355,7 +355,7 @@ TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& prog
     );
 
     const TDuration TIME_LIMIT = TDuration::Seconds(NValgrind::PlainOrUnderValgrind(60, 300));
-    Y_ABORT_UNLESS(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
+    Y_ENSURE(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
     NYql::TConvertResult res = resFuture.GetValue();
     res.Errors.PrintTo(Cerr);
     UNIT_ASSERT(res.Node.GetNode());
@@ -946,7 +946,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                             RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender);
                         }
 
-                        Y_ABORT_UNLESS(delayedEvent);
+                        Y_ENSURE(delayedEvent);
                         DelayedReadSets.clear();
                         Tester.Runtime.Send(delayedEvent.Release());
                         Cerr << "resending delayed RS" << Endl;
@@ -1427,12 +1427,12 @@ TRowVersion GrabCreateVolatileSnapshotResult(
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     const auto& record = ev->Get()->Record;
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
-    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
+    Y_ENSURE(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
         "Unexpected status " << status);
 
     auto step = record.GetStep();
     auto txId = record.GetTxId();
-    Y_VERIFY_S(step != 0 && txId != 0,
+    Y_ENSURE(step != 0 && txId != 0,
         "Unexpected step " << step << " and txId " << txId);
 
     return { step, txId };
@@ -1558,12 +1558,12 @@ TRowVersion CommitWrites(
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     const auto& record = ev->Get()->Record;
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
-    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
+    Y_ENSURE(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
         "Unexpected status " << status);
 
     auto step = record.GetStep();
     auto txId = record.GetTxId();
-    Y_VERIFY_S(txId != 0,
+    Y_ENSURE(txId != 0,
         "Unexpected step " << step << " and txId " << txId);
 
     return { step, txId };
@@ -2118,7 +2118,7 @@ void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cell
         stringValues.emplace_back(Sprintf("String_%" PRIu64, value));
         cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));
     } else {
-        Y_ABORT("Unsupported column type");
+        Y_ENSURE(false, "Unsupported column type " << columnType);
     }
 }
 
@@ -2412,7 +2412,7 @@ namespace {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: {
                     const auto rsData = msg->Record.GetSerializedReadTableResponse();
                     Ydb::ResultSet rsParsed;
-                    Y_ABORT_UNLESS(rsParsed.ParseFromString(rsData));
+                    Y_ENSURE(rsParsed.ParseFromString(rsData));
                     NYdb::TResultSet rs(rsParsed);
                     auto& columns = rs.GetColumnsMeta();
                     NYdb::TResultSetParser parser(rs);
@@ -2467,7 +2467,7 @@ namespace {
         }
 
         void Handle(TEvResume::TPtr&, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(State == EState::PauseSent);
+            Y_ENSURE(State == EState::PauseSent);
             State = EState::Normal;
             SendQuotas(ctx);
         }
@@ -2508,7 +2508,7 @@ namespace {
                 break;
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
         }
 
@@ -2532,7 +2532,7 @@ namespace {
             PRINT_PRIMITIVE(DyNumber);
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
 
             #undef PRINT_PRIMITIVE

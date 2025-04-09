@@ -1,7 +1,7 @@
 #include "ydb_node_config.h"
 #include <util/system/fs.h>
 #include <util/folder/dirut.h>
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 
 namespace NYdb::NConsoleClient::NNodeConfig {
 
@@ -17,11 +17,6 @@ TCommandNodeConfig::TCommandNodeConfig()
 TCommandNodeConfigInit::TCommandNodeConfigInit()
     : TYdbCommand("init", {}, "Initialize node configuration")
 {
-}
-
-void TCommandNodeConfigInit::PropagateFlags(const TCommandFlags& flags) {
-    TYdbCommand::PropagateFlags(flags);
-    Dangerous = false;
 }
 
 void TCommandNodeConfigInit::Config(TConfig& config) {
@@ -92,14 +87,14 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
             storageSaved = SaveConfig(storageConfig, STORAGE_CONFIG_FILE_NAME, ConfigDirPath);
 
             if (clusterSaved && storageSaved) {
-                Cout << "Initialized main and storage configs in " << ConfigDirPath << "/" 
+                Cout << "Initialized main and storage configs in " << ConfigDirPath << "/"
                      << CONFIG_FILE_NAME << " and " << STORAGE_CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
             }
-            Cerr << "Failed to save configs: " 
+            Cerr << "Failed to save configs: "
                  << (clusterSaved ? "" : "main config")
-                 << (clusterSaved && storageSaved ? ", " : "") 
-                 << (storageSaved ? "" : "storage config") 
+                 << (clusterSaved && storageSaved ? ", " : "")
+                 << (storageSaved ? "" : "storage config")
                  << Endl;
             return EXIT_FAILURE;
         }

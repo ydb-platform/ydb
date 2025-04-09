@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <util/generic/hash.h>
 
@@ -61,14 +62,14 @@ class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions)) {
         AFL_VERIFY(WriteResults.size());
-        std::optional<ui64> pathId;
+        std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
             i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());

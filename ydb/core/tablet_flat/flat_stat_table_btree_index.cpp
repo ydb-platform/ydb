@@ -2,6 +2,7 @@
 #include "flat_table_subset.h"
 #include <util/stream/format.h>
 #include "flat_stat_table_btree_index.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr::NTable {
 
@@ -46,7 +47,7 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
 }
 
 ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, TRowId& historicRowId, bool& ready) {
-    Y_ABORT_UNLESS(groupId == TGroupId(0, true));
+    Y_ENSURE(groupId == TGroupId(0, true));
 
     auto& meta = part->IndexPages.GetBTree(groupId);
 
@@ -93,7 +94,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     return prevDataSize;
 }
 
-void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) noexcept {
+void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) {
     ui32 page = frames->Lower(beginRowId, 0, Max<ui32>());
 
     while (auto &rel = frames->Relation(page)) {
@@ -102,7 +103,7 @@ void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* f
             stats.Add(rel.Size, channel);
             ++page;
         } else if (!rel.IsHead()) {
-            Y_ABORT("Got unaligned TFrames head record");
+            Y_TABLET_ERROR("Got unaligned TFrames head record");
         } else {
             break;
         }

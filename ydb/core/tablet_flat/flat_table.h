@@ -77,7 +77,7 @@ public:
 
     TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept;
 
-    TEpoch Snapshot() noexcept;
+    TEpoch Snapshot();
 
     TEpoch Head() const noexcept
     {
@@ -86,23 +86,23 @@ public:
 
     TAutoPtr<TSubset> CompactionSubset(TEpoch edge, TArrayRef<const TLogoBlobID> bundle);
     TAutoPtr<TSubset> PartSwitchSubset(TEpoch edge, TArrayRef<const TLogoBlobID> bundle, TArrayRef<const TLogoBlobID> txStatus);
-    TAutoPtr<TSubset> Subset(TEpoch edge) const noexcept;
-    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept;
-    TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */
+    TAutoPtr<TSubset> Subset(TEpoch edge) const;
+    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max());
+    TAutoPtr<TSubset> Unwrap(); /* full Subset(..) + final Replace(..) */
 
-    bool HasBorrowed(ui64 selfTabletId) const noexcept;
+    bool HasBorrowed(ui64 selfTabletId) const;
 
     /**
      * Returns current slices for bundles
      *
      * Map will only contain bundles that currently exist in the table
      */
-    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const noexcept;
+    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const;
 
     /**
      * Replaces slices for bundles in the slices map
      */
-    void ReplaceSlices(TBundleSlicesMap slices) noexcept;
+    void ReplaceSlices(TBundleSlicesMap slices);
 
     /* Interface for redistributing data layout within the table. Take some
         subset with Subset(...) call, do some work and then return result
@@ -111,57 +111,57 @@ public:
         be displaced from table with Clean() method eventually.
     */
 
-    void Replace(const TSubset&, TArrayRef<const TPartView>, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>) noexcept;
+    void Replace(const TSubset&, TArrayRef<const TPartView>, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>);
 
     /*_ Special interface for clonig flatten part of table for outer usage.
         Cook some TPartView with Subset(...) method and/or TShrink tool first and
         then merge produced TPartView to outer table.
     */
 
-    void Merge(TPartView partView) noexcept;
-    void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
-    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
-    void MergeDone() noexcept;
+    void Merge(TPartView partView);
+    void Merge(TIntrusiveConstPtr<TColdPart> part);
+    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus);
+    void MergeDone();
 
     /**
      * Returns constructed levels for slices
      */
-    const TLevels& GetLevels() const noexcept;
+    const TLevels& GetLevels() const;
 
     /**
      * Returns search height if there are no cold parts, 0 otherwise
      */
-    ui64 GetSearchHeight() const noexcept;
+    ui64 GetSearchHeight() const;
 
     /* Hack for filling external blobs in TMemTable tables with data */
 
-    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
+    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const;
 
     TAutoPtr<TTableIter> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     EReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
                   ui64 flg, TRowVersion snapshot, TDeque<TPartIter>& tempIterators,
                   TSelectStats& stats,
                   const ITransactionMapPtr& visible = nullptr,
-                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
+                  const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             TRawVals key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             TArrayRef<const TCell> key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             const TCelled& key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
 
     EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,
@@ -329,7 +329,7 @@ public:
 
     TCompactionStats GetCompactionStats() const;
 
-    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept;
+    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr);
 
 private:
     TMemTable& MemTable();

@@ -115,7 +115,7 @@ public:
     }
 
     EReady Next() override {
-        Y_ABORT_UNLESS(IsValid());
+        Y_ENSURE(IsValid());
 
         NodeIndex++;
 
@@ -173,7 +173,7 @@ private:
     }
 
     const TNodeState& GetCurrentNode() const {
-        Y_ABORT_UNLESS(IsValid());
+        Y_ENSURE(IsValid());
         return Nodes[NodeIndex];
     }
 

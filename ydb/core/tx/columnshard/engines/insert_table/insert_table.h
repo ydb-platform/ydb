@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
@@ -32,21 +33,21 @@ public:
         : Summary(versionCounters)
     {
     }
-    TPathInfo& RegisterPathInfo(const ui64 pathId) {
+    TPathInfo& RegisterPathInfo(const TInternalPathId pathId) {
         return Summary.RegisterPathInfo(pathId);
     }
 
-    void ErasePath(const ui64 pathId) {
+    void ErasePath(const TInternalPathId pathId) {
         Summary.ErasePath(pathId);
     }
-    bool HasDataInPathId(const ui64 pathId) const {
+    bool HasDataInPathId(const TInternalPathId pathId) const {
         return Summary.HasPathIdData(pathId);
     }
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
 
-    std::optional<TSnapshot> GetMinCommittedSnapshot(const ui64 pathId) const {
+    std::optional<TSnapshot> GetMinCommittedSnapshot(const TInternalPathId pathId) const {
         auto* info = Summary.GetPathInfoOptional(pathId);
         if (!info) {
             return {};
@@ -74,10 +75,10 @@ public:
         if (load) {
             AddBlobLink(data.GetBlobRange().BlobId);
         }
-        const ui64 pathId = data.GetPathId();
+        const TInternalPathId pathId = data.GetPathId();
         return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
     }
-    bool HasPathIdData(const ui64 pathId) const {
+    bool HasPathIdData(const TInternalPathId pathId) const {
         return Summary.HasPathIdData(pathId);
     }
     const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
@@ -92,7 +93,7 @@ public:
     const TInsertionSummary::TCounters& GetCountersCommitted() const {
         return Summary.GetCountersCommitted();
     }
-    bool IsOverloadedByCommitted(const ui64 pathId) const {
+    bool IsOverloadedByCommitted(const TInternalPathId pathId) const {
         return Summary.IsOverloaded(pathId);
     }
 };
@@ -112,7 +113,7 @@ public:
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(
-        IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+        IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(TInternalPathId)> pathExists);
     TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
     void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
@@ -127,7 +128,7 @@ public:
     void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+    std::vector<TCommittedBlob> Read(TInternalPathId pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
         const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
     bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
 

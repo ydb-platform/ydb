@@ -91,7 +91,6 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
-                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -161,6 +160,14 @@ public:
             return iterator->second;
         }
         return nullptr;
+    }
+
+    void AddParticipantNode(const ui32 nodeId) override {
+        ParticipantNodes.insert(nodeId);
+    }
+
+    const THashSet<ui32>& GetParticipantNodes() const override {
+        return ParticipantNodes;
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
@@ -506,6 +513,8 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+
+    THashSet<ui32> ParticipantNodes;
 
     THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
 

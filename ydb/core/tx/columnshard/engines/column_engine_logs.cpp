@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "column_engine_logs.h"
 #include "filter.h"
 
@@ -179,7 +180,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {
-        const ui64 pathId = data.GetPathId();
+        const TInternalPathId pathId = data.GetPathId();
 
         if (changes->PathToGranule.contains(pathId)) {
             continue;
@@ -192,7 +193,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
-ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
+ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
     const std::optional<ui64> waitingPriority) noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
     if (!priority) {
@@ -219,7 +220,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(
     return changes;
 }
 
-std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept {
+std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept {
     if (pathsToDrop.empty()) {
         return nullptr;
     }
@@ -227,7 +228,7 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 
     ui64 txSize = 0;
     const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
-    for (ui64 pathId : pathsToDrop) {
+    for (TInternalPathId pathId : pathsToDrop) {
         if (!HasDataInPathId(pathId)) {
             changes->TablesToDrop.emplace(pathId);
         }
@@ -243,7 +244,7 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 }
 
 std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(
-    const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    const TSnapshot& snapshot, const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
@@ -255,7 +256,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     bool limitExceeded = false;
     const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
-    for (ui64 pathId : pathsToDrop) {
+    for (TInternalPathId pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
             continue;
@@ -331,7 +332,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     return changes;
 }
 
-std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("external", pathEviction.size());
@@ -432,7 +433,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 }
 
 std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
-    ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
+    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const {
     auto out = std::make_shared<TSelectInfo>();
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
@@ -472,7 +473,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     return out;
 }
 
-bool TColumnEngineForLogs::StartActualization(const THashMap<ui64, TTiering>& specialPathEviction) {
+bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {
     if (ActualizationStarted) {
         return false;
     }
@@ -488,7 +489,7 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<ui64, TTiering>& sp
     ActualizationStarted = true;
     return true;
 }
-void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) {
+void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     StartActualization({});
 
@@ -496,7 +497,7 @@ void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering
     g->RefreshTiering(ttl);
 }
 
-void TColumnEngineForLogs::OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) {
+void TColumnEngineForLogs::OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("new_count_tierings", ttl.size());
     StartActualization({});
 
@@ -510,7 +511,7 @@ void TColumnEngineForLogs::OnTieringModified(const THashMap<ui64, NOlap::TTierin
     }
 }
 
-void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
+void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId) {
     std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex, VersionCounters);
     if (ActualizationStarted) {
         g->StartActualizationIndex();

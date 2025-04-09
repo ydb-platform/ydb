@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -129,7 +130,7 @@ private:
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
-    const ui64 PathId;
+    const TInternalPathId PathId;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -369,7 +370,7 @@ public:
         return result;
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -389,7 +390,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+    explicit TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
         const TVersionedIndex& versionedIndex, const std::shared_ptr<TVersionCounters>& versionCounters);
 
     bool Empty() const noexcept {

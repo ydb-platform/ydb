@@ -4,7 +4,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 //! Partition stream.
 struct TPartitionStream : public TThrRefBase {

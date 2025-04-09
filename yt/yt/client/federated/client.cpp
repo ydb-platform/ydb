@@ -342,7 +342,7 @@ public:
         return client->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetClusterName(fetchIfNull);
@@ -394,6 +394,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (const NYPath::TRichYPath&, const TLocateSkynetShareOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<NYPath::TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<NYPath::TRichYPath>&, const TPartitionTablesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (const TTablePartitionCookiePtr&, const TReadTablePartitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (const NYPath::TYPath&, const TGetTablePivotKeysOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));
@@ -636,7 +637,7 @@ void TClient::CheckClustersHealth()
         const auto& check = checks[index];
         auto error = NConcurrency::WaitFor(check);
         YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
-            UnderlyingClients_[index]->Client->GetClusterName(/*fetchIfNull*/ false));
+            UnderlyingClients_[index]->Client->GetConnection()->GetClusterName());
         UnderlyingClients_[index]->HasErrors = !error.IsOK()
             && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
     }

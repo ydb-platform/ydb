@@ -4,13 +4,13 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_prettifier.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
 #include <util/string/escape.h>
 #include <google/protobuf/text_format.h>
@@ -46,8 +46,11 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
-        .Hidden();
+        .RequiredArgument("[String]")
+        .Hidden()
+        .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
+            SetSyntax(arg);
+        });
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -143,13 +146,8 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
-    }
+
+    settings.Syntax(SyntaxType);
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
@@ -284,8 +282,14 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
     CollectStatsMode = std::move(collectStatsMode);
 }
 
-void TCommandSql::SetSyntax(TString&& syntax) {
-    Syntax = std::move(syntax);
+void TCommandSql::SetSyntax(const TString& syntax) {
+    if (syntax == "yql") {
+        SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
+    } else if (syntax == "pg") {
+        SyntaxType = NYdb::NQuery::ESyntax::Pg;
+    } else {
+        throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
+    }
 }
 
 }

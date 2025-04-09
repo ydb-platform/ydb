@@ -12,14 +12,14 @@ namespace NDataShard {
     class TMicrosecTimerCounter {
     public:
         template<class TDataShardClass>
-        TMicrosecTimerCounter(TDataShardClass& dataShard, NDataShard::ECumulativeCounters counter) noexcept
+        TMicrosecTimerCounter(TDataShardClass& dataShard, NDataShard::ECumulativeCounters counter)
             : Callback(
                 [&dataShard, counter](ui64 us) {
                     dataShard.IncCounter(counter, us);
                 })
         { }
 
-        ~TMicrosecTimerCounter() noexcept {
+        ~TMicrosecTimerCounter() {
             Callback(ui64(1000000.0 * Timer.Passed()));
         }
 

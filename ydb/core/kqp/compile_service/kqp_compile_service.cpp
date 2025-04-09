@@ -311,7 +311,10 @@ private:
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
 
+        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
+
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
@@ -345,7 +348,10 @@ private:
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
-            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts) {
+            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
+            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling
+        ) {
 
             QueryCache->Clear();
 

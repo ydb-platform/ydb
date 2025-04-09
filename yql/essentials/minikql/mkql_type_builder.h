@@ -2,6 +2,7 @@
 
 #include "mkql_node.h"
 
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
@@ -125,7 +126,8 @@ public:
             const TStringBuf& moduleName,
             NUdf::ICountersProvider* countersProvider,
             const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* provider = nullptr);
+            const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+            const NUdf::ILogProvider* logProvider = nullptr);
 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
             NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
@@ -206,6 +208,7 @@ public:
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
+    NUdf::TLoggerPtr MakeLogger(bool synchronized) const override;
 
 private:
     const TTypeEnvironment& Env_;
@@ -223,6 +226,7 @@ private:
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_;
+    const NUdf::ILogProvider* LogProvider_;
     TString ModuleIR_;
     TString ModuleIRUniqID_;
     TString IRFunctionName_;
@@ -321,6 +325,9 @@ public:
 
     TType* NewResourceType(const std::string_view& tag) const;
     TType* NewVariantType(TType* underlyingType) const;
+
+    TType* BuildBlockStructType(const TStructType* structType) const;
+    TType* ValidateBlockStructType(const TStructType* structType) const;
 
 protected:
     const TTypeEnvironment& Env;

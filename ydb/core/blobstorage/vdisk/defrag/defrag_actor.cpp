@@ -121,14 +121,14 @@ namespace NKikimr {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
-                    Y_ABORT_UNLESS(usefulChunks <= totalChunks);
+                    Y_VERIFY_S(usefulChunks <= totalChunks, DCtx->VCtx->VDiskLogPrefix);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
                     double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
                         TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->MaxChunksToDefrag, canBeFreedChunks));
-                        Y_ABORT_UNLESS(chunksToDefrag);
+                        Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
@@ -159,7 +159,7 @@ namespace NKikimr {
         };
 
         void RunDefragPlanner(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(!PlannerId);
+            Y_VERIFY_S(!PlannerId, DCtx->VCtx->VDiskLogPrefix);
             PlannerId = RunInBatchPool(ctx, new TDefragPlannerActor(DCtx));
         }
 
@@ -169,7 +169,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvDefragStartQuantum::TPtr ev, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(ev->Sender == PlannerId);
+            Y_VERIFY_S(ev->Sender == PlannerId, DCtx->VCtx->VDiskLogPrefix);
             PlannerId = {};
             if (ev->Get()->ChunksToDefrag) {
                 ctx.Send(new IEventHandle(DefragActorId, SelfId(), ev->ReleaseBase().Release()));
@@ -376,7 +376,7 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             auto subrequest = ev->Get()->SubRequestId;
-            Y_ABORT_UNLESS(subrequest == TDbMon::Defrag);
+            Y_VERIFY_S(subrequest == TDbMon::Defrag, DCtx->VCtx->VDiskLogPrefix);
             TStringStream str;
             RenderHtml(str);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), subrequest));

@@ -253,8 +253,9 @@ TUnversionedOwningRow YsonToSchemafulRow(
     for (const auto& [name, value] : rowParts) {
         int id = nameTable->GetIdOrRegisterName(name);
         if (id >= std::ssize(tableSchema.Columns())) {
-            if (validateValues && tableSchema.GetStrict()) {
-                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
+            if (validateValues && tableSchema.IsStrict()) {
+                THROW_ERROR_EXCEPTION(
+                    EErrorCode::SchemaViolation,
                     "Unknown column %Qv in strict schema",
                     name);
             }
@@ -1425,8 +1426,10 @@ TUnversionedValue EncodeUnversionedAnyValue(
 {
     YT_ASSERT(None(value.Flags));
     switch (value.Type) {
-        case EValueType::Any:
         case EValueType::Composite:
+            value.Type = EValueType::Any;
+            [[fallthrough]];
+        case EValueType::Any:
             return value;
 
         case EValueType::Null: {

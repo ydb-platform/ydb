@@ -17,6 +17,7 @@ SRCS(
     operation_preparer.cpp
     operation_tracker.cpp
     operation.cpp
+    partition_reader.cpp
     prepare_operation.cpp
     py_helpers.cpp
     retry_heavy_write_request.cpp

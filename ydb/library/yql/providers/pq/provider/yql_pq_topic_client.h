@@ -1,5 +1,6 @@
 #pragma once
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 namespace NYql {
 class ITopicClient : public TThrRefBase {
@@ -29,6 +30,13 @@ public:
 
     virtual NYdb::TAsyncStatus CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,
         const NYdb::NTopic::TCommitOffsetSettings& settings = {}) = 0;
+};
+
+class IFederatedTopicClient : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IFederatedTopicClient>;
+
+    virtual NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() = 0;
 };
 
 class TNativeTopicClient : public ITopicClient {
@@ -85,5 +93,20 @@ public:
 private:
     NYdb::TDriver Driver_;
     NYdb::NTopic::TTopicClient Client_;
+};
+
+class TNativeFederatedTopicClient : public IFederatedTopicClient {
+public:
+    TNativeFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}):
+        Driver_(driver), FederatedClient_(Driver_, settings) {}
+
+    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
+        return FederatedClient_.GetAllClusterInfo();
+    }
+
+    ~TNativeFederatedTopicClient() {}
+private:
+    NYdb::TDriver Driver_;
+    NYdb::NFederatedTopic::TFederatedTopicClient FederatedClient_;
 };
 }

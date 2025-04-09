@@ -1,7 +1,7 @@
 #include "ydb_latency.h"
 
-#include <ydb-cpp-sdk/client/debug/client.h>
-#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
 
@@ -183,7 +183,7 @@ void TCommandLatency::Config(TConfig& config) {
             .OptionalArgument("INT").StoreResult(&ChainConfig->WorkUsec_).DefaultValue(ChainConfig->WorkUsec_);
     config.Opts->AddLongOption(
         "no-tail-chain", TStringBuilder() << "Don't use Tail sends and registrations (ActorChain kind only)")
-            .NoArgument().SetFlag(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);
+            .StoreTrue(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);
 }
 
 void TCommandLatency::Parse(TConfig& config) {

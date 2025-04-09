@@ -3,7 +3,7 @@
 #include "read_session.h"
 #include "write_session.h"
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 std::shared_ptr<IReadSession> TPersQueueClient::TImpl::CreateReadSession(const TReadSessionSettings& settings) {
     std::optional<TReadSessionSettings> maybeSettings;

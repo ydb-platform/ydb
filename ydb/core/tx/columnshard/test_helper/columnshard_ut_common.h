@@ -17,7 +17,7 @@
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -357,19 +357,6 @@ struct TTestSchema {
         NKikimrTxColumnShard::TCommitTxBody proto;
         for (ui64 id : writeIds) {
             proto.AddWriteIds(id);
-        }
-
-        TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
-        return txBody;
-    }
-
-    static TString TtlTxBody(const std::vector<ui64>& pathIds, TString ttlColumnName, ui64 tsSeconds) {
-        NKikimrTxColumnShard::TTtlTxBody proto;
-        proto.SetTtlColumnName(ttlColumnName);
-        proto.SetUnixTimeSeconds(tsSeconds);
-        for (auto& pathId : pathIds) {
-            proto.AddPathIds(pathId);
         }
 
         TString txBody;

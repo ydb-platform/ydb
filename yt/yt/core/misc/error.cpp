@@ -2,6 +2,7 @@
 #include "serialize.h"
 
 #include <yt/yt/core/concurrency/fls.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/net/local_address.h>
 
@@ -326,6 +327,20 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(
+    const TErrorCode& errorCode,
+    IYsonConsumer* consumer)
+{
+    consumer->OnInt64Scalar(static_cast<int>(errorCode));
+}
+
+void Deserialize(
+    TErrorCode& errorCode,
+    const NYTree::INodePtr& node)
+{
+    errorCode = TErrorCode(node->GetValue<int>());
+}
 
 void Serialize(
     const TError& error,

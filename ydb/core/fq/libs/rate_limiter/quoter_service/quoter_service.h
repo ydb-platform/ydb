@@ -9,6 +9,7 @@ namespace NFq {
 NActors::IActor* CreateQuoterService(
     const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
     const NFq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

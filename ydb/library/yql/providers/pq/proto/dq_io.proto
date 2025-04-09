@@ -21,6 +21,13 @@ message TWatermarks {
     bool IdlePartitionsEnabled = 4;
 }
 
+message TDqPqFederatedCluster {
+    string Name = 1;
+    string Endpoint = 2;
+    string Database = 3;
+    uint32 PartitionsCount = 4;
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -42,6 +49,7 @@ message TDqPqTopicSource {
     string ReadGroup = 18;
     string Format = 19;
     string RowType = 20; // Final row type with metadata columns
+    repeated TDqPqFederatedCluster FederatedClusters = 21;
 }
 
 message TDqPqTopicSink {

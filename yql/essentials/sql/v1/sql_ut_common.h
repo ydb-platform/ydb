@@ -449,38 +449,118 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
-        auto reqCreateUser = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1;
-        )");
+        {
+            auto reqCreateUser = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1;
+            )");
 
-        UNIT_ASSERT(reqCreateUser.IsOk());
+            UNIT_ASSERT(reqCreateUser.IsOk());
 
-        auto reqAlterUser = SqlToYql(R"(
-            USE plato;
-            ALTER USER user1;
-        )");
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+            };
 
-        UNIT_ASSERT(!reqAlterUser.IsOk());
+            TWordCountHive elementStat = {{TString("createUser"), 0}};
+            VerifyProgram(reqCreateUser, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+        }
+
+        {
+            auto reqAlterUser = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1;
+            )");
+
+            UNIT_ASSERT(!reqAlterUser.IsOk());
 #if ANTLR_VER == 3
-        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: Unexpected token ';' : cannot match to any predicted input...");
+            UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: Unexpected token ';' : cannot match to any predicted input...");
 #else
-        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, HASH, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
+            UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: mismatched input ';' expecting {ENCRYPTED, HASH, LOGIN, NOLOGIN, PASSWORD, RENAME, WITH}");
 #endif
+        }
 
-        auto reqPasswordAndLogin = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1 LOgin;
-        )");
+        {
+            auto reqCreateUserLogin = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1 LOgin;
+            )");
 
-        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+            UNIT_ASSERT(reqCreateUserLogin.IsOk());
 
-        auto reqPasswordAndNoLogin = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1 PASSWORD '123' NOLOGIN;
-        )");
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "createUser") {
+                    UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+                }
+            };
 
-        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+            TWordCountHive elementStat = {{TString("alterUser"), 0}, {TString("createUser"), 0}};
+            VerifyProgram(reqCreateUserLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 0);
+        }
+
+        {
+            auto reqAlterUserLogin = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1 LOgin;
+            )");
+
+            UNIT_ASSERT(reqAlterUserLogin.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "alterUser") {
+                    UNIT_ASSERT(line.find("nullPassword") == TString::npos);
+                }
+            };
+
+            TWordCountHive elementStat = {{TString("alterUser"), 0}, {TString("createUser"), 0}};
+            VerifyProgram(reqAlterUserLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 1);
+        }
+
+        {
+            auto reqPasswordAndNoLogin = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1 PASSWORD '123' NOLOGIN;
+            )");
+
+            UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") == TString::npos);
+            };
+
+            TWordCountHive elementStat = {{TString("createUser"), 0}};
+            VerifyProgram(reqPasswordAndNoLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+        }
+
+        {
+            auto reqAlterUserNullPassword = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1 PASSWORD NULL;
+            )");
+
+            UNIT_ASSERT(reqAlterUserNullPassword.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+            };
+
+            TWordCountHive elementStat = {{TString("alterUser"), 0}};
+            VerifyProgram(reqAlterUserNullPassword, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 1);
+        }
 
         auto reqLogin = SqlToYql(R"(
             USE plato;
@@ -1395,6 +1475,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input returning *;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with RETURNING\n");
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1477,6 +1563,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set value = 'cool' where key = 200 returning key;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with RETURNING\n");
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -3115,6 +3207,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["showCreateTable"]);
+    }
+
+    Y_UNIT_TEST(ShowCreateView) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE VIEW user;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Read") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "showCreateView");
+            }
+        };
+
+        TWordCountHive elementStat = {{"Read"}, {"showCreateView"}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateView"], 1);
     }
 
     Y_UNIT_TEST(OptionalAliases) {
@@ -7401,6 +7513,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewWithUdfs) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT "bbb" LIKE Unwrap("aaa");
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(CreateViewIfNotExists) {
         constexpr const char* name = "TheView";
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
@@ -8394,5 +8515,16 @@ Y_UNIT_TEST_SUITE(OlapPartitionCount) {
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT(res.Issues.Size() == 1);
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "PARTITION_COUNT can be used only with STORE=COLUMN");
+    }
+}
+
+Y_UNIT_TEST_SUITE(Crashes) {
+    Y_UNIT_TEST(IncorrectCorrQuery) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            use plato;
+            SELECT COUNT(DISTINCT EXISTS (SELECT 1 FROM t1 AS t2)) FROM Input AS t1
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     }
 }

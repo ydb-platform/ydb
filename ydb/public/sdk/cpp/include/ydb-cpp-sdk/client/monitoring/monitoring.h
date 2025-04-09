@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Monitoring {
@@ -8,7 +8,7 @@ namespace Monitoring {
 }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TProtoAccessor;
 
@@ -33,7 +33,7 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 };
 
 class TSelfCheckResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 public:
     TSelfCheckResult(TStatus&& status, Ydb::Monitoring::SelfCheckResult&& result);
 private:

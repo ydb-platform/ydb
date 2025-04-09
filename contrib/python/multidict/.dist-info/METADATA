@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: multidict
-Version: 6.1.0
+Version: 6.2.0
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
@@ -20,16 +20,15 @@ Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
-Requires-Dist: typing-extensions >=4.1.0 ; python_version < "3.11"
+Requires-Dist: typing-extensions>=4.1.0; python_version < "3.11"
 
 =========
 multidict

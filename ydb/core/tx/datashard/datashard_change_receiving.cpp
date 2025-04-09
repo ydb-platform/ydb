@@ -44,7 +44,7 @@ public:
 
             const auto& [sender, req] = Self->PendingChangeExchangeHandshakes.front();
             auto& [_, resp] = Statuses.emplace_back(sender, MakeHolder<TEvChangeExchange::TEvStatus>());
-            Y_ABORT_UNLESS(ExecuteHandshake(db, req, resp->Record));
+            Y_ENSURE(ExecuteHandshake(db, req, resp->Record));
             Self->PendingChangeExchangeHandshakes.pop_front();
         }
 
@@ -137,7 +137,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             case NKikimrChangeExchange::TDataChange::kReset:
                 return record.GetReset();
             default:
-                Y_FAIL_S("Unexpected row operation: " << static_cast<ui32>(record.GetRowOperationCase()));
+                Y_ENSURE(false, "Unexpected row operation: " << static_cast<ui32>(record.GetRowOperationCase()));
         }
     }
 
@@ -406,7 +406,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(Status);
+        Y_ENSURE(Status);
 
         if (MvccReadWriteVersion) {
             Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);
@@ -450,7 +450,7 @@ void TDataShard::Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr&, c
 void TDataShard::RunChangeExchangeHandshakeTx() {
     if (!ChangeExchangeHandshakeTxScheduled && !PendingChangeExchangeHandshakes.empty()) {
         ChangeExchangeHandshakeTxScheduled = true;
-        EnqueueExecute(new TTxChangeExchangeHandshake(this));
+        Enqueue(new TTxChangeExchangeHandshake(this));
     }
 }
 

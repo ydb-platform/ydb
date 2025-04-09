@@ -192,6 +192,8 @@ public:
 
         REGISTER_ALL(TPartitionTablesCommand,              "partition_tables",                Null,       Structured, false, false);
 
+        REGISTER    (TReadTablePartitionCommand,           "read_table_partition",            Null,       Tabular,    false, true , ApiVersion4);
+
         REGISTER    (TInsertRowsCommand,                   "insert_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TLockRowsCommand,                     "lock_rows",                       Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TDeleteRowsCommand,                   "delete_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
@@ -535,8 +537,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
-    ISignatureGeneratorPtr SignatureGenerator_;
-    ISignatureValidatorPtr SignatureValidator_;
+    const ISignatureGeneratorPtr SignatureGenerator_;
+    const ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;

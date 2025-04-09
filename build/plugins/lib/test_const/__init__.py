@@ -181,7 +181,6 @@ NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
-CLANG_FORMAT_15_RESOURCE = 'CLANG_FORMAT_15_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -439,6 +438,12 @@ class ServiceTags(Enum):
     AnyTag = "ya:anytag"
 
 
+# NOTE: Linter constants are used in ya style, ya ide, config validator check (devtools/ya/handlers/style/config_validator).
+# ya and validator have different release cycles, make sure you preserve compatibility:
+# - don't delete anything from here until you get rid of all usages and roll out the changes;
+# - keep in mind that changes of constants used in multiple tools may get to production at different times;
+
+
 # Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
 class PythonLinterName(Enum):
     Black = "black"
@@ -452,6 +457,7 @@ class CppLinterName(Enum):
     ClangFormat = "clang_format"
     ClangFormatYT = "clang_format_yt"
     ClangFormat15 = "clang_format_15"
+    ClangFormat18Vanilla = "clang_format_18_vanilla"
 
 
 class DefaultLinterConfig(Enum):
@@ -464,9 +470,26 @@ class LinterConfigsValidationRules(Enum):
     Python = "build/config/tests/py_style/configs_validation_rules.json"
 
 
+# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
+LINTER_TO_DEFAULT_CONFIGS = {
+    CppLinterName.ClangFormat: DefaultLinterConfig.Cpp,
+    PythonLinterName.Black: DefaultLinterConfig.Python,
+    PythonLinterName.Ruff: DefaultLinterConfig.Python,
+}
+
+# Fill up like
+"""
+{
+    PythonLinterName.Ruff: LinterConfigsValidationRules.Python,
+}
+"""
+# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
+LINTER_TO_VALIDATION_CONFIGS = {}
+
 LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: (".clang-format",),
     CppLinterName.ClangFormat15: (".clang-format",),
+    CppLinterName.ClangFormat18Vanilla: (".clang-format",),
     CppLinterName.ClangFormatYT: (".clang-format",),
     PythonLinterName.Black: ("pyproject.toml",),
     PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
@@ -476,6 +499,9 @@ AUTOINCLUDE_PATHS = (
     'build/conf/autoincludes.json',
     'build/internal/conf/autoincludes.json',
 )
+
+
+# End of linter constants
 
 
 class Status(object):

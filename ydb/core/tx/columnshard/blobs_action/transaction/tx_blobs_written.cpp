@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "tx_blobs_written.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
@@ -74,7 +75,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
-            lock.SetPathId(writeMeta.GetTableId());
+            lock.SetPathId(writeMeta.GetTableId().GetRawValue());
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
@@ -94,12 +95,13 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     for (auto&& i : Results) {
         i.DoSendReply(ctx);
     }
-    std::set<ui64> pathIds;
+    std::set<TInternalPathId> pathIds;
     for (auto&& writeResult : Pack.GetWriteResults()) {
+        const auto& writeMeta = writeResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
         if (writeResult.GetNoDataToWrite()) {
             continue;
         }
-        const auto& writeMeta = writeResult.GetWriteMeta();
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId());
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
@@ -145,6 +147,7 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& /* ctx */) {
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());

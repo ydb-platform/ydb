@@ -3,6 +3,7 @@
 #include "events.h"
 
 #include <ydb/core/tablet_flat/flat_sausage_solid.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -84,7 +85,7 @@ namespace NFake {
 
                 PassAway();
             } else {
-                 Y_ABORT("DS proxy model got an unexpected event");
+                 Y_TABLET_ERROR("DS proxy model got an unexpected event");
             }
         }
 
@@ -93,7 +94,7 @@ namespace NFake {
             Send(eh->Sender, ev, 0, eh->Cookie);
         }
 
-        void ReportUsage() const noexcept
+        void ReportUsage() const
         {
             if (auto logl = Logger->Log(ELnLev::Info)) {
 

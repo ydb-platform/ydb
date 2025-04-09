@@ -5,6 +5,7 @@
 #include <util/folder/path.h>
 
 namespace NPersQueue {
+inline namespace Dev {
 
 bool CorrectName(const std::string& topic) {
     if (!std::string_view{topic}.starts_with("rt3."))
@@ -151,4 +152,5 @@ std::string ConvertOldConsumerName(const std::string& consumer) {
 }
 
 
-} // namespace NPersQueue
+}
+}

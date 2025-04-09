@@ -132,7 +132,7 @@ public:
                     return false;
                 }
             }
-            src->AddDependentSource(Source.Get());
+            src->AddDependentSource(Source);
         }
         if (Node && WithTables) {
             TTableList tableList;
@@ -497,7 +497,7 @@ public:
             }
 
             if (src) {
-                src->AddDependentSource(source.Get());
+                src->AddDependentSource(source);
             }
             if (!source->Init(ctx, src)) {
                 return false;
@@ -1274,7 +1274,7 @@ public:
         }
 
         if (src) {
-            src->AddDependentSource(Source.Get());
+            src->AddDependentSource(Source);
         }
         if (!Source->Init(ctx, src)) {
             return false;
@@ -2954,6 +2954,10 @@ public:
 
     TNodePtr GetSessionWindowSpec() const override {
         return Source->GetSessionWindowSpec();
+    }
+
+    IJoin* GetJoin() override {
+        return Source->GetJoin();
     }
 
     TNodePtr DoClone() const final {

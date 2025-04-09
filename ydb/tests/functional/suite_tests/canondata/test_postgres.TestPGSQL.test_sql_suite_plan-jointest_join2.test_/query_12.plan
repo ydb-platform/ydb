@@ -98,7 +98,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "precompute_0_0",
+                                                        "CTE Name": "precompute_0_1",
                                                         "Node Type": "LeftJoin (MapJoin)-ConstantExpr",
                                                         "Operators": [
                                                             {
@@ -116,7 +116,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "ToFlow",
-                                                                "ToFlow": "precompute_0_0"
+                                                                "ToFlow": "precompute_0_1"
                                                             }
                                                         ],
                                                         "PlanNodeId": 18,
@@ -167,7 +167,7 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "CTE Name": "precompute_0_0",
+                                                                                                        "CTE Name": "precompute_0_1",
                                                                                                         "Node Type": "ConstantExpr-Aggregate",
                                                                                                         "Operators": [
                                                                                                             {
@@ -180,7 +180,7 @@
                                                                                                                 "Name": "Iterator"
                                                                                                             },
                                                                                                             {
-                                                                                                                "Input": "precompute_0_0",
+                                                                                                                "Input": "precompute_0_1",
                                                                                                                 "Inputs": [],
                                                                                                                 "Name": "PartitionByKey"
                                                                                                             }
@@ -208,13 +208,13 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "precompute_0_1",
+                                                        "CTE Name": "precompute_0_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "ToFlow",
-                                                                "ToFlow": "precompute_0_1"
+                                                                "ToFlow": "precompute_0_0"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10
@@ -231,27 +231,6 @@
                         ]
                     }
                 ]
-            },
-            {
-                "Node Type": "Precompute_0_1",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 3,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Collect",
-                        "PlanNodeId": 2,
-                        "Plans": [
-                            {
-                                "CTE Name": "Stage_5",
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 1,
-                                "PlanNodeType": "Connection"
-                            }
-                        ]
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_1"
             },
             {
                 "Node Type": "Precompute_0_0",
@@ -307,6 +286,27 @@
                     }
                 ],
                 "Subplan Name": "CTE precompute_0_0"
+            },
+            {
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 3,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "CTE Name": "Stage_5",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 1,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute_0_1"
             }
         ],
         "Stats": {

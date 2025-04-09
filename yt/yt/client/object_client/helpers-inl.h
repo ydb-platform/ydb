@@ -98,6 +98,11 @@ inline bool IsSequoiaId(TObjectId id)
     return (CounterFromId(id) & SequoiaCounterMask) && !IsWellKnownId(id);
 }
 
+inline bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId)
+{
+    return IsCypressTransactionType(TypeFromId(transactionId)) && IsSequoiaId(transactionId);
+}
+
 inline TObjectId MakeRegularId(
     EObjectType type,
     TCellTag cellTag,

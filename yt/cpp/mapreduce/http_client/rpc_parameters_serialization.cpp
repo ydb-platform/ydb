@@ -558,6 +558,9 @@ TNode SerializeParamsForListJobs(
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
+    if (options.WithInterruptionInfo_) {
+        result["with_interruption_info"] = *options.WithInterruptionInfo_;
+    }
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
     }
@@ -663,6 +666,13 @@ TNode SerializeParamsForReadTable(
             .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
         .EndMap();
     return result;
+}
+
+TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePartitionReaderOptions& /*options*/)
+{
+    TNode node;
+    node["cookie"] = cookie;
+    return node;
 }
 
 TNode SerializeParamsForReadBlobTable(
@@ -812,6 +822,7 @@ TNode SerializeParamsForGetTablePartitions(
         result["max_partition_count"] = *options.MaxPartitionCount_;
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
+    result["enable_cookies"] = options.EnableCookies_;
     return result;
 }
 

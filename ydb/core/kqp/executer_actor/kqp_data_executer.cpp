@@ -258,6 +258,10 @@ public:
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
+
+            for (const ui64& shardId : TxManager->GetShards()) {
+                Stats->AffectedShards.insert(shardId);
+            }
         }
 
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
@@ -271,7 +275,12 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -279,7 +288,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -288,7 +302,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -301,6 +320,7 @@ public:
         try {
             switch(ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
@@ -345,13 +365,8 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
-        if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
-            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN, "Buffer actor isn't available. Operation state unknown.");
-            ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
-        } else {
-            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Buffer actor isn't available.");
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
-        }
+        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Buffer actor isn't available.");
+        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
     }
 
     void MakeResponseAndPassAway() {
@@ -405,6 +420,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -456,6 +472,7 @@ private:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
@@ -901,6 +918,7 @@ private:
                         case NKikimrTxDataShard::TError::SCHEME_ERROR:
                             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
+                        //TODO Split OUT_OF_SPACE and DISK_SPACE_EXHAUSTED cases. The first one is temporary, the second one is permanent.
                         case NKikimrTxDataShard::TError::OUT_OF_SPACE:
                         case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
                             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
@@ -1136,6 +1154,7 @@ private:
                 hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1190,6 +1209,11 @@ private:
         } else {
             LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
         }
+    }
+
+    void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+        TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
 
     void HandleExecute(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -1266,6 +1290,10 @@ private:
 
         if (Stats) {
             Stats->AddDatashardStats(std::move(*res->Record.MutableTxStats()));
+        }
+
+        if (TxManager) {
+            TxManager->AddParticipantNode(ev->Sender.NodeId());
         }
 
         switch (ev->Get()->GetStatus()) {
@@ -1990,9 +2018,12 @@ private:
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
+            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                const auto stageId = TStageId(txIdx, stageIdx);
+                auto& stageInfo = TasksGraph.GetStageInfo(stageId);
+                AFL_ENSURE(stageInfo.Id == stageId);
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -2131,6 +2162,7 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
+
         if (!TxManager) {
             BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         }
@@ -2295,6 +2327,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }

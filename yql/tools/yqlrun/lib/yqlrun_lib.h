@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 
 #include <util/generic/string.h>
@@ -10,6 +11,9 @@ namespace NYql {
 class TYqlRunTool: public TFacadeRunner {
 public:
     TYqlRunTool();
+
+protected:
+    virtual IOptimizerFactory::TPtr CreateCboFactory();
 
 private:
     THashMap<TString, TString> TablesMapping_;

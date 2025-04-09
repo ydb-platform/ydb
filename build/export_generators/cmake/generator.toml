@@ -329,7 +329,10 @@ attrs=[
     "target_macroses-macro=target_cython_include_directories",
     "target_macroses-macro=set_python_type_for_cython",
 ]
-copy=["cmake/cython.cmake"]
+copy=[
+    "cmake/cython.cmake",
+    "cmake/FindCython.cmake"
+]
 add_values=[{attr="includes", values=["cmake/cython.cmake"]}]
 
 [[rules]]

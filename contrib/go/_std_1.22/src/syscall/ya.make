@@ -1,7 +1,19 @@
 GO_LIBRARY()
+
+IF(SANITIZER_TYPE == "memory")
+    SRCS(msan.go)
+ELSE()
+    SRCS(msan0.go)
+ENDIF()
+
+IF(SANITIZER_TYPE == "address")
+    SRCS(asan.go)
+ELSE()
+    SRCS(asan0.go)
+ENDIF()
+
 IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        asan0.go
         asm_darwin_arm64.s
         bpf_bsd.go
         dirent.go
@@ -11,7 +23,6 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
         exec_unix.go
         flock_bsd.go
         forkpipe.go
-        msan0.go
         net.go
         rlimit.go
         rlimit_darwin.go
@@ -34,7 +45,6 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
     )
 ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        asan0.go
         asm_darwin_amd64.s
         bpf_bsd.go
         dirent.go
@@ -44,7 +54,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         exec_unix.go
         flock_bsd.go
         forkpipe.go
-        msan0.go
         net.go
         rlimit.go
         rlimit_darwin.go
@@ -67,7 +76,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
     )
 ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        asan0.go
         asm_linux_arm64.s
         dirent.go
         endian_little.go
@@ -77,7 +85,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
         flock_linux.go
         forkpipe2.go
         lsf_linux.go
-        msan0.go
         net.go
         netlink_linux.go
         rlimit.go
@@ -100,7 +107,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
     )
 ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        asan0.go
         asm_linux_amd64.s
         dirent.go
         endian_little.go
@@ -110,7 +116,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         flock_linux.go
         forkpipe2.go
         lsf_linux.go
-        msan0.go
         net.go
         netlink_linux.go
         rlimit.go
@@ -133,12 +138,10 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
-        asan0.go
         dll_windows.go
         endian_little.go
         env_windows.go
         exec_windows.go
-        msan0.go
         net.go
         security_windows.go
         syscall.go

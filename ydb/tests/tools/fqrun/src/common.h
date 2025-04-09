@@ -46,14 +46,12 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     bool EnableRemoteRd = false;
     std::optional<TExternalDatabase> RowDispatcherDatabase;
 
-    EVerbose VerboseLevel = EVerbose::Info;
+    bool EnableYdbCompute = false;
+    std::optional<TExternalDatabase> SingleComputeDatabase;
+    std::vector<TExternalDatabase> SharedComputeDatabases;
 
-    TString YqlToken;
+    EVerbose VerboseLevel = EVerbose::Info;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    NFq::NConfig::TConfig FqConfig;
-    NKikimrConfig::TLogConfig LogConfig;
-    std::optional<NKikimrConfig::TActorSystemConfig> ActorSystemConfig;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
@@ -62,15 +60,26 @@ struct TRunnerOptions {
     std::unordered_set<ui64> TraceOptIds;
 
     IOutputStream* ResultOutput = nullptr;
+    IOutputStream* AstOutput = nullptr;
+    IOutputStream* PlanOutput = nullptr;
+
+    bool CanonicalOutput = false;
     NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
 
     TDuration PingPeriod;
     TFqSetupSettings FqSettings;
 };
 
+struct TFqOptions {
+    TString Scope;
+};
+
 struct TRequestOptions {
     TString Query;
-    ui64 QueryId;
+    FederatedQuery::ExecuteMode Action = FederatedQuery::ExecuteMode::RUN;
+    FederatedQuery::QueryContent::QueryType Type = FederatedQuery::QueryContent::STREAMING;
+    ui64 QueryId = 0;
+    TFqOptions FqOptions;
 };
 
 void SetupAcl(FederatedQuery::Acl* acl);

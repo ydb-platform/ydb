@@ -5,6 +5,8 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
@@ -47,37 +49,6 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
     }
 }
 
-std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-    const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    if (arrType != NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        return TFetchingInfo::BuildFullRestore(false);
-    }
-    AFL_VERIFY(input.size() == 2 && input.front().GetColumnId() == columnId);
-    auto description = BuildDescription(input, resources).DetachResult();
-    const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
-    if (!description.GetInputAccessor()) {
-        return TFetchingInfo::BuildSubColumnsRestore(subColumns);
-    }
-
-    std::optional<bool> hasSubColumns;
-    return NAccessor::TCompositeChunkedArray::VisitDataOwners<TFetchingInfo>(
-        description.GetInputAccessor(), [&](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
-            if (arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-                AFL_VERIFY(!hasSubColumns || *hasSubColumns);
-                hasSubColumns = true;
-                auto scArr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(arr);
-                if (scArr->NeedFetch(description.GetJsonPath())) {
-                    return std::optional<TFetchingInfo>(TFetchingInfo::BuildSubColumnsRestore(subColumns));
-                }
-            } else {
-                AFL_VERIFY(arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray);
-                AFL_VERIFY(!hasSubColumns || !*hasSubColumns);
-                hasSubColumns = false;
-            }
-            return std::optional<TFetchingInfo>();
-        });
-}
-
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::utf8());
 }
@@ -86,17 +57,65 @@ std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
     const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     auto arr = TBase::ExtractArray(jsonAcc, svPath);
     auto chunkedArray = arr->GetChunkedArray();
-    auto builder = NArrow::MakeBuilder(arrow::boolean(), arr->GetRecordsCount());
+    auto builder = NArrow::MakeBuilder(arrow::uint8(), arr->GetRecordsCount());
     for (auto&& i : chunkedArray->chunks()) {
         for (ui32 idx = 0; idx < i->length(); ++idx) {
-            NArrow::Append<arrow::BooleanType>(*builder, !i->IsNull(idx));
+            NArrow::Append<arrow::UInt8Type>(*builder, i->IsNull(idx) ? 0 : 1);
         }
     }
     return std::make_shared<NAccessor::TTrivialArray>(FinishBuilder(std::move(builder)));
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
-    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::boolean());
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
+}
+
+TString TSimpleKernelLogic::SignalDescription() const {
+    if (YqlOperationId) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+bool TSimpleKernelLogic::IsBoolInResult() const {
+    if (YqlOperationId) {
+        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId) {
+            case NYql::TKernelRequestBuilder::EBinaryOp::And:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Or:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
+                return true;
+            case NYql::TKernelRequestBuilder::EBinaryOp::Add:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Sub:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Mul:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Div:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Mod:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Coalesce:
+                return false;
+
+            case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
+
+            case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
+            case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Less:
+            case NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Greater:
+            case NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual:
+                return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+NJson::TJsonValue TSimpleKernelLogic::DoDebugJson() const {
+    if (YqlOperationId) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return NJson::JSON_NULL;
+    }
 }
 
 }   // namespace NKikimr::NArrow::NSSA

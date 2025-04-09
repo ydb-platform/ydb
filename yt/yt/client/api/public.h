@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/transaction_client/public.h>
 
+#include <yt/yt/client/prerequisite_client/public.h>
+
 #include <yt/yt/client/bundle_controller_client/public.h>
 
 #include <yt/yt/library/auth/authentication_options.h>
@@ -138,6 +140,7 @@ DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
+DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
 DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)

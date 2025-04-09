@@ -256,6 +256,11 @@ public:
         const TTransactionAttachOptions& options),
         (transactionId, options))
 
+    DELEGATE_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (prerequisiteId, options))
+
     // Tables
     DELEGATE_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,

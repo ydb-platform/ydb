@@ -378,6 +378,11 @@ public:
         const TTransactionAttachOptions& options),
         (override));
 
+    MOCK_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
         const TMountTableOptions& options),

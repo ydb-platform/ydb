@@ -12,6 +12,7 @@
 
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/table_partition_reader.h>
+#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
@@ -223,6 +224,16 @@ ITransactionPtr TClient::AttachTransaction(
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
         "Transaction attached");
+}
+
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    static_cast<TPrerequisiteAttachOptions&>(attachOptions) = options;
+
+    return AttachTransaction(prerequisiteId, attachOptions);
 }
 
 TFuture<void> TClient::MountTable(

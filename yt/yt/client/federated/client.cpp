@@ -116,11 +116,11 @@ public:
 
     TFuture<TTransactionFlushResult> Flush() override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const TPrerequisitePingOptions& options = {}) override;
 
     TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = TTransactionCommitOptions()) override;
 
-    TFuture<void> Abort(const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
+    TFuture<void> Abort(const TTransactionAbortOptions& options = {}) override;
 
     TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath&, NTableClient::TNameTablePtr,
@@ -238,6 +238,7 @@ public:
     UNIMPLEMENTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const NYPath::TYPath&, const TJournalWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, Abort, (const TPrerequisiteAbortOptions&));
 
 private:
     const TClientPtr Client_;
@@ -335,6 +336,8 @@ public:
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
 
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
+
+    IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
 
     IConnectionPtr GetConnection() override
     {
@@ -552,7 +555,7 @@ TFuture<ResultType> TTransaction::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args
 
 TRANSACTION_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
 TRANSACTION_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSelectRowsOptions&));
-TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TTransactionPingOptions&));
+TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TPrerequisitePingOptions&));
 TRANSACTION_METHOD_IMPL(TTransactionCommitResult, Commit, (const TTransactionCommitOptions&));
 TRANSACTION_METHOD_IMPL(void, Abort, (const TTransactionAbortOptions&));
 TRANSACTION_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
@@ -760,6 +763,21 @@ ITransactionPtr TClient::AttachTransaction(
         }
     }
     THROW_ERROR_EXCEPTION("No client is known for transaction %v", transactionId);
+}
+
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    attachOptions.AutoAbort = options.AutoAbort;
+    attachOptions.PingPeriod = options.PingPeriod;
+    attachOptions.Ping = options.Ping;
+    attachOptions.PingAncestors = options.PingAncestors;
+
+    static_assert(std::is_convertible_v<ITransaction*, IPrerequisite*>);
+
+    return AttachTransaction(prerequisiteId, attachOptions);
 }
 
 void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)

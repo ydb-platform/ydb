@@ -120,6 +120,7 @@ public:
     UNSUPPORTED_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, ());
     UNSUPPORTED_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, ());
     UNSUPPORTED_METHOD(ITransactionPtr, AttachTransaction, (NTransactionClient::TTransactionId, const TTransactionAttachOptions&));
+    UNSUPPORTED_METHOD(IPrerequisitePtr, AttachPrerequisite, (NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MountTable, (const TYPath&, const TMountTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, UnmountTable, (const TYPath&, const TUnmountTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemountTable, (const TYPath&, const TRemountTableOptions&));

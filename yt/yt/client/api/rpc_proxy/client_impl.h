@@ -32,6 +32,10 @@ public:
         NTransactionClient::TTransactionId transactionId,
         const NApi::TTransactionAttachOptions& options) override;
 
+    NApi::IPrerequisitePtr AttachPrerequisite(
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const NApi::TPrerequisiteAttachOptions& options) override;
+
     // Tables.
     TFuture<void> MountTable(
         const NYPath::TYPath& path,

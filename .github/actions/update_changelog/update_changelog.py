@@ -221,7 +221,7 @@ def main():
     run_command(f"git commit -m \"Update CHANGELOG.md for {suffix}\"")
     run_command(f"git push origin {branch_name}")
 
-    pr_title = f"Update CHANGELOG.md for {suffix}"
+    pr_title = f"Update CHANGELOG.md for {base_branch}:{suffix}"
     pr_body = f"This PR updates the CHANGELOG.md file for {suffix}."
     pr_create_command = f"gh pr create --title \"{pr_title}\" --body \"{pr_body}\" --base {base_branch} --head {branch_name}"
     pr_url = run_command(pr_create_command)

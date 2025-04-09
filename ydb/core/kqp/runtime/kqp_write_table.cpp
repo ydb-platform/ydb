@@ -245,7 +245,7 @@ public:
         for (const auto& row : Rows) {
             AFL_ENSURE(row.size() == Rows.front().size());
             const auto size = EstimateSize(row);
-            SerializedMemory += GetCellHeaderSize() * rows.Size() + size;
+            SerializedMemory += GetCellHeaderSize() * row.size() + size;
             Memory += size;
         }
     }

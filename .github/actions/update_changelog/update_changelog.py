@@ -216,6 +216,7 @@ def main():
     while branch_exists(branch_name):
         branch_name = f"{base_branch_name}-{index}"
         index += 1
+    run_command(f"git checkout -b {base_branch}")
     run_command(f"git checkout -b {branch_name}")
     run_command(f"git add {changelog_path}")
     run_command(f"git commit -m \"Update CHANGELOG.md for {suffix}\"")

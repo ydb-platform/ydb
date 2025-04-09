@@ -36,6 +36,7 @@ struct TEvKafka {
         EvAddOffsetsToTxnRequest,
         EvTxnOffsetCommitRequest,
         EvEndTxnRequest,
+        EvTransactionActorDied,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -336,6 +337,18 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 
     EStatus Status;
     TString Message;
+};
+
+struct TEvTransactionActorDied : public NActors::TEventLocal<TEvTransactionActorDied, EvTransactionActorDied> {
+    TEvTransactionActorDied(const TString& transactionalId, const i64 producerId, const i16 producerEpoch) :
+        TransactionalId(std::move(transactionalId)),
+        ProducerId(producerId),
+        ProducerEpoch(producerEpoch)
+    {}
+
+    const TString TransactionalId;
+    const i64 ProducerId;
+    const i16 ProducerEpoch;
 };
 }; // struct TEvKafka
 

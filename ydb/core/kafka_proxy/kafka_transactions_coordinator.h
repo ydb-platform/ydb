@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kafka_events.h"
+#include "actors/txn_actor_response_builder.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -69,15 +70,13 @@ namespace NKafka {
             template<class EventType> 
             void ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
 
-            template<class ResponseType, class RequestType>
-            std::shared_ptr<ResponseType> BuildProducerFencedResponse(TMessagePtr<RequestType> request);
-
             bool NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState);
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
             TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerState& currentProducerState, const TProducerState& newProducerState);
 
             std::unordered_map<TString, TProducerState> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
+            NKafkaTransactions::ResponseBuilder ResponseBuilder = NKafkaTransactions::ResponseBuilder();
     };
 
     inline NActors::IActor* CreateKafkaTransactionsCoordinator() {

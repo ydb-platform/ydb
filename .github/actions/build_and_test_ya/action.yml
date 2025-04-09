@@ -68,7 +68,7 @@ runs:
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
-        folder_prefix: ya-
+        folder_prefix: ${{ inputs.custom_branch_name  && format('ya-{0}', inputs.custom_branch_name) || 'ya-' }}
         build_preset: ${{ inputs.build_preset }}
 
     - name: Run build and tests

@@ -3470,7 +3470,7 @@ WITH (
         // Check that user is locked out and cannot login
         {
             auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
-            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 is not permitted to log in");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 is not permitted to log in, because the count of password attempts has been exceeded");
         }
 
         Sleep(TDuration::Seconds(5));

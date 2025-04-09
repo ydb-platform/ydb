@@ -5,6 +5,7 @@
 #include "rpc_operation_request_base.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/ydb_convert/compression.h>
 
@@ -205,13 +206,35 @@ public:
             }
         }
         if constexpr (IsS3Export) {
+            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonDestPrefixSpecified = !settings.destination_prefix().empty();
+            if (!encryptedExportFeatureFlag) {
+                // Check that no new fields are specified
+                if (commonDestPrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                }
+                if (!settings.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
+                }
+                if (settings.has_encryption_settings()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+            }
             if (settings.items().empty() && !commonDestPrefixSpecified) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix specified. Don't know where to export");
             }
             for (const auto& item : settings.items()) {
                 if (item.destination_prefix().empty() && !commonDestPrefixSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
+                }
+            }
+            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                try {
+                    NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
+                    NBackup::TEncryptionKey key(settings.encryption_settings().symmetric_key().key());
+                    NBackup::TEncryptedFileSerializer::EncryptFullFile(settings.encryption_settings().encryption_algorithm(), key, iv, {});
+                } catch (const std::exception& ex) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid encryption settings: " << ex.what());
                 }
             }
         }

@@ -53,9 +53,7 @@
     ],
     "test.test[recursion_ignore]": [
         {
-            "checksum": "eeb1ca24bdc09529bd0a320965b3123d",
-            "size": 1241,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_recursion_ignore_/results.txt"
+            "uri": "file://test.test_recursion_ignore_/results.txt"
         }
     ],
     "test.test[syntax_aware_empty_nested_message]": [
@@ -95,30 +93,22 @@
     ],
     "test.test[yt_mode_no_ser]": [
         {
-            "checksum": "eeb1ca24bdc09529bd0a320965b3123d",
-            "size": 1241,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_yt_mode_no_ser_/results.txt"
+            "uri": "file://test.test_yt_mode_no_ser_/results.txt"
         }
     ],
     "test.test[yt_mode_plain]": [
         {
-            "checksum": "7321635f17c1f8fdb75d96bb2a3ce4d1",
-            "size": 1796,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_yt_mode_plain_/results.txt"
+            "uri": "file://test.test_yt_mode_plain_/results.txt"
         }
     ],
     "test.test[yt_mode_ser_pb]": [
         {
-            "checksum": "eeb1ca24bdc09529bd0a320965b3123d",
-            "size": 1241,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_yt_mode_ser_pb_/results.txt"
+            "uri": "file://test.test_yt_mode_ser_pb_/results.txt"
         }
     ],
     "test.test[yt_mode_ser_yt]": [
         {
-            "checksum": "eeb1ca24bdc09529bd0a320965b3123d",
-            "size": 1241,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_yt_mode_ser_yt_/results.txt"
+            "uri": "file://test.test_yt_mode_ser_yt_/results.txt"
         }
     ],
     "test.test[yt_mode_variant]": [

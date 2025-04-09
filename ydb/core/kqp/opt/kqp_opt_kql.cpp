@@ -457,7 +457,6 @@ TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inpu
         .Build()
         .Columns(inputColumns)
         .ReturningColumns(write.ReturningColumns())
-        .Settings(IsUpdateSetting(ctx, write.Pos()))
         .Done();
 }
 

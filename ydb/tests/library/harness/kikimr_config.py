@@ -164,6 +164,7 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
+            domain_login_only=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -349,6 +350,11 @@ class KikimrConfigGenerator(object):
 
         if auth_config_path:
             self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
+
+        if domain_login_only is not None:
+            if "auth_config" not in self.yaml_config:
+                self.yaml_config["auth_config"] = dict()
+            self.yaml_config["auth_config"]["domain_login_only"] = domain_login_only
 
         if fq_config_path:
             self.yaml_config["federated_query_config"] = _load_yaml_config(fq_config_path)

@@ -2,6 +2,7 @@ RECURSE(
     accessor
     aclib
     actors
+    analytics
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
@@ -9,6 +10,7 @@ RECURSE(
     benchmarks
     breakpad
     chunks_limiter
+    drr
     folder_service
     formats
     fyamlcpp
@@ -23,11 +25,13 @@ RECURSE(
     ncloud
     pdisk_io
     persqueue
+    planner
     pretty_types_print
     protobuf_printer
     query_actor
     schlab
     security
+    shop
     signal_backtrace
     table_creator
     testlib

@@ -55,7 +55,7 @@ std::vector<NYql::TIssue> TIcebergProcessor::GetIssues() const {
 
     std::vector<NYql::TIssue> issues;
     std::copy(Issues_->begin(), Issues_->end(), std::back_inserter(issues));
-    return std::move(issues);
+    return issues;
 }
 
 void TIcebergProcessor::RiseError(const TString& property, const TString& msg) {

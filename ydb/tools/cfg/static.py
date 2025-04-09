@@ -113,6 +113,7 @@ class StaticConfigGenerator(object):
             "immediate_controls_config.txt": None,
             "cms_config.txt": None,
             "audit_config.txt": None,
+            "kqpconfig.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -310,6 +311,16 @@ class StaticConfigGenerator(object):
     @property
     def actor_system_config_txt_enabled(self):
         return self.__proto_config("actor_system_config.txt").ByteSize() > 0
+
+    @property
+    def kqpconfig_txt(self):
+        return self.__proto_config("kqpconfig.txt",
+                                   config_pb2.TKQPConfig,
+                                   self.__cluster_details.get_service("kqpconfig"))
+
+    @property
+    def kqpconfig_txt_enabled(self):
+        return self.__proto_config("kqpconfig.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -692,7 +703,6 @@ class StaticConfigGenerator(object):
         app_config.LogConfig.CopyFrom(self.log_txt)
         if self.auth_txt.ByteSize() > 0:
             app_config.AuthConfig.CopyFrom(self.auth_txt)
-        app_config.KQPConfig.CopyFrom(self.kqp_txt)
         app_config.NameserviceConfig.CopyFrom(self.names_txt)
         app_config.GRpcConfig.CopyFrom(self.grpc_txt)
         app_config.InterconnectConfig.CopyFrom(self.ic_txt)
@@ -728,6 +738,12 @@ class StaticConfigGenerator(object):
         # New config.yaml style:
         if self.actor_system_config_txt_enabled:
             app_config.ActorSystemConfig.CopyFrom(self.actor_system_config_txt)
+
+        # Old template style:
+        app_config.KQPConfig.CopyFrom(self.kqp_txt)
+        # New config.yaml style:
+        if self.kqpconfig_txt_enabled:
+            app_config.KQPConfig.CopyFrom(self.kqpconfig_txt)
 
         # Old template style:
         if self.cms_txt.ByteSize() > 0:

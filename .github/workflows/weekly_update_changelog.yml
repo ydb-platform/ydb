@@ -15,6 +15,9 @@ jobs:
       branches: ${{ steps.branch-list.outputs.branches }}
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        
       - name: List 'main' and 'stable-*' branches
         id: branch-list
         run: |

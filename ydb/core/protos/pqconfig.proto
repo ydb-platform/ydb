@@ -744,6 +744,7 @@ message TClientInfo {
     optional uint64 ReadLagMs = 5;
     optional uint64 LastReadTimestampMs = 8;
     optional uint64 TotalLagMs = 9;
+    optional uint64 CommitedLagMs = 10;
 }
 
 
@@ -844,6 +845,7 @@ message TStatusResponse {
         optional uint64 CommitedOffset = 9;
 
         optional bool ReadingFinished = 10;
+        optional uint64 CommitedLagMs = 11;
     }
 
 

@@ -30,6 +30,7 @@ SRCS(
     autoscaling_ut.cpp
     balancing_ut.cpp
     mirrorer_ut.cpp
+    topic_ut.cpp
 )
 
 END()

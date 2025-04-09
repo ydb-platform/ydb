@@ -197,6 +197,7 @@ QueryServiceConfig {
   AvailableExternalDataSources: "Oracle"
   AvailableExternalDataSources: "Logging"
   AvailableExternalDataSources: "Solomon"
+  AvailableExternalDataSources: "Redis"
   Generic {
     Connector {
         Endpoint {

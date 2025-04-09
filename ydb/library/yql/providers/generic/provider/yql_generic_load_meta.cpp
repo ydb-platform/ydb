@@ -540,6 +540,8 @@ namespace NYql {
                     auto* options = request.mutable_data_source_instance()->mutable_iceberg_options();
                     SetIcebergOptions(*options, clusterConfig);
                 } break;
+                case NYql::EGenericDataSourceKind::REDIS:
+                    break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";

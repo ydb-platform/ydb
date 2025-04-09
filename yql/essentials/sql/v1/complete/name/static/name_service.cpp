@@ -74,6 +74,9 @@ namespace NSQLComplete {
             Sort(NameSet_.Pragmas, NoCaseCompare);
             Sort(NameSet_.Types, NoCaseCompare);
             Sort(NameSet_.Functions, NoCaseCompare);
+            for (auto& [_, hints] : NameSet_.Hints) {
+                Sort(hints, NoCaseCompare);
+            }
         }
 
         TFuture<TNameResponse> Lookup(TNameRequest request) override {
@@ -95,6 +98,13 @@ namespace NSQLComplete {
                 auto prefix = Prefixed(request.Prefix, "::", *request.Constraints.Function);
                 auto names = FilteredByPrefix(prefix, NameSet_.Functions);
                 AppendAs<TFunctionName>(response.RankedNames, names);
+            }
+
+            if (request.Constraints.Hint) {
+                const auto stmt = request.Constraints.Hint->Statement;
+                AppendAs<THintName>(
+                    response.RankedNames,
+                    FilteredByPrefix(request.Prefix, NameSet_.Hints[stmt]));
             }
 
             Ranking_->CropToSortedPrefix(response.RankedNames, request.Limit);

@@ -6,6 +6,8 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 
+#include <ranges>
+
 #define DEBUG_SYMBOLIZE_STACK(stack) \
     auto debug_symbolized_##stack = Symbolized(stack)
 
@@ -38,6 +40,10 @@ namespace NSQLComplete {
         RULE(Id_expr),
         RULE(An_id_or_type),
         RULE(Id_or_type),
+    };
+
+    const TVector<TRuleId> HintNameRules = {
+        RULE(Id_hint),
     };
 
     TVector<std::string> Symbolized(const TParserCallStack& stack) {
@@ -87,6 +93,22 @@ namespace NSQLComplete {
                          RULE(Atom_expr),
                          RULE(An_id_or_type)}, stack) ||
                EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack);
+    }
+
+    bool IsLikelyHintStack(const TParserCallStack& stack) {
+        return ContainsRule(RULE(Id_hint), stack);
+    }
+
+    std::optional<EStatementKind> StatementKindOf(const TParserCallStack& stack) {
+        for (TRuleId rule : std::ranges::views::reverse(stack)) {
+            if (rule == RULE(Select_core)) {
+                return EStatementKind::Select;
+            }
+            if (rule == RULE(Into_table_stmt)) {
+                return EStatementKind::Insert;
+            }
+        }
+        return std::nullopt;
     }
 
     std::unordered_set<TRuleId> GetC3PreferredRules() {

@@ -18,10 +18,15 @@ namespace NSQLComplete {
             TString Namespace;
         };
 
+        struct THint {
+            EStatementKind StatementKind;
+        };
+
         TVector<TString> Keywords;
         std::optional<TPragma> Pragma;
         bool IsTypeName;
         std::optional<TFunction> Function;
+        std::optional<THint> Hint;
     };
 
     class ILocalSyntaxAnalysis {

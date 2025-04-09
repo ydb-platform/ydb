@@ -77,6 +77,12 @@ namespace NSQLComplete {
                     }
                 }
 
+                if constexpr (std::is_same_v<T, THintName>) {
+                    if (auto weight = Frequency_.Hints.FindPtr(identifier)) {
+                        return *weight;
+                    }
+                }
+
                 return 0;
             }, name);
         }

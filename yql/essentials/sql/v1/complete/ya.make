@@ -22,6 +22,7 @@ END()
 
 RECURSE(
     antlr4
+    core
     name
     syntax
     text

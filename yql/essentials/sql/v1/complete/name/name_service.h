@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/core/statement.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/vector.h>
@@ -29,16 +31,24 @@ namespace NSQLComplete {
         struct TConstraints: TNamespaced {};
     };
 
+    struct THintName: TIndentifier {
+        struct TConstraints {
+            EStatementKind Statement;
+        };
+    };
+
     using TGenericName = std::variant<
         TPragmaName,
         TTypeName,
-        TFunctionName>;
+        TFunctionName,
+        THintName>;
 
     struct TNameRequest {
         struct {
             std::optional<TPragmaName::TConstraints> Pragma;
             std::optional<TTypeName::TConstraints> Type;
             std::optional<TFunctionName::TConstraints> Function;
+            std::optional<THintName::TConstraints> Hint;
         } Constraints;
         TString Prefix = "";
         size_t Limit = 128;
@@ -46,7 +56,8 @@ namespace NSQLComplete {
         bool IsEmpty() const {
             return !Constraints.Pragma &&
                    !Constraints.Type &&
-                   !Constraints.Function;
+                   !Constraints.Function &&
+                   !Constraints.Hint;
         }
     };
 

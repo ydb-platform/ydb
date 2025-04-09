@@ -23,6 +23,7 @@ namespace NSQLComplete {
         PragmaName,
         TypeName,
         FunctionName,
+        HintName,
     };
 
     struct TCandidate {

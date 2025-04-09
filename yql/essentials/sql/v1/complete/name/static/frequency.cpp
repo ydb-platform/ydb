@@ -19,6 +19,8 @@ namespace NSQLComplete {
             const char* Func = "FUNC";
             const char* Module = "MODULE";
             const char* ModuleFunc = "MODULE_FUNC";
+            const char* ReadHint = "READ_HINT";
+            const char* InsertHint = "INSERT_HINT";
         } Parent;
     } Json;
 
@@ -58,7 +60,9 @@ namespace NSQLComplete {
                 item.Parent == Json.Parent.Type ||
                 item.Parent == Json.Parent.Func ||
                 item.Parent == Json.Parent.ModuleFunc ||
-                item.Parent == Json.Parent.Module) {
+                item.Parent == Json.Parent.Module ||
+                item.Parent == Json.Parent.ReadHint ||
+                item.Parent == Json.Parent.InsertHint) {
                 item.Rule = ToLowerUTF8(item.Rule);
             }
 
@@ -66,11 +70,14 @@ namespace NSQLComplete {
                 data.Pragmas[item.Rule] += item.Sum;
             } else if (item.Parent == Json.Parent.Type) {
                 data.Types[item.Rule] += item.Sum;
+            } else if (item.Parent == Json.Parent.Module) {
+                // Ignore, unsupported: Modules
             } else if (item.Parent == Json.Parent.Func ||
                        item.Parent == Json.Parent.ModuleFunc) {
                 data.Functions[item.Rule] += item.Sum;
-            } else if (item.Parent == Json.Parent.Module) {
-                // Ignore, unsupported: Modules
+            } else if (item.Parent == Json.Parent.ReadHint ||
+                       item.Parent == Json.Parent.InsertHint) {
+                data.Hints[item.Rule] += item.Sum;
             } else {
                 // Ignore, unsupported: Parser Call Stacks
             }

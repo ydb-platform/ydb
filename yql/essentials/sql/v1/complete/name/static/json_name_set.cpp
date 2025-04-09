@@ -3,6 +3,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
+#include <util/charset/utf8.h>
+
 namespace NSQLComplete {
 
     NJson::TJsonValue LoadJsonResource(const TStringBuf filename) {
@@ -38,7 +40,7 @@ namespace NSQLComplete {
         return ParseNames(json.GetArraySafe());
     }
 
-    TVector<TString> ParseUfs(NJson::TJsonValue json) {
+    TVector<TString> ParseUdfs(NJson::TJsonValue json) {
         TVector<TString> names;
         for (auto& [module, v] : json.GetMapSafe()) {
             auto functions = ParseNames(v.GetArraySafe());
@@ -50,13 +52,40 @@ namespace NSQLComplete {
         return names;
     }
 
+    // TODO(YQL-19747): support multiple systems, name service/set hierarchy - common & special
+    THashMap<EStatementKind, TVector<TString>> ParseHints(NJson::TJsonValue json) {
+        THashMap<EStatementKind, TVector<TString>> hints;
+
+        THashMap<EStatementKind, TString> StatementNames = {
+            {EStatementKind::Select, "read"},
+            {EStatementKind::Insert, "insert"},
+        };
+
+        for (const auto& [k, kname] : StatementNames) {
+            for (auto& [_, values] : json.GetMapSafe().at(kname).GetMapSafe()) {
+                for (auto& name : ParseNames(values.GetMapSafe().at("hints").GetArraySafe())) {
+                    hints[k].emplace_back(std::move(name));
+                }
+            }
+        }
+
+        for (auto& [_, hints] : hints) {
+            for (auto& hint : hints) {
+                hint = ToUpperUTF8(hint);
+            }
+        }
+
+        return hints;
+    }
+
     NameSet MakeDefaultNameSet() {
         return {
             .Pragmas = ParsePragmas(LoadJsonResource("pragmas_opensource.json")),
             .Types = ParseTypes(LoadJsonResource("types.json")),
             .Functions = Merge(
                 ParseFunctions(LoadJsonResource("sql_functions.json")),
-                ParseUfs(LoadJsonResource("udfs_basic.json"))),
+                ParseUdfs(LoadJsonResource("udfs_basic.json"))),
+            .Hints = ParseHints(LoadJsonResource("statements_opensource.json")),
         };
     }
 

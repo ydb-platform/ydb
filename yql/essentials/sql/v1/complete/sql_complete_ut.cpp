@@ -38,6 +38,7 @@ public:
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::FunctionName;
+    using ECandidateKind::HintName;
     using ECandidateKind::Keyword;
     using ECandidateKind::PragmaName;
     using ECandidateKind::TypeName;
@@ -59,6 +60,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             .Pragmas = {"yson.CastToString"},
             .Types = {"Uint64"},
             .Functions = {"StartsWith", "DateTime::Split"},
+            .Hints = {
+                {EStatementKind::Select, {"XLOCK"}},
+                {EStatementKind::Insert, {"EXPIRATION"}},
+            },
         };
         auto ranking = MakeDefaultRanking({});
         INameService::TPtr service = MakeStaticNameService(std::move(names), std::move(ranking));
@@ -67,6 +72,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TCompletionInput input) {
         return engine->Complete(input).Candidates;
+    }
+
+    TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TCompletionInput input) {
+        auto candidates = Complete(engine, input);
+        candidates.crop(limit);
+        return candidates;
     }
 
     Y_UNIT_TEST(Beginning) {
@@ -465,6 +476,28 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(SelectTableHintName) {
+        TVector<TCandidate> expected = {
+            {Keyword, "COLUMNS"},
+            {Keyword, "SCHEMA"},
+            {HintName, "XLOCK"},
+        };
+
+        auto engine = MakeSqlCompletionEngineUT();
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT key FROM my_table WITH "}), expected);
+    }
+
+    Y_UNIT_TEST(InsertTableHintName) {
+        TVector<TCandidate> expected = {
+            {Keyword, "COLUMNS"},
+            {Keyword, "SCHEMA"},
+            {HintName, "EXPIRATION"},
+        };
+
+        auto engine = MakeSqlCompletionEngineUT();
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"INSERT INTO my_table WITH "}), expected);
+    }
+
     Y_UNIT_TEST(UTF8Wide) {
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"\xF0\x9F\x98\x8A"}).size(), 0);
@@ -606,17 +639,19 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {"minby", 32},
                 {"maxby", 32},
             },
+            .Hints = {
+                {"xlock", 4},
+                {"unordered", 2},
+            },
         };
         auto service = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking(frequency));
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
         {
-            TVector<TCandidate> expectedPrefix = {
+            TVector<TCandidate> expected = {
                 {PragmaName, "DefaultMemoryLimit"},
                 {PragmaName, "Annotations"},
             };
-            auto actualPrefix = Complete(engine, {"PRAGMA yt."});
-            actualPrefix.crop(expectedPrefix.size());
-            UNIT_ASSERT_VALUES_EQUAL(actualPrefix, expectedPrefix);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, {"PRAGMA yt."}), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -630,7 +665,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT OPTIONAL<I"}), expected);
         }
         {
-            TVector<TCandidate> expectedPrefix = {
+            TVector<TCandidate> expected = {
                 {FunctionName, "Min("},
                 {FunctionName, "Max("},
                 {FunctionName, "MaxOf("},
@@ -640,11 +675,16 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FunctionName, "Math::Acos("},
                 {FunctionName, "Math::Asin("},
             };
-
-            auto actualPrefix = Complete(engine, {"SELECT m"});
-            actualPrefix.crop(expectedPrefix.size());
-
-            UNIT_ASSERT_VALUES_EQUAL(actualPrefix, expectedPrefix);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, {"SELECT m"}), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {Keyword, "COLUMNS"},
+                {Keyword, "SCHEMA"},
+                {HintName, "XLOCK"},
+                {HintName, "UNORDERED"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, {"SELECT * FROM a WITH "}), expected);
         }
     }
 

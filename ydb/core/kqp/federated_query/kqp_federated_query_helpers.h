@@ -157,6 +157,6 @@ namespace NKikimr::NKqp {
         NYql::IssuesToMessage(TruncateIssues(issues, maxLevels, keepTailLevels), issuesProto);
     }
 
-    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 50);
+    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
 }  // namespace NKikimr::NKqp

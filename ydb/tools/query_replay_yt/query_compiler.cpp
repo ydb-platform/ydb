@@ -312,33 +312,37 @@ private:
 
 private:
 
+    TKqpQueryRef MakeQueryRef() {
+        return TKqpQueryRef(Query->Text, Query->QueryParameterTypes);
+    }
+
     void StartCompilation() {
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
 
         switch (Query->Settings.QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQuery(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQuery(MakeQueryRef(), prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_AST_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQueryAst(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQueryAst(MakeQueryRef(), prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-                AsyncCompileResult = KqpHost->PrepareScanQuery(Query->Text, Query->IsSql(), prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareScanQuery(MakeQueryRef(), Query->IsSql(), prepareSettings);
                 break;
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareGenericScript(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(MakeQueryRef(), prepareSettings);
                 break;
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY: {
                 prepareSettings.ConcurrentResults = false;
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(MakeQueryRef(), prepareSettings, nullptr);
                 break;
             }
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY: {
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(MakeQueryRef(), prepareSettings, nullptr);
                 break;
             }
 

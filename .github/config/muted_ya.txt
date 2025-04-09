@@ -49,6 +49,7 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario2
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_DistributedTxCommit_CheckOffsetCommitForDifferentCases_SplitedTopic
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut DataCleanup.CleanupDataWithFollowers

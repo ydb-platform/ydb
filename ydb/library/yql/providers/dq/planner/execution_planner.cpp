@@ -149,7 +149,7 @@ namespace NYql::NDqs {
         auto value = expr.Maybe<TDqPhyPrecompute>();
         const auto maxTasksPerOperation = Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
-        YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
+        YQL_CLOG(TRACE, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
 
         auto stages = GetStages(DqExprRoot);
         YQL_ENSURE(!stages.empty());

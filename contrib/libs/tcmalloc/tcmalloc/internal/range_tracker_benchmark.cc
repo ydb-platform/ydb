@@ -13,13 +13,15 @@
 // limitations under the License.
 
 #include <algorithm>
-#include <utility>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "absl/base/attributes.h"
 #include "absl/random/distributions.h"
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/range_tracker.h"
 
 GOOGLE_MALLOC_SECTION_BEGIN
@@ -27,11 +29,16 @@ namespace tcmalloc {
 namespace tcmalloc_internal {
 namespace {
 
+struct RangeInfo {
+  size_t index;
+  size_t len;
+};
+
 template <size_t N>
 static void BM_MarkUnmark(benchmark::State& state) {
   RangeTracker<N> range;
   absl::BitGen rng;
-  std::vector<std::pair<size_t, size_t>> things;
+  std::vector<RangeInfo> things;
   while (range.used() < N / 2) {
     size_t len =
         absl::LogUniform<int32_t>(rng, 0, range.longest_free() - 1) + 1;
@@ -43,7 +50,7 @@ static void BM_MarkUnmark(benchmark::State& state) {
   for (auto s : state) {
     size_t index = absl::Uniform<int32_t>(rng, 0, things.size());
     auto p = things[index];
-    range.Unmark(p.first, p.second);
+    range.Unmark(p.index, p.len);
     size_t len =
         absl::LogUniform<int32_t>(rng, 0, range.longest_free() - 1) + 1;
     things[index] = {range.FindAndMark(len), len};
@@ -58,6 +65,7 @@ BENCHMARK_TEMPLATE(BM_MarkUnmark, 256 * 32);
 template <size_t N, size_t K>
 static void BM_MarkUnmarkEmpty(benchmark::State& state) {
   RangeTracker<N> range;
+  absl::BitGen rng;
   for (auto s : state) {
     size_t index = range.FindAndMark(K);
     benchmark::DoNotOptimize(index);

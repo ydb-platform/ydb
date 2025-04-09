@@ -403,20 +403,20 @@ private:
         std::int64_t leftJoinKeysOrderingIdx = edge->LeftJoinKeysShuffleOrderingIdx;
         std::int64_t rightJoinKeysOrderingIdx = edge->RightJoinKeysShuffleOrderingIdx;
 
-        joinNode->LogicalOrderings = fsm.CreateState();
+        joinNode->Stats.LogicalOrderings = fsm.CreateState();
         switch (joinNode->JoinAlgo) {
             case EJoinAlgoType::GraceJoin: {
                 /* look at dphyp shuffle elimination EmitCsgCmp function. it has the same logic. */
 
                 bool lhsShuffled =
-                    left->LogicalOrderings.HasState() &&
-                    left->LogicalOrderings.ContainsShuffle(leftJoinKeysOrderingIdx) &&
-                    left->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->LeftJoinKeys.size());
+                    left->Stats.LogicalOrderings.HasState() &&
+                    left->Stats.LogicalOrderings.ContainsShuffle(leftJoinKeysOrderingIdx) &&
+                    left->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->LeftJoinKeys.size());
 
                 bool rhsShuffled =
-                    right->LogicalOrderings.HasState() &&
-                    right->LogicalOrderings.ContainsShuffle(rightJoinKeysOrderingIdx) &&
-                    right->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->RightJoinKeys.size());
+                    right->Stats.LogicalOrderings.HasState() &&
+                    right->Stats.LogicalOrderings.ContainsShuffle(rightJoinKeysOrderingIdx) &&
+                    right->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->RightJoinKeys.size());
 
                 if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
                     if (left->Stats.Nrows < right->Stats.Nrows) {
@@ -437,26 +437,26 @@ private:
                 Cout << "left: " << joinNode->ShuffleLeftSideByOrderingIdx << ", right: " << joinNode->ShuffleRightSideByOrderingIdx << Endl;
                 Cout << lhsShuffled << " " << rhsShuffled << Endl;
 
-                joinNode->LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
+                joinNode->Stats.LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
 
-                Cout << joinNode->LogicalOrderings.GetState() << Endl;
+                Cout << joinNode->Stats.LogicalOrderings.GetState() << Endl;
                 break;
             }
             case EJoinAlgoType::MapJoin:
             case EJoinAlgoType::LookupJoin: {
-                joinNode->LogicalOrderings = left->LogicalOrderings;
+                joinNode->Stats.LogicalOrderings = left->Stats.LogicalOrderings;
                 break;
             }
             case EJoinAlgoType::LookupJoinReverse: {
-                joinNode->LogicalOrderings = right->LogicalOrderings;
+                joinNode->Stats.LogicalOrderings = right->Stats.LogicalOrderings;
                 break;
             }
             default:
                 Y_UNUSED(joinNode->JoinAlgo);
         }
 
-        joinNode->LogicalOrderings.InduceNewOrderings(
-            left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs() | edge->FDs
+        joinNode->Stats.LogicalOrderings.InduceNewOrderings(
+            left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs() | edge->FDs
         );
     }
 
@@ -591,7 +591,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
 
     // Check that statistics for all inputs of equiJoin were computed
-    // The arguments of the EquiJoin are 1..n-2, n-2 is the actual join tree
+    // The arguments of the EquiJoin are 1..n-2, n-2 is the  join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){

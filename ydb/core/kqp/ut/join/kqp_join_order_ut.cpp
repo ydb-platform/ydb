@@ -934,6 +934,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             stream.Finish();
         }
 
+        Cout << "actual\n" << currentJoinOrder << Endl;
+
         TString ref = GetStatic(correctJoinOrderPath);
         Cout << "actual\n" << GetJoinOrder(plan).GetStringRobust() << Endl;
         Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;

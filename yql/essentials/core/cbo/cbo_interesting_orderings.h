@@ -173,18 +173,30 @@ public:
             return BaseColumnByRename[renamedColumn];
         }
 
+        if (std::count(renamedColumn.begin(), renamedColumn.end(), '.') > 1) {
+            auto lastPointIdx = renamedColumn.find_last_of('.');
+            auto prevPointIdx = renamedColumn.find_last_of('.', lastPointIdx - 1);
+            TString alias = renamedColumn.substr(prevPointIdx + 1, lastPointIdx - prevPointIdx - 1);
+            TString column = renamedColumn.substr(lastPointIdx + 1);
+            if (auto baseTable = GetBaseTableByAlias(alias)) {
+                return TBaseColumn(std::move(baseTable), std::move(column));
+            }
+            return TBaseColumn(std::move(alias), std::move(column));
+        }
+
         if (auto pointIdx = renamedColumn.find('.'); pointIdx != TString::npos) {
             TString alias = renamedColumn.substr(0, pointIdx);
+            TString column = renamedColumn.substr(pointIdx + 1);
             if (auto baseTable = GetBaseTableByAlias(alias)) {
-                return TBaseColumn(std::move(baseTable), renamedColumn.substr(pointIdx + 1));
+                return TBaseColumn(std::move(baseTable), std::move(column));
             }
+            return TBaseColumn(std::move(alias), std::move(column));
         }
 
         return TBaseColumn("", renamedColumn);
     }
 
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn) {
-        Cout << renamedColumn.RelName << " and " << renamedColumn.AttributeName << Endl;
         return GetBaseColumnByRename(renamedColumn.RelName + "." + renamedColumn.AttributeName);
     }
 
@@ -283,6 +295,10 @@ public:
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type
     ) {
+        if (interestingOrdering.empty()) {
+            return std::numeric_limits<std::size_t>::max();
+        }
+
         auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true);
 
         if (foundIdx >= 0) {
@@ -321,7 +337,7 @@ public:
         TVector<TString> columnsMapping(IdCounter);
         for (const auto& [column, idx]: IdxByColumn) {
             std::stringstream columnSs;
-            columnSs << "{" << idx << ": " << column << "}, ";
+            columnSs << "{" << idx << ": " << column << "}";
             columnsMapping[idx] = columnSs.str();
         }
         ss << JoinSubsequence(", ", columnsMapping) << "\n";

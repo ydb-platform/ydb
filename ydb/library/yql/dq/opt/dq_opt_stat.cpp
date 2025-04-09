@@ -379,6 +379,10 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
  * DqJoin is an intermediary join representantation in Dq
  */
 void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
+    if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
+        return;
+    }
+
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TDqJoin>();
 

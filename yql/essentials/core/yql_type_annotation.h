@@ -553,7 +553,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     /**
      * Helper method to fetch statistics from type annotation context
      */
-    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) const {
         return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 

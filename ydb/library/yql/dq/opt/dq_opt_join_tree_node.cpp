@@ -17,7 +17,7 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
     auto res = std::make_shared<TJoinOptimizerNodeInternal>(left, right, leftJoinKeys, rightJoinKeys, joinKind, joinAlgo, leftAny, rightAny);
     res->Stats = std::move(stats);
     if (logicalOrderings.has_value()) {
-        res->LogicalOrderings = logicalOrderings.value();
+        res->Stats.LogicalOrderings = logicalOrderings.value();
     }
     return res;
 }

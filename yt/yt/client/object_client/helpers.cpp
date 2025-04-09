@@ -256,16 +256,6 @@ bool IsChaosTableReplicaType(EObjectType type)
     return type == EObjectType::ChaosTableReplica;
 }
 
-bool IsReplicationCardType(EObjectType type)
-{
-    return type == EObjectType::ReplicationCard;
-}
-
-bool IsChaosLeaseType(EObjectType type)
-{
-    return type == EObjectType::ChaosLease;
-}
-
 bool IsCollocationType(EObjectType type)
 {
     return

@@ -845,7 +845,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         lead.To(range.From, NTable::ESeek::Upper);
         lead.Until(range.To, true);
     }
-    
+
     if (!request.HasLevelName()) {
         badRequest(TStringBuilder() << "Empty level table name");
     }

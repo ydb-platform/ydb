@@ -33,7 +33,7 @@ enum EDatashardState {
     Readonly = 3;
     Offline = 4;
     PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received
-    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden
+    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbidden
 
     // Split/Merge Src states
     SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting
@@ -1628,9 +1628,6 @@ message TEvReshuffleKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
-
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional last written primary key
 }
 
 message TEvPrefixKMeansRequest {

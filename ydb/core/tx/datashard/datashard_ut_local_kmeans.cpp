@@ -16,9 +16,9 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NTableVectorKmeansTreeIndex;
 
 static std::atomic<ui64> sId = 1;
-static constexpr const char* kMainTable = "/Root/table-main";
-static constexpr const char* kLevelTable = "/Root/table-level";
-static constexpr const char* kPostingTable = "/Root/table-posting";
+static const TString kMainTable = "/Root/table-main";
+static const TString kLevelTable = "/Root/table-level";
+static const TString kPostingTable = "/Root/table-posting";
 
 Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         return {std::move(level), std::move(posting)};
     }
 
-    static void DropTable(Tests::TServer::TPtr server, TActorId sender, const char* name)
+    static void DropTable(Tests::TServer::TPtr server, TActorId sender, const TString& name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
         WaitTxNotification(server, sender, txId);
@@ -205,8 +205,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         CreateShardedTable(server, sender, "/Root", "table-posting", options);
     }
 
-    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                                 const char* name)
+    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const TString& name)
     {
         options.AllowSystemColumnNames(true);
         options.Columns({

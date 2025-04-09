@@ -66,7 +66,7 @@ private:
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
-    bool SchemeNeedActualization = false;
+    bool SchemeNeedActualization = false;//
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;

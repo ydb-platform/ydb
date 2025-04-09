@@ -46,6 +46,7 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(const TInternalPathId pat
 
 void TGranuleActualizationIndex::Start() {
     AFL_VERIFY(Actualizers.empty());
+    SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex); //
     TieringActualizer = std::make_shared<TTieringActualizer>(PathId, VersionedIndex, StoragesManager);
     SchemeActualizer = std::make_shared<TSchemeActualizer>(PathId, VersionedIndex);
     Actualizers.emplace_back(TieringActualizer);

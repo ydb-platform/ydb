@@ -528,7 +528,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCompaction({});
     SetupCleanupPortions();
     SetupCleanupTables();
-    SetupMetadata();
+    SetupMetadata();//
     SetupTtl();
     SetupGC();
     SetupCleanupInsertTable();

@@ -75,19 +75,23 @@ public:
     }
 
     [[nodiscard]]
-    bool IsFull() const override {
-        if (!Storage) {
-            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes;
+    TDqFillLevel GetFillLevel() const override {
+        if (Storage) {
+            if (Storage->IsFull()) {
+                return HardLimit;
+            }
+            return FirstStoredId < NextStoredId ? SoftLimit : NoLimit;
+        } else {
+            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
         }
-        return Storage->IsFull();
     }
 
-    virtual void Push(NUdf::TUnboxedValue&& value) override {
+    void Push(NUdf::TUnboxedValue&& value) override {
         YQL_ENSURE(!OutputType->IsMulti());
         DoPushSafe(&value, 1);
     }
 
-    virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
+    void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         YQL_ENSURE(OutputType->IsMulti());
         YQL_ENSURE(Width == width);
         DoPushSafe(values, width);
@@ -95,7 +99,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        YQL_ENSURE(!IsFull());
+        YQL_ENSURE(GetFillLevel() == NoLimit);
 
         if (Finished) {
             return;
@@ -196,7 +200,7 @@ public:
             LOG("Data spilled. Total rows spilled: " << SpilledChunkCount << ", bytesInMemory: " << (PackedDataSize + packerSize)); // FIXME with RowCount
         }
 
-        if (IsFull() || FirstStoredId < NextStoredId) {
+        if ((GetFillLevel() != NoLimit) || FirstStoredId < NextStoredId) {
             PopStats.TryPause();
         }
 
@@ -263,7 +267,7 @@ public:
             PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++; // pop chunks do not match push chunks
-            if (!IsFull() || FirstStoredId == NextStoredId) {
+            if ((GetFillLevel() == NoLimit) || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
             }
         }
@@ -361,7 +365,7 @@ public:
             PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
-            if (!IsFull() || FirstStoredId == NextStoredId) {
+            if ((GetFillLevel() == NoLimit) || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
             }
         }

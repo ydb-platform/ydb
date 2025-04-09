@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: gather-branches
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         branch: ${{ fromJson(needs.gather-branches.outputs.branches) }}
     outputs:

@@ -235,10 +235,6 @@ std::shared_ptr<NSimple::TPortionDataSource> TDuplicateFilterConstructor::TWaiti
 }
 
 TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& sources) {
-    for (const auto& source : sources) {
-        SortedSourceIds.emplace_back(source->GetPortionId());
-    }
-
     class TBorderView {
     private:
         YDB_READONLY_DEF(bool, IsLast);
@@ -293,13 +289,24 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vecto
         }
     }
     AFL_VERIFY(SourceRanges.size() == sources.size());
+
+    // for (const auto& border : borders) {
+    //     if (border.GetIsLast()) {
+    //         SourcesSortedByRight.emplace_back(border.GetSourceId());
+    //     } else {
+    //         SourcesSortedByLeft.emplace_back(border.GetSourceId());
+    //     }
+    // }
+    // AFL_VERIFY(SourcesSortedByLeft.size() == sources.size());
+    // AFL_VERIFY(SourcesSortedByRight.size() == sources.size());
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     const ui64 sourceId = ev->Get()->GetSource()->GetSourceId();
     const auto range = Intervals.GetRangeBySourceId(sourceId);
 
-    const THashSet<ui64> notFetchedSources = NotFetchedSourcesIndex.GetPartialIntersections(range.GetFirstIdx(), range.GetLastIdx());
+    StableBorderCursor->Move(ReverseFetchingOrder ? range.GetLastIdx() : range.GetFirstIdx());
+    const THashSet<ui64> notFetchedSources = NotFetchedSourcesIndex.GetIntersections(range.GetFirstIdx(), range.GetLastIdx(), StableBorderCursor);
     for (const auto& sourceId : notFetchedSources) {
         StartAllocation(sourceId, ev->Get()->GetSource());
     }
@@ -375,8 +382,9 @@ void TDuplicateFilterConstructor::AbortAndPassAway(const TString& reason) {
     PassAway();
 }
 
-TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context)
+TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context, const bool reverseFetchingOrder)
     : TActor(&TDuplicateFilterConstructor::StateMain)
+    , ReverseFetchingOrder(reverseFetchingOrder)
     , Intervals(context.GetReadMetadata()->SelectInfo->Portions)
     , NotFetchedSourcesCount([this]() {
         std::vector<std::pair<ui32, ui32>> intervals;
@@ -388,9 +396,13 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const NSimple::TSpecial
     for (const auto& [id, range] : Intervals.GetSourceRanges()) {
         NotFetchedSourcesIndex.Insert(range.GetFirstIdx(), range.GetLastIdx(), id);
     }
+    StableBorderCursor = NotFetchedSourcesIndex.MakeCursor();
+
+    {
     const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
     for (ui64 i = 0; i < portions.size(); ++i) {
         WaitingSources.emplace(portions[i]->GetPortionId(), std::make_shared<TWaitingSourceInfo>(i));
+    }
     }
 }
 

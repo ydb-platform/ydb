@@ -21,6 +21,15 @@ TReplicationCardId MakeReplicationCardId(TObjectId randomId)
         EntropyFromId(randomId) & 0xffff0000);
 }
 
+TReplicationCardId MakeChaosLeaseId(TObjectId randomId)
+{
+    return MakeId(
+        EObjectType::ChaosLease,
+        CellTagFromId(randomId),
+        CounterFromId(randomId),
+        EntropyFromId(randomId) & 0xffff0000);
+}
+
 TReplicaId MakeReplicaId(TReplicationCardId replicationCardId, TReplicaIdIndex index)
 {
     return MakeId(

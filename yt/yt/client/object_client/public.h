@@ -342,6 +342,7 @@ DEFINE_ENUM(EObjectType,
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
+    ((ChaosLease)                                  (1209))
 
     // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))

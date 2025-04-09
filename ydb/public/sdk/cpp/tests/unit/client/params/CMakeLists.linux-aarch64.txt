@@ -19,9 +19,9 @@ target_link_libraries(ydb-public-sdk-cpp-tests-unit-client-params PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-testing-unittest_main
+  cpp-testing-gtest
+  cpp-testing-gtest_main
   src-client-params
-  public-lib-yson_value
 )
 
 target_allocator(ydb-public-sdk-cpp-tests-unit-client-params
@@ -43,28 +43,14 @@ target_sources(ydb-public-sdk-cpp-tests-unit-client-params PRIVATE
 )
 
 
-set_property(
-  TARGET
-  ydb-public-sdk-cpp-tests-unit-client-params
-  PROPERTY
-  SPLIT_FACTOR
-  10
-)
-
-add_yunittest(
+add_test(
   NAME
   ydb-public-sdk-cpp-tests-unit-client-params
-  TEST_TARGET
+  COMMAND
   ydb-public-sdk-cpp-tests-unit-client-params
-  TEST_ARG
-  --print-before-suite
-  --print-before-test
-  --fork-tests
-  --print-times
-  --show-fails
 )
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-params
   PROPERTY
@@ -72,7 +58,7 @@ set_yunittest_property(
   MEDIUM
 )
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-params
   PROPERTY
@@ -81,7 +67,7 @@ set_yunittest_property(
 
 vcs_info(ydb-public-sdk-cpp-tests-unit-client-params)
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-params
   PROPERTY

@@ -19,9 +19,8 @@ target_link_libraries(ydb-public-sdk-cpp-tests-unit-client-value PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  public-lib-json_value
-  public-lib-yson_value
+  cpp-testing-gtest
+  cpp-testing-gtest_main
   src-client-value
   src-client-params
 )
@@ -43,28 +42,14 @@ target_sources(ydb-public-sdk-cpp-tests-unit-client-value PRIVATE
 )
 
 
-set_property(
-  TARGET
-  ydb-public-sdk-cpp-tests-unit-client-value
-  PROPERTY
-  SPLIT_FACTOR
-  10
-)
-
-add_yunittest(
+add_test(
   NAME
   ydb-public-sdk-cpp-tests-unit-client-value
-  TEST_TARGET
+  COMMAND
   ydb-public-sdk-cpp-tests-unit-client-value
-  TEST_ARG
-  --print-before-suite
-  --print-before-test
-  --fork-tests
-  --print-times
-  --show-fails
 )
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-value
   PROPERTY
@@ -72,7 +57,7 @@ set_yunittest_property(
   MEDIUM
 )
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-value
   PROPERTY
@@ -81,7 +66,7 @@ set_yunittest_property(
 
 vcs_info(ydb-public-sdk-cpp-tests-unit-client-value)
 
-set_yunittest_property(
+set_property(
   TEST
   ydb-public-sdk-cpp-tests-unit-client-value
   PROPERTY

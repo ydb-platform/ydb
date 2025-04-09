@@ -34,8 +34,20 @@ public:
         SortPartitions(Partitions, KeyColumnTypes, [](const auto& partition) { return partition.Range; });
     }
 
-    bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+    TDqFillLevel GetFillLevel() const override {
+        TDqFillLevel result = SoftLimit;
+        for (auto output : Outputs) {
+            switch(output->GetFillLevel()) {
+                case HardLimit:
+                    return HardLimit;
+                case SoftLimit:
+                    break;
+                case NoLimit:
+                    result = NoLimit;
+                    break;
+            }
+        }
+        return result;
     }
 
     void Consume(TUnboxedValue&& value) final {

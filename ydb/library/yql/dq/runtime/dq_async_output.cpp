@@ -57,13 +57,13 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         return PushStats;
     }
-    
+
     const TDqAsyncOutputBufferStats& GetPopStats() const override {
         return PopStats;
     }
 
-    bool IsFull() const override {
-        return EstimatedStoredBytes >= MaxStoredBytes;
+    TDqFillLevel GetFillLevel() const override {
+        return EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -214,7 +214,7 @@ private:
             PushStats.Resume();
         }
 
-        if (IsFull()) {
+        if (GetFillLevel() != NoLimit) {
             PopStats.TryPause();
         }
 
@@ -229,7 +229,7 @@ private:
             PopStats.Bytes += bytes;
             PopStats.Rows += rows;
             PopStats.Chunks++;
-            if (!IsFull()) {
+            if (GetFillLevel() == NoLimit) {
                 PopStats.Resume();
             }
         }

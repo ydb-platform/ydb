@@ -36,8 +36,20 @@ public:
         YQL_ENSURE(!Consumers.empty());
     }
 
-    bool IsFull() const override {
-        return AnyOf(Consumers, [](const auto& consumer) { return consumer->IsFull(); });
+    TDqFillLevel GetFillLevel() const override {
+        TDqFillLevel result = SoftLimit;
+        for (auto consumer : Consumers) {
+            switch(consumer->GetFillLevel()) {
+                case HardLimit:
+                    return HardLimit;
+                case SoftLimit:
+                    break;
+                case NoLimit:
+                    result = NoLimit;
+                    break;
+            }
+        }
+        return result;
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) override {
@@ -79,8 +91,8 @@ public:
     TDqOutputMapConsumer(IDqOutput::TPtr output)
         : Output(output) {}
 
-    bool IsFull() const override {
-        return Output->IsFull();
+    TDqFillLevel GetFillLevel() const override {
+        return Output->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) override {
@@ -263,7 +275,7 @@ private:
 protected:
     void DrainWaiting() const {
         if (Y_UNLIKELY(IsWaitingFlag)) {
-            if (OutputWaiting->IsFull()) {
+            if (OutputWaiting->GetFillLevel() != NoLimit) {
                 return;
             }
             if (OutputWidth.Defined()) {
@@ -301,15 +313,15 @@ public:
         }
     }
 
-    bool IsFull() const override {
+    TDqFillLevel GetFillLevel() const override {
         DrainWaiting();
-        return IsWaitingFlag;
+        return IsWaitingFlag ? HardLimit : NoLimit;
     }
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
         ui32 partitionIndex = GetHashPartitionIndex(value);
-        if (Outputs[partitionIndex]->IsFull()) {
+        if (Outputs[partitionIndex]->GetFillLevel() != NoLimit) {
             YQL_ENSURE(!IsWaitingFlag);
             IsWaitingFlag = true;
             OutputWaiting = Outputs[partitionIndex];
@@ -322,7 +334,7 @@ public:
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && count == OutputWidth);
         ui32 partitionIndex = GetHashPartitionIndex(values);
-        if (Outputs[partitionIndex]->IsFull()) {
+        if (Outputs[partitionIndex]->GetFillLevel() != NoLimit) {
             YQL_ENSURE(!IsWaitingFlag);
             IsWaitingFlag = true;
             OutputWaiting = Outputs[partitionIndex];
@@ -438,9 +450,9 @@ public:
         }
     }
 private:
-    bool IsFull() const final {
+    TDqFillLevel GetFillLevel() const override {
         DrainWaiting();
-        return IsWaitingFlag_;
+        return IsWaitingFlag_ ? HardLimit : NoLimit;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -458,7 +470,7 @@ private:
         if (!Output_) {
             Output_ = Outputs_[GetHashPartitionIndex(values)];
         }
-        if (Output_->IsFull()) {
+        if (Output_->GetFillLevel() != NoLimit) {
             YQL_ENSURE(!IsWaitingFlag_);
             IsWaitingFlag_ = true;
             std::move(values, values + count, WaitingValues_.data());
@@ -482,7 +494,7 @@ private:
     void DrainWaiting() const {
         if (Y_UNLIKELY(IsWaitingFlag_)) {
             YQL_ENSURE(Output_);
-            if (Output_->IsFull()) {
+            if (Output_->GetFillLevel() != NoLimit) {
                 return;
             }
             YQL_ENSURE(OutputWidth_ == WaitingValues_.size());
@@ -580,9 +592,9 @@ public:
     }
 
 private:
-    bool IsFull() const final {
+    TDqFillLevel GetFillLevel() const override {
         DrainWaiting();
-        return IsWaitingFlag_;
+        return IsWaitingFlag_ ? HardLimit : NoLimit;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -647,7 +659,7 @@ private:
         while (!outputData.empty()) {
             bool hasData = false;
             for (size_t i = 0; i < Outputs_.size(); ++i) {
-                if (Outputs_[i]->IsFull()) {
+                if (Outputs_[i]->GetFillLevel() != NoLimit) {
                     IsWaitingFlag_ = true;
                     Y_ENSURE(OutputData_.empty());
                     OutputData_ = std::move(outputData);
@@ -796,8 +808,8 @@ public:
     {
     }
 
-    bool IsFull() const override {
-        return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
+    TDqFillLevel GetFillLevel() const override {
+        return AnyOf(Outputs, [](const auto& output) { return output->GetFillLevel() != NoLimit; }) ? HardLimit : NoLimit;
     }
 
     void Consume(TUnboxedValue&& value) final {

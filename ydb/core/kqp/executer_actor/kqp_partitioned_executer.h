@@ -12,15 +12,28 @@
 
 namespace NKikimr::NKqp {
 
-NActors::IActor* CreateKqpPartitionedExecuter(
-    NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-    const TActorId sessionActorId, const NMiniKQL::IFunctionRegistry* funcRegistry, TIntrusivePtr<ITimeProvider> timeProvider,
-    TIntrusivePtr<IRandomProvider> randomProvider, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
-    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo,
-    ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit);
+struct TKqpPartitionedExecuterSettings {
+    IKqpGateway::TExecPhysicalRequest&& LiteralRequest;
+    IKqpGateway::TExecPhysicalRequest&& PhysicalRequest;
+    TActorId SessionActorId;
+    const NMiniKQL::IFunctionRegistry* FuncRegistry;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+    TString Database;
+    const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
+    TKqpRequestCounters::TPtr RequestCounters;
+    const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    TPreparedQueryHolder::TConstPtr PreparedQuery;
+    const TIntrusivePtr<TUserRequestContext>& UserRequestContext;
+    ui32 StatementResultIndex;
+    std::optional<TKqpFederatedQuerySetup>& FederatedQuerySetup;
+    const TGUCSettings::TPtr& GUCSettings;
+    const TShardIdToTableInfoPtr& ShardIdToTableInfo;
+    ui64 WriteBufferInitialMemoryLimit;
+    ui64 WriteBufferMemoryLimit;
+};
+
+NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings);
 
 }  // namespace NKikimr::NKqp

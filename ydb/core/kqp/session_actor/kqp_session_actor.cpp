@@ -1518,7 +1518,9 @@ public:
         physicalRequest.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         physicalRequest.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         physicalRequest.MaxShardCount = RequestControls.MaxShardCount;
-        physicalRequest.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        physicalRequest.TraceId = QueryState
+            ? QueryState->KqpSessionSpan.GetTraceId()
+            : NWilson::TTraceId();
         physicalRequest.CaFactory_ = CaFactory_;
         physicalRequest.ResourceManager_ = ResourceManager_;
 
@@ -1531,13 +1533,37 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest),
-            SelfId(), AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider,
-            Settings.Database, QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
-            QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo,
-            writeBufferInitialMemoryLimit, writeBufferMemoryLimit);
+        TKqpPartitionedExecuterSettings settings{
+            .LiteralRequest = std::move(literalRequest),
+            .PhysicalRequest = std::move(physicalRequest),
+            .SessionActorId = SelfId(),
+            .FuncRegistry = AppData()->FunctionRegistry,
+            .TimeProvider = AppData()->TimeProvider,
+            .RandomProvider = AppData()->RandomProvider,
+            .Database = Settings.Database,
+            .UserToken = QueryState
+                ? QueryState->UserToken
+                : TIntrusiveConstPtr<NACLib::TUserToken>(),
+            .RequestCounters = RequestCounters,
+            .TableServiceConfig = Settings.TableService,
+            .AsyncIoFactory = AsyncIoFactory,
+            .PreparedQuery = QueryState
+                ? QueryState->PreparedQuery
+                : nullptr,
+            .UserRequestContext = QueryState
+                ? QueryState->UserRequestContext
+                : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
+            .StatementResultIndex = QueryState
+                ? QueryState->StatementResultIndex
+                : 0,
+            .FederatedQuerySetup = FederatedQuerySetup,
+            .GUCSettings = GUCSettings,
+            .ShardIdToTableInfo = txCtx->ShardIdToTableInfo,
+            .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
+            .WriteBufferMemoryLimit = writeBufferMemoryLimit,
+        };
+
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(settings));
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP partitioned executer: " << ExecuterId);

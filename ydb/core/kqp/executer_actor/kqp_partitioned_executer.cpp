@@ -61,43 +61,26 @@ public:
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
-    TKqpPartitionedExecuter(
-        IKqpGateway::TExecPhysicalRequest&& literalRequest,
-        IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-        const TActorId sessionActorId,
-        const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpRequestCounters::TPtr requestCounters,
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        TPreparedQueryHolder::TConstPtr preparedQuery,
-        const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TGUCSettings::TPtr& GUCSettings,
-        const TShardIdToTableInfoPtr& shardIdToTableInfo,
-        ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit)
-        : LiteralRequest(std::move(literalRequest))
-        , PhysicalRequest(std::move(physicalRequest))
-        , SessionActorId(sessionActorId)
-        , FuncRegistry(funcRegistry)
-        , TimeProvider(timeProvider)
-        , RandomProvider(randomProvider)
-        , Database(database)
-        , UserToken(userToken)
-        , RequestCounters(requestCounters)
-        , TableServiceConfig(tableServiceConfig)
-        , UserRequestContext(userRequestContext)
-        , StatementResultIndex(statementResultIndex)
-        , AsyncIoFactory(std::move(asyncIoFactory))
-        , PreparedQuery(preparedQuery)
-        , FederatedQuerySetup(federatedQuerySetup)
-        , GUCSettings(GUCSettings)
-        , ShardIdToTableInfo(shardIdToTableInfo)
-        , WriteBufferInitialMemoryLimit(writeBufferInitialMemoryLimit)
-        , WriteBufferMemoryLimit(writeBufferMemoryLimit)
+    explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings)
+        : LiteralRequest(std::move(settings.LiteralRequest))
+        , PhysicalRequest(std::move(settings.PhysicalRequest))
+        , SessionActorId(std::move(settings.SessionActorId))
+        , FuncRegistry(std::move(settings.FuncRegistry))
+        , TimeProvider(std::move(settings.TimeProvider))
+        , RandomProvider(std::move(settings.RandomProvider))
+        , Database(std::move(settings.Database))
+        , UserToken(std::move(settings.UserToken))
+        , RequestCounters(std::move(settings.RequestCounters))
+        , TableServiceConfig(std::move(settings.TableServiceConfig))
+        , UserRequestContext(std::move(settings.UserRequestContext))
+        , StatementResultIndex(std::move(settings.StatementResultIndex))
+        , AsyncIoFactory(std::move(std::move(settings.AsyncIoFactory)))
+        , PreparedQuery(std::move(settings.PreparedQuery))
+        , FederatedQuerySetup(std::move(settings.FederatedQuerySetup))
+        , GUCSettings(std::move(settings.GUCSettings))
+        , ShardIdToTableInfo(std::move(settings.ShardIdToTableInfo))
+        , WriteBufferInitialMemoryLimit(std::move(settings.WriteBufferInitialMemoryLimit))
+        , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
     {
         UseLiteral = PreparedQuery->GetTransactions().size() == 2;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
@@ -115,8 +98,8 @@ public:
             }
         }
 
-        if (tableServiceConfig.HasBatchOperationSettings()) {
-            BatchOperationSettings = SetBatchOperationSettings(tableServiceConfig.GetBatchOperationSettings());
+        if (TableServiceConfig.HasBatchOperationSettings()) {
+            BatchOperationSettings = SetBatchOperationSettings(TableServiceConfig.GetBatchOperationSettings());
         }
 
         PE_LOG_I("Created " << ActorName << " with MaxBatchSize = " << BatchOperationSettings.MaxBatchSize
@@ -987,21 +970,9 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateKqpPartitionedExecuter(
-    NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-    const TActorId sessionActorId, const NMiniKQL::IFunctionRegistry* funcRegistry, TIntrusivePtr<ITimeProvider> timeProvider,
-    TIntrusivePtr<IRandomProvider> randomProvider, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery,
-    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
-    const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo,
-    ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit)
+NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings)
 {
-    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, funcRegistry,
-        timeProvider, randomProvider, database, userToken, requestCounters, tableServiceConfig,
-        std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext, statementResultIndex, federatedQuerySetup,
-        GUCSettings, shardIdToTableInfo, writeBufferInitialMemoryLimit, writeBufferMemoryLimit);
+    return new TKqpPartitionedExecuter(std::move(settings));
 }
 
 } // namespace NKqp

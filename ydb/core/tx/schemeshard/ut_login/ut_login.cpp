@@ -1197,7 +1197,7 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 Y_UNIT_TEST_SUITE(TWebLoginService) {
     void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLoginBadPassword) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
@@ -1309,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginSuccess) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1405,7 +1405,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1596,7 +1596,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1691,7 +1691,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLogout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         // Add ticket parser to the mix
@@ -1790,6 +1790,74 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
             UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
             UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+        }
+    }
+
+    Y_UNIT_TEST(AuditLogCreateModifyUser) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
+        TTestEnv env(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        ui64 txId = 100;
+
+        TString database = "/MyRoot";
+        TString user = "user1";
+        TString password = "password1";
+        TString newPassword = "password2";
+        TString hash = R"(
+        {
+            "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+            "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+            "type": "argon2id"
+        }
+        )";
+
+        auto check = [&](const TString& operation, const TString& details) {
+            auto last = FindAuditLine(lines, Sprintf("tx_id=%u", txId));
+
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation=%s", operation.c_str()));
+
+            if (details) {
+                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation_details=%s", details.c_str()));
+            }
+
+            UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("database=%s", database.c_str()));
+            UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=StatusSuccess");
+            UNIT_ASSERT_STRING_CONTAINS(last, "login_user_level=admin");
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_user=%s", user.c_str()));
+        };
+
+        CreateAlterLoginCreateUser(runtime, ++txId, database, user, password);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+            check("CREATE USER", "");
+        }
+
+        ChangePasswordUser(runtime, ++txId, database, user, newPassword);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+            check("MODIFY USER", "Changing the password");
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, database, user, false);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+            check("MODIFY USER", "Blocking the user");
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, database, user, true);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 5);
+            check("MODIFY USER", "Unblocking the user");
+        }
+
+        ChangePasswordHashUser(runtime, ++txId, database, user, hash);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 6);
+            check("MODIFY USER", "Changing the password");
         }
     }
 }

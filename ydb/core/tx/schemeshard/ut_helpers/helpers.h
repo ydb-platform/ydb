@@ -554,6 +554,12 @@ namespace NSchemeShardUT_Private {
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, bool isEnabled);
 
+    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& password);
+
+    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& hash);
+    
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
     public:

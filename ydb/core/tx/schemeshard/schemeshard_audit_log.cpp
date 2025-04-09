@@ -119,6 +119,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
         AUDIT_PART("operation", logEntry.Operation)
+        AUDIT_PART("operation_details", logEntry.OperationDetails,!logEntry.OperationDetails.empty())
         AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
         AUDIT_PART("status", GeneralStatus(status))
         AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(status))

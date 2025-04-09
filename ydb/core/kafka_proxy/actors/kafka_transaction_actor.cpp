@@ -83,9 +83,13 @@ namespace NKafka {
         }
     }
 
+    void TKafkaTransactionActor::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+        Die(ctx);
+    }
+
     void TKafkaTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-            SendResponseFail<TEndTxnResponseData>(ev, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
+            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
             return;
         }

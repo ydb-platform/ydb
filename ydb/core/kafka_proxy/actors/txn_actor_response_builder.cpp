@@ -3,7 +3,7 @@
 namespace NKafka {
     namespace NKafkaTransactions {
         template<class ResponseType, class RequestType>
-        std::shared_ptr<ResponseType> ResponseBuilder::Build(TMessagePtr<RequestType> request, EKafkaErrors errorCode) {
+        std::shared_ptr<ResponseType> TResponseBuilder::Build(TMessagePtr<RequestType> request, EKafkaErrors errorCode) {
             Y_UNUSED(request); // used in other template functions
             auto response = std::make_shared<ResponseType>();
             response->ErrorCode = errorCode;
@@ -11,7 +11,7 @@ namespace NKafka {
         };
 
         template<>
-        std::shared_ptr<TAddPartitionsToTxnResponseData> ResponseBuilder::Build<TAddPartitionsToTxnResponseData, TAddPartitionsToTxnRequestData>(TMessagePtr<TAddPartitionsToTxnRequestData> request, EKafkaErrors errorCode) {
+        std::shared_ptr<TAddPartitionsToTxnResponseData> TResponseBuilder::Build<TAddPartitionsToTxnResponseData, TAddPartitionsToTxnRequestData>(TMessagePtr<TAddPartitionsToTxnRequestData> request, EKafkaErrors errorCode) {
             auto response = std::make_shared<TAddPartitionsToTxnResponseData>();
             std::vector<TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult> topicsResponse;
             topicsResponse.reserve(request->Topics.size());
@@ -32,7 +32,7 @@ namespace NKafka {
         };
 
         template<>
-        std::shared_ptr<TTxnOffsetCommitResponseData> ResponseBuilder::Build<TTxnOffsetCommitResponseData, TTxnOffsetCommitRequestData>(TMessagePtr<TTxnOffsetCommitRequestData> request, EKafkaErrors errorCode) {
+        std::shared_ptr<TTxnOffsetCommitResponseData> TResponseBuilder::Build<TTxnOffsetCommitResponseData, TTxnOffsetCommitRequestData>(TMessagePtr<TTxnOffsetCommitRequestData> request, EKafkaErrors errorCode) {
             auto response = std::make_shared<TTxnOffsetCommitResponseData>();
             std::vector<TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic> topicsResponse;
             topicsResponse.reserve(request->Topics.size());

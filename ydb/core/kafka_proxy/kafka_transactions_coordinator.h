@@ -76,7 +76,7 @@ namespace NKafka {
 
             std::unordered_map<TString, TProducerState> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
-            NKafkaTransactions::ResponseBuilder ResponseBuilder = NKafkaTransactions::ResponseBuilder();
+            NKafkaTransactions::TResponseBuilder ResponseBuilder = NKafkaTransactions::TResponseBuilder();
     };
 
     inline NActors::IActor* CreateKafkaTransactionsCoordinator() {

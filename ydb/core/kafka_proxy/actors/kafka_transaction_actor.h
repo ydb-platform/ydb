@@ -124,7 +124,7 @@ namespace NKafka {
 
             // helper fields
             const TString DatabasePath;
-            NKafkaTransactions::ResponseBuilder ResponseBuilder;
+            NKafkaTransactions::TResponseBuilder ResponseBuilder;
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;

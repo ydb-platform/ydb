@@ -331,6 +331,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Batch update is only supported for idempotent updates.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -340,6 +341,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Batch update is only supported for idempotent updates.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -349,48 +351,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        }
-    }
-
-    Y_UNIT_TEST(MultiTable) {
-        TKikimrRunner kikimr(GetAppConfig());
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = Q_(R"(
-                BATCH UPDATE Test
-                    SET Amount = 1000
-                    WHERE Comment IN (
-                        SELECT Comment FROM Test WHERE Group >= 1;
-                    );
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        }
-        {
-            auto query = Q_(R"(
-                BATCH UPDATE KeyValue
-                    SET Value = "None"
-                    WHERE Value IN (
-                        SELECT Value FROM KeyValue2;
-                    );
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        }
-        {
-            auto query = Q_(R"(
-                BATCH UPDATE KeyValue
-                    SET Value = "None";
-                BATCH UPDATE KeyValue2
-                    SET Value = "None";
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Batch update is only supported for idempotent updates.", result.GetIssues().ToString());
         }
     }
 
@@ -402,12 +363,26 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
         {
             auto query = Q_(R"(
                 BATCH UPDATE Test
+                    SET Amount = 1000
+                    WHERE Age in (
+                        SELECT Age FROM Test
+                    );
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
                     SET Amount = 1000;
                 SELECT 42;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -418,6 +393,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -429,6 +405,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -440,6 +417,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
     }
 
@@ -457,6 +435,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH UPDATE is unsupported with RETURNING", result.GetIssues().ToString());
         }
     }
 }

@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
     }
 
-    Y_UNIT_TEST(MultiTable) {
+    Y_UNIT_TEST(MultiStatement) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -261,30 +261,15 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         {
             auto query = Q_(R"(
                 BATCH DELETE FROM Test
-                    WHERE Comment IN (
-                        SELECT Comment FROM Test WHERE Group >= 1;
+                    WHERE Amount IN (
+                        SELECT Amount FROM Test
                     );
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
-        {
-            auto query = Q_(R"(
-                BATCH DELETE FROM KeyValue;
-                BATCH DELETE FROM KeyValue2;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        }
-    }
-
-    Y_UNIT_TEST(MultiStatement) {
-        TKikimrRunner kikimr(GetAppConfig());
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
         {
             auto query = Q_(R"(
                 BATCH DELETE FROM Test
@@ -294,6 +279,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -304,6 +290,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -315,6 +302,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
         {
             auto query = Q_(R"(
@@ -325,6 +313,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH can't be used with multiple writes or reads.", result.GetIssues().ToString());
         }
     }
 
@@ -342,6 +331,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH DELETE is unsupported with RETURNING", result.GetIssues().ToString());
         }
     }
 }

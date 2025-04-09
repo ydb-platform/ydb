@@ -685,8 +685,6 @@ private:
 //                            ^               ^                       ^
 //                          StartOffset     HeadOffset                EndOffset
 //                          [DataKeysBody  ][DataKeysHead                      ]
-    ui64 StartOffset;
-    ui64 EndOffset;
     TInstant EndWriteTimestamp;
     TInstant PendingWriteTimestamp;
 

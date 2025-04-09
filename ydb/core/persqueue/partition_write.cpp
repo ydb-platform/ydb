@@ -252,7 +252,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
 
-    ui64 offset = EndOffset;
+    ui64 offset = WorkZone.EndOffset;
     while (!Responses.empty()) {
         auto& response = Responses.front();
 
@@ -396,7 +396,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    Y_ABORT_UNLESS(EndOffset == WorkZone.Head.GetNextOffset());
+    Y_ABORT_UNLESS(WorkZone.EndOffset == WorkZone.Head.GetNextOffset());
 
     // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
     // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
@@ -407,15 +407,15 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     WorkZone.SyncDataKeysBody(ctx.Now(),
                               [this](const TString& key){ return MakeBlobKeyToken(key); },
-                              StartOffset,
+                              WorkZone.StartOffset,
                               GapOffsets,
                               GapSize);
 
-    WorkZone.SyncHead(StartOffset, EndOffset);
+    WorkZone.SyncHead(WorkZone.StartOffset, WorkZone.EndOffset);
 
     EndWriteTimestamp = PendingWriteTimestamp;
 
-    WorkZone.ResetNewHead(EndOffset);
+    WorkZone.ResetNewHead(WorkZone.EndOffset);
 
     CheckHeadConsistency();
 
@@ -492,7 +492,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }
-    ui64 prevEndOffset = EndOffset;
+    ui64 prevEndOffset = WorkZone.EndOffset;
 
     ui32 totalLatencyMs = (now - WriteCycleStartTime).MilliSeconds();
     ui32 writeLatencyMs = (now - WriteStartTime).MilliSeconds();
@@ -550,9 +550,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
 
     //if EndOffset changed there could be subscriptions witch could be completed
-    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset);
+    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(WorkZone.EndOffset);
     for (auto& read : reads) {
-        Y_ABORT_UNLESS(EndOffset > read.first.Offset);
+        Y_ABORT_UNLESS(WorkZone.EndOffset > read.first.Offset);
         ProcessRead(ctx, std::move(read.first), read.second, true);
     }
     //same for read requests
@@ -1122,7 +1122,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                     << "'. Message seqNo: " << p.Msg.SeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
                     << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
-                    << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
+                    << ". EndOffset: " << WorkZone.EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
             Y_ENSURE(!p.Internal); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
@@ -1254,7 +1254,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
     if (!WorkZone.Head.GetCount() && !WorkZone.NewHead.GetCount() && WorkZone.DataKeysBody.empty() && WorkZone.HeadKeys.empty() && p.Offset) {
-        StartOffset = *p.Offset;
+        WorkZone.StartOffset = *p.Offset;
     }
 
     TMaybe<TPartData> partData;
@@ -1391,7 +1391,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     const auto& key = res.first;
 
-    TString valueD = WorkZone.SerializeForKey(key, res.second, EndOffset, PendingWriteTimestamp);
+    TString valueD = WorkZone.SerializeForKey(key, res.second, WorkZone.EndOffset, PendingWriteTimestamp);
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
@@ -1617,7 +1617,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
     PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
             << " compactOffset " << key.GetOffset() << "," << key.GetCount()
-            << " HeadOffset " << WorkZone.Head.Offset << " endOffset " << EndOffset << " curOffset "
+            << " HeadOffset " << WorkZone.Head.Offset << " endOffset " << WorkZone.EndOffset << " curOffset "
             << WorkZone.NewHead.GetNextOffset() << " " << key.ToString()
             << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
@@ -1629,7 +1629,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     Parameters.ConstructInPlace(*SourceIdBatch);
-    Parameters->CurOffset = WorkZone.PartitionedBlob.IsInited() ? WorkZone.PartitionedBlob.GetOffset() : EndOffset;
+    Parameters->CurOffset = WorkZone.PartitionedBlob.IsInited() ? WorkZone.PartitionedBlob.GetOffset() : WorkZone.EndOffset;
 
     WriteCycleSize = 0;
     WriteNewSize = 0;
@@ -1640,7 +1640,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     CurrentTimestamp = ctx.Now();
 
     // WorkZone.ResetNewHead ???
-    WorkZone.NewHead.Offset = EndOffset;
+    WorkZone.NewHead.Offset = WorkZone.EndOffset;
     WorkZone.NewHead.PartNo = 0;
     WorkZone.NewHead.PackedSize = 0;
 

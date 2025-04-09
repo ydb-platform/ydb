@@ -82,6 +82,9 @@ struct TPartitionWorkZone {
 
     std::pair<TKey, ui32> Compact(const TKey& key, bool headCleared);
 
+    ui64 StartOffset;
+    ui64 EndOffset;
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;

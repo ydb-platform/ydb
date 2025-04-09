@@ -57,7 +57,9 @@ auto GetStepAndTxId(const E& event)
 }
 
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
-    return !IsActive() && (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == EndOffset || StartOffset == EndOffset);
+    return !IsActive() &&
+        (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == WorkZone.EndOffset ||
+         WorkZone.StartOffset == WorkZone.EndOffset);
 }
 
 struct TMirrorerInfo {
@@ -196,8 +198,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , DCId(std::move(dcId))
     , PartitionGraph()
     , SourceManager(*this)
-    , StartOffset(0)
-    , EndOffset(0)
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
@@ -302,14 +302,14 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
 }
 
 ui64 TPartition::ImportantClientsMinOffset() const {
-    ui64 minOffset = EndOffset;
+    ui64 minOffset = WorkZone.EndOffset;
     for (const auto& consumer : Config.GetConsumers()) {
         if (!consumer.GetImportant()) {
             continue;
         }
 
         const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
-        ui64 curOffset = StartOffset;
+        ui64 curOffset = WorkZone.StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
         minOffset = Min<ui64>(minOffset, curOffset);
@@ -344,7 +344,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
-        userInfo.second.UpdateReadingTimeAndState(EndOffset, now);
+        userInfo.second.UpdateReadingTimeAndState(WorkZone.EndOffset, now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
             avg.Update(now);
         }
@@ -367,8 +367,8 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    meta.SetStartOffset(StartOffset);
-    meta.SetEndOffset(Max(WorkZone.NewHead.GetNextOffset(), EndOffset));
+    meta.SetStartOffset(WorkZone.StartOffset);
+    meta.SetEndOffset(Max(WorkZone.NewHead.GetNextOffset(), WorkZone.EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -397,7 +397,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 
     PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
 
-    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), StartOffset, Partition,
+    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), WorkZone.StartOffset, Partition,
                                                     Config.GetPartitionConfig());
     if (haveChanges) {
         SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
@@ -410,7 +410,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    if (StartOffset == EndOffset || WorkZone.DataKeysBody.size() <= 1) {
+    if (WorkZone.StartOffset == WorkZone.EndOffset || WorkZone.DataKeysBody.size() <= 1) {
         return false;
     }
 
@@ -465,9 +465,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     const auto& lastKey = WorkZone.DataKeysBody.front().Key;
 
-    StartOffset = lastKey.GetOffset();
+    WorkZone.StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
-        ++StartOffset;
+        ++WorkZone.StartOffset;
     }
 
     Y_UNUSED(request);
@@ -538,10 +538,10 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
-    if (StartOffset == EndOffset && EndOffset == 0) {
+    if (WorkZone.StartOffset == WorkZone.EndOffset && WorkZone.EndOffset == 0) {
         for (auto& [user, info] : UsersInfoStorage->GetAll()) {
-            if (info.Offset > 0 && StartOffset < (ui64)info.Offset) {
-                 WorkZone.Head.Offset = EndOffset = StartOffset = info.Offset;
+            if (info.Offset > 0 && WorkZone.StartOffset < (ui64)info.Offset) {
+                 WorkZone.Head.Offset = WorkZone.EndOffset = WorkZone.StartOffset = info.Offset;
             }
         }
     }
@@ -550,7 +550,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
-       << " so " << StartOffset << " endOffset " << EndOffset << " Head " << WorkZone.Head << "\n";
+       << " so " << WorkZone.StartOffset << " endOffset " << WorkZone.EndOffset << " Head " << WorkZone.Head << "\n";
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
@@ -579,7 +579,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         PQ_LOG_D("Init complete for topic '" << TopicName() << "' Partition: " << Partition
                     << " SourceId: " << s.first << " SeqNo: " << s.second.SeqNo << " offset: " << s.second.Offset
-                    << " MaxOffset: " << EndOffset
+                    << " MaxOffset: " << WorkZone.EndOffset
         );
     }
     ProcessHasDataRequests(ctx);
@@ -611,7 +611,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
 void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
-        userInfo.second.UpdateReadingTimeAndState(EndOffset, now);
+        userInfo.second.UpdateReadingTimeAndState(WorkZone.EndOffset, now);
     }
 }
 
@@ -698,7 +698,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
-    } else if (EndOffset - StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
+    } else if (WorkZone.EndOffset - WorkZone.StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
                Size() >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxSizeInPartition())) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_PARTITION_IS_FULL);
     } else {
@@ -815,8 +815,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
     }
 
-    result.SetStartOffset(StartOffset);
-    result.SetEndOffset(EndOffset);
+    result.SetStartOffset(WorkZone.StartOffset);
+    result.SetEndOffset(WorkZone.EndOffset);
 
     if (filterConsumers) {
         for (TString consumer : requiredConsumers) {
@@ -884,8 +884,8 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition.InternalPartitionId);
-    result.SetStartOffset(StartOffset);
-    result.SetEndOffset(EndOffset);
+    result.SetStartOffset(WorkZone.StartOffset);
+    result.SetEndOffset(WorkZone.EndOffset);
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
     for (auto& pr : UsersInfoStorage->GetAll()) {
         auto snapshot = CreateSnapshot(pr.second);
@@ -931,8 +931,9 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 
 //zero means no such record
 TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
-    if (offset < StartOffset) offset = StartOffset;
-    if (offset >= EndOffset)
+    if (offset < WorkZone.StartOffset)
+        offset = WorkZone.StartOffset;
+    if (offset >= WorkZone.EndOffset)
         return TInstant::Zero();
     const std::deque<TDataKey>& container =
         WorkZone.PositionInBody(offset, 0) ? WorkZone.DataKeysBody : WorkZone.HeadKeys;
@@ -945,7 +946,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     // Always greater
     Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
-             TabletID, StartOffset, WorkZone.Head.Offset, offset, container.size(),
+             TabletID, WorkZone.StartOffset, WorkZone.Head.Offset, offset, container.size(),
              container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
                    offset < it->Key.GetOffset() ||
@@ -1448,7 +1449,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     }
 
     TReadAnswer answer(info.FormAnswer(
-        ctx, *ev->Get(), StartOffset, EndOffset, Partition, userInfo,
+        ctx, *ev->Get(), WorkZone.StartOffset, WorkZone.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -1560,9 +1561,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != EndOffset - userInfo.Offset) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != WorkZone.EndOffset - userInfo.Offset) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(EndOffset - userInfo.Offset);
+            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(WorkZone.EndOffset - userInfo.Offset);
         }
 
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != EndOffset - snapshot.ReadOffset) {
@@ -2332,7 +2333,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                 "'");
             result = false;
         } else if (operation.GetOnlyCheckCommitedToFinish()) {
-            if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
+            if (IsActive() || static_cast<ui64>(userInfo.Offset) != WorkZone.EndOffset) {
                result = false;
             }
         } else {
@@ -2350,11 +2351,11 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                             " Offset " << userInfo.Offset <<
                             " Begin " << operation.GetCommitOffsetsBegin());
                 result = false;
-            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > WorkZone.EndOffset) {
                 PQ_LOG_D("Partition " << Partition <<
                             " Consumer '" << consumer << "'" <<
                             " Bad request (behind the last offset) " <<
-                            " EndOffset " << EndOffset <<
+                            " EndOffset " << WorkZone.EndOffset <<
                             " End " << operation.GetCommitOffsetsEnd());
                 result = false;
             }
@@ -2541,12 +2542,12 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 continue; // this is stale request, answer ok for it
             }
 
-            if (operation.GetCommitOffsetsEnd() <= StartOffset) {
+            if (operation.GetCommitOffsetsEnd() <= WorkZone.StartOffset) {
                 userInfo.AnyCommits = false;
-                userInfo.Offset = StartOffset;
-            } else if (operation.GetCommitOffsetsEnd() > EndOffset) {
+                userInfo.Offset = WorkZone.StartOffset;
+            } else if (operation.GetCommitOffsetsEnd() > WorkZone.EndOffset) {
                 userInfo.AnyCommits = true;
-                userInfo.Offset = EndOffset;
+                userInfo.Offset = WorkZone.EndOffset;
             } else {
                 userInfo.AnyCommits = true;
                 userInfo.Offset = operation.GetCommitOffsetsEnd();
@@ -2682,7 +2683,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
-            if (userInfo.Offset <= (i64)StartOffset) {
+            if (userInfo.Offset <= (i64)WorkZone.StartOffset) {
                 userInfo.AnyCommits = false;
             }
             userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
@@ -2695,8 +2696,8 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 }
                 userInfo.SetImportant(actual->Important);
             }
-            if (userInfo.Important && userInfo.Offset < (i64)StartOffset) {
-                userInfo.Offset = StartOffset;
+            if (userInfo.Important && userInfo.Offset < (i64)WorkZone.StartOffset) {
+                userInfo.Offset = WorkZone.StartOffset;
             }
 
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
@@ -2911,7 +2912,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > WorkZone.EndOffset) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -3079,12 +3080,12 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    if (strictCommitOffset && act.Offset < StartOffset) {
+    if (strictCommitOffset && act.Offset < WorkZone.StartOffset) {
         // strict commit to past, reply error
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
-                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << StartOffset);
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << WorkZone.StartOffset);
 
         return;
     }
@@ -3104,19 +3105,19 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
-    if (offset > EndOffset) {
+    if (offset > WorkZone.EndOffset) {
         if (strictCommitOffset) {
             TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
             ScheduleReplyError(act.Cookie,
                             NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
-                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << EndOffset);
+                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << WorkZone.EndOffset);
 
             return;
         }
         PQ_LOG_W("commit to future - topic " << TopicName() << " partition " << Partition
-                << " client " << act.ClientId << " EndOffset " << EndOffset << " offset " << offset
+                << " client " << act.ClientId << " EndOffset " << WorkZone.EndOffset << " offset " << offset
         );
-        act.Offset = EndOffset;
+        act.Offset = WorkZone.EndOffset;
 /*
         TODO:
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
@@ -3127,7 +3128,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 */
     }
 
-    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(EndOffset) == userInfo.Offset && offset < EndOffset) {
+    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(WorkZone.EndOffset) == userInfo.Offset && offset < WorkZone.EndOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
@@ -3178,7 +3179,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.AnyCommits = false;
 
         if (userInfo.Important) {
-            userInfo.Offset = StartOffset;
+            userInfo.Offset = WorkZone.StartOffset;
         }
     } else {
         if (createSession || dropSession) {
@@ -3210,11 +3211,11 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << (createSession || dropSession ? " session" : " offset")
-                    << " is set to " << offset << " (startOffset " << StartOffset << ") session " << session
+                    << " is set to " << offset << " (startOffset " << WorkZone.StartOffset << ") session " << session
         );
 
         userInfo.Offset = offset;
-        if (userInfo.Offset <= (i64)StartOffset) {
+        if (userInfo.Offset <= (i64)WorkZone.StartOffset) {
             userInfo.AnyCommits = false;
         }
 
@@ -3490,9 +3491,9 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         Y_ABORT_UNLESS(writeTimestamp);
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
-    user->SetEndOffset(EndOffset);
+    user->SetEndOffset(WorkZone.EndOffset);
     user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-    if (IsActive() || (offset > -1 && offset < (i64)EndOffset)) {
+    if (IsActive() || (offset > -1 && offset < (i64)WorkZone.EndOffset)) {
         user->SetSizeLag(GetSizeLag(offset));
     } else {
         user->SetSizeLag(0);
@@ -3618,7 +3619,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, WorkZone.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }

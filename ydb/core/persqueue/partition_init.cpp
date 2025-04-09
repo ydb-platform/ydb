@@ -323,10 +323,10 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
-        Partition()->StartOffset = meta.GetStartOffset();
-        Partition()->EndOffset = meta.GetEndOffset();
-        if (Partition()->StartOffset == Partition()->EndOffset) {
-           Partition()->WorkZone.NewHead.Offset = Partition()->WorkZone.Head.Offset = Partition()->EndOffset;
+        Partition()->WorkZone.StartOffset = meta.GetStartOffset();
+        Partition()->WorkZone.EndOffset = meta.GetEndOffset();
+        if (Partition()->WorkZone.StartOffset == Partition()->WorkZone.EndOffset) {
+           Partition()->WorkZone.NewHead.Offset = Partition()->WorkZone.Head.Offset = Partition()->WorkZone.EndOffset;
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
@@ -488,12 +488,12 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->WorkZone.StartOffset) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->WorkZone.StartOffset);
                 return PoisonPill(ctx);
             }
-            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->EndOffset) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->EndOffset);
+            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->WorkZone.EndOffset) {
+                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->WorkZone.EndOffset);
                 return PoisonPill(ctx);
             }
 
@@ -573,8 +573,8 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 }
 
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
-    auto& endOffset = Partition()->EndOffset;
-    auto& startOffset = Partition()->StartOffset;
+    auto& endOffset = Partition()->WorkZone.EndOffset;
+    auto& startOffset = Partition()->WorkZone.StartOffset;
     auto& head = Partition()->WorkZone.Head;
     auto& dataKeysBody = Partition()->WorkZone.DataKeysBody;
     auto& gapOffsets = Partition()->GapOffsets;
@@ -630,8 +630,8 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
 
 void TInitDataRangeStep::FormHeadAndProceed() {
-    auto& endOffset = Partition()->EndOffset;
-    auto& startOffset = Partition()->StartOffset;
+    auto& endOffset = Partition()->WorkZone.EndOffset;
+    auto& startOffset = Partition()->WorkZone.StartOffset;
     auto& head = Partition()->WorkZone.Head;
     auto& headKeys = Partition()->WorkZone.HeadKeys;
     auto& dataKeysBody = Partition()->WorkZone.DataKeysBody;
@@ -719,13 +719,13 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
                 Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
 
-                PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->EndOffset
+                PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->WorkZone.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
                         << " expected " << size
                 );
 
-                Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
-                Y_ABORT_UNLESS(offset < Partition()->EndOffset);
+                Y_ABORT_UNLESS(offset + 1 >= Partition()->WorkZone.StartOffset);
+                Y_ABORT_UNLESS(offset < Partition()->WorkZone.EndOffset);
                 Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {

@@ -55,6 +55,7 @@ struct TQueryReplayEvents {
         WriteColumnsMismatch,
         UncategorizedPlanMismatch,
         MissingTableMetadata,
+        UncategorizedFailure,
         Unspecified,
     };
 

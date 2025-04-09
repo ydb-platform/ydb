@@ -166,14 +166,11 @@ bool SplitViewQuery(const TString& query, TViewQuerySplit& split, TIssues& issue
 }
 
 TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, const TString& viewAbsolutePath, const NKikimrSchemeOp::TViewDescription& viewDesc) {
-    TString query;
-    TIssues issues;
-    if (!NYdb::NDump::Format(viewDesc.GetQueryText(), query, issues)) {
-        return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
-    }
+    const auto& query = viewDesc.GetQueryText();
 
     google::protobuf::Arena arena;
     TTranslationSettings translationSettings;
+    TIssues issues;
     if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
         return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
     }
@@ -199,8 +196,12 @@ TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, cons
         path.c_str(),
         split.Select.c_str()
     );
+    TString formattedQuery;
+    if (!NYdb::NDump::Format(creationQuery, formattedQuery, issues)) {
+        return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
+    }
 
-    return TFormatResult(creationQuery);
+    return TFormatResult(formattedQuery);
 }
 
 }

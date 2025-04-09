@@ -5810,6 +5810,7 @@ Y_UNIT_TEST(WithTablePathPrefix) {
         )",
         "a/b/c/test_view",
 R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+
 CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
 SELECT
     *
@@ -5843,6 +5844,7 @@ Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
         "test_view",
 R"(-- the case of the pragma identifier does not matter, but is preserved
 PRAGMA tabLEpathPRefix = '/Root/a/b';
+
 CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS
 SELECT
     *
@@ -5874,6 +5876,7 @@ Y_UNIT_TEST(WithPairedTablePathPrefix) {
         )",
         "a/b/c/test_view",
 R"(PRAGMA TablePathPrefix('db', '/Root/a/b/c');
+
 CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
 SELECT
     *
@@ -5907,6 +5910,7 @@ Y_UNIT_TEST(WithTwoTablePathPrefixes) {
         "some/other/folder/test_view",
 R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
 PRAGMA TablePathPrefix = '/Root/some/other/folder';
+
 CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
 SELECT
     *

@@ -103,7 +103,7 @@ TString GetTokens(const NProtoBuf::Message& message) {
 }
 
 TString TrimQuotes(TString&& s) {
-    if ((s.StartsWith('"') && s.EndsWith('"')) || (s.StartsWith('\'') && s.EndsWith('\''))) {
+    if (s.size() > 1 && ((s.StartsWith('"') && s.EndsWith('"')) || (s.StartsWith('\'') && s.EndsWith('\'')))) {
         return s.substr(1, s.size() - 2);
     }
     return s;

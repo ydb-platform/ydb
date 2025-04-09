@@ -144,7 +144,7 @@ jobs:
               
               # Создаем ссылку на дашборд с тестами из flaky.txt (а не flaky_debug.txt)
               if [ -s mute_update/flaky.txt ]; then
-                BASE_URL="https://datalens.yandex/34xnbsom67hcq?&branch=${{ env.BASE_BRANCH }}"
+                BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
                 MAX_TESTS=50
                 TEST_COUNT=0
                 

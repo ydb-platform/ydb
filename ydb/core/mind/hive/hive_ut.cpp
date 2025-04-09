@@ -3534,7 +3534,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        const TActorId bootstrapper = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(bootstrapper);
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets, runtime.GetNodeCount());
@@ -7172,11 +7173,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        const TActorId bootstrapper = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(bootstrapper);
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets, runtime.GetNodeCount());
-            runtime.DispatchEvents(options);
+            runtime.DispatchEvents(options, TDuration::Zero());
         }
         for (int i = 0; i < 5; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Hive, BINDED_CHANNELS));
@@ -7188,6 +7190,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TActorId hiveActor = GetHiveActor(runtime, hiveTablet);
         // Simulate a situation when wait queue is constantly processed
         // this could happen e. g. when nodes are often restarting
+        // (previously it would happen all the time because of metric updates)
         auto handler = runtime.AddObserver<NHive::TEvPrivate::TEvProcessBootQueue>([=](auto&& ev) {
             if (ev->Recipient == hiveActor) {
                 ev->Get()->ProcessWaitQueue = true;

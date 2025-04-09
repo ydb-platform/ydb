@@ -36,7 +36,6 @@ void TBootQueue::IncludeWaitQueue() {
 
 void TBootQueue::ExcludeWaitQueue() {
     ProcessWaitQueue = false;
-    NextFromWaitQueue = false;
 }
 
 bool TBootQueue::Empty() const {
@@ -62,7 +61,7 @@ TBootQueue::TQueue& TBootQueue::GetCurrentQueue() {
     if (WaitQueue.empty()) {
         return BootQueue;
     }
-    if (NextFromWaitQueue) {
+    if (ProcessWaitQueue && NextFromWaitQueue) {
         return WaitQueue;
     }
     return BootQueue;

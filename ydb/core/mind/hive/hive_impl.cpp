@@ -282,6 +282,9 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             delayedTablets.push_back(record);
         }
     }
+    if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {
+        BootQueue.ExcludeWaitQueue();
+    }
     for (TBootQueue::TBootQueueRecord record : delayedTablets) {
         record.Priority -= 1;
         BootQueue.AddToBootQueue(record);
@@ -306,7 +309,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             BLOG_D("ProcessBootQueue - BootQueue throttling (size: " << BootQueue.BootQueue.size() << ")");
             return;
         }
-        if (processedItems == GetMaxBootBatchSize()) {
+        if (processedItems == GetMaxBootBatchSize() && !BootQueue.Empty()) {
             BLOG_D("ProcessBootQueue - rescheduling");
             ProcessBootQueue();
         } else if (postponedStart > now) {
@@ -314,7 +317,6 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
             PostponeProcessBootQueue(postponedStart - now);
         }
     }
-    BootQueue.ExcludeWaitQueue();
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&) {
@@ -341,7 +343,7 @@ void THive::ProcessBootQueue() {
     if (!ProcessBootQueueScheduled) {
         BLOG_TRACE("ProcessBootQueue - sending");
         ProcessBootQueueScheduled = true;
-        Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessBootQueue());
+        Send(SelfId(), new TEvPrivate::TEvProcessBootQueue());
     }
 }
 

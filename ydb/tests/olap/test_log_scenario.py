@@ -21,12 +21,33 @@ logger = logging.getLogger(__name__)
 
 
 class YdbWorkloadLog:
-    def __init__(self, endpoint: str, database: str, table_name: str, timestamp_deviation: int):
+    class PKMode(Enum):
+        TIMESTAMP_DEVIATION = 1,
+        UNIFORM = 2
+
+    def __init__(self, endpoint: str, database: str, table_name: str, timestamp_deviation: int | None = None, date_from: int | None = None, date_to: int | None = None):
         self.path: str = yatest.common.binary_path(os.environ["YDB_CLI_BINARY"])
         self.endpoint: str = endpoint
         self.database: str = database
         self.begin_command: list[str] = [self.path, "-e", self.endpoint, "-d", self.database, "workload", "log", "--path", table_name]
-        self.timestamp_deviation = timestamp_deviation
+        if timestamp_deviation is not None:
+            if date_from is not None:
+                raise TypeError("timestamp_deviation and uniform PK mode should be applied mutual exclusively")
+            if date_to is not None:
+                raise TypeError("timestamp_deviation and uniform PK mode should be applied mutual exclusively")
+            self.timestamp_deviation = timestamp_deviation
+            self.pk_mode = YdbWorkloadLog.PKMode.TIMESTAMP_DEVIATION
+        else:
+            if date_from is not None:
+                if timestamp_deviation is not None:
+                    raise TypeError("timestamp_deviation and uniform PK mode should be applied mutual exclusively")
+                if date_to is None:
+                    raise TypeError("missing date_to")
+                self.date_from = date_from
+                self.date_to = date_to
+                self.pk_mode = YdbWorkloadLog.PKMode.UNIFORM
+            else:
+                raise TypeError("missing date_from")
 
     def _call(self, command: list[str], wait=False):
         logging.info(f'YdbWorkloadLog execute {' '.join(command)} with wait = {wait}')
@@ -48,9 +69,19 @@ class YdbWorkloadLog:
             str(threads),
             "--rows",
             str(rows),
-            "--timestamp_deviation",
-            str(self.timestamp_deviation)
         ]
+        if self.pk_mode == YdbWorkloadLog.PKMode.TIMESTAMP_DEVIATION:
+            command = command + [
+                "--timestamp_deviation",
+                str(self.timestamp_deviation)
+            ]
+        else:
+            command = command + [
+                "--date-from",
+                str(self.date_from),
+                "--date-to",
+                str(self.date_to)
+            ]
         self._call(command=command, wait=wait)
 
     # seconds - Seconds to run workload
@@ -122,13 +153,46 @@ class TestLogScenario(object):
                                   f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
 
     @pytest.mark.parametrize('timestamp_deviation', [3 * 60, 365 * 24 * 60 * 2])  # [3 hours, 2 years]
-    def test(self, timestamp_deviation: int):
-        """As per https://github.com/ydb-platform/ydb/issues/13531"""
+    def test_log_deviation(self, timestamp_deviation: int):
+        """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
         wait_time: int = int(get_external_param("wait_seconds", "30"))
         self.table_name: str = "log"
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name, timestamp_deviation=timestamp_deviation)
+        ydb_workload.create_table(self.table_name)
+        ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
+        logging.info(f"Count rows after insert {self.get_row_count()} before wait")
+
+        assert self.get_row_count() != 0
+
+        prev_count: int = self.get_row_count()
+
+        threads: list[TestThread] = []
+        threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 500, True]))
+        threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 500, True]))
+        threads.append(TestThread(target=ydb_workload.upsert, args=[wait_time, 10, 500, True]))
+
+        for _ in range(10):
+            threads.append(TestThread(target=self.aggregation_query, args=[datetime.timedelta(seconds=int(wait_time))]))
+
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+    
+    def test_log_uniform(self):
+        """As per https://github.com/ydb-platform/ydb/issues/13531"""
+
+        wait_time: int = int(get_external_param("wait_seconds", "30"))
+        self.table_name: str = "log"
+
+        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, 
+                                                      database=self.ydb_client.database, 
+                                                      table_name=self.table_name, 
+                                                      date_from=0, 
+                                                      date_to=2678400000)  # Sunday, 1 February 1970, 0:00:00
         ydb_workload.create_table(self.table_name)
         ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")

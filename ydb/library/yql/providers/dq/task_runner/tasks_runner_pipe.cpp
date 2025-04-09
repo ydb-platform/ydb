@@ -1013,7 +1013,7 @@ public:
 
     // <| producer methods
     [[nodiscard]]
-    bool IsFull() const override {
+    TDqFillLevel GetFillLevel() const override {
         ythrow yexception() << "unimplemented";
     };
 
@@ -1249,7 +1249,7 @@ public:
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsFull() const override {
+    TDqFillLevel GetFillLevel() const override {
         Y_ABORT("Unimplemented");
     }
 

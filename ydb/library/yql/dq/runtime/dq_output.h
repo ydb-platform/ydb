@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 
-#include "dq_async_stats.h" 
+#include "dq_async_stats.h"
 
 namespace NYql {
 namespace NDqProto {
@@ -27,6 +27,12 @@ struct TDqOutputStats : public TDqAsyncStats {
     ui64 MaxRowsInMemory = 0;
 };
 
+enum TDqFillLevel {
+    NoLimit,
+    SoftLimit,
+    HardLimit
+};
+
 class IDqOutput : public TSimpleRefCount<IDqOutput> {
 public:
     using TPtr = TIntrusivePtr<IDqOutput>;
@@ -37,7 +43,7 @@ public:
 
     // <| producer methods
     [[nodiscard]]
-    virtual bool IsFull() const = 0;
+    virtual TDqFillLevel GetFillLevel() const = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;

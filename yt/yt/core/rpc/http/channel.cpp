@@ -22,6 +22,8 @@ using namespace NRpc;
 using namespace NYTree;
 using namespace NYT::NHttp;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(THttpChannel)
@@ -264,8 +266,8 @@ private:
 
                 NRpc::NProto::TResponseHeader responseHeader;
                 ToProto(responseHeader.mutable_request_id(), requestId);
-                NYT::ToProto(responseHeader.mutable_service(), service);
-                NYT::ToProto(responseHeader.mutable_method(), method);
+                ToProto(responseHeader.mutable_service(), service);
+                ToProto(responseHeader.mutable_method(), method);
 
                 auto responseMessage = CreateResponseMessage(
                     responseHeader,

@@ -254,6 +254,11 @@ class TRandomLogGenerator {
         return result.str();
     }
 
+    TInstant UniformInstant(ui64 from, ui64 to) const {
+        TMersenne<ui64> rnd(Seed());
+        return TInstant::FromValue(rnd.Uniform(from, to));
+    }
+
     TInstant RandomInstant() const {
         auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
         i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
@@ -281,7 +286,7 @@ public:
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
-            result.back().Ts = RandomInstant();
+            result.back().Ts = Params.TimestampDateFrom.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
             result.back().Component = RandomWord(true);
@@ -439,6 +444,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
     
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);
+
             opts.AddLongOption("null-percent", "Percent of nulls in generated data")
                 .DefaultValue(NullPercent).StoreResult(&NullPercent);
             break;

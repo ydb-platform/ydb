@@ -2730,6 +2730,30 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
     }));
 }
 
+TFuture<TFlowExecuteResult> TClient::FlowExecute(
+    const NYPath::TYPath& pipelinePath,
+    const TString& command,
+    const NYson::TYsonString& argument,
+    const TFlowExecuteOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FlowExecute();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_command(command);
+    if (argument) {
+        req->set_argument(argument.ToString());
+    }
+
+    return req->Invoke().Apply(BIND([](const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
+        return TFlowExecuteResult{
+            .Result = rsp->has_result() ? TYsonString(rsp->result()) : TYsonString{},
+        };
+    }));
+}
+
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     const std::string& account,
     int partitionCount,

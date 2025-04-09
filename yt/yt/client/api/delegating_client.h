@@ -871,6 +871,13 @@ public:
         const TGetFlowViewOptions& options),
         (pipelinePath, viewPath, options))
 
+    DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}),
+        (pipelinePath, command, argument, options))
+
     // Distributed client
     DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
         const NYPath::TRichYPath& path,

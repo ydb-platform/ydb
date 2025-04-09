@@ -589,6 +589,12 @@ public:
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
 
+    TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) override;
+
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(
         const std::string& account,

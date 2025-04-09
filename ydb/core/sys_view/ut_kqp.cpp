@@ -1,5 +1,6 @@
 #include "ut_common.h"
 
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -399,6 +400,12 @@ private:
     NKikimrSchemeOp::TViewDescription CanonizeViewDescription(NKikimrSchemeOp::TViewDescription&& description) {
         description.ClearVersion();
         description.ClearPathId();
+
+        TString queryText;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NDump::Format(description.GetQueryText(), queryText, issues), issues.ToString());
+        *description.MutableQueryText() = queryText;
+
         return description;
     }
 
@@ -5745,8 +5752,11 @@ Y_UNIT_TEST(Basic) {
             CREATE VIEW `test_view` WITH security_invoker = TRUE AS SELECT 1;
         )",
         "test_view",
-        "CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT 1;\n"
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    1
+;
+)"
     );
 }
 
@@ -5765,12 +5775,17 @@ Y_UNIT_TEST(FromTable) {
     )");
 
     checker.CheckShowCreateView(R"(
-            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
                 SELECT * FROM t;
         )",
         "test_view",
-        "CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT * FROM t;\n"
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
     );
 }
 
@@ -5790,13 +5805,18 @@ Y_UNIT_TEST(WithTablePathPrefix) {
 
     checker.CheckShowCreateView(R"(
             PRAGMA TablePathPrefix = "/Root/a/b/c";
-            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
                 SELECT * FROM t;
         )",
         "a/b/c/test_view",
-        "PRAGMA TablePathPrefix = \"/Root/a/b/c\";\n"
-        "CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT * FROM t;\n"
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
     );
 }
 
@@ -5815,16 +5835,21 @@ Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
     )");
 
     checker.CheckShowCreateView(R"(
-            -- the case of the pragma identifier does not matter
+            -- the case of the pragma identifier does not matter, but is preserved
             pragma tabLEpathPRefix = '/Root/a/b';
             CREATE VIEW `../../test_view` WITH security_invoker = TRUE AS
                 SELECT * FROM `c/t`;
         )",
         "test_view",
-        R"(-- the case of the pragma identifier does not matter
-            pragma tabLEpathPRefix = '/Root/a/b';)"
-        "CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT * FROM `c/t`;\n"
+R"(-- the case of the pragma identifier does not matter, but is preserved
+PRAGMA tabLEpathPRefix = '/Root/a/b';
+CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    `c/t`
+;
+)"
     );
 }
 
@@ -5848,9 +5873,14 @@ Y_UNIT_TEST(WithPairedTablePathPrefix) {
                 SELECT * FROM t;
         )",
         "a/b/c/test_view",
-        "PRAGMA TablePathPrefix (\"db\", \"/Root/a/b/c\");\n"
-        "CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT * FROM t;\n"
+R"(PRAGMA TablePathPrefix('db', '/Root/a/b/c');
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
     );
 }
 
@@ -5875,10 +5905,15 @@ Y_UNIT_TEST(WithTwoTablePathPrefixes) {
                 SELECT * FROM t;
         )",
         "some/other/folder/test_view",
-        "PRAGMA TablePathPrefix = \"/Root/a/b/c\";\n"
-        "PRAGMA TablePathPrefix = \"/Root/some/other/folder\";\n"
-        "CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\n"
-        "SELECT * FROM t;\n"
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+PRAGMA TablePathPrefix = '/Root/some/other/folder';
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
     );
 }
 

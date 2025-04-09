@@ -1,5 +1,7 @@
 #include "create_view_formatter.h"
 
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
@@ -164,9 +166,12 @@ bool SplitViewQuery(const TString& query, TViewQuerySplit& split, TIssues& issue
 }
 
 TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, const TString& viewAbsolutePath, const NKikimrSchemeOp::TViewDescription& viewDesc) {
-    const auto& query = viewDesc.GetQueryText();
-
+    TString query;
     TIssues issues;
+    if (!NYdb::NDump::Format(viewDesc.GetQueryText(), query, issues)) {
+        return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
+    }
+
     google::protobuf::Arena arena;
     TTranslationSettings translationSettings;
     if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
@@ -189,7 +194,7 @@ TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, cons
     const TString creationQuery = std::format(
         "{}"
         "CREATE VIEW `{}` WITH (security_invoker = TRUE) AS\n"
-        "{};\n",
+        "{}\n",
         split.ContextRecreation.c_str(),
         path.c_str(),
         split.Select.c_str()

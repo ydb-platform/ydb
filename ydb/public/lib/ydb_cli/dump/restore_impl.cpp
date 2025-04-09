@@ -691,7 +691,10 @@ TRestoreResult TRestoreClient::RestoreUsers(TTableClient& client, const TFsPath&
             auto alterStatementResult = client.RetryOperationSync([&](TSession session) {
                 return session.ExecuteSchemeQuery(alterStatement).ExtractValueSync();
             });
-            if (!alterStatementResult.IsSuccess()) {
+            if (alterStatementResult.GetStatus() == EStatus::UNAUTHORIZED) {
+                LOG_W("Not enough rights to restore user from statement " << alterStatement.Quote() << ", skipping");
+                continue;
+            } else if (!alterStatementResult.IsSuccess()) {
                 LOG_E("Failed to execute statement for restoring user: "
                     << alterStatement.Quote() << ", error: "
                     << alterStatementResult.GetIssues().ToOneLineString());

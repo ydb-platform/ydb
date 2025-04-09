@@ -136,14 +136,17 @@ def update_changelog(changelog_path, pr_data):
     to_file(changelog_path, changelog)
 
 def run_command(command):
+    print(f"Executing command: {command}")
     try:
         result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = result.stdout.decode().strip()
+        print(f"Command output: {output}")
+        return output
     except subprocess.CalledProcessError as e:
         print(f"::error::Command failed with exit code {e.returncode}: {e.stderr.decode()}")
         print(f"::error::Command: {e.cmd}")
         print(f"::error::Output: {e.stdout.decode()}")
         sys.exit(1)
-    return result.stdout.decode().strip()
 
 def branch_exists(branch_name):
     result = subprocess.run(["git", "ls-remote", "--heads", "origin", branch_name], capture_output=True, text=True)
@@ -207,7 +210,14 @@ def main():
         except Exception as e:
             print(f"::error::Failed to fetch PR details for PR #{pr['id']}: {e}")
             sys.exit(1)
-
+           
+    # Fetch latest changes
+    run_command("git fetch origin")
+    # Check out existing branch
+    run_command(f"git checkout {base_branch}")
+    # Make sure it's up to date
+    run_command(f"git pull origin {base_branch}")
+   
     update_changelog(changelog_path, pr_data)
 
     base_branch_name = f"changelog/{base_branch}-{suffix}"
@@ -216,7 +226,7 @@ def main():
     while branch_exists(branch_name):
         branch_name = f"{base_branch_name}-{index}"
         index += 1
-    run_command(f"git checkout -b {base_branch}")
+
     run_command(f"git checkout -b {branch_name}")
     run_command(f"git add {changelog_path}")
     run_command(f"git commit -m \"Update CHANGELOG.md for {suffix}\"")

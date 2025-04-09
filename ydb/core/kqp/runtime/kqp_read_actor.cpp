@@ -1569,23 +1569,9 @@ private:
     }
 
     void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
-        for (size_t row = 0; row < ev->GetRowsCount(); ++row) {
-            TConstArrayRef<TCell> cells = ev->GetCells(row);
-            if (BatchOperationMaxRow.empty()) {
-                BatchOperationMaxRow = TOwnedCellVec::Make(cells);
-                continue;
-            }
-
-            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
-                const auto& column = BatchOperationReadColumns[i];
-                if (column.IsPrimary) {
-                    NScheme::TTypeInfoOrder typeOrder(column.TypeInfo, NScheme::EOrder::Ascending);
-                    if (CompareTypedCells(BatchOperationMaxRow[i], cells[i], typeOrder) < 0) {
-                        BatchOperationMaxRow = TOwnedCellVec::Make(cells);
-                        break;
-                    }
-                }
-            }
+        if (ev->GetRowsCount() > 0) {
+            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
+            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
         }
     }
 

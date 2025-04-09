@@ -801,11 +801,12 @@ private:
         TVector<TKeyColumnInfo> newInfo;
 
         for (const auto& id : keyIds) {
-            for (const auto& info : KeyColumnInfo) {
-                if (info.Id == id) {
-                    newInfo.push_back(info);
-                }
-            }
+            auto it = std::find_if(KeyColumnInfo.cbegin(), KeyColumnInfo.cend(), [&id] (const TKeyColumnInfo& info) {
+                return info.Id == id;
+            });
+
+            YQL_ENSURE(it != KeyColumnInfo.cend());
+            newInfo.push_back(*it);
         }
 
         KeyColumnInfo = std::move(newInfo);

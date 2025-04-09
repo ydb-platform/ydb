@@ -148,7 +148,7 @@ namespace NKikimr::NKqp {
     // Used only for unit tests
     bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout = TDuration::Minutes(1), TDuration refreshPeriod = TDuration::MilliSeconds(100));
 
-    NYql::TIssues TruncateIssues(NYql::TIssues issues, ui32 maxLevels = 50, ui32 keepTailLevels = 3);
+    NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels = 50, ui32 keepTailLevels = 3);
 
     template <typename TIssueMessage>
     void TruncateIssues(google::protobuf::RepeatedPtrField<TIssueMessage>* issuesProto, ui32 maxLevels = 50, ui32 keepTailLevels = 3) {

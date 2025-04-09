@@ -246,7 +246,7 @@ namespace {
         return false;
     }
 
-    NYql::TIssues TruncateIssues(NYql::TIssues issues, ui32 maxLevels, ui32 keepTailLevels) {
+    NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels, ui32 keepTailLevels) {
         const auto options = NYql::TTruncateIssueOpts()
             .SetMaxLevels(maxLevels)
             .SetKeepTailLevels(keepTailLevels);

@@ -41,6 +41,11 @@ jobs:
       prs: ${{ steps.pr-list.outputs.prs }}
       base_branch: ${{ steps.branch-name.outputs.base_branch }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+           ref: ${{ matrix.branch }}
+           
       - name: Set up date range
         id: date-setup
         run: |

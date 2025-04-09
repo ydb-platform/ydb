@@ -15,9 +15,6 @@ jobs:
       branches: ${{ steps.branch-list.outputs.branches }}
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
       - name: List 'main' and 'stable-*' branches
         id: branch-list
         run: |
@@ -41,6 +38,10 @@ jobs:
       prs: ${{ steps.pr-list.outputs.prs }}
       base_branch: ${{ steps.branch-name.outputs.base_branch }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+           ref: ${{ github.ref }}
            
       - name: Set up date range
         id: date-setup

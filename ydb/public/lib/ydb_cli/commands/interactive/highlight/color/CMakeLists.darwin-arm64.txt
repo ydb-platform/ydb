@@ -12,21 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(commands-interactive-complete)
+add_library(interactive-highlight-color)
 
 
-target_link_libraries(commands-interactive-complete PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(interactive-highlight-color PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
-  sql-v1-complete
-  v1-lexer-antlr4_pure
-  v1-lexer-antlr4_pure_ansi
-  interactive-highlight-color
 )
 
-target_sources(commands-interactive-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.cpp
+target_sources(interactive-highlight-color PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.cpp
 )
 

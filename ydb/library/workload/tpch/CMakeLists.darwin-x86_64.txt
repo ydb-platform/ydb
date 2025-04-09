@@ -80,7 +80,7 @@ target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/9604d7cfe5b647e964e6be189a1a7be6.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/83b85b748436853b0d2eaabd43befc63.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/266f999a7afb1a95b472cbcf0ff17e4e.cpp
 )
 
 
@@ -96,7 +96,7 @@ resources(library-workload-tpch.global
 )
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/83b85b748436853b0d2eaabd43befc63.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/266f999a7afb1a95b472cbcf0ff17e4e.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q1.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q10.result
@@ -194,8 +194,12 @@ resources(library-workload-tpch.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q14.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q15.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q16.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q17.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q18.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q19.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q2.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q20.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q21.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q22.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q3.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q4.result
@@ -203,6 +207,7 @@ resources(library-workload-tpch.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q6.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q7.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q8.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q9.result
   KEYS
   resfs/file/tpch/s1_canonical/q1.result
   resfs/file/tpch/s1_canonical/q10.result
@@ -300,8 +305,12 @@ resources(library-workload-tpch.global
   resfs/file/tpch/s10000_canonical/q14.result
   resfs/file/tpch/s10000_canonical/q15.result
   resfs/file/tpch/s10000_canonical/q16.result
+  resfs/file/tpch/s10000_canonical/q17.result
+  resfs/file/tpch/s10000_canonical/q18.result
   resfs/file/tpch/s10000_canonical/q19.result
   resfs/file/tpch/s10000_canonical/q2.result
+  resfs/file/tpch/s10000_canonical/q20.result
+  resfs/file/tpch/s10000_canonical/q21.result
   resfs/file/tpch/s10000_canonical/q22.result
   resfs/file/tpch/s10000_canonical/q3.result
   resfs/file/tpch/s10000_canonical/q4.result
@@ -309,6 +318,7 @@ resources(library-workload-tpch.global
   resfs/file/tpch/s10000_canonical/q6.result
   resfs/file/tpch/s10000_canonical/q7.result
   resfs/file/tpch/s10000_canonical/q8.result
+  resfs/file/tpch/s10000_canonical/q9.result
   OPTS
   -
   resfs/src/resfs/file/tpch/s1_canonical/q1.result=ydb/library/workload/tpch/s1_canonical/q1.result
@@ -503,9 +513,17 @@ resources(library-workload-tpch.global
   -
   resfs/src/resfs/file/tpch/s10000_canonical/q16.result=ydb/library/workload/tpch/s10000_canonical/q16.result
   -
+  resfs/src/resfs/file/tpch/s10000_canonical/q17.result=ydb/library/workload/tpch/s10000_canonical/q17.result
+  -
+  resfs/src/resfs/file/tpch/s10000_canonical/q18.result=ydb/library/workload/tpch/s10000_canonical/q18.result
+  -
   resfs/src/resfs/file/tpch/s10000_canonical/q19.result=ydb/library/workload/tpch/s10000_canonical/q19.result
   -
   resfs/src/resfs/file/tpch/s10000_canonical/q2.result=ydb/library/workload/tpch/s10000_canonical/q2.result
+  -
+  resfs/src/resfs/file/tpch/s10000_canonical/q20.result=ydb/library/workload/tpch/s10000_canonical/q20.result
+  -
+  resfs/src/resfs/file/tpch/s10000_canonical/q21.result=ydb/library/workload/tpch/s10000_canonical/q21.result
   -
   resfs/src/resfs/file/tpch/s10000_canonical/q22.result=ydb/library/workload/tpch/s10000_canonical/q22.result
   -
@@ -520,4 +538,6 @@ resources(library-workload-tpch.global
   resfs/src/resfs/file/tpch/s10000_canonical/q7.result=ydb/library/workload/tpch/s10000_canonical/q7.result
   -
   resfs/src/resfs/file/tpch/s10000_canonical/q8.result=ydb/library/workload/tpch/s10000_canonical/q8.result
+  -
+  resfs/src/resfs/file/tpch/s10000_canonical/q9.result=ydb/library/workload/tpch/s10000_canonical/q9.result
 )

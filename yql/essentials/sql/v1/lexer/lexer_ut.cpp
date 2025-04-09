@@ -28,7 +28,7 @@ using namespace NSQLTranslationV1;
 
 TLexers Lexers = {
     .Antlr3 = MakeAntlr3LexerFactory(),
-    .Antlr3Ansi = MakeAntlr4AnsiLexerFactory(),
+    .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
     .Antlr4 = MakeAntlr4LexerFactory(),
     .Antlr4Ansi = MakeAntlr4AnsiLexerFactory(),
     .Antlr4Pure = MakeAntlr4PureLexerFactory(),
@@ -307,6 +307,11 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "INSERT", "INSERT EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "from", "FROM(from) EOF");
+        if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+            UNIT_ASSERT_TOKENIZED(lexer, "sKip", "TSKIP(sKip) EOF");
+        } else {
+            UNIT_ASSERT_TOKENIZED(lexer, "sKip", "SKIP(sKip) EOF");
+        }
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(Punctuation) {
@@ -337,6 +342,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "123", "DIGITS(123) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123u", "INTEGER_VALUE(123u) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123ui", "INTEGER_VALUE(123ui) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0xDEADbeef", "DIGITS(0xDEADbeef) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45", "REAL(123.45) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E10", "REAL(123.45E10) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E+10", "REAL(123.45E+10) EOF");
@@ -353,7 +359,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         if (!ANSI) {
             UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "STRING_VALUE(\"\\\"\") EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\") STRING_VALUE(\"\") EOF");
-        } else {
+        } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
             UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "[INVALID] STRING_VALUE(\"\\\") EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\"\"\") EOF");
         }
@@ -387,7 +393,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         if (!ANSI) {
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */ */", "COMMENT(/* /* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
-        } else {
+        } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* yql */ */", "COMMENT(/* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
             UNIT_ASSERT_TOKENIZED(lexer, "/* /* /* yql */ */", "COMMENT(/* /* /* yql */ */) EOF");

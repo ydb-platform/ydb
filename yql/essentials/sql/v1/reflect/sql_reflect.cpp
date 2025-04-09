@@ -15,6 +15,13 @@ namespace NSQLReflect {
     const TStringBuf SectionOther = "//! section:other";
     const TStringBuf FragmentPrefix = "fragment ";
 
+    const TStringBuf TLexerGrammar::KeywordBlock(const TStringBuf name) {
+        if (name == "TSKIP") {
+            return "SKIP";
+        }
+        return name;
+    }
+
     TVector<TString> GetResourceLines(const TStringBuf key) {
         TString text;
         Y_ENSURE(NResource::FindExact(key, &text));
@@ -126,7 +133,7 @@ namespace NSQLReflect {
         SubstGlobal(block, "'", "");
         SubstGlobal(block, " ", "");
 
-        Y_ENSURE(name == block || (name == "TSKIP" && block == "SKIP"));
+        Y_ENSURE(name == block || (name == "TSKIP" && block == TLexerGrammar::KeywordBlock("SKIP")));
         grammar.KeywordNames.emplace(std::move(name));
     }
 

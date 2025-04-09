@@ -28,11 +28,14 @@ namespace NSQLTranslationV1 {
             : Grammar_(std::move(grammar))
             , Ansi_(ansi)
         {
+            RE2::Options custom;
+            custom.set_longest_match(true);
+
             for (const auto& [token, regex] : RegexByOtherName) {
                 if (token == CommentTokenName) {
                     CommentRegex_.Reset(new RE2(regex));
                 } else {
-                    OtherRegexes_.emplace_back(token, new RE2(regex));
+                    OtherRegexes_.emplace_back(token, new RE2(regex, custom));
                 }
             }
         }
@@ -62,7 +65,7 @@ namespace NSQLTranslationV1 {
                 onNextToken(std::move(matched));
             }
 
-            onNextToken(TParsedToken{.Name = "EOF"});
+            onNextToken(TParsedToken{.Name = "EOF", .Content = "<EOF>"});
             return errors == 0;
         }
 
@@ -110,7 +113,7 @@ namespace NSQLTranslationV1 {
             size_t count = 0;
             for (const auto& keyword : Grammar_.KeywordNames) {
                 const TStringBuf content = prefix.substr(0, keyword.length());
-                if (AsciiEqualsIgnoreCase(content, keyword)) {
+                if (AsciiEqualsIgnoreCase(content, NSQLReflect::TLexerGrammar::KeywordBlock(keyword))) {
                     matches.emplace_back(keyword, TString(content));
                     count += 1;
                 }

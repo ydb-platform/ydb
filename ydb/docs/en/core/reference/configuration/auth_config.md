@@ -220,6 +220,13 @@ Default value: `ldap`
     ||
 || `extended_settings.enable_nested_groups_search`
 | Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong.
+
+Possible values:
+
+- `true` — {{ ydb-short-name }} requests information about all groups to which the user's direct groups belong. It might take a long time to traverse the entire hierarchy of nested parent groups.
+- `false` — {{ ydb-short-name }} requests a flat list of groups, to which the user belongs. This request does not traverse possible nested parent groups.
+
+Default value: `false`
     ||
 || `host`
 | Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter.
@@ -274,38 +281,56 @@ Default value: `false`
     ||
 |#
 
-## Configuring token life cycle
+## Configuring user token life cycle
 
-Parameters for configuring the token life cycle are applicable to all authentication methods.
+Parameters for configuring the [user token](../../concepts/glossary.md#user-token) life cycle are applicable to all authentication methods.
 
 #|
 || refresh_period
-| Specifies the time interval for detecting expired tokens
+| Specifies how often a {{ ydb-short-name }} node scans cached user tokens to find the ones that need to be refreshed because the `refresh_time`, `life_time` or `expire_time` interval elapses. The lower this parameter value, the higher the CPU load.
 
 Default value: `1s`
     ||
 || refresh_time
-| Specifies the time interval for refreshing user information. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
+| Specifies the time interval since the last user token update after which a {{ ydb-short-name }} node updates the user token again. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
 
 Default value: `1h`
     ||
 || life_time
-| Specifies the time interval for keeping a token in cache since its last use.
+| Specifies the time interval for keeping a user token in {{ ydb-short-name }} node cache since its last use. If a {{ ydb-short-name }} node does not receive queries from a user within the specified time interval, the node deletes the user token from its cache.
 
 Default value: `1h`
     ||
 || expire_time
-| Specifies the time period, after which a token expires and is deleted from cache.
+| Specifies the time period, after which a user token is deleted from {{ ydb-short-name }} node cache. Deletion occurs regardless of the `life_time` interval.
+
+{% note warning %}
+
+If a third-party system has successfully authenticated in the {{ydb-short-name }} node and regularly (more often than the `life_time` interval) sends requests to the same node, {{ydb-short-name }} will detect the possible deletion or change in the user account privileges only after the `expire_time` interval elapses.
+
+{% endnote %}
+
+The shorter this time period, the more often {{ ydb-short-name }} nodes re-authenticate users and refresh their privileges. However, excessive user re-authentication slows down {{ ydb-short-name }}, especially so for external users. Setting this parameter to seconds negates the effect of caching user tokens.
 
 Default value: `24h`
     ||
 || min_error_refresh_time
-| Specifies minimum period of time that must elapse since a failed attempt to refresh a token before retrying the attempt.
+| Specifies minimum period of time that must elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+
+Together with the `max_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+
+{% note warning %}
+
+Setting this parameter to `0` is not recommended, because instant retries results in excessive load.
+
+{% endnote %}
 
 Default value: `1s`
     ||
 || max_error_refresh_time
-| Specifies the maximum time interval that can elapse since a failed attempt to refresh a token before retrying the attempt.
+| Specifies the maximum time interval that can elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+
+Together with the `min_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
 
 Default value: `1m`
     ||

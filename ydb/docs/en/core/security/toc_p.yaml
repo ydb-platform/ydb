@@ -3,7 +3,7 @@ items:
   href: authentication.md
 - name: Authorization
   href: authorization.md
-- name: Built-in security
+- name: Built-in security configuration
   href: builtin-security.md
 - name: Audit log
   href: audit-log.md

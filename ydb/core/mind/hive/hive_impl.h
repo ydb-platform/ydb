@@ -1017,7 +1017,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     ui64 GetNodeRestartsForPenalty() const {
-        return CurrentConfig.GetNodeRestartsForPenalty();
+        return CurrentConfig.GetNodeRestartsForPenalty() ?: Max<ui64>();
     }
 
     i64 GetMaxDeleteTabletInProgress() const {

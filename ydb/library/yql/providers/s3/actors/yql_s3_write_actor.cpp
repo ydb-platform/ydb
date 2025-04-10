@@ -4,11 +4,8 @@
 #include <arrow/result.h>
 #include <arrow/table.h>
 #include <arrow/util/type_fwd.h>
-
 #include <library/cpp/string_utils/base64/base64.h>
-
 #include <parquet/arrow/writer.h>
-
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/providers/s3/compressors/factory.h>  // defines NO_SANITIZE_THREAD

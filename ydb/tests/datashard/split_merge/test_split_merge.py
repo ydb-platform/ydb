@@ -41,6 +41,47 @@ class TestSplitMerge(TestBase):
             ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
             ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
             ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
+            ("table_Int64", {"Int64": "CAST({} AS Int64)"},
+             {}, {}, "", "", ""),
+            ("table_Int32", {"Int32": "CAST({} AS Int32)"},
+             {}, {}, "", "", ""),
+            # ("table_Int16", {"Int16": "CAST({} AS Int16)"},
+            # {}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Int8", {"Int8": "CAST({} AS Int8)"}, {}, {}, "", "", ""),
+            ("table_Uint64", {"Uint64": "CAST({} AS Uint64)"},
+             {}, {}, "", "", ""),
+            ("table_Uint32", {"Uint32": "CAST({} AS Uint32)"},
+             {}, {}, "", "", ""),
+            # ("table_Uint16", {"Uint16": "CAST({} AS Uint16)"},
+            # {}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Uint8", {"Uint8": "CAST({} AS Uint8)"},
+             {}, {}, "", "", ""),
+            ("table_Decimal150", {
+             "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))"}, {}, {}, "", "", ""),
+            ("table_Decimal229", {
+             "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))"}, {}, {}, "", "", ""),
+            ("table_Decimal3510", {
+             "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))"}, {}, {}, "", "", ""),
+            ("table_DyNumber", {
+             "DyNumber": "CAST('{}E1' AS DyNumber)"}, {}, {}, "", "", ""),
+            ("table_String", {"String": "'String {}'"}, {}, {}, "", "", ""),
+            ("table_Utf8", {"Utf8": "'Utf8 {}'"}, {}, {}, "", "", ""),
+            ("table_Date", {
+             "Date": "CAST('2{:03}-01-01' AS Date)"}, {}, {}, "", "", ""),
+            ("table_Datetime", {
+             "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)"}, {}, {}, "", "", ""),
+            ("table_Timestamp", {
+             "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)"}, {}, {}, "", "", ""),
+            ("table_Interval", {
+             "Interval": "CAST({} AS Interval)"}, {}, {}, "", "", ""),
+            ("table_Date32", {
+             "Date32": "CAST('2{:03}-01-01' AS Date32)"}, {}, {}, "", "", ""),
+            ("table_Datetime64", {
+             "Datetime64": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime64)"}, {}, {}, "", "", ""),
+            ("table_Timestamp64", {
+             "Timestamp64": "CAST(16962{:03}00000000 AS Timestamp64)"}, {}, {}, "", "", ""),
+            ("table_Interval64", {
+             "Interval64": "CAST({} AS Interval64)"}, {}, {}, "", "", ""),
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
@@ -102,6 +143,9 @@ class TestSplitMerge(TestBase):
 
         if ttl != "":
             number_of_columns += 1
+
+        if number_of_columns < 24:
+            number_of_columns = 24
         for count in range(1, number_of_columns + 1):
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
@@ -128,6 +172,8 @@ class TestSplitMerge(TestBase):
 
         if ttl != "":
             number_of_columns += 1
+        if number_of_columns < 24:
+            number_of_columns = 24
         for count in range(1, number_of_columns + 1):
             create_all_type = []
             for type_name in all_types.keys():

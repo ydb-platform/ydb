@@ -946,6 +946,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         struct TReadDataNoAckResult {
+            // Start offset, end offset. E.g. if the messages in the response have offsets 1, 2, 3, then Range = {1, 4}.
             std::pair<i64, i64> Range;
             Ydb::Topic::StreamDirectReadMessage::FromServer Response;
         };
@@ -957,8 +958,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool success = resp.status() == Ydb::StatusIds::SUCCESS;
             bool isDirectReadResponse = resp.server_message_case() == Ydb::Topic::StreamDirectReadMessage::FromServer::kDirectReadResponse;
 
-            UNIT_ASSERT_C(success, resp.DebugString());
-            UNIT_ASSERT_C(isDirectReadResponse, resp.DebugString());
+            UNIT_ASSERT(success);
+            UNIT_ASSERT(isDirectReadResponse);
             UNIT_ASSERT_VALUES_EQUAL(resp.direct_read_response().direct_read_id(), directReadId);
 
             i64 id = resp.direct_read_response().partition_session_id();
@@ -972,13 +973,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 // This case is possible on DirectRead restarts. See test DirectReadBudgetOnRestart.
                 return { .Range = {0, 0}, .Response = resp };
             }
-            UNIT_ASSERT_C(data.batches_size() == 1, resp.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(data.batches_size(), 1);
             const auto& firstBatch = data.batches(0);
             const auto firstOffset = firstBatch.message_data(0).offset();
             const auto& lastBatch = data.batches(data.batches_size() - 1);
             const auto lastOffset = lastBatch.message_data(lastBatch.message_data_size() - 1).offset();
             Cerr << (TStringBuilder() << "First offset: " << firstOffset << ", last offset: " << lastOffset << Endl);
-            return { .Range = {firstOffset, lastOffset}, .Response = resp };
+            return { .Range = {firstOffset, lastOffset + 1}, .Response = resp };
         };
 
         auto Commit(std::pair<ui64, ui64> offsets, ui64 assignId) {
@@ -1251,10 +1252,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         // 3. Log the bytes_size and offsets. Ensure that we've got 1MB of data.
         const auto grpcByteSize = resp.Response.ByteSize();
         const auto directReadResponseBytesSize = resp.Response.direct_read_response().bytes_size();
-        const auto firstOffset = resp.Range.first;
-        const auto lastOffset = resp.Range.second;
+        const auto startOffset = resp.Range.first;
+        const auto endOffset = resp.Range.second;
         Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << grpcByteSize << " bytes_size = " << directReadResponseBytesSize
-                                  << " firstOffset = " << firstOffset << " lastOffset = " << lastOffset << Endl);
+                                  << " startOffset = " << startOffset << " endOffset = " << endOffset << Endl);
 
         // 4. Write 40MB of data, so the first message is deleted by retention period.
         Cerr << (TStringBuilder() << "XXXXX Write 40_MB" << Endl);
@@ -1312,9 +1313,88 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
                                   << " firstOffset = " << resp.Range.first << " lastOffset = " << resp.Range.second << Endl);
         UNIT_ASSERT(resp.Response.direct_read_response().bytes_size() == directReadResponseBytesSize);
-        UNIT_ASSERT(resp.Range.first == resp.Range.second);
+        UNIT_ASSERT_VALUES_EQUAL(resp.Range.first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp.Range.first, resp.Range.second);
+    }
 
-        // resp = setup.ReadDataNoAck(assignId, nextReadId);
+    Y_UNIT_TEST(DirectReadCorrectOffsetsOnRestart) {
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"acc/topic1"};
+        TString oldPath{"/Root/PQ/rt3.dc1--acc--topic1"};
+        TDirectReadTestSetup setup{server};
+
+        {
+            // 1. Write one message.
+            Cerr << (TStringBuilder() << "XXXXX Write 1 message" << Endl);
+            setup.DoWrite(pqClient->GetDriver(), topicPath, 1_MB, 1);
+        }
+
+        Cerr << (TStringBuilder() << "XXXXX InitControlSession" << Endl);
+        setup.InitControlSession(topicPath, 100_KB);
+
+        Cerr << "XXXXX GetNextAssign\n";
+        auto assignRes = setup.GetNextAssign(topicPath);
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+
+        Cerr << (TStringBuilder() << "XXXXX InitDirectSession" << Endl);
+        setup.InitDirectSession(topicPath);
+
+        // Send StartDirectReadPartitionSessionRequest, get StartDirectReadPartitionSessionResponse
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+
+        // 2. Read the message back. It should contain only one offset.
+        Cerr << "XXXXX ReadDataNoAck\n";
+        auto resp = setup.ReadDataNoAck(assignId, 1);
+        auto startOffset = resp.Range.first;
+        auto endOffset = resp.Range.second;
+        Cerr << (TStringBuilder() << "XXXXX startOffset = " << startOffset << " endOffset = " << endOffset << Endl);
+
+        Cerr << "XXXXX Write one more message\n";
+        setup.DoWrite(pqClient->GetDriver(), topicPath, 1_MB, 1);
+
+        Cerr << "XXXXX Kill tablet\n";
+        auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
+        auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
+        server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
+        Cerr << "XXXXX ExpectDestroyPartitionSession\n";
+        setup.ExpectDestroyPartitionSession(assignId);
+
+        Cerr << "XXXXX Sleep 1 seconds\n";
+        Sleep(TDuration::Seconds(1));
+
+        Cerr << "XXXXX GetNextAssign\n";
+        auto nextAssignRes = setup.GetNextAssign(topicPath, assignRes.Generation);
+        assignId = nextAssignRes.AssignId;
+
+        Cerr << "XXXXX Sleep 2 seconds\n";
+        Sleep(TDuration::Seconds(2));
+
+        Cerr << "XXXXX SendReadSessionAssign\n";
+        setup.SendReadSessionAssign(assignId, nextAssignRes.Generation);
+
+        Cerr << "XXXXX Sleep 3 seconds\n";
+        Sleep(TDuration::Seconds(3));
+
+        Cerr << "XXXXX ReadDataNoAck direct_read_id = 1\n";
+        resp = setup.ReadDataNoAck(assignId, 1);
+        Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
+                                  << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(startOffset, resp.Range.first);
+        UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.second);
+
+        startOffset = resp.Range.first;
+        endOffset = resp.Range.second;
+
+        setup.SendReadRequest(2_MB);
+
+        Cerr << "XXXXX ReadDataNoAck direct_read_id = 2\n";
+        resp = setup.ReadDataNoAck(assignId, 2);
+        Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
+                                  << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.first);
+        UNIT_ASSERT_VALUES_EQUAL(resp.Range.second, 2);
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {

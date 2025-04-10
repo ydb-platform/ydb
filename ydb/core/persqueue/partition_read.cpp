@@ -152,7 +152,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
 
             auto now = ctx.Now();
             auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
-            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);          
+            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
         }
     } else if (request.Offset < EndOffset) {
         sendResponse(GetSizeLag(request.Offset), false);
@@ -638,7 +638,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         }
         while (it != DataKeysBody.end()
                && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
-               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
+               && (lastOffset == 0 || it->Key.GetOffset() < lastOffset)
         ) {
             size += sz;
             count += cnt;
@@ -686,7 +686,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
             Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
-            if (lastOffset != 0 && lastOffset < offset) {
+            if (lastOffset != 0 && offset >= lastOffset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {

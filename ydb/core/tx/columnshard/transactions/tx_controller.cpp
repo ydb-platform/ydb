@@ -98,6 +98,8 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
     op->ResetStatusOnUpdate();
     auto& txInfo = op->MutableTxInfo();
     txInfo.Source = tx.Source;
+    txInfo.MinStep = tx.MinStep;
+    txInfo.MaxStep = tx.MaxStep;
     txInfo.Cookie = tx.Cookie;
     txInfo.SeqNo = tx.SeqNo;
 

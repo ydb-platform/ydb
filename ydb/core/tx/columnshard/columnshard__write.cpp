@@ -415,7 +415,8 @@ public:
         }
         proto.SetLockId(WriteCommit->GetLockId());
         TxOperator = Self->GetProgressTxController().StartProposeOnExecute(
-            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Cookie, {}), proto.SerializeAsString(), txc);
+            TTxController::TTxInfo(kind, WriteCommit->GetTxId(), Source, Self->GetProgressTxController().GetAllowedStep(), 
+            Cookie, {}), proto.SerializeAsString(), txc);
         return true;
     }
 

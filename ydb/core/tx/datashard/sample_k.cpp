@@ -323,6 +323,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         return;
     }
 
+    // 3. Creating scan
     TAutoPtr<NTable::IScan> scan = new TSampleKScan(userTable,
         request, ev->Sender, std::move(response),
         requestedRange);

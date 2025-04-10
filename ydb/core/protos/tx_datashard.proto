@@ -1424,14 +1424,14 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index proccess
+    optional uint64 BuildIndexId = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
     optional string TargetName = 5;
-    repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table
+    repeated string IndexColumns = 6;          // key columns that is needed to transfer in terms of target table
 
     optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
 

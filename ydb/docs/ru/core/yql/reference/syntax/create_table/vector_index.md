@@ -1,12 +1,16 @@
 # Векторный индекс
 
+{% if backend_name == "YDB" and oss == true %}
+
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 {% note warning %}
 
 Создание пустой таблицы с векторным индексом в настоящее время не имеет практического смысла, так как модификация данных в таблицах с векторными индексами пока не поддерживается.
 
-Следует использовать `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.  
+Следует использовать `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
 
 {% endnote %}
 
@@ -59,8 +63,8 @@ CREATE TABLE user_articles (
     title String,
     text String,
     embedding String,
-    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree 
-    ON (user, embedding) COVER (title, text) 
+    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+    ON (user, embedding) COVER (title, text)
     WITH (dimension=512, type="float", distance="cosine", clusters=128, levels=2),
     PRIMARY KEY (article_id)
 )

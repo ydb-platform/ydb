@@ -609,9 +609,9 @@ public:
             if (GetBlockOutput(settings.Settings().Ref())) {
                 auto& arrowSettings = *sinkDesc.MutableArrowSettings();
 
-                const auto& fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+                const auto& fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 TExprContext ctx;
-                arrowSettings.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(fullRowType), NYT::NYson::EYsonFormat::Text));
+                arrowSettings.SetRowType(NCommon::WriteTypeToYson(fullRowType, NYT::NYson::EYsonFormat::Text));
 
                 if (const auto maxFileSize = State_->Configuration->MaxOutputObjectSize.Get()) {
                     arrowSettings.SetMaxFileSize(*maxFileSize);

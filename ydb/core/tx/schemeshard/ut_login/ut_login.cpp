@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultLogin1.error(), "");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", false);
         auto resultLogin2 = Login(runtime, "user1", "123");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin2.error(), "User user1 login denied: account is blocked");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", "user1", true);
         auto resultLogin3 = Login(runtime, "user1", "123");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin3.error(), "");
@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         Sleep(TDuration::Seconds(4));
 
         auto resultLogin = Login(runtime, "user1", "123");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "User user1 login denied: account is blocked");
     }
 
     Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
@@ -854,11 +854,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -982,7 +982,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
         resultLogin = Login(runtime, "user2", TStringBuilder() << "wrongpassword2" << newAttemptThreshold);
         // User is not permitted to log in after 6 attempts
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 login denied: too many failed password attempts");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // After 4 seconds user2 must be locked out
         Sleep(TDuration::Seconds(4));
         resultLogin = Login(runtime, "user2", "wrongpassword28");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user2 login denied: too many failed password attempts");
 
         // After 7 seconds user2 must be unlocked
         Sleep(TDuration::Seconds(8));
@@ -1026,11 +1026,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // Also do not accept correct password
         resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
     }
 
     Y_UNIT_TEST(CheckThatLockedOutParametersIsRestoredFromLocalDb) {
@@ -1067,7 +1067,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
         }
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         {
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         // After reboot schemeshard user1 must be locked out
         resultLogin = Login(runtime, "user1", TStringBuilder() << "wrongpassword" << accountLockoutConfig.GetAttemptThreshold());
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 is not permitted to log in");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), TStringBuilder() << "User user1 login denied: too many failed password attempts");
 
         // User1 must be unlocked in 1 second after reboot schemeshard
         Sleep(TDuration::Seconds(2));
@@ -1133,9 +1133,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", userName, userPassword);
 
         blockUser();
-        loginUser(TStringBuilder() << "User " << userName << " is not permitted to log in");
+        loginUser(TStringBuilder() << "User " << userName << " login denied: too many failed password attempts");
         reboot();
-        loginUser(TStringBuilder() << "User " << userName << " is not permitted to log in");
+        loginUser(TStringBuilder() << "User " << userName << " login denied: too many failed password attempts");
         ChangeIsEnabledUser(runtime, ++txId, "/MyRoot", userName, true);
         loginUser("");
 
@@ -1197,7 +1197,7 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
 Y_UNIT_TEST_SUITE(TWebLoginService) {
     void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLoginBadPassword) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
@@ -1309,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginSuccess) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1405,7 +1405,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadPassword) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1500,7 +1500,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1596,7 +1596,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
         TTestEnv env(runtime);
@@ -1691,7 +1691,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLogout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(lines));
+        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         TTestEnv env(runtime);
 
         // Add ticket parser to the mix
@@ -1790,6 +1790,90 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
             UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
             UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
+        }
+    }
+
+    Y_UNIT_TEST(AuditLogCreateModifyUser) {
+        TTestBasicRuntime runtime;
+        std::vector<std::string> lines;
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
+        TTestEnv env(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        ui64 txId = 100;
+
+        TString database = "/MyRoot";
+        TString user = "user1";
+        TString password = "password1";
+        TString newPassword = "password2";
+        TString hash = R"(
+        {
+            "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+            "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+            "type": "argon2id"
+        }
+        )";
+
+        auto check = [&](const TString& operation, const TVector<TString>& details = {}) {
+            auto render = [](const TVector<TString>& list) {
+                auto result = TStringBuilder();
+                result << "[" << JoinStrings(list.begin(), list.end(), ", ") << "]";
+                return result;
+            };
+
+            auto last = FindAuditLine(lines, Sprintf("tx_id=%u", txId));
+
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation=%s", operation.c_str()));
+
+            if (!details.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_user_change=%s", render(details).c_str()));
+            }
+
+            UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("database=%s", database.c_str()));
+            UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=StatusSuccess");
+            UNIT_ASSERT_STRING_CONTAINS(last, "login_user_level=admin");
+            UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_user=%s", user.c_str()));
+        };
+
+        CreateAlterLoginCreateUser(runtime, ++txId, database, user, password);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+            check("CREATE USER");
+        }
+
+        ChangePasswordUser(runtime, ++txId, database, user, newPassword);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+            check("MODIFY USER", {"password"});
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, database, user, false);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+            check("MODIFY USER", {"blocking"});
+        }
+
+        ChangeIsEnabledUser(runtime, ++txId, database, user, true);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 5);
+            check("MODIFY USER", {"unblocking"});
+        }
+
+        ChangePasswordHashUser(runtime, ++txId, database, user, hash);
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 6);
+            check("MODIFY USER", {"password"});
+        }
+
+        ModifyUser(runtime, ++txId, database, [user, password, isEnabled = false](auto* alterUser) {
+            alterUser->SetUser(std::move(user));
+            alterUser->SetCanLogin(isEnabled);
+            alterUser->SetPassword(std::move(password));
+        });
+        {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 7);
+            check("MODIFY USER", {"password", "blocking"});
         }
     }
 }

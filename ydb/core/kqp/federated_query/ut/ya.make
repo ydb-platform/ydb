@@ -7,6 +7,7 @@ PEERDIR(
     yql/essentials/public/issue/protos
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
+    yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/dq
     yt/yql/providers/yt/comp_nodes/llvm14
 )

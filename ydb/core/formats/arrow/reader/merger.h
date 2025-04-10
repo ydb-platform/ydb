@@ -28,6 +28,7 @@ private:
     std::shared_ptr<arrow::Schema> DataSchema;
     const bool Reverse;
     const std::vector<std::string> VersionColumnNames;
+    std::optional<TCursor> MaxVersion;
     ui32 ControlPoints = 0;
 
     TSortingHeap<TBatchIterator> SortHeap;
@@ -50,12 +51,13 @@ private:
         std::optional<TCursor>* lastResultPosition = nullptr);
 
 public:
-    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse, const std::vector<std::string>& versionColumnNames)
+    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse,
+        const std::vector<std::string>& versionColumnNames, const std::optional<TCursor>& maxVersion)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
         , Reverse(reverse)
         , VersionColumnNames(versionColumnNames)
-    {
+        , MaxVersion(maxVersion) {
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());

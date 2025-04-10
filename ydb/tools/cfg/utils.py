@@ -242,7 +242,7 @@ def need_generate_bs_config(template_bs_config):
     return template_bs_config.get("service_set", {}).get("groups") is None
 
 
-use_alternative_yaml_handler = False
+use_alternative_yaml_parser = False
 
 
 def determine_yaml_parsing(yaml_template_file):
@@ -253,10 +253,10 @@ def determine_yaml_parsing(yaml_template_file):
 
 
 def load_yaml(yaml_template_file):
-    global use_alternative_yaml_handler
-    use_alternative_yaml_handler = determine_yaml_parsing(yaml_template_file)
+    global use_alternative_yaml_parser
+    use_alternative_yaml_parser = determine_yaml_parsing(yaml_template_file)
 
-    if use_alternative_yaml_handler:
+    if use_alternative_yaml_parser:
         ruamel_yaml = YAML()
 
         with open(yaml_template_file, "r") as yaml_template:
@@ -277,20 +277,22 @@ def sort_dict_recursively(obj):
         return obj
 
 
-def dump_yaml(data):
-    global use_alternative_yaml_handler
+def dump_yaml(data, sort=True):
+    global use_alternative_yaml_parser
 
-    if use_alternative_yaml_handler:
+    if use_alternative_yaml_parser:
         yaml = YAML()
 
         yaml.default_flow_style = False
-        yaml.indent(mapping=2, sequence=4, offset=2)
+        yaml.indent(mapping=2, sequence=2, offset=0)
         yaml.sort_base_mapping_type_on_output = True
 
-        sorted_data = sort_dict_recursively(data)
-
         stream = StringIO()
-        yaml.dump(sorted_data, stream)
+
+        if sort:
+            data = sort_dict_recursively(data)
+
+        yaml.dump(data, stream)
         return stream.getvalue()
     else:
         return pyyaml.safe_dump(data, sort_keys=True, default_flow_style=False, indent=2)

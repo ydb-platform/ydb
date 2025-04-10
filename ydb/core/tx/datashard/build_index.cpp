@@ -255,7 +255,11 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
-        LOG_N("Finish" << Debug() << " " << progress->Record.ShortDebugString());
+        if (progress->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << progress->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << progress->Record.ShortDebugString());
+        }
         this->Send(ProgressActorId, progress.Release());
 
         Driver = nullptr;
@@ -273,12 +277,11 @@ public:
     }
 
     TString Debug() const {
-        return TStringBuilder() << "TBuildIndexScan: "
-                                << "datashard: " << DataShardId
-                                << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
-                                << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
-                                << Stats.ToString()
-                                << UploadStatus.ToString();
+        return TStringBuilder() << "TBuildIndexScan TabletId: " << DataShardId << " Id: " << BuildIndexId
+            << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
+            << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
+            << Stats.ToString()
+            << UploadStatus.ToString();
     }
 
     EScan PageFault() override {
@@ -526,7 +529,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TBuildIndexScan " << request.ShortDebugString()
+    LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -543,7 +547,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
     };
     auto trySendBadRequest = [&] {
         if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TBuildIndexScan bad request " << request.ShortDebugString()
+            LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
                 << " with response " << response->Record.ShortDebugString());
             ctx.Send(ev->Sender, std::move(response));
             return true;

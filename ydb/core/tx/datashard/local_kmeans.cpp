@@ -66,6 +66,7 @@ protected:
 
     TLead Lead;
 
+    ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
@@ -133,7 +134,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(const TUserTable& table,
+    TLocalKMeansScanBase(ui64 tabletId, const TUserTable& table,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                          const TActorId& responseActorId,
                          TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
@@ -147,6 +148,7 @@ public:
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
+        , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
         , LevelTable{request.GetLevelName()}
@@ -204,7 +206,11 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+        if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -219,7 +225,8 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << "TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TLocalKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size()
@@ -408,10 +415,10 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     }
 
 public:
-    TLocalKMeansScan(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+    TLocalKMeansScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
         TLead&& lead)
-        : TLocalKMeansScanBase{table, request, responseActorId, std::move(response), std::move(lead)}
+        : TLocalKMeansScanBase{tabletId, table, request, responseActorId, std::move(response), std::move(lead)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
@@ -760,7 +767,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
+    LOG_N("Starting TLocalKMeansScan TabletId: " << TabletID() 
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -777,7 +785,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     };
     auto trySendBadRequest = [&] {
         if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TLocalKMeansScan bad request " << request.ShortDebugString()
+            LOG_E("Rejecting TLocalKMeansScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
                 << " with response " << response->Record.ShortDebugString());
             ctx.Send(ev->Sender, std::move(response));
             return true;
@@ -871,7 +880,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TLocalKMeansScan<T>{
-            userTable, request, ev->Sender, std::move(response),
+            TabletID(), userTable, request, ev->Sender, std::move(response),
             std::move(lead)
         };
     };

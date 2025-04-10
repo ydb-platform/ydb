@@ -45,6 +45,7 @@ protected:
 
     TLead Lead;
 
+    ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
@@ -115,7 +116,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TPrefixKMeansScanBase(const TUserTable& table,
+    TPrefixKMeansScanBase(ui64 tabletId, const TUserTable& table,
                           const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                           const TActorId& responseActorId,
                           TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
@@ -127,6 +128,7 @@ public:
         , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
+        , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
         , LevelTable{request.GetLevelName()}
@@ -208,7 +210,11 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+        if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -223,7 +229,8 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << "TPrefixKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TPrefixKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size()
@@ -414,9 +421,9 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     }
 
 public:
-    TPrefixKMeansScan(const TUserTable& table, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
+    TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                       const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
-        : TPrefixKMeansScanBase{table, request, responseActorId, std::move(response)}
+        : TPrefixKMeansScanBase{tabletId, table, request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
@@ -746,7 +753,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TPrefixKMeansScan " << request.ShortDebugString()
+    LOG_N("Starting TPrefixKMeansScan TabletId: " << TabletID() 
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -763,7 +771,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     };
     auto trySendBadRequest = [&] {
         if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TPrefixKMeansScan bad request " << request.ShortDebugString()
+            LOG_E("Rejecting TPrefixKMeansScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
                 << " with response " << response->Record.ShortDebugString());
             ctx.Send(ev->Sender, std::move(response));
             return true;
@@ -834,7 +843,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TPrefixKMeansScan<T>{
-            userTable, request, ev->Sender, std::move(response),
+            TabletID(), userTable, request, ev->Sender, std::move(response),
         };
     };
     MakeScan(request, createScan, badRequest);

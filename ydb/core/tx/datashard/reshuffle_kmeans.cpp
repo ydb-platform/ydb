@@ -38,6 +38,7 @@ protected:
 
     TLead Lead;
 
+    ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
@@ -78,7 +79,7 @@ public:
         return NKikimrServices::TActivity::RESHUFFLE_KMEANS_SCAN_ACTOR;
     }
 
-    TReshuffleKMeansScanBase(const TUserTable& table, TLead&& lead,
+    TReshuffleKMeansScanBase(ui64 tabletId, const TUserTable& table, TLead&& lead,
                              const NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                              const TActorId& responseActorId,
                              TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
@@ -88,6 +89,7 @@ public:
         , K{static_cast<ui32>(request.ClustersSize())}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
+        , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
@@ -156,7 +158,11 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+        if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+        }
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -171,7 +177,8 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << "TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
             << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
@@ -276,9 +283,9 @@ protected:
 template <typename TMetric>
 class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalculation<TMetric> {
 public:
-    TReshuffleKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
+    TReshuffleKMeansScan(ui64 tabletId, const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                          const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
-        : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
+        : TReshuffleKMeansScanBase{tabletId, table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
@@ -390,7 +397,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TReshuffleKMeansScan " << request.ShortDebugString()
+    LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID() 
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -407,7 +415,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     };
     auto trySendBadRequest = [&] {
         if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TReshuffleKMeansScan bad request " << request.ShortDebugString()
+            LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
                 << " with response " << response->Record.ShortDebugString());
             ctx.Send(ev->Sender, std::move(response));
             return true;
@@ -482,7 +491,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TReshuffleKMeansScan<T>{
-            userTable, CreateLeadFrom(range), request, ev->Sender, std::move(response),
+            TabletID(), userTable, CreateLeadFrom(range), request, ev->Sender, std::move(response),
         };
     };
     MakeScan(request, createScan, badRequest);

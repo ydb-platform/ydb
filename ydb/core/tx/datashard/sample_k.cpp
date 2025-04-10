@@ -41,6 +41,7 @@ protected:
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
+    ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
@@ -60,7 +61,7 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
+    TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range)
         : TActor(&TThis::StateWork)
@@ -71,6 +72,7 @@ public:
         , TableRange(table.Range)
         , RequestedRange(range)
         , K(request.GetK())
+        , TabletId(tabletId)
         , BuildId(request.GetId())
         , MaxProbability(request.GetMaxProbability())
         , Rng(request.GetSeed()) 
@@ -151,7 +153,12 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+
+        if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+        } else {
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+        }
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
@@ -167,7 +174,7 @@ public:
     }
 
     TString Debug() const {
-        return TStringBuilder() << "TSampleKScan Id: " << BuildId
+        return TStringBuilder() << "TSampleKScan TabletId: " << TabletId << " Id: " << BuildId
             << " K: " << K << " Clusters: " << MaxRows.size();
     }
 
@@ -239,7 +246,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
 
-    LOG_N("Starting TSampleKScan " << request.ShortDebugString()
+    LOG_N("Starting TSampleKScan TabletId: " << TabletID()
+        << " " << request.ShortDebugString()
         << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -256,7 +264,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     };
     auto trySendBadRequest = [&] {
         if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-            LOG_E("Rejecting TSampleKScan bad request " << request.ShortDebugString()
+            LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
+                << " " << request.ShortDebugString()
                 << " with response " << response->Record.ShortDebugString());
             ctx.Send(ev->Sender, std::move(response));
             return true;
@@ -324,7 +333,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     }
 
     // 3. Creating scan
-    TAutoPtr<NTable::IScan> scan = new TSampleKScan(userTable,
+    TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
         request, ev->Sender, std::move(response),
         requestedRange);
 

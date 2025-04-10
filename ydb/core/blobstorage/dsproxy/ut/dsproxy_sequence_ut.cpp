@@ -1284,6 +1284,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
 }
 
 Y_UNIT_TEST(TestBlock42CheckLwtrack) {
+    #ifndef LWTRACE_DISABLE
     NLWTrace::TManager mngr(*Singleton<NLWTrace::TProbeRegistry>(), true);
     NLWTrace::TOrbit orbit;
     NLWTrace::TTraceRequest req;
@@ -1386,7 +1387,7 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
     for (auto i = 13; i < 15; ++i) {
         const auto& p = r.GetEvents(i);
         UNIT_ASSERT_VALUES_EQUAL("DSProxyScheduleAccelerate", p.GetName());
-         UNIT_ASSERT_VALUES_EQUAL("Get", p.GetParams(1).GetStrValue());
+        UNIT_ASSERT_VALUES_EQUAL("Get", p.GetParams(1).GetStrValue());
     }
 
     for (auto i = 15; i < 17; ++i) {
@@ -1417,6 +1418,7 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
         UNIT_ASSERT_VALUES_EQUAL("DSProxyGetReply", p.GetName());
         UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
     }
+    #endif // LWTRACE_DISABLE
 }
 
 } // Y_UNIT_TEST_SUITE TBlobStorageProxySequenceTest

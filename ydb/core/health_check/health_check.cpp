@@ -2162,7 +2162,12 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
             }
-            case NKikimrBlobStorage::FAULTY:
+            case NKikimrBlobStorage::FAULTY: {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
+                                     TStringBuilder() << "PDisk state is " << statusString,
+                                     ETags::PDiskState);
+                break;
+            }
             case NKikimrBlobStorage::BROKEN:
             case NKikimrBlobStorage::TO_BE_REMOVED: {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,

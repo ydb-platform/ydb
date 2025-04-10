@@ -39,7 +39,7 @@
 
 {% endnote %}
 
-О том, как задать топологию кластера {{ ydb-short-name }}, читайте в разделе [{#T}](../devops/configuration-management/configuration-v1/config-settings.md#topology).
+О том, как задать топологию кластера {{ ydb-short-name }}, читайте в разделе [{#T}](../devops/configuration-management/configuration-v1/config-settings.md#domains-blob).
 
 ### Упрощённые конфигурации {#reduced}
 
@@ -83,7 +83,7 @@
 ## Дополнительная информация
 
 * [Документация для DevOps-инженеров](../devops/index.md)
-* [{#T}](../devops/configuration-management/configuration-v1/config-settings.md#topology)
+* [{#T}](../devops/configuration-management/configuration-v1/config-settings.md#domains-blob)
 * [Примеры конфигурационных файлов кластера](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 {% if audience != "corp" %}
 * [{#T}](../contributor/distributed-storage.md)

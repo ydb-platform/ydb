@@ -4,16 +4,16 @@ items:
 - name: Обновление конфигурации
   href: update-config.md
 - name: DSL конфигурации кластера
-  href: ../dynamic-config-selectors.md
+  href: dynamic-config-selectors.md
 - name: Параметры конфигурации
   href: config-settings.md
 - name: Расширение кластера
-  href: ../../../maintenance/manual/cluster_expansion.md
+  href: cluster-expansion.md
 - name: Перемещение State Storage
   href: state-storage-move.md
 - name: Перемещение статической группы
   href: static-group-move.md
 - name: Замена FQDN узла
-  href: ../../../maintenance/manual/replacing_nodes.md
+  href: replacing-nodes.md
 - name: Аутентификация и авторизация узлов баз данных
-  href: ../node-authorization.md
+  href: node-authorization.md

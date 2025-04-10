@@ -926,7 +926,7 @@ node_broker_config:
 
 {% note info %}
 
-Рекомендуется **дополнять** конфигурацию брокера ресурсов, используя [теги](../dynamic-config-selectors.md#dopolnitelnye-tegi-v-yaml) `!inherit` и `!append`.
+Рекомендуется **дополнять** конфигурацию брокера ресурсов, используя [теги](dynamic-config-selectors.md#dopolnitelnye-tegi-v-yaml) `!inherit` и `!append`.
 
 {% endnote %}
 

@@ -1,6 +1,6 @@
 # Перемещение статической группы
 
-# !WORK IN PROGRESS
+## !WORK IN PROGRESS
 
 {% include [new](_includes/new.md) %}
 

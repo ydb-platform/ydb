@@ -8,7 +8,7 @@ items:
 - name: Временная конфигурация
   href: dynamic-config-volatile-config.md
 - name: DSL конфигурации кластера
-  href: ../dynamic-config-selectors.md
+  href: dynamic-config-selectors.md
 - name: Параметры конфигурации
   href: config-settings.md
 - name: Изменение конфигураций через CMS
@@ -22,6 +22,6 @@ items:
 - name: Перемещение статической группы
   href: static-group-move.md
 - name: Замена FQDN узла
-  href: ../../../maintenance/manual/replacing_nodes.md
+  href: replacing-nodes.md
 - name: Аутентификация и авторизация узлов баз данных
-  href: ../node-authorization.md
+  href: node-authorization.md

@@ -1195,6 +1195,14 @@ public:
     }
 
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
+        if (QueryState->HasTxControl()) {
+            NYql::TIssues issues;
+            return ReplyQueryError(
+                ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+                "BATCH operation can be executed only in NoTx mode.",
+                MessageFromIssues(issues));
+        }
+
         auto& txCtx = *QueryState->TxCtx;
 
         auto literalRequest = PrepareLiteralRequest(QueryState.get());
@@ -1515,7 +1523,6 @@ public:
         literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
 
         physicalRequest.LocksOp = ELocksOp::Commit;
-        physicalRequest.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         physicalRequest.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         physicalRequest.MaxShardCount = RequestControls.MaxShardCount;
         physicalRequest.TraceId = QueryState

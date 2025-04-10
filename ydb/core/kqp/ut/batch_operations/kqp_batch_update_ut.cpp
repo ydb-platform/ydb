@@ -438,6 +438,23 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH UPDATE is unsupported with RETURNING", result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(HasTxControl) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET Amount = 1000;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operation can be executed only in NoTx mode.", result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

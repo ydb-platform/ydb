@@ -25,7 +25,7 @@ struct TClusterConfigBuilder {
     TClusterConfigBuilder& FillWarehouseWithS3() {
         S3Endpoint = "endpoint";
         S3Uri = "uri";
-        S3Region = "region";      
+        S3Region = "region";
         return *this;
     }
 
@@ -91,6 +91,19 @@ struct TClusterConfigBuilder {
 
 };
 
+std::vector<TString> GetErrorsFromIssues(const NYql::TIssues& issues) {
+    std::vector<TString> result;
+
+    std::transform(
+        issues.begin(),
+        issues.end(),
+        std::back_inserter(result),
+        [](const NYql::TIssue& issue)-> TString { return issue.GetMessage(); }
+    );
+
+    return result;
+}
+
 } // unnamed 
 
 Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
@@ -107,7 +120,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
         auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(cluster, false);
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
-        
+
         UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "SOURCE_TYPE=\"Iceberg\",DATABASE_NAME=\"db\",USE_TLS=\"false\",WAREHOUSE_TYPE=\"s3\",WAREHOUSE_S3_REGION=\"region\",WAREHOUSE_S3_ENDPOINT=\"endpoint\",WAREHOUSE_S3_URI=\"uri\",CATALOG_TYPE=\"hadoop\"");
     }
 
@@ -119,7 +132,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
             .FillAuthToken()
             .FillHiveCatalog()
             .Build();
-        
+
         auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(cluster, true);
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
@@ -138,10 +151,10 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
 
         TIcebergProcessor processor(cluster, issues);
         processor.Process();
-        auto r = processor.GetIssues();
+        auto r = GetErrorsFromIssues(issues);
 
         UNIT_ASSERT_VALUES_EQUAL(r.size(), 1);
-        UNIT_ASSERT_STRING_CONTAINS(r[0].GetMessage(), "warehouse");
+        UNIT_ASSERT_STRING_CONTAINS(r[0], "warehouse");
     }
 
     // Test parsing for FederatedQuery::IcebergCluster without catalog
@@ -151,14 +164,14 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
             .FillDb()
             .FillWarehouseWithS3()
             .FillAuthToken()
-            .Build();        
-            
+            .Build();
+
         TIcebergProcessor processor(cluster, issues);
         processor.Process();
-        auto r = processor.GetIssues();
+        auto r = GetErrorsFromIssues(issues);
 
         UNIT_ASSERT_VALUES_EQUAL(r.size(), 1);
-        UNIT_ASSERT_STRING_CONTAINS(r[0].GetMessage(), "catalog");
+        UNIT_ASSERT_STRING_CONTAINS(r[0], "catalog");
     }
 
     //
@@ -203,12 +216,12 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
             TIcebergProcessor processor(cluster,issues);
 
             processor.Process();
-            auto r = processor.GetIssues();
+            auto r = GetErrorsFromIssues(issues);
 
             UNIT_ASSERT_VALUES_EQUAL(r.size(), waitErrors.size());
-                
+
             for (size_t i = 0; i < waitErrors.size(); ++i) {
-                UNIT_ASSERT_STRING_CONTAINS(r[i].GetMessage(), waitErrors[i]);
+                UNIT_ASSERT_STRING_CONTAINS(r[i], waitErrors[i]);
             }
 
             *propertyValue = oldValue;

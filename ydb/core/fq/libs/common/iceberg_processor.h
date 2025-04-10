@@ -33,8 +33,6 @@ public:
         OnHadoopCallback_ = callback;
     }
 
-    std::vector<NYql::TIssue> GetIssues() const;
-
 private:
     void RiseError(const TString& field,const TString& msg);
 
@@ -48,7 +46,7 @@ private:
 
     void ProcessCatalogHive(const FederatedQuery::TIcebergCatalog_THive& hive);
 
-    bool GetHasErrors() {
+    bool HasErrors() {
         return Issues_ ? Issues_->Size() > 0 : false;
     }
 

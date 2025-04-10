@@ -48,16 +48,6 @@ void TIcebergProcessor::ProcessSkipAuth() {
     }
 }
 
-std::vector<NYql::TIssue> TIcebergProcessor::GetIssues() const {
-    if (!Issues_) {
-        throw yexception() << "Issues is not set";
-    }
-
-    std::vector<NYql::TIssue> issues;
-    std::copy(Issues_->begin(), Issues_->end(), std::back_inserter(issues));
-    return issues;
-}
-
 void TIcebergProcessor::RiseError(const TString& property, const TString& msg) {
     if (!Issues_) {
         throw yexception() << property << ": " << msg;
@@ -94,13 +84,13 @@ void TIcebergProcessor::ProcessWarehouseS3() {
         RiseError("warehouse.s3.region","is required");
     }
 
-    if (OnS3Callback_ && !GetHasErrors()) {
+    if (OnS3Callback_ && !HasErrors()) {
         OnS3Callback_(warehouse.s3());
     }
 }
 
 void TIcebergProcessor::ProcessCatalogHadoop(const FederatedQuery::TIcebergCatalog_THadoop& hadoop) {
-    if (OnHadoopCallback_ && !GetHasErrors()) {
+    if (OnHadoopCallback_ && !HasErrors()) {
         OnHadoopCallback_(hadoop);
     }
 }
@@ -110,7 +100,7 @@ void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::TIcebergCatalog
         RiseError("hive.uri", "is not specified");
     }
 
-    if (OnHiveCallback_ && !GetHasErrors()) {
+    if (OnHiveCallback_ && !HasErrors()) {
         OnHiveCallback_(hive);
     }
 }

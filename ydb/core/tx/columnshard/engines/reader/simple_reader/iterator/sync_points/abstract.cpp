@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader) {
@@ -43,6 +45,47 @@ void ISyncPoint::OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInpu
             }
         }
     }
+}
+
+TString ISyncPoint::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    for (auto&& i : SourcesSequentially) {
+        sb << i->GetSourceId() << ",";
+    }
+    sb << "}";
+    return sb;
+}
+
+void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& reader) {
+    AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
+    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceId() == continueAddress.GetSourceId());
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", SourcesSequentially.front()->GetSourceId());
+    OnSourcePrepared(SourcesSequentially.front(), reader);
+}
+
+void ISyncPoint::AddSource(const std::shared_ptr<IDataSource>& source) {
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
+    AFL_VERIFY(!AbortFlag);
+    source->SetPurposeSyncPointIndex(GetPointIndex());
+    if (Next) {
+        source->SetNeedFullAnswer(false);
+    }
+    AFL_VERIFY(!!source);
+    if (!LastSourceIdx) {
+        LastSourceIdx = source->GetSourceIdx();
+    } else {
+        AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx());
+    }
+    LastSourceIdx = source->GetSourceIdx();
+    SourcesSequentially.emplace_back(source);
+    if (!source->HasFetchingPlan()) {
+        source->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
+    }
+    OnAddSource(source);
+    source->StartProcessing(source);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

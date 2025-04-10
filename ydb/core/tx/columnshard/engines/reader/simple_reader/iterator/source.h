@@ -473,7 +473,6 @@ private:
     YDB_READONLY(ui32, PortionIdx, 0);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
-    bool NeedForceToExtractFlag = false;
 
     virtual ui64 DoGetEntityId() const override {
         return SourceId;
@@ -483,14 +482,6 @@ private:
     }
 
 public:
-    bool NeedForceToExtract() const {
-        return NeedForceToExtractFlag;
-    }
-
-    void SetNeedForceToExtract() {
-        NeedForceToExtractFlag = true;
-    }
-
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }

@@ -26,7 +26,7 @@ bool TSyncPointLimitControl::DrainToLimit() {
             return false;
         }
         std::pop_heap(Iterators.begin(), Iterators.end());
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "LimitIteratorNext")("source_id", Iterators.back().GetSourceId())(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "LimitIteratorNext")("source_id", Iterators.back().GetSourceId())(
             "fetched", FetchedCount)("limit", Limit)("iterators", Iterators.size());
         if (!Iterators.back().Next()) {
             Iterators.pop_back();
@@ -66,7 +66,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const std::share
         } else {
             AFL_VERIFY(*PKPrefixSize == arrs.size())("prefix", PKPrefixSize)("arr", arrs.size());
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_id", source->GetSourceId())(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_id", source->GetSourceId())(
             "fetched", FetchedCount)("limit", Limit);
         Iterators.back() = TSourceIterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
         AFL_VERIFY(Iterators.back().IsFilled());

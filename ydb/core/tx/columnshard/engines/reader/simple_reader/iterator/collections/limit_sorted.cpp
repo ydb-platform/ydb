@@ -7,7 +7,7 @@ std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
     std::pop_heap(HeapSources.begin(), HeapSources.end());
     auto result = NextSource ? NextSource : HeapSources.back().Construct(SourceIdxCurrent++, Context);
     AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractNext")("source_id", result->GetSourceId());
     HeapSources.pop_back();
     if (HeapSources.size()) {
         NextSource = HeapSources.front().Construct(SourceIdxCurrent++, Context);
@@ -18,7 +18,7 @@ std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_id", source->GetSourceId())("limit", Limit)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_id", source->GetSourceId())("limit", Limit)(
         "max", GetMaxInFlight())("in_flight_limit", InFlightLimit)("count", FetchingInFlightSources.size());
     if (!source->GetResultRecordsCount() && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = 2 * InFlightLimit;

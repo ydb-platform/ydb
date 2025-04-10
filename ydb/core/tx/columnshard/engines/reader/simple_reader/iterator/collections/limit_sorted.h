@@ -61,7 +61,7 @@ private:
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return (FetchingInFlightSources.size() < InFlightLimit) || (HeapSources.size() && HeapSources.front().NeedForceToExtract());
+        return FetchingInFlightSources.size() < InFlightLimit;
     }
 
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;

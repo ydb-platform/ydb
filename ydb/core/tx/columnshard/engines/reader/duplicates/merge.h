@@ -67,6 +67,7 @@ private:
     ui32 IntervalIdx;
     TActorId Owner;
     NColumnShard::TScanCounters Counters;
+    std::optional<NArrow::NMerger::TCursor> MaxVersion;
 
 private:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
@@ -78,12 +79,14 @@ private:
 
 public:
     TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames,
-        const ui32 intervalIdx, const TActorId& owner, const NColumnShard::TScanCounters& counters)
+        const ui32 intervalIdx, const TActorId& owner, const NColumnShard::TScanCounters& counters,
+        const std::optional<NArrow::NMerger::TCursor>& maxVersion)
         : PKSchema(pkSchema)
         , VersionColumnNames(versionColumnNames)
         , IntervalIdx(intervalIdx)
         , Owner(owner)
-        , Counters(counters) {
+        , Counters(counters)
+        , MaxVersion(maxVersion) {
     }
 
     void AddSource(

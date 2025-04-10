@@ -1,6 +1,10 @@
 #include "plain_read_data.h"
 #include "scanner.h"
 
+#include "collections/full_scan_sorted.h"
+#include "collections/limit_sorted.h"
+#include "collections/not_sorted.h"
+
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 
@@ -8,56 +12,54 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
-    const ui32 recordsCount, TPlainReadData& reader) {
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("f"));
-    AFL_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", source->GetEventsReport())("count", FetchingSources.size());
-    source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
-    if (!tableExt || !tableExt->num_rows()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
+void TScanHead::OnSourceCheckLimit(const std::shared_ptr<IDataSource>& source) {
+    SourcesCollection->OnSourceCheckLimit(source);
+    if (SourcesCollection->IsFinished() && !SourcesCollection->HasWaitingSources()) {
+        FetchingSources.clear();
     }
-    Context->GetCommonContext()->GetCounters().OnSourceFinished(
-        source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
+}
 
-    source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
-    while (FetchingSources.size()) {
-        auto frontSource = FetchingSources.front();
-        if (!frontSource->HasStageResult()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
-            break;
-        }
-        if (!frontSource->GetStageResult().HasResultChunk()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result_chunk")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
-            break;
-        }
-        auto table = frontSource->MutableStageResult().ExtractResultChunk();
-        const bool isFinished = frontSource->GetStageResult().IsFinished();
+void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader) {
+    AFL_VERIFY(sourceInput->IsSyncSection());
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("f"));
+    AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", FetchingSourcesByIdx.size())(
+        "source_id", sourceInput->GetSourceId());
+    if (FetchingSources.size()) {
+        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", FetchingSourcesByIdx.size())(
+            "source_id", sourceInput->GetSourceId())("first_source_id", FetchingSources.front()->GetSourceId());
+    }
+    while (FetchingSources.size() && FetchingSources.front()->IsSyncSection() && FetchingSources.front()->HasStageResult() &&
+           SourcesCollection->IsSourceReadyForResult(FetchingSources.front())) {
+        auto source = FetchingSources.front();
+        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event", "ready_source")("source_id", source->GetSourceId());
+        auto resultChunk = source->MutableStageResult().ExtractResultChunk(false);
+        const bool isFinished = source->GetStageResult().IsFinished();
         std::optional<ui32> sourceIdxToContinue;
         if (!isFinished) {
-            sourceIdxToContinue = frontSource->GetSourceIdx();
+            sourceIdxToContinue = source->GetSourceIdx();
         }
-        if (table && table->num_rows()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx())("table", table->num_rows());
-            auto cursor = SourcesCollection->BuildCursor(frontSource, startIndex + recordsCount);
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table,
-                cursor, Context->GetCommonContext(), sourceIdxToContinue));
-            SourcesCollection->OnIntervalResult(table, frontSource);
+        if (resultChunk && resultChunk->HasData()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", source->GetSourceId())(
+                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
+            auto cursor = SourcesCollection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount());
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(source->GetResourceGuards(), source->GetGroupGuard(),
+                resultChunk->GetTable(), cursor, Context->GetCommonContext(), sourceIdxToContinue));
         } else if (sourceIdxToContinue) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", source->GetSourceId())(
+                "source_idx", source->GetSourceIdx());
             ContinueSource(*sourceIdxToContinue);
             break;
         }
         if (!isFinished) {
             break;
         }
-        AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
+        AFL_VERIFY(FetchingSourcesByIdx.erase(source->GetSourceIdx()));
+        source->ClearResult();
+        SourcesCollection->OnSourceFinished(source);
         FetchingSources.pop_front();
-        frontSource->ClearResult();
-        SourcesCollection->OnSourceFinished(frontSource);
+        if (SourcesCollection->IsFinished() && !SourcesCollection->HasWaitingSources()) {
+            FetchingSources.clear();
+        }
     }
 }
 
@@ -82,11 +84,8 @@ TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (!Context->IsActive()) {
-        return false;
-    }
     bool changed = false;
-    while (!SourcesCollection->IsFinished() && SourcesCollection->CheckInFlightLimits() && Context->IsActive()) {
+    while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
         auto source = SourcesCollection->ExtractNext();
         source->InitFetchingPlan(Context->GetColumnsFetchingPlan(source));
         source->StartProcessing(source);
@@ -111,7 +110,7 @@ void TScanHead::Abort() {
         i->Abort();
     }
     FetchingSources.clear();
-    SourcesCollection->Clear();
+    SourcesCollection->Abort();
     Y_ABORT_UNLESS(IsFinished());
 }
 

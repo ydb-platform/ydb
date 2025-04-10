@@ -59,8 +59,16 @@ public:
         AFL_VERIFY(Markers.erase(marker));
     }
 
-    bool IsEmptyFiltered() const {
+    bool IsEmptyFilter() const {
         return Filter->IsTotalDenyFilter();
+    }
+
+    bool HasData() const {
+        return Accessors.size();
+    }
+
+    bool IsEmptyData() const {
+        return Accessors.empty() || !GetRecordsCountActualVerified();
     }
 
     bool HasAccessors() const {

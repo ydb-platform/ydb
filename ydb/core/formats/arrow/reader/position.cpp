@@ -125,6 +125,12 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch) {
+    Fields = batch->GetSchema()->GetFields();
+    Columns = batch->GetColumns();
+    BuildPosition(position);
+}
+
 TSortableScanData::TSortableScanData(
     const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {

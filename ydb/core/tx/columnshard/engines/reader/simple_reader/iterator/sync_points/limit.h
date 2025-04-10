@@ -1,118 +1,7 @@
 #pragma once
-#include "source.h"
-
-#include "collections/abstract.h"
-
-#include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include "abstract.h"
 
 namespace NKikimr::NOlap::NReader::NSimple {
-
-class TPlainReadData;
-
-class ISyncPoint {
-private:
-    YDB_READONLY(ui32, PointIndex, 0);
-    YDB_READONLY_DEF(TString, PointName);
-    std::optional<ui32> LastSourceIdx;
-    virtual void OnSourceAdded(const std::shared_ptr<IDataSource>& source) = 0;
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source) const = 0;
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const = 0;
-
-protected:
-    std::shared_ptr<ISyncPoint> Next;
-    std::deque<std::shared_ptr<IDataSource>> SourcesSequentially;
-
-public:
-    ISyncPoint(const ui32 pointIndex, const TString& pointName)
-        : PointIndex(pointIndex)
-        , PointName(pointName) {
-    }
-
-    void AddSource(const std::shared_ptr<IDataSource>& source) {
-        source->SetPurposeSyncPoint(GetPointIndex());
-        AFL_VERIFY(!!source);
-        if (!LastSourceIdx) {
-            LastSourceIdx = source->GetSourceIdx();
-        } else {
-            AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx());
-        }
-        LastSourceIdx = source->GetSourceIdx();
-        SourcesSequentially.emplace_back(source);
-        source->InitFetchingPlan(BuildFetchingPlan());
-        source->StartProcessing(source);
-    }
-
-    void OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader) {
-        AFL_VERIFY(sourceInput->IsSyncSection());
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("f"));
-        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
-            "source_id", sourceInput->GetSourceId());
-        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event", "OnSourcePrepared")("syn_point", GetPointName())(
-            "source_id", sourceInput->GetSourceId());
-        if (SourcesSequentially.size()) {
-            AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
-                "source_id", sourceInput->GetSourceId())("first_source_id", SourcesSequentially.front()->GetSourceId());
-        }
-        while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
-            auto source = SourcesSequentially.front();
-            AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event", "ready_source")("source_id", source->GetSourceId());
-            if (OnSourceReady(source)) {
-                if (Next) {
-                    Next->AddSource(source);
-                } else {
-                    reader.GetScanner().MutableSourcesCollection().OnSourceFinished(source);
-                }
-                SourcesSequentially.pop_front();
-            } else {
-                break;
-            }
-        }
-    }
-};
-
-class TSyncPointResult: public ISyncPoint {
-private:
-    using TBase = ISyncPoint;
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const override {
-    }
-
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) const override {
-        auto resultChunk = source->MutableStageResult().ExtractResultChunk(false);
-        const bool isFinished = source->GetStageResult().IsFinished();
-        std::optional<ui32> sourceIdxToContinue;
-        if (!isFinished) {
-            sourceIdxToContinue = source->GetSourceIdx();
-        }
-        if (resultChunk && resultChunk->HasData()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", source->GetSourceId())(
-                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
-            auto cursor = SourcesCollection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount());
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(source->GetResourceGuards(), source->GetGroupGuard(),
-                resultChunk->GetTable(), cursor, Context->GetCommonContext(), sourceIdxToContinue));
-        } else if (sourceIdxToContinue) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", source->GetSourceId())(
-                "source_idx", source->GetSourceIdx());
-            source->ContinueSource(source);
-            return false;
-        }
-        if (!isFinished) {
-            return false;
-        }
-        AFL_VERIFY(FetchingSourcesByIdx.erase(source->GetSourceIdx()));
-        source->ClearResult();
-        return true;
-    }
-
-public:
-    TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex)
-        : TBase(pointIndex, "RESULT")
-        , Limit(limit) {
-    }
-};
 
 class TSyncPointLimitControl: public ISyncPoint {
 private:
@@ -263,16 +152,18 @@ private:
             TSourceIterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source)).second);
         AFL_VERIFY(Iterators.size());
         AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId());
-        DrainToLimit();
+        if (DrainToLimit()) {
+            reader.GetScanner().MutableSourcesCollection().Clear();
+        }
         return true;
     }
 
-    void DrainToLimit(TPlainReadData& reader) {
+    bool DrainToLimit() {
         while (Iterators.size()) {
             if (!Iterators.front().IsFilled()) {
                 auto it = FilledIterators.find(Iterators.front().GetSourceId());
                 if (it == FilledIterators.end()) {
-                    break;
+                    return false;
                 }
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "RemoveFilledIterator")("source_id", Iterators.front().GetSourceId())(
                     "fetched", FetchedCount)("limit", Limit);
@@ -292,12 +183,12 @@ private:
                 } else {
                     std::push_heap(Iterators.begin(), Iterators.end());
                     if (++FetchedCount >= Limit) {
-                        reader.GetScanner().MutableSourcesCollection().Clear();
-                        break;
+                        return true;
                     }
                 }
             }
         }
+        return false;
     }
 
 public:
@@ -305,59 +196,6 @@ public:
         : TBase(pointIndex, "SYNC_LIMIT")
         , Limit(limit) {
     }
-};
-
-class TScanHead {
-private:
-    std::shared_ptr<TSpecialReadContext> Context;
-    THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
-    std::deque<std::shared_ptr<IDataSource>> FetchingSources;
-    TPositiveControlInteger IntervalsInFlightCount;
-    std::unique_ptr<ISourcesCollection> SourcesCollection;
-
-    void StartNextSource(const std::shared_ptr<TPortionDataSource>& source);
-
-public:
-    void OnSourceCheckLimit(const std::shared_ptr<IDataSource>& source);
-
-    ISourcesCollection& MutableSourcesCollection() {
-        return *SourcesCollection;
-    }
-
-    ~TScanHead();
-
-    void ContinueSource(const ui32 sourceIdx) const {
-        auto it = FetchingSourcesByIdx.find(sourceIdx);
-        AFL_VERIFY(it != FetchingSourcesByIdx.end())("source_idx", sourceIdx)("count", FetchingSourcesByIdx.size());
-        it->second->ContinueCursor(it->second);
-    }
-
-    bool IsReverse() const;
-    void Abort();
-
-    bool IsFinished() const {
-        return FetchingSources.empty() && SourcesCollection->IsFinished();
-    }
-
-    const TReadContext& GetContext() const;
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "S:{" << SourcesCollection->DebugString() << "};";
-        sb << "F:";
-        for (auto&& i : FetchingSources) {
-            sb << i->GetSourceId() << ";";
-        }
-        return sb;
-    }
-
-    void OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader);
-
-    TConclusionStatus Start();
-
-    TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
-
-    [[nodiscard]] TConclusion<bool> BuildNextInterval();
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

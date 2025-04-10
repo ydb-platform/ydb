@@ -306,7 +306,7 @@ void TColumnShardScan::ContinueProcessing() {
             }
         }
     }
-    CheckHanging(false);
+    CheckHanging(true);
 }
 
 void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {

@@ -51,6 +51,10 @@ private:
     NArrow::TComparablePosition Value;
 
 public:
+    const NArrow::TComparablePosition& GetValue() const {
+        return Value;
+    }
+
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
         : Reverse(reverse)
         , Value(rk) {
@@ -138,6 +142,9 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
+    bool FinishedFlag = false;
+    bool StartedInLimitFlag = false;
+    std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
     std::optional<ui64> UsedRawBytes;
@@ -149,6 +156,39 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    ui32 GetPurposeSyncPointIndex() const {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        return *PurposeSyncPointIndex;
+    }
+
+    void ResetPurposeSyncPointIndex() {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        PurposeSyncPointIndex.reset();
+    }
+
+    ui32 SetPurposeSyncPointIndex(const ui32 value) {
+        AFL_VERIFY(!PurposeSyncPointIndex);
+        PurposeSyncPointIndex = value;
+    }
+
+    bool IsStartedInLimit() const {
+        return StartedInLimitFlag;
+    }
+    void MarkAsStartedInLimit() {
+        AFL_VERIFY(IsSyncSection());
+        AFL_VERIFY(!StartedInLimitFlag);
+        StartedInLimitFlag = true;
+    }
+    void MarkAsFinished() {
+        AFL_VERIFY(IsSyncSection());
+        AFL_VERIFY(!FinishedFlag);
+        FinishedFlag = true;
+    }
+
+    bool IsFinished() const {
+        return FinishedFlag;
+    }
+
     virtual void InitUsedRawBytes() = 0;
 
     ui64 GetUsedRawBytes() const {
@@ -437,6 +477,7 @@ private:
     YDB_READONLY(ui32, PortionIdx, 0);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
+    bool NeedForceToExtractFlag = false;
 
     virtual ui64 DoGetEntityId() const override {
         return SourceId;
@@ -446,6 +487,14 @@ private:
     }
 
 public:
+    bool NeedForceToExtract() const {
+        return NeedForceToExtractFlag;
+    }
+
+    void SetNeedForceToExtract() {
+        NeedForceToExtractFlag = true;
+    }
+
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }

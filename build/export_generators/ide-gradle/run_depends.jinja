@@ -20,35 +20,37 @@ tasks.compileTestKotlin.configure {
 {%     endif -%}
 {%- endmacro -%}
 
-{%- if target.custom_runs|length -%}
-{%-     for obj in target.custom_runs -%}
-{%-         if obj['_parent_object_index'] %}
+{%- macro ObjDepends(obj) -%}
+{%-     set taskvar = "codegen" + obj['_object_index'] -%}
+{%-     if obj['_parent_object_index'] -%}
+{%-         set parent_taskvar = "codegen" + obj['_parent_object_index'] %}
 
-codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
-{%-         else -%}
-{{ TopDepends("codegen" + obj['_object_index'])}}
-{%-         endif  -%}
+tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
+{%-     else -%}
+{{ TopDepends(taskvar) }}
+{%-     endif  -%}
+{%- endmacro -%}
+
+{%- if target.custom_runs|length -%}
+{%-     for custom_run in target.custom_runs -%}
+{{ ObjDepends(custom_run) }}
 {%-     endfor -%}
 {%- endif -%}
 
 {%- if target.runs|length -%}
-{%-     for obj in target.runs -%}
-{%-         if obj['_parent_object_index'] %}
-
-codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
-{%-         else -%}
-{{ TopDepends("codegen" + obj['_object_index'])}}
-{%-         endif  -%}
+{%-     for run in target.runs -%}
+{{ ObjDepends(run) }}
 {%-     endfor -%}
 {%- endif -%}
 
 {%- if copies|length -%}
-{%-     for obj in copies -%}
-{%-         if obj['_parent_object_index'] %}
+{%-     for copy in copies -%}
+{{ ObjDepends(copy) }}
+{%-     endfor -%}
+{%- endif -%}
 
-codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
-{%-         else -%}
-{{ TopDepends("codegen" + obj['_object_index'])}}
-{%-         endif  -%}
+{%- if moves|length -%}
+{%-     for move in moves -%}
+{{ ObjDepends(move) }}
 {%-     endfor -%}
 {%- endif -%}

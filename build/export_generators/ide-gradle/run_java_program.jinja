@@ -1,7 +1,7 @@
 {%- if target.runs|length -%}
 {%-     for run in target.runs %}
 
-val codegen{{ run['_object_index'] }} = task<JavaExec>("runJavaProgram{{ run['_object_index'] }}") {
+val codegen{{ run['_object_index'] }} = task<JavaExec>("codegen{{ run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run java program"
 

@@ -1,4 +1,4 @@
-{%- if not proto_template and (target.runs|length or target.custom_runs|length) %}
+{%- if not proto_template and (target.runs|length or target.custom_runs|length or copies|length or moves|length) %}
 
 tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
 {%-     if with_kotlin %}

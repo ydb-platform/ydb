@@ -10,7 +10,7 @@
 {%-         set dst_path = dst_split[0] -%}
 {%-         set dst_name = dst_split[1] %}
 
-val codegen{{ copy['_object_index'] }} = tasks.register<Copy>("copy{{ copy['_object_index'] }}") {
+val codegen{{ copy['_object_index'] }} = tasks.register<Copy>("codegen{{ copy['_object_index'] }}") {
     from({{ PatchRoots(src_path) }}) {
         include("{{ src_name }}")
     }

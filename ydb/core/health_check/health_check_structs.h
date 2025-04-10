@@ -1,5 +1,6 @@
 #pragma once
 #include "health_check_utils.h"
+
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -448,7 +449,7 @@ struct TRequestResponse {
         constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {IsSuccess(r);};
         if constexpr (hasErrorCheck) {
             if (!IsSuccess(response)) {
-                Error(GetError(response));
+                Error(NKikimr::NHealthCheck::GetError(response));
                 return;
             }
         }

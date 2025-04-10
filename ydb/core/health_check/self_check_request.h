@@ -117,29 +117,6 @@ public:
         TimeoutFinal,
     };
 
-    static bool IsSuccess(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
-        return ev->GetRecord().status() == NKikimrScheme::StatusSuccess;
-    }
-
-    static TString GetError(const std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
-        return NKikimrScheme::EStatus_Name(ev->GetRecord().status());
-    }
-
-    static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {
-        return ev->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok;
-    }
-
-    static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev) {
-        switch (ev->Status) {
-            case TEvStateStorage::TEvBoardInfo::EStatus::Ok:
-                return "Ok";
-            case TEvStateStorage::TEvBoardInfo::EStatus::Unknown:
-                return "Unknown";
-            case TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable:
-                return "NotAvailable";
-        }
-    }
-
     TString FilterDatabase;
     THashMap<TSubDomainKey, TString> FilterDomainKey;
     TVector<TActorId> PipeClients;
@@ -1263,46 +1240,36 @@ public:
         }
     }
 
-    struct TCtx;
-    using TCtx = TBuilderContext<
-        TBuilderResult<TCtx>,
-        TBuilderDatabase<TCtx>,
-        TBuilderCompute<TCtx>,
-        TBuilderSystemTablets<TCtx>,
-        TBuilderTablets<TCtx>,
-        TBuilderStorage<TCtx>,
-        TBuilderStoragePool<TCtx>,
-        TBuilderStorageGroup<TCtx>,
-        TBuilderStorageVDisk<TCtx>,
-        TBuilderStoragePDisk<TCtx>,
-        TBuilderStorageGroupWithWhiteboard<TCtx>,
-        TBuilderStorageVDiskWithWhiteboard<TCtx>,
-        TBuilderStoragePDiskWithWhiteboard<TCtx>
-    >;
+    TIntrusivePtr<TBuilderContext> MakeBuilders() {
+        TIntrusivePtr<TBuilderContext> builders = MakeIntrusive<TBuilderContext>();
+        builders->Result = MakeHolder<TBuilderResult<TBuilderContext>>(builders, DomainPath, FilterDatabase, HaveAllBSControllerInfo(),
+                                                            DatabaseState, StoragePoolState, StoragePoolSeen,
+                                                            StoragePoolStateByName, StoragePoolSeenByName);
+        builders->Database = MakeHolder<TBuilderDatabase<TBuilderContext>>(builders, IsSpecificDatabaseFilter());
+        builders->Compute = MakeHolder<TBuilderCompute<TBuilderContext>>(builders, FilterDomainKey, MergedNodeSystemState,
+                                                            DatabaseState, ReturnHints, OverloadedShardHints);
+        builders->ComputeDatabase = MakeHolder<TBuilderComputeDatabase>(DescribeByPath);
+        builders->ComputeNode = MakeHolder<TBuilderComputeNode<TBuilderContext>>(builders, HealthCheckConfig, MergedNodeSystemState);
+        builders->SystemTablets = MakeHolder<TBuilderSystemTablets<TBuilderContext>>(builders, TabletRequests, Timeout.MilliSeconds());
+        builders->Tablets = MakeHolder<TBuilderTablets<TBuilderContext>>(builders);
+        builders->Storage = MakeHolder<TBuilderStorage<TBuilderContext>>(builders, HaveAllBSControllerInfo(), StoragePoolState, StoragePoolSeen,
+                                                            StoragePoolStateByName, StoragePoolSeenByName);
+        builders->StoragePool = MakeHolder<TBuilderStoragePool<TBuilderContext>>(builders, HaveAllBSControllerInfo(), UnknownStaticGroups, MergedBSGroupState, Request->Request.merge_records());
+        builders->StorageGroup = MakeHolder<TBuilderStorageGroup<TBuilderContext>>(builders, GroupState, VDiskStatuses);
+        builders->VDisk = MakeHolder<TBuilderVDisk<TBuilderContext>>(builders, MergedNodeInfo);
+        builders->PDisk = MakeHolder<TBuilderPDisk>(PDisksMap);
+        builders->StorageGroupWithWhiteboard = MakeHolder<TBuilderStorageGroupWithWhiteboard<TBuilderContext>>(builders, MergedVDiskState, MergedNodeInfo);
+        builders->VDiskWithWhiteboard = MakeHolder<TBuilderVDiskWithWhiteboard<TBuilderContext>>(builders, MergedPDiskState);
+        builders->PDiskWithWhiteboard = MakeHolder<TBuilderPDiskWithWhiteboard>(MergedNodeInfo, UnavailableStorageNodes);
+        builders->Node = MakeHolder<TBuilderNode>(MergedNodeInfo);
 
-    THolder<TCtx> MakeBuilderContext() {
-        auto ctx = MakeHolder<TCtx>();
-        ctx->BuilderResult = MakeHolder<TBuilderResult<TCtx>>(*ctx, domainPath, filterDatabase, haveAllBSControllerInfo,
-                                                            databaseState, storagePoolState, storagePoolSeen,
-                                                            storagePoolStateByName, storagePoolSeenByName);
-        ctx->BuilderDatabase = MakeHolder<TBuilderDatabase<TCtx>>(*ctx, isSpecificDatabaseFilter);
-        ctx->BuilderCompute = MakeHolder<TBuilderCompute<TCtx>>(*ctx, filterDomainKey, mergedNodeSystemState);
-        ctx->BuilderSystemTablets = MakeHolder<TBuilderSystemTablets<TCtx>>(*ctx);
-        ctx->BuilderTablets = MakeHolder<TBuilderTablets<TCtx>>(*ctx);
-        ctx->BuilderStorage = MakeHolder<TBuilderStorage<TCtx>>(*ctx);
-        ctx->BuilderStoragePool = MakeHolder<TBuilderStoragePool<TCtx>>(*ctx);
-        ctx->BuilderStorageGroup = MakeHolder<TBuilderStorageGroup<TCtx>>(*ctx);
-        ctx->BuilderStorageVDisk = MakeHolder<TBuilderStorageVDisk<TCtx>>(*ctx);
-        ctx->BuilderStoragePDisk = MakeHolder<TBuilderStoragePDisk<TCtx>>(*ctx);
-        ctx->BuilderStorageGroupWithWhiteboard = MakeHolder<TBuilderStorageGroupWithWhiteboard<TCtx>>(*ctx);
-        ctx->BuilderStorageVDiskWithWhiteboard = MakeHolder<TBuilderStorageVDiskWithWhiteboard<TCtx>>(*ctx);
-        ctx->BuilderStoragePDiskWithWhiteboard = MakeHolder<TBuilderStoragePDiskWithWhiteboard<TCtx>>(*ctx);
+        return builders;
     }
 
     void ReplyAndPassAway() {
         Span.Event("ReplyAndPassAway");
         THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
-        Ydb::Monitoring::SelfCheckResult& result = builder;
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         AggregateHiveInfo();
         AggregateHiveNodeStats();
@@ -1313,11 +1280,11 @@ public:
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
         }
 
-        auto builder = MakeBuilder();
-        builder.Result.Build({&result});
+        auto builders = MakeBuilders();
+        builders->Result->Fill(&result);
         RemoveUnrequestedEntries(result, Request->Request);
 
-        FillNodeInfo(SelfId().NodeId(), result.mutable_location());
+        builders->Node->Fill(SelfId().NodeId(), result.mutable_location());
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last
@@ -1354,50 +1321,6 @@ public:
         PassAway();
     }
 
-    class TSelfCheckBuilder {
-public:
-    THolder<IBuilderResult> Result;
-    THolder<IBuilderDatabase> Database;
-    THolder<IBuilderCompute> Compute;
-    THolder<IBuilderComputeDatabase> ComputeDatabase;
-    THolder<IBuilderComputeNode> ComputeNode;
-    THolder<IBuilderStorage> Storage;
-    THolder<IBuilderStoragePool> StoragePool;
-    THolder<IBuilderStorageGroup> StorageGroup;
-    THolder<IBuilderStorageVDisk> StorageVDisk;
-    THolder<IBuilderStoragePDisk> StoragePDisk;
-    THolder<IBuilderStorageGroupWithWhiteboard> StorageGroupWithWhiteboard;
-    THolder<IBuilderStorageVDiskWithWhiteboard> StorageVDiskWithWhiteboard;
-    THolder<IBuilderStoragePDiskWithWhiteboard> StoragePDiskWithWhiteboard;
-
-    void Init(THolder<IBuilderResult> result,
-                      THolder<IBuilderDatabase> database,
-                      THolder<IBuilderCompute> compute,
-                      THolder<IBuilderComputeDatabase> computeDatabase,
-                      THolder<IBuilderComputeNode> computeNode,
-                      THolder<IBuilderStorage> storage,
-                      THolder<IBuilderStoragePool> storagePool,
-                      THolder<IBuilderStorageGroup> storageGroup,
-                      THolder<IBuilderStorageGroupWithWhiteboard> storageGroupWithWhiteboard,
-                      THolder<IBuilderStoragePDisk> storagePDisk,
-                      THolder<IBuilderStoragePDiskWithWhiteboard> storagePDiskWithWhiteboard,
-                      THolder<IBuilderStorageVDisk> storageVDisk,
-                      THolder<IBuilderStorageVDiskWithWhiteboard> storageVDiskWithWhiteboard) {
-        Result = std::move(result);
-        Database = std::move(database);
-        Compute = std::move(compute);
-        ComputeDatabase = std::move(computeDatabase);
-        ComputeNode = std::move(computeNode);
-        Storage = std::move(storage);
-        StoragePool = std::move(storagePool);
-        StorageGroup = std::move(storageGroup);
-        StorageGroupWithWhiteboard = std::move(storageGroupWithWhiteboard);
-        StoragePDisk = std::move(storagePDisk);
-        StoragePDiskWithWhiteboard = std::move(storagePDiskWithWhiteboard);
-        StorageVDisk = std::move(storageVDisk);
-        StorageVDiskWithWhiteboard = std::move(storageVDiskWithWhiteboard);
-    }
-};
 };
 
 } // NKikimr::NHealthCheck

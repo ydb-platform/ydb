@@ -100,7 +100,6 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     scale: int = 100
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {

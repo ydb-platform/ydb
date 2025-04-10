@@ -20,7 +20,7 @@ void TMinStats::Resize(ui32 count) {
 }
 
 void TMinStats::Set(ui32 index, ui64 value) {
-    Y_ASSERT(index < Values.size());
+    AFL_ENSURE(index < Values.size());
     auto maybeMin = Values[index] == MinValue;
     Values[index] = value;
     if (maybeMin) {
@@ -33,7 +33,7 @@ void TMaxStats::Resize(ui32 count) {
 }
 
 void TMaxStats::Set(ui32 index, ui64 value) {
-    Y_ASSERT(index < Values.size());
+    AFL_ENSURE(index < Values.size());
     auto isMonotonic = value >= Values[index];
     Values[index] = value;
     MaxValue = isMonotonic ? (value > MaxValue ? value : MaxValue) : ExportMaxStats(Values);
@@ -65,7 +65,7 @@ void TTimeSeriesStats::Resize(ui32 count) {
 
 void TTimeSeriesStats::SetNonZero(ui32 index, ui64 value) {
     if (value) {
-        Y_ASSERT(index < Values.size());
+        AFL_ENSURE(index < Values.size());
         Sum += value;
         Sum -= Values[index];
         Values[index] = value;
@@ -150,12 +150,12 @@ void TPartitionedStats::ResizeByParts(ui32 partCount, ui32 taskCount) {
 
 void TPartitionedStats::SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
     if (value) {
-        Y_ASSERT(partIndex < Parts.size());
+        AFL_ENSURE(partIndex < Parts.size());
         auto& part = Parts[partIndex];
         auto delta = value - part[taskIndex];
-        Y_ASSERT(taskIndex < part.size());
+        AFL_ENSURE(taskIndex < part.size());
         part[taskIndex] = value;
-        Y_ASSERT(partIndex < Values.size());
+        AFL_ENSURE(partIndex < Values.size());
         Values[partIndex] += delta;
         Sum += delta;
         if (recordTimeSeries) {
@@ -394,7 +394,7 @@ inline void SetNonZero(ui64& target, ui64 source) {
 }
 
 inline void SetNonZero(std::vector<ui64>& vector, ui32 index, ui64 value) {
-    Y_ASSERT(index < vector.size());
+    AFL_ENSURE(index < vector.size());
     SetNonZero(vector[index], value);
 }
 
@@ -426,7 +426,7 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     aggrAsyncStats.WaitTimeUs.SetNonZero(index, asyncStats.GetWaitTimeUs());
     SetNonZero(aggrAsyncStats.WaitPeriods, index, asyncStats.GetWaitPeriods());
     if (firstMessageMs && lastMessageMs > firstMessageMs) {
-        Y_ASSERT(index < aggrAsyncStats.ActiveTimeUs.size());
+        AFL_ENSURE(index < aggrAsyncStats.ActiveTimeUs.size());
         aggrAsyncStats.ActiveTimeUs[index] = lastMessageMs - firstMessageMs;
     }
 
@@ -1235,9 +1235,9 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
 }
 
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state) {
-    Y_ASSERT(stats.GetTasks().size() == 1);
+    AFL_ENSURE(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
-    Y_ASSERT(taskStats.GetTaskId() == taskId);
+    AFL_ENSURE(taskStats.GetTaskId() == taskId);
     auto stageId = TasksGraph->GetTask(taskId).StageId;
     auto [it, inserted] = StageStats.try_emplace(stageId);
     if (inserted) {
@@ -1246,7 +1246,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
     }
     BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
-    constexpr ui64 deadline = 60'000'000; // 60s
+    constexpr ui64 deadline = 600'000'000; // 10m
     if (it->second.CurrentWaitOutputTimeUs.MinValue > deadline) {
         for (auto stat : it->second.OutputStages) {
             if (stat->IsDeadlocked(deadline)) {

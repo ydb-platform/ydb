@@ -801,7 +801,7 @@ TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit,
             result.Add(false, totalRecordsCount - limit);
         }
     } else {
-        AFL_VERIFY_DEBUG(GetRecordsCountVerified() == totalRecordsCount)("total", GetRecordsCountVerified())("ext", totalRecordsCount);
+        AFL_VERIFY(GetRecordsCountVerified() == totalRecordsCount)("total", GetRecordsCountVerified())("ext", totalRecordsCount);
         ui32 cutCount = 0;
         bool currentValue = reverse ? LastValue : GetStartValue();
         const auto scan = [&](auto begin, auto end) {

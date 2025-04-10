@@ -1,46 +1,14 @@
 # MATCH_RECOGNIZE
 
-Recognizing patterns in a sequence of rows has been a widely desired feature, but it was not possible until recently with SQL. There were workarounds available, but they were inefficient, difficult to implement and hard to comprehend. Now, the MATCH_RECOGNIZE clause allows you to do this in SQL efficiently.
-
-The ability to recognize patterns across multiple rows is important for various business areas, such as fraud detection, pricing analysis in finance, and sensor data processing. This area is known as Complex event processing (CEP), and pattern recognition is a valuable tool for this.
-
-Here is a hands-on example of pattern recognizing in a data table produced by an IoT device, where pressing its buttons triggers certain events. Let's assume you need to find and process the following sequence of button clicks: `button 1`, `button 2`, and `button 3`.
-
-The structure of the data to transmit is as follows:
-
-|ts|button|device_id|zone_id|
-|:-:|:-:|:-:|:-:|
-|1700000000|1|1|24|
-|1701000000|2|2|12|
-
-The body of the SQL query looks like this:
-
-```sql
-PRAGMA FeatureR010="prototype"; -- pragma for enabling functionality
-
-SELECT * FROM bindings.input_table MATCH_RECOGNIZE ( -- Performing pattern matching from input_table
-    PARTITION BY device_id, zone_id -- Partitioning the input data into groups by columns device_id and zone_id
-    ORDER BY ts -- Viewing events based on the ts column data sorted ascending
-    MEASURES
-        LAST(B1.ts) AS b1, -- Going to get the latest timestamp of clicking button 1 in the query results
-        LAST(B3.ts) AS b3  -- Going to get the latest timestamp of clicking button 3 in the query results
-    ONE ROW PER MATCH            -- Going to get one result row per match hit
-    AFTER MATCH SKIP TO NEXT ROW -- Going to move to the next row once the match is found
-    PATTERN (B1 B2+ B3) -- Searching for a pattern that includes one button 1 click, one or more button 2 clicks, and one button 3 click
-    DEFINE
-        B1 AS B1.button = 1, -- Defining the B1 variable as event of clicking button 1 (the button field equals 1)
-        B2 AS B2.button = 2, -- Defining the B2 variable as event of clicking button 2 (the button field equals 2)
-        B3 AS B3.button = 3  -- Defining the B3 variable as event of clicking button 3 (the button field equals 3)
-);
-```
+The `MATCH_RECOGNIZE` expression performs pattern recognition in a sequence of rows and returns the found results. This functionality is important for various business areas, such as fraud detection, pricing analysis in finance, and sensor data processing. This area is known as Complex Event Processing (CEP), and pattern recognition is a valuable tool for this. An example of how `MATCH_RECOGNIZE` works is provided in the [link](#example).
 
 ## Data processing algorithm
 
 The `MATCH_RECOGNIZE` expression performs the following actions:
 
-1. The input table is divided into partitions. Each partition consists of a set of rows from the input table with identical values in the columns listed after `PARTITION BY`.
-2. Each partition is ordered according to the `ORDER BY` clause.
-3. Recognition of pattern from `PATTERN` is performed independently in each ordered partition.
+1. The input table is divided into non-overlapping groups. Each group consists of a set of rows from the input table with identical values in the columns listed after `PARTITION BY`.
+2. Each group is ordered according to the `ORDER BY` clause.
+3. Recognition of pattern from `PATTERN` is performed independently in each ordered group.
 4. Pattern search in the sequence of rows is a step-by-step process: rows are checked one by one if they fit the pattern. Among all matches starting in the earliest row, the one consisting of the largest number of rows is selected. If no matches were found starting in the earliest row, the search continues starting from the next row.
 5. After a match is found, the columns defined by expressions in the `MEASURES` block are calculated.
 6. Depending on the `ROWS PER MATCH` mode, one or all rows for the found match are output.
@@ -60,7 +28,7 @@ MATCH_RECOGNIZE (
 )
 ```
 
-Here is a brief description of the SQL syntax elements of the `MATCH_RECOGNIZE` command:
+Here is a brief description of the SQL syntax elements of the `MATCH_RECOGNIZE` expression:
 
 * [`DEFINE`](#define): Block for declaring variables that describe the search pattern and the conditions that rows must meet for each variable.
 * [`PATTERN`](#pattern): [Regular expressions](https://en.wikipedia.org/wiki/Regular_expressions) describing the search pattern.
@@ -334,7 +302,7 @@ PARTITION BY <partition_1> [ ... , <partition_N> ]
 <partition> ::= { <column_names> | <expression> }
 ```
 
-`PARTITION BY` is the expression partitions the source data into multiple non-overlapping groups, each used for an independent pattern search. If the command is not specified, all data is processed as a single group. Records with the same values of the columns listed after `PARTITION BY` fall into the same group.
+`PARTITION BY` partitions the source data into multiple non-overlapping groups, each used for an independent pattern search. If the expression is not specified, all data is processed as a single group. Records with the same values of the columns listed after `PARTITION BY` fall into the same group.
 
 #### **Example** {#partition_by-example}
 
@@ -344,9 +312,42 @@ PARTITION BY device_id, zone_id
 
 ## Limitations {#limitations}
 
-Our support for the `MATCH_RECOGNIZE` command will eventually comply with [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
+Our support for the `MATCH_RECOGNIZE` expression will eventually comply with [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
 
 - [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
 - [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
 - [`PATTERN`](#pattern). Union pattern variables are not implemented.
 - [`DEFINE`](#define). Aggregation functions are not supported.
+
+## Example of usage {#example}
+
+Here is a hands-on example of pattern recognizing in a data table produced by an IoT device, where pressing its buttons triggers certain events. Let's assume you need to find and process the following sequence of button clicks: `button 1`, `button 2`, and `button 3`.
+
+The structure of the data to transmit is as follows:
+
+|ts|button|device_id|zone_id|
+|:-:|:-:|:-:|:-:|
+|100|1|17|3|
+|200|2|17|3|
+|300|3|17|3|
+
+The body of the SQL query looks like this:
+
+```sql
+PRAGMA FeatureR010="prototype"; -- pragma for enabling MATCH_RECOGNIZE
+
+SELECT * FROM input MATCH_RECOGNIZE ( -- Performing pattern matching from input
+    PARTITION BY device_id, zone_id -- Partitioning the input data into groups by columns device_id and zone_id
+    ORDER BY ts -- Viewing events based on the ts column data sorted ascending
+    MEASURES
+        LAST(B1.ts) AS b1, -- Going to get the latest timestamp of clicking button 1 in the query results
+        LAST(B3.ts) AS b3  -- Going to get the latest timestamp of clicking button 3 in the query results
+    ONE ROW PER MATCH            -- Going to get one result row per match hit
+    AFTER MATCH SKIP TO NEXT ROW -- Going to move to the next row once the match is found
+    PATTERN (B1 B2+ B3) -- Searching for a pattern that includes one button 1 click, one or more button 2 clicks, and one button 3 click
+    DEFINE
+        B1 AS B1.button = 1, -- Defining the B1 variable as event of clicking button 1 (the button field equals 1)
+        B2 AS B2.button = 2, -- Defining the B2 variable as event of clicking button 2 (the button field equals 2)
+        B3 AS B3.button = 3  -- Defining the B3 variable as event of clicking button 3 (the button field equals 3)
+);
+```

@@ -1,4 +1,3 @@
-#pragma clang system_header
 // Copyright 2019 The TCMalloc Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@
 
 #include <atomic>
 #include <type_traits>
-#include <version>
 
 #include "tcmalloc/internal/config.h"
 

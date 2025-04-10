@@ -14,18 +14,18 @@
 
 #include "tcmalloc/internal/mincore.h"
 
-#include <errno.h>
-#include <stddef.h>
-#include <string.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <set>
 
-#include "benchmark/benchmark.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "tcmalloc/internal/page_size.h"
+#include "benchmark/benchmark.h"
+#include "tcmalloc/internal/logging.h"
 
 namespace tcmalloc {
 namespace tcmalloc_internal {
@@ -41,7 +41,7 @@ class MInCoreMock : public MInCoreInterface {
 
   // Implementation of minCore that reports presence based on provided array.
   int mincore(void* addr, size_t length, unsigned char* result) override {
-    const size_t kPageSize = GetPageSize();
+    const size_t kPageSize = getpagesize();
     uintptr_t uAddress = reinterpret_cast<uintptr_t>(addr);
     // Check that we only pass page aligned addresses into mincore().
     EXPECT_THAT(uAddress & (kPageSize - 1), Eq(0));
@@ -87,9 +87,9 @@ namespace {
 
 using ::testing::Eq;
 
-TEST(MInCoreTest, TestResidence) {
+TEST(StaticVarsTest, TestResidence) {
   MInCoreTest mct;
-  const size_t kPageSize = GetPageSize();
+  const size_t kPageSize = getpagesize();
 
   // Set up a pattern with a few resident pages.
   // page 0 not mapped
@@ -141,10 +141,10 @@ TEST(MInCoreTest, TestResidence) {
 }
 
 // Test whether we are correctly handling multiple calls to mincore.
-TEST(MInCoreTest, TestLargeResidence) {
+TEST(StaticVarsTest, TestLargeResidence) {
   MInCoreTest mct;
   uintptr_t uAddress = 0;
-  const size_t kPageSize = GetPageSize();
+  const size_t kPageSize = getpagesize();
   // Set up a pattern covering 6 * page size *  MInCore::kArrayLength to
   // allow us to test for situations where the region we're checking
   // requires multiple calls to mincore().
@@ -164,8 +164,8 @@ TEST(MInCoreTest, TestLargeResidence) {
   }
 }
 
-TEST(MInCoreTest, UnmappedMemory) {
-  const size_t kPageSize = GetPageSize();
+TEST(StaticVarsTest, UnmappedMemory) {
+  const size_t kPageSize = getpagesize();
   const int kNumPages = 16;
 
   // Overallocate kNumPages of memory, so we can munmap the page before and
@@ -181,17 +181,9 @@ TEST(MInCoreTest, UnmappedMemory) {
   memset(q, 0, kNumPages * kPageSize);
   ::benchmark::DoNotOptimize(q);
 
-  EXPECT_EQ(0, MInCore::residence(nullptr, kPageSize));
-  EXPECT_EQ(0, MInCore::residence(p, kPageSize));
   for (int i = 0; i <= kNumPages; i++) {
     EXPECT_EQ(i * kPageSize, MInCore::residence(q, i * kPageSize));
   }
-
-  // Note we can only query regions that are entirely mapped, but we should also
-  // test the edge case of incomplete pages.
-  EXPECT_EQ((kNumPages - 1) * kPageSize,
-            MInCore::residence(reinterpret_cast<char*>(q) + 7,
-                               (kNumPages - 1) * kPageSize));
 
   ASSERT_EQ(munmap(q, kNumPages * kPageSize), 0);
 }

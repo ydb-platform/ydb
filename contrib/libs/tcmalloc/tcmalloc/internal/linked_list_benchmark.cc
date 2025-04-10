@@ -19,7 +19,6 @@
 
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
-#include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/linked_list.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/mock_span.h"
@@ -34,6 +33,7 @@ void BM_PushPop(benchmark::State& state) {
   const int sequential_calls = state.range(1);
 
   LinkedList list;
+  list.Init();
   const size_t size = pointers * sizeof(void*);
 
   std::vector<void*> v(sequential_calls);
@@ -68,6 +68,7 @@ void BM_PushPopBatch(benchmark::State& state) {
   const int batch_size = state.range(1);
 
   LinkedList list;
+  list.Init();
   const size_t size = pointers * sizeof(void*);
 
   const int kNumberOfObjects = 64 << 10;
@@ -111,7 +112,7 @@ static void BM_AppendRemove(benchmark::State& state) {
   // Create MockSpans in append order
   for (int i = 0; i < sequential_calls; i++) {
     MockSpan* s = MockSpan::New(i);
-    TC_CHECK_NE(s, nullptr);
+    CHECK_CONDITION(s != nullptr);
     vappend[i] = s;
   }
 

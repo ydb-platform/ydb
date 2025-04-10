@@ -14,16 +14,8 @@
 
 #include "tcmalloc/internal/timeseries_tracker.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <vector>
-
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/base/internal/cycleclock.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "tcmalloc/internal/clock.h"
 
 using ::testing::ElementsAre;
 
@@ -80,7 +72,8 @@ TEST(TimeSeriesTest, CycleClock) {
   int num_timestamps = 0;
   int offset_1, offset_2;
   tracker.Iter(
-      [&](size_t offset, const TimeSeriesTrackerTest::TestEntry& e) {
+      [&](size_t offset, int64_t ts,
+          const TimeSeriesTrackerTest::TestEntry& e) {
         ASSERT_LT(num_timestamps, 2);
         if (num_timestamps == 0) {
           offset_1 = offset;
@@ -99,6 +92,7 @@ TEST(TimeSeriesTest, CycleClock) {
 }
 
 TEST_F(TimeSeriesTrackerTest, Works) {
+  const int64_t kEpochLength = absl::ToInt64Nanoseconds(kDuration) / 8;
   Advance(kDuration);
 
   tracker_.Report(1);
@@ -111,13 +105,17 @@ TEST_F(TimeSeriesTrackerTest, Works) {
   int num_timestamps = 0;
   int offset_1, offset_2;
   tracker_.Iter(
-      [&](size_t offset, const TestEntry& e) {
+      [&](size_t offset, int64_t ts, const TestEntry& e) {
         ASSERT_LT(num_timestamps, 2);
         if (num_timestamps == 0) {
           offset_1 = offset;
+          EXPECT_EQ(absl::ToInt64Nanoseconds(kDuration), ts);
           EXPECT_THAT(e.values_, ElementsAre(1, 2));
         } else {
           offset_2 = offset;
+          EXPECT_EQ(absl::ToInt64Nanoseconds(kDuration) +
+                        absl::ToInt64Nanoseconds(kDuration) / 4,
+                    ts);
           EXPECT_THAT(e.values_, ElementsAre(4));
         }
         num_timestamps++;
@@ -130,11 +128,14 @@ TEST_F(TimeSeriesTrackerTest, Works) {
   Advance(kDuration / 4);
 
   // Iterate through entries not skipping empty entries.
+  int64_t expected_timestamp = absl::ToInt64Nanoseconds(kDuration) / 4;
   num_timestamps = 0;
 
   tracker_.Iter(
-      [&](size_t offset, const TestEntry& e) {
+      [&](size_t offset, int64_t ts, const TestEntry& e) {
+        expected_timestamp += kEpochLength;
         ASSERT_LT(num_timestamps, 8);
+        EXPECT_EQ(expected_timestamp, ts);
         num_timestamps++;
       },
       tracker_.kDoNotSkipEmptyEntries);
@@ -147,10 +148,13 @@ TEST_F(TimeSeriesTrackerTest, Works) {
 
   // Iterate backwards.
   num_timestamps = 0;
+  expected_timestamp =
+      7 * absl::ToInt64Nanoseconds(kDuration) / 4;  // Current time
   tracker_.IterBackwards(
-      [&](size_t offset, const TestEntry& e) {
+      [&](size_t offset, int64_t ts, const TestEntry& e) {
         ASSERT_LT(num_timestamps, 3);
         EXPECT_EQ(num_timestamps, offset);
+        EXPECT_EQ(expected_timestamp, ts);
         if (num_timestamps == 0) {
           EXPECT_THAT(e.values_, ElementsAre(16));
         } else if (num_timestamps == 1) {
@@ -158,6 +162,7 @@ TEST_F(TimeSeriesTrackerTest, Works) {
         } else {
           EXPECT_THAT(e.values_, ElementsAre(8));
         }
+        expected_timestamp -= kEpochLength;
         num_timestamps++;
       },
       3);
@@ -169,12 +174,12 @@ TEST_F(TimeSeriesTrackerTest, Works) {
   EXPECT_TRUE(tracker_.GetEpochAtOffset(3).empty());
   EXPECT_TRUE(tracker_.GetEpochAtOffset(1000).empty());
 
-  // This should annihilate everything.
+  // This should annilate everything.
   Advance(kDuration * 2);
   tracker_.UpdateTimeBase();
   tracker_.Iter(
-      [&](size_t offset, const TestEntry& e) {
-        FAIL() << "Time series should be empty";
+      [&](size_t offset, int64_t ts, const TestEntry& e) {
+        ASSERT_TRUE(false) << "Time series should be empty";
       },
       tracker_.kSkipEmptyEntries);
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,14 +20,12 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include <limits>
 #include <string>
 #include <thread>  // NOLINT(build/c++11)
 
-#include "benchmark/benchmark.h"
 #include "gtest/gtest.h"
 #include "absl/strings/str_cat.h"
-#include "absl/time/time.h"
+#include "benchmark/benchmark.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/memory_stats.h"
 #include "tcmalloc/internal/parameter_accessors.h"
@@ -38,16 +37,16 @@ namespace {
 int64_t MemoryUsageSlow(pid_t pid) {
   int64_t ret = 0;
 
-  FILE* f =
+  FILE *f =
       fopen(absl::StrCat("/proc/", pid, "/task/", pid, "/smaps").c_str(), "r");
-  TC_CHECK_NE(f, nullptr);
+  CHECK_CONDITION(f != nullptr);
 
   char buf[BUFSIZ];
   while (fgets(buf, sizeof(buf), f) != nullptr) {
     size_t rss;
     if (sscanf(buf, "Rss: %zu kB", &rss) == 1) ret += rss;
   }
-  TC_CHECK(feof(f));
+  CHECK_CONDITION(feof(f));
   fclose(f);
 
   // Rss is reported in KiB
@@ -56,7 +55,7 @@ int64_t MemoryUsageSlow(pid_t pid) {
   // A sanity check: our return value should be in the same ballpark as
   // GetMemoryStats.
   tcmalloc::tcmalloc_internal::MemoryStats stats;
-  TC_CHECK(tcmalloc::tcmalloc_internal::GetMemoryStats(&stats));
+  CHECK_CONDITION(tcmalloc::tcmalloc_internal::GetMemoryStats(&stats));
   EXPECT_GE(ret, 0.9 * stats.rss);
   EXPECT_LE(ret, 1.1 * stats.rss);
 
@@ -69,7 +68,7 @@ class ThreadCacheTest : public ::testing::Test {
     // Explicitly disable guarded allocations for this test.  For aggressive
     // sample rates on PPC (with 64KB pages), RSS grows quickly due to
     // page-sized allocations that we don't release.
-    MallocExtension::SetGuardedSamplingInterval(-1);
+    MallocExtension::SetGuardedSamplingRate(-1);
   }
 };
 
@@ -82,7 +81,7 @@ TEST_F(ThreadCacheTest, NoLeakOnThreadDestruction) {
   // Force a small sample to initialize tagged page allocator.
   constexpr int64_t kAlloc = 8192;
   const int64_t num_allocs =
-      32 * MallocExtension::GetProfileSamplingInterval() / kAlloc;
+      32 * MallocExtension::GetProfileSamplingRate() / kAlloc;
   for (int64_t i = 0; i < num_allocs; ++i) {
     ::operator delete(::operator new(kAlloc));
   }
@@ -107,30 +106,21 @@ TEST_F(ThreadCacheTest, NoLeakOnThreadDestruction) {
 
   for (int i = 0; i < kThreads; ++i) {
     std::thread t([]() {
-      void* p = calloc(1024, 1);
+      void *p = calloc(1024, 1);
       benchmark::DoNotOptimize(p);
       free(p);
     });
 
     t.join();
   }
+  const int64_t end_size = MemoryUsageSlow(getpid());
 
   // Flush the page heap.  Our allocations may have been retained.
-  if (TCMalloc_Internal_GetHugePageFillerSkipSubreleaseShortInterval !=
-      nullptr) {
-    TCMalloc_Internal_SetHugePageFillerSkipSubreleaseShortInterval(
-        absl::ZeroDuration());
-  }
-  if (TCMalloc_Internal_GetHugePageFillerSkipSubreleaseLongInterval !=
-      nullptr) {
-    TCMalloc_Internal_SetHugePageFillerSkipSubreleaseLongInterval(
+  if (TCMalloc_Internal_SetHugePageFillerSkipSubreleaseInterval != nullptr) {
+    TCMalloc_Internal_SetHugePageFillerSkipSubreleaseInterval(
         absl::ZeroDuration());
   }
   MallocExtension::ReleaseMemoryToSystem(std::numeric_limits<size_t>::max());
-
-  // Read RSS usage only after releasing page heap has had an opportunity to
-  // reduce it.
-  const int64_t end_size = MemoryUsageSlow(getpid());
 
   // This will detect a leak rate of 12 bytes per thread, which is well under 1%
   // of the allocation done.

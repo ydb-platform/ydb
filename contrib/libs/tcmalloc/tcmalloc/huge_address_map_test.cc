@@ -14,14 +14,12 @@
 
 #include "tcmalloc/huge_address_map.h"
 
-#include <stddef.h>
 #include <stdlib.h>
 
 #include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "tcmalloc/mock_metadata_allocator.h"
 
 namespace tcmalloc {
 namespace tcmalloc_internal {
@@ -29,7 +27,13 @@ namespace {
 
 class HugeAddressMapTest : public ::testing::Test {
  protected:
-  HugeAddressMapTest() : map_(malloc_metadata_) {}
+  HugeAddressMapTest() : map_(MallocMetadata) { metadata_allocs_.clear(); }
+
+  ~HugeAddressMapTest() override {
+    for (void* p : metadata_allocs_) {
+      free(p);
+    }
+  }
 
   std::vector<HugeRange> Contents() {
     std::vector<HugeRange> ret;
@@ -48,8 +52,16 @@ class HugeAddressMapTest : public ::testing::Test {
   HugeAddressMap map_;
 
  private:
-  FakeMetadataAllocator malloc_metadata_;
+  static void* MallocMetadata(size_t size) {
+    void* ptr = malloc(size);
+    metadata_allocs_.push_back(ptr);
+    return ptr;
+  }
+
+  static std::vector<void*> metadata_allocs_;
 };
+
+std::vector<void*> HugeAddressMapTest::metadata_allocs_;
 
 // This test verifies that HugeAddressMap merges properly.
 TEST_F(HugeAddressMapTest, Merging) {

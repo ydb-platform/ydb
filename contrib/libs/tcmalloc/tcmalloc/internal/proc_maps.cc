@@ -18,12 +18,10 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>
 
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
 #include "absl/strings/str_format.h"
-#include "tcmalloc/internal/config.h"
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/util.h"
 
@@ -31,12 +29,26 @@ GOOGLE_MALLOC_SECTION_BEGIN
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
+ProcMapsIterator::ProcMapsIterator(pid_t pid) { Init(pid, nullptr); }
+
 ProcMapsIterator::ProcMapsIterator(pid_t pid, Buffer* buffer) {
+  Init(pid, buffer);
+}
+
+void ProcMapsIterator::Init(pid_t pid, Buffer* buffer) {
   if (pid == 0) {
     pid = getpid();
   }
 
   pid_ = pid;
+  if (!buffer) {
+    // If the user didn't pass in any buffer storage, allocate it
+    // now. This is the normal case; the signal handler passes in a
+    // static buffer.
+    buffer = dynamic_buffer_ = new Buffer;
+  } else {
+    dynamic_buffer_ = nullptr;
+  }
 
   ibuf_ = buffer->buf;
 
@@ -52,7 +64,7 @@ ProcMapsIterator::ProcMapsIterator(pid_t pid, Buffer* buffer) {
   // Use the main thread's "local" view to ensure adequate performance.
   int path_length = absl::SNPrintF(ibuf_, Buffer::kBufSize,
                                    "/proc/%d/task/%d/maps", pid, pid);
-  TC_CHECK_LT(path_length, Buffer::kBufSize);
+  CHECK_CONDITION(path_length < Buffer::kBufSize);
 
   // No error logging since this can be called from the crash dump
   // handler at awkward moments. Users should call Valid() before
@@ -69,6 +81,7 @@ ProcMapsIterator::~ProcMapsIterator() {
   // the manpage for close(2), this is widespread yet not fully portable, which
   // is unfortunate. POSIX explicitly leaves this behavior as unspecified.
   if (fd_ >= 0) close(fd_);
+  delete dynamic_buffer_;
 }
 
 bool ProcMapsIterator::Valid() const { return fd_ != -1; }

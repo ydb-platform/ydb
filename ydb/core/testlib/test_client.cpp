@@ -1182,7 +1182,7 @@ namespace Tests {
             Runtime->RegisterService(NConveyor::TInsertServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            if (Settings.FeatureFlags.GetEnableSharedMetadataCache()) {
+            if (Settings->FeatureFlags.GetEnableSharedMetadataCache()) {
                 auto* actor = NKikimr::NOlap::NDataAccessorControl::TNodeActor::CreateActor();
 
                 const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);

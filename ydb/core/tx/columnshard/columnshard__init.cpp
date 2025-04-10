@@ -23,12 +23,11 @@ namespace NKikimr::NColumnShard {
 using namespace NTabletFlatExecutor;
 
 class TTxInit: public TTransactionBase<TColumnShard> {
-private:
-    const TMonotonic StartInstant = TMonotonic::Now();
-
 public:
-    TTxInit(TColumnShard* self)
-        : TBase(self) {
+    TTxInit(TColumnShard* self, TMonotonic start, std::shared_ptr<ITxReader> reader)
+        : TBase(self)
+        , StartInstant(start)
+        , StartReader(reader) {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -38,6 +37,7 @@ public:
     }
 
 private:
+    const TMonotonic StartInstant;
     std::shared_ptr<ITxReader> StartReader;
     void SetDefaults();
     std::shared_ptr<ITxReader> BuildReader();
@@ -57,7 +57,7 @@ void TTxInit::SetDefaults() {
 }
 
 std::shared_ptr<ITxReader> TTxInit::BuildReader() {
-    auto result = std::make_shared<TTxCompositeReader>("composite_init");
+    auto result = std::make_shared<TTxCompositeReader>("composite_init", true);
     result->AddChildren(std::make_shared<NLoading::TSpecialValuesInitializer>("special_values", Self));
     result->AddChildren(std::make_shared<NLoading::TTablesManagerInitializer>("tables_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TInsertTableInitializer>("insert_table", Self));
@@ -76,7 +76,7 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
-    LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
+    ACFL_INFO("tx_init_with_reader", !!StartReader)("first_started_at", StartInstant);
 
     try {
         if (!StartReader) {
@@ -86,7 +86,6 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         if (!StartReader->Execute(txc, ctx)) {
             return false;
         }
-        StartReader = nullptr;
         Self->UpdateInsertTableCounters();
         Self->UpdateIndexCounters();
         Self->UpdateResourceMetrics(ctx, {});
@@ -104,6 +103,11 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    if (!StartReader->GetIsFinished()) {
+        Self->Execute(new TTxInit(Self, StartInstant, StartReader), ctx);
+        return;
+    }
+
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
@@ -165,7 +169,7 @@ void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
-        Self->Execute(new TTxInit(Self), ctx);
+        Self->Execute(new TTxInit(Self, TMonotonic::Now(), {}), ctx);
         return;
     }
 
@@ -238,7 +242,7 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
         Self->Execute(new TTxUpdateSchema(Self), ctx);
     } else {
         AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
-        Self->Execute(new TTxInit(Self), ctx);
+        Self->Execute(new TTxInit(Self, TMonotonic::Now(), {}), ctx);
     }
 }
 

@@ -3553,7 +3553,13 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
 
-    RequestBlobQuota();
+    if (NeedDeletePartition) {
+        // deferred TEvPQ::TEvDeletePartition
+        DeletePartitionState = DELETION_INITED;
+    } else {
+        RequestBlobQuota();
+    }
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -3656,6 +3662,12 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
+
+    if (TopicQuotaRequestCookie != 0) {
+        // wait for TEvPQ::TEvApproveWriteQuota
+        NeedDeletePartition = true;
+        return;
+    }
 
     DeletePartitionState = DELETION_INITED;
 

@@ -1928,6 +1928,26 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   }
   ```
 
+- Python
+
+  To read without a `Consumer`, create a reader using the `no_consumer_reader` method:
+
+  ```python
+  def callee(partition_id: int) -> int:
+      return 0
+
+  reader = driver.topic_client.no_consumer_reader(
+      topic="topic-path",
+      partition_ids=[0,1,2],
+      get_start_offset_lambda=callee,
+  )
+  ```
+
+  This method takes three required arguments:
+  * `topic` - the path to the topic;
+  * `partition_ids` - array of partition IDs to be read from;
+  * `get_start_offset_lambda` - is a function that will calculate the starting offset when the reader starts, as well as when it reconnects. It can be asynchronous.
+
 {% endlist %}
 
 ### Reading in a transaction {#read-tx}

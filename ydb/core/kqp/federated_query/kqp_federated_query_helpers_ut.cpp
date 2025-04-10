@@ -2,9 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
-
-#include <yql/essentials/public/issue/protos/issue_message.pb.h>
 
 namespace NKikimr::NKqp {
 

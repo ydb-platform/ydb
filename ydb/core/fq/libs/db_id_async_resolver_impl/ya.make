@@ -20,7 +20,7 @@ PEERDIR(
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/actors
-    yql/essentials/utils
+    ydb/library/yql/utils
 )
 
 YQL_LAST_ABI_VERSION()

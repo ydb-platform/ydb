@@ -3,12 +3,12 @@ UNITTEST_FOR(ydb/core/kqp/federated_query)
 PEERDIR(
     ydb/core/kqp/federated_query
     ydb/public/api/protos
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/public/issue/protos
-    yql/essentials/public/udf/service/stub
-    yql/essentials/sql/pg_dummy
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/public/issue/protos
+    ydb/library/yql/public/udf/service/stub
+    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/yt/comp_nodes/dq
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
 )
 
 SRCS(

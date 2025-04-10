@@ -428,14 +428,28 @@ struct TMetadataHeader {
         *this = header;
     }
 
-    bool CheckHash() const {
+    bool CheckHash(ui64 *magic) const {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else 
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         return hasher.GetHashResult() == HeaderHash;
     }
 
-    void SetHash() {
+    void SetHash(const ui64 *magic) {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else 
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         HeaderHash = hasher.GetHashResult();
     }

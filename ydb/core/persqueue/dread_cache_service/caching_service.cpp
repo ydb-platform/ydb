@@ -73,15 +73,16 @@ private:
             CloseSession(ev->Sender, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
+
+        auto sender = ev->Sender;
         if (sessionIter->second.Generation != ev->Get()->Generation) {
             ctx.Send(
-                    sessionIter->second.Client->ProxyId,
-                    new TEvPQProxy::TEvDirectReadDestroyPartitionSession(key, Ydb::PersQueue::ErrorCode::ErrorCode::ERROR, "Generation mismatch")
+                sender,
+                new TEvPQProxy::TEvDirectReadDestroyPartitionSession(key, Ydb::PersQueue::ErrorCode::ErrorCode::ERROR, "Generation mismatch")
             );
             return;
         }
 
-        auto sender = ev->Sender;
         auto startingReadId = ev->Get()->StartingReadId;
 
         // Let the proxy respond with StartDirectReadPartitionSessionResponse right away,

@@ -39,7 +39,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
                 val Uint64,
                 PRIMARY KEY(ts),
             )
-            WITH (STORE = COLUMN)
+            WITH (STORE = COLUMN, PARTITION_COUNT=2)
             """
         )
         table = ColumnTableHelper(self.ydb_client, table_path)
@@ -169,8 +169,8 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         test_name = 'test_data_unchanged_after_ttl_change'
         buckets = ["cold_uc", "middle_uc", "frozen_uc"]
         ttl = ["P1000D", "P2000D", "P3000D"]
-        single_upsert_row_count = 7_000
-        upsert_number = 1000
+        single_upsert_row_count = 10_000
+        upsert_number = 100
         self.teset_generator(test_name, buckets, ttl, single_upsert_row_count, upsert_number)
 
     @link_test_case("#13467")

@@ -685,6 +685,16 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         }
         return;
     }
+
+    if (!(
+            result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult()
+            || result.HasCmdForgetReadResult() || result.HasCmdRestoreDirectReadResult()
+    )) {
+        // this is commit response
+        CommitDone(result.GetCookie(), ctx);
+        return;
+    }
+
     switch (DirectReadRestoreStage) {
         case EDirectReadRestoreStage::None:
             break;
@@ -696,14 +706,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Prepare:
             Y_ABORT_UNLESS(RestoredDirectReadId != 0);
-
+            if (!result.HasCmdPrepareReadResult()) {
+                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for " << Partition << ": expect PrepareReadResult");
+            }
             Y_ABORT_UNLESS(result.HasCmdPrepareReadResult());
             Y_ABORT_UNLESS(DirectReadsToRestore.begin()->first == result.GetCmdPrepareReadResult().GetDirectReadId());
             DirectReadsToRestore.erase(DirectReadsToRestore.begin());
             {
                 auto sent = SendNextRestorePublishRequest();
-                if (!sent) // Nothing to publish
+                if (!sent) {
+                    // Read was not published previously and thus no response sent to session. Need to keep it
+                    UnpublishedDirectReads.insert(result.GetCmdPrepareReadResult().GetDirectReadId());
                     sent = SendNextRestorePrepareOrForget();
+                }
                 if (!sent)
                     OnDirectReadsRestored();
             }
@@ -726,11 +741,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 OnDirectReadsRestored();
             }
             return;
-    }
-
-    if (!(result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult() || result.HasCmdForgetReadResult())) { // this is commit response
-        CommitDone(result.GetCookie(), ctx);
-        return;
     }
 
     if (result.HasCmdForgetReadResult()) {
@@ -1164,8 +1174,8 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
         DirectReadRestoreStage = EDirectReadRestoreStage::Prepare;
         Y_ABORT_UNLESS(dr.GetReadOffset() <= dr.GetLastOffset());
 
-        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset(), std::numeric_limits<i32>::max(),
-                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId());
+        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset() + 1, std::numeric_limits<i32>::max(),
+                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId(), dr.GetBytesSizeEstimate());
 
         if (!PipeClient) //Pipe will be recreated soon
             return true;
@@ -1205,6 +1215,16 @@ void TPartitionActor::OnDirectReadsRestored() {
     const auto& ctx = ActorContext();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << "Restore direct reads done, continue working");
+
+    if (InitDone) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
+    }
+
+    for (auto id: UnpublishedDirectReads) {
+        SendPublishDirectRead(id, ActorContext());
+    }
+    UnpublishedDirectReads.clear();
+
     ResendRecentRequests();
 }
 
@@ -1310,7 +1330,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 
 NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
-        ui64 readOffset, ui64 lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId
+        ui64 readOffset, ui64 lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId, ui64 sizeEstimate
 ) const {
     NKikimrClient::TPersQueueRequest request;
 
@@ -1326,6 +1346,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
     read->SetSessionId(Session);
     if (DirectRead) {
         read->SetDirectReadId(directReadId);
+        read->SetSizeEstimate(sizeEstimate);
     }
     if (maxCount) {
         read->SetCount(maxCount);
@@ -1366,7 +1387,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
     RequestInfly = true;
     CurrentRequest = request;
-    
+
     if (!PipeClient) //Pipe will be recreated soon
         return;
 

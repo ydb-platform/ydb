@@ -227,6 +227,7 @@ private:
                 }
             }
         }
+
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
@@ -260,7 +261,10 @@ private:
         }
         if (isDirectRead) {
             auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
-            prepareResponse->SetBytesSizeEstimate(readResult.GetSizeEstimate());
+            auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
+            sizeEstimate = sizeEstimate ? sizeEstimate : PreparedResponse->GetPartitionResponse().ByteSize();
+            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
+            prepareResponse->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
             prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
             prepareResponse->SetLastOffset(readResult.GetLastOffset());
@@ -2318,15 +2322,18 @@ void TPersQueue::HandleReadRequest(
                 return;
             }
         }
+
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
                                        cmd.HasPartNo() ? cmd.GetPartNo() : 0,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
                                        cmd.GetClientId(),
-                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0, bytes,
+                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
+                                       bytes,
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
-                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0, clientDC,
+                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
+                                       clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
 
@@ -2407,8 +2414,7 @@ void TPersQueue::HandleForgetReadRequest(
     THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
-
-    forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult();
+    forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
     ctx.Send(SelfId(), forgetDoneEvent.Release());
 
     PQ_LOG_D("Forget direct read id " << key.ReadId << " for session " << key.SessionId);

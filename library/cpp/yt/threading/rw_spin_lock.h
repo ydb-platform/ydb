@@ -16,8 +16,16 @@ namespace NYT::NThreading {
 
 //! Single-writer multiple-readers spin lock.
 /*!
- *  Reader-side calls are pretty cheap.
- *  The lock is unfair.
+ *  Reader-side acquires are pretty cheap, and readers don't spin unless writers
+ *  are present.
+ *
+ *  The lock is unfair, but writers are prioritized over readers, that is,
+ *  if AcquireWriter() is called at some time, then some writer
+ *  (not necessarily the same one that called AcquireWriter) will succeed
+ *  in the next time.
+ *
+ *  WARNING: You should not use this lock if forks are possible: see
+ *  fork_aware_rw_spin_lock.h for a proper fork-safe lock.
  */
 class TReaderWriterSpinLock
     : public TSpinLockBase
@@ -29,18 +37,23 @@ public:
     /*!
      *  Optimized for the case of read-intensive workloads.
      *  Cheap (just one atomic increment and no spinning if no writers are present).
+     *
      *  Don't use this call if forks are possible: forking at some
      *  intermediate point inside #AcquireReader may corrupt the lock state and
-     *  leave lock forever stuck for the child process.
+     *  leave the lock stuck forever for the child process.
      */
     void AcquireReader() noexcept;
     //! Acquires the reader lock.
     /*!
      *  A more expensive version of #AcquireReader (includes at least
      *  one atomic load and CAS; also may spin even if just readers are present).
+     *
      *  In contrast to #AcquireReader, this method can be used in the presence of forks.
-     *  Note that fork-friendliness alone does not provide fork-safety: additional
-     *  actions must be performed to release the lock after a fork.
+     *
+     *  WARNING: fork-friendliness alone does not provide fork-safety: additional
+     *  actions must be performed to release the lock after a fork. This means you
+     *  probably should NOT use this lock in the presence of forks, consider
+     *  fork_aware_rw_spin_lock.h instead as a proper fork-safe lock.
      */
     void AcquireReaderForkFriendly() noexcept;
     //! Tries acquiring the reader lock; see #AcquireReader.
@@ -94,10 +107,12 @@ private:
     using TValue = ui32;
     static constexpr TValue UnlockedValue = 0;
     static constexpr TValue WriterMask = 1;
-    static constexpr TValue ReaderDelta = 2;
+    static constexpr TValue WriterReadyMask = 2;
+    static constexpr TValue ReaderDelta = 4;
 
     std::atomic<TValue> Value_ = UnlockedValue;
 
+    bool TryAcquireWriterWithExpectedValue(TValue expected) noexcept;
 
     bool TryAndTryAcquireReader() noexcept;
     bool TryAndTryAcquireWriter() noexcept;

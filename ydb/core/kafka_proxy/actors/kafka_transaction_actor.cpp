@@ -294,7 +294,6 @@ namespace NKafka {
             Die(ctx);
             return;
         }
-        
 
         // parse and validate consumers
         std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);

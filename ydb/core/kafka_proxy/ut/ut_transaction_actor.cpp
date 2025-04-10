@@ -3,6 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
 
@@ -97,10 +98,25 @@ namespace {
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
-            void AddObserverForRequestToKqpWithAssert(std::function<void(const NKikimr::NKqp::TEvKqp::TEvQueryRequest&)> callback) {
-                auto observer = [&callback](TAutoPtr<IEventHandle>& input) {
+            // Arguments:
+            // 1. callback - function, that will be called on recieving the response from KQP om commit request
+            // 2. consumerGenerationsToReturnInValidationRequest - map of consumer name to its generation to ensure proper validation of consumer state by actor
+            void AddObserverForCommitRequestToKqp(std::function<TTestActorRuntimeBase::EEventAction(const NKikimr::NKqp::TEvKqp::TEvQueryRequest&)> callback, std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest = {}) {
+                ui32 eventCounter = 0;
+                auto observer = [&](TAutoPtr<IEventHandle>& input) {
                     if (auto* event = input->CastAsLocal<NKikimr::NKqp::TEvKqp::TEvQueryRequest>()) {
-                        callback(*event);
+                        if (eventCounter == 0) {
+                            eventCounter++;
+                            Ctx->Runtime->SingleSys()->Send(new IEventHandle(
+                                MakeKqpProxyID(Ctx->Runtime->GetFirstNodeId()), 
+                                ActorId, 
+                                MakeValidResponseOnSelectFromKqp(consumerGenerationsToReturnInValidationRequest).Release(),
+                                0, 
+                                input->Cookie
+                            ));
+                        } else {
+                            return callback(*event);
+                        }
                     }
 
                     return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -117,6 +133,101 @@ namespace {
                 
                 MatchPartitionsInTxn(request, matcher);
                 MatchOffsetsInTxn(request, matcher);
+            }
+
+            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeValidResponseOnSelectFromKqp(std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest) {
+                auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+                NKikimrKqp::TEvQueryResponse record;
+
+                record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+                auto* producerState = record.MutableResponse()->AddYdbResults();
+                producerState = MakeHolder<Ydb::ResultSet>(CreateProducerStateResultsSet(TransactionalId, ProducerId, ProducerEpoch)).Release();
+                bool result = record.MutableResponse()->AddYdbResults()->ParseFromString(GetConsumersStatesString(consumerGenerationsToReturnInValidationRequest));
+                if (!result) {
+                    throw yexception();
+                }
+                
+                response->Record = record;
+                return response;
+            }
+
+            Ydb::ResultSet CreateProducerStateResultsSet(const TString& transactionalId, ui64 producerId, ui16 ProducerEpoch) {
+                const std::string resultSetString =
+                    "columns {\n"
+                    "  name: \"transactional_id\"\n"
+                    "  type {\n"
+                    "    optional_type {\n"
+                    "      item {\n"
+                    "        type_id: UTF8\n"
+                    "      }\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "columns {\n"
+                    "  name: \"producer_id\"\n"
+                    "  type {\n"
+                    "    optional_type {\n"
+                    "      item {\n"
+                    "        type_id: int64\n"
+                    "      }\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "columns {\n"
+                    "  name: \"producer_epoch\"\n"
+                    "  type {\n"
+                    "    optional_type {\n"
+                    "      item {\n"
+                    "        type_id: int32\n"
+                    "      }\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "rows {\n"
+                    "  items {\n"
+                    "    transactional_id: \"" + transactionalId + "\"\n"
+                    "    producerId: " + producerId + "\n"
+                    "    producerEpoch: " + ProducerEpoch + "\n"
+                    "  }\n"
+                    "}\n";
+                Ydb::ResultSet rsProto;
+                google::protobuf::TextFormat::ParseFromString(TStringType{resultSetString}, &rsProto);
+            }
+
+            TString GetConsumersStatesString(std::unordered_map<TString, i32> generationByConsumerName) {
+                TStringBuilder builder;
+                builder << 
+                    "columns {\n"
+                    "  name: \"consumer_group\"\n"
+                    "  type {\n"
+                    "    optional_type {\n"
+                    "      item {\n"
+                    "        type_id: UTF8\n"
+                    "      }\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "columns {\n"
+                    "  name: \"generation\"\n"
+                    "  type {\n"
+                    "    optional_type {\n"
+                    "      item {\n"
+                    "        type_id: uint64\n"
+                    "      }\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n";
+
+                for (auto& [consumerName, generation] : generationByConsumerName) {
+                    builder <<
+                        "rows {\n"
+                        "  items {\n"
+                        "    consumer_name: \"" << consumerName << "\"\n"
+                        "    generation: " << generation << "\n"
+                        "  }\n"
+                        "}\n";
+                }
+                return builder;
             }
 
         private:
@@ -178,9 +289,10 @@ namespace {
         Y_UNIT_TEST(OnAddPartitionsAndEndTxn_shouldSendTxnToKqpWithSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
             bool seenEvent = false;
-            AddObserverForRequestToKqpWithAssert([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
                 seenEvent = true;
                 MatchQueryRequest(request, {true, true, topics, {}});
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
             });
 
             SendAddPartitionsToTxnRequest(topics);
@@ -222,9 +334,10 @@ namespace {
         Y_UNIT_TEST(OnDoubleAddPartitionsWithSamePartitionsAndEndTxn_shouldSendTxnToKqpWithOnceSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0}}};
             bool seenEvent = false;
-            AddObserverForRequestToKqpWithAssert([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
                 seenEvent = true;
                 MatchQueryRequest(request, {true, true, topics, {}});
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
             });
 
             SendAddPartitionsToTxnRequest(topics);
@@ -239,8 +352,25 @@ namespace {
         }
 
         Y_UNIT_TEST(OnDoubleAddPartitionsWithDifferentPartitionsAndEndTxn_shouldSendTxnToKqpWithAllSpecifiedPartitions) {
-            // implement after specifiying how many requests to KQP i should send
-            UNIT_ASSERT_C(false, "Not implemented yet");
+            TVector<TTopicPartitions> topics1 = {{"topic1", {0}}};
+            TVector<TTopicPartitions> topics2 = {{"topic2", {0}}};
+            bool seenEvent = false;
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest& request) {
+                seenEvent = true;
+                MatchQueryRequest(request, {true, true, topics1, {}});
+                MatchQueryRequest(request, {true, true, topics2, {}});
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            SendAddPartitionsToTxnRequest(topics1);
+            SendAddPartitionsToTxnRequest(topics2);
+            SendEndTxnRequest();
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
         }
 
         Y_UNIT_TEST(OnAddOffsetsToTxnAndEndTxn_shouldSendTxnToKqpWithSpecifiedOffsets) {

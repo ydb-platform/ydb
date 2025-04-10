@@ -224,11 +224,6 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState upload
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {
-    if (!record.HasEmbeddingColumn()) {
-        badRequest("Should be specified embedding column");
-        return;
-    }
-
     const auto& settings = record.GetSettings();
     if (settings.vector_dimension() < 1) {
         badRequest("Dimension of vector should be at least one");

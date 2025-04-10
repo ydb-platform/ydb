@@ -59,6 +59,7 @@ struct TEvPrivate {
         EvUploadStarted,
         EvUploadPartFinished,
         EvUploadFinished,
+        EvResumeExecution,
 
         EvEnd
     };
@@ -125,6 +126,9 @@ struct TEvPrivate {
         const size_t Size, Index;
         const TString ETag;
     };
+
+    struct TEvResumeExecution : public TEventLocal<TEvResumeExecution, EvResumeExecution> {
+    };
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -174,6 +178,7 @@ public:
             const size_t size = Max<size_t>(Parts->Volume(), 1);
             InFlight += size;
             SentSize += size;
+            UploadStarted = true;
             Gateway->Upload(Url,
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
                 Parts->Pop(),
@@ -241,13 +246,22 @@ public:
         return Parts->IsSealed();
     }
 
+    bool IsUploadStarted() const {
+        return UploadStarted;
+    }
+
     const TString& GetUrl() const {
         return Url;
     }
 
-    i64 GetMemoryUsed() const {
-        return InFlight + Parts->Volume();
+    i64 GetMemoryUsed(bool storedOnly) const {
+        i64 result = Parts->Volume();
+        if (!storedOnly) {
+            result += InFlight;
+        }
+        return result;
     }
+
 private:
     template <void (TS3FileWriteActor::* DelegatedStateFunc)(STFUNC_SIG)>
     STFUNC(StateFuncWrapper) {
@@ -356,13 +370,16 @@ private:
 
     void Handle(TEvPrivate::TEvUploadStarted::TPtr& result) {
         UploadId = result->Get()->UploadId;
+        UploadStarted = true;
         Become(&TS3FileWriteActor::StateFuncWrapper<&TS3FileWriteActor::MultipartWorkingStateFunc>);
         StartUploadParts();
+        Send(ParentId, new TEvPrivate::TEvResumeExecution());
     }
 
     void Handle(TEvPrivate::TEvUploadPartFinished::TPtr& result) {
         InFlight -= result->Get()->Size;
         Tags[result->Get()->Index] = std::move(result->Get()->ETag);
+        Send(ParentId, new TEvPrivate::TEvResumeExecution());
 
         if (!InFlight && Parts->IsSealed() && Parts->Empty()) {
             FinalizeMultipartCommit();
@@ -462,6 +479,7 @@ private:
     TString UploadId;
     bool DirtyWrite;
     TString Token;
+    bool UploadStarted = false;
 };
 
 class TS3WriteActorBase : public TActorBootstrapped<TS3WriteActorBase>, public IDqComputeActorAsyncOutput {
@@ -569,11 +587,16 @@ private:
         return EgressStats;
     }
 
-    i64 GetFreeSpace() const final {
-        return std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), i64(MemoryLimit),
-            [](i64 free, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
-                return free - std::accumulate(item.second.cbegin(), item.second.cend(), i64(0), [](i64 sum, TS3FileWriteActor* actor) { return sum += actor->GetMemoryUsed(); });
+    i64 GetUsedSpace(bool storedOnly) const {
+        return std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), i64(0), [storedOnly](i64 sum, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
+            return sum += std::accumulate(item.second.cbegin(), item.second.cend(), i64(0), [storedOnly](i64 sum, TS3FileWriteActor* actor) {
+                return sum += actor->GetMemoryUsed(storedOnly);
             });
+        });
+    }
+
+    i64 GetFreeSpace() const final {
+        return i64(MemoryLimit) - GetUsedSpace(/* storedOnly */ false);
     }
 
     TString MakeOutputName() const {
@@ -584,6 +607,7 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvUploadError, Handle);
         hFunc(TEvPrivate::TEvUploadFinished, Handle);
+        sFunc(TEvPrivate::TEvResumeExecution, ResumeExecution);
     )
 
     void SendData(TUnboxedValueBatch&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
@@ -594,6 +618,9 @@ private:
 
         for (TS3FileWriteActor* actor : ProcessedActors) {
             actor->Go();
+        }
+        if (GetFreeSpace() < 0) {
+            CheckDeadlock();
         }
 
         if (finished) {
@@ -643,11 +670,38 @@ private:
                 }
             }
         }
-        if (!Finished && GetFreeSpace() > 0) {
+        ResumeExecution();
+        FinishIfNeeded();
+    }
+
+    void ResumeExecution() {
+        if (Finished) {
+            return;
+        }
+        if (GetFreeSpace() >= 0) {
             LOG_D("TS3WriteActor", "Has free space, notify owner");
             Callbacks->ResumeExecution();
+            return;
         }
-        FinishIfNeeded();
+        CheckDeadlock();
+    }
+
+    void CheckDeadlock() const {
+        const bool isAllStarted = std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), true, [](bool started, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
+            return started &= std::accumulate(item.second.cbegin(), item.second.cend(), true, [](bool started, TS3FileWriteActor* actor) {
+                return started &= actor->IsUploadStarted();
+            });
+        });
+        if (!isAllStarted) {
+            // Wait start notification from all actors
+            return;
+        }
+
+        const auto usedSpace = GetUsedSpace(/* storedOnly */ false);
+        if (usedSpace > i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
+            // If all data is not inflight and all uploads running now -- deadlock occurred
+            Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes)")}, NDqProto::StatusIds::INTERNAL_ERROR);
+        }
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -903,12 +957,12 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         .Extension = params.GetExtension(),
         .Gateway = gateway,
         .Credentials = TS3Credentials(credentialsFactory, token),
-        .Token = params.GetToken(),
+        .Token = token,
         .RandomProvider = randomProvider,
         .Callbacks = callbacks,
         .RetryPolicy = retryPolicy,
         .StatsLevel = statsLevel,
-        .MemoryLimit = params.GetMemoryLimit(),
+        .MemoryLimit = params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
         .Compression = params.GetCompression(),
         .Multipart = params.HasMultipart(),
         .DirtyWrite = !params.GetAtomicUploadCommit(),

@@ -436,9 +436,9 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
             response.Status = TCheckLockOutResponse::EStatus::SUCCESS;
 
             if (!sid.IsEnabled) {
-                response.Error = TStringBuilder() << "User " << request.User << " is not permitted to log in, because it is blocked";
+                response.Error = TStringBuilder() << "User " << request.User << " login denied: account is blocked";
             } else {
-                response.Error = TStringBuilder() << "User " << request.User << " is not permitted to log in, because the count of password attempts has been exceeded";
+                response.Error = TStringBuilder() << "User " << request.User << " login denied: too many failed password attempts";
             }
         }
         return response;

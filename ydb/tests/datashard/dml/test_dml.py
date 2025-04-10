@@ -382,7 +382,7 @@ class TestDML(TestBase):
 
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = []
-        # убрать if после https://github.com/ydb-platform/ydb/issues/16930
+        # delete if after https://github.com/ydb-platform/ydb/issues/16930
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
                 statements.append(f"col_{cleanup_type_name(type)}")

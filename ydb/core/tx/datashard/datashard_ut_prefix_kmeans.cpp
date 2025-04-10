@@ -16,16 +16,16 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NTableVectorKmeansTreeIndex;
 
 static std::atomic<ui64> sId = 1;
-static constexpr const char* kMainTable = "/Root/table-main";
-static constexpr const char* kPrefixTable = "/Root/table-prefix";
-static constexpr const char* kLevelTable = "/Root/table-level";
-static constexpr const char* kPostingTable = "/Root/table-posting";
+static const TString kMainTable = "/Root/table-main";
+static const TString kPrefixTable = "/Root/table-prefix";
+static const TString kLevelTable = "/Root/table-level";
+static const TString kPostingTable = "/Root/table-posting";
 
 Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
+
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
-                             std::unique_ptr<TEvDataShard::TEvPrefixKMeansRequest> & ev, size_t dims = 2,
-                             VectorIndexSettings::VectorType type = VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                             VectorIndexSettings::Metric metric = VectorIndexSettings::DISTANCE_COSINE)
+        std::function<void(NKikimrTxDataShard::TEvPrefixKMeansRequest&)> setupRequest,
+        TString expectedError, bool expectedErrorSubstring = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -36,51 +36,54 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         TString err;
         UNIT_ASSERT(datashards.size() == 1);
 
-        for (auto tid : datashards) {
-            auto& rec = ev->Record;
-            rec.SetId(1);
+        auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
 
-            rec.SetSeqNoGeneration(id);
-            rec.SetSeqNoRound(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
 
-            if (!rec.HasTabletId()) {
-                rec.SetTabletId(tid);
-            }
-            if (!rec.HasPathId()) {
-                tableId.PathId.ToProto(rec.MutablePathId());
-            }
+        rec.SetTabletId(datashards[0]);
+        if (!rec.HasPathId()) {
+            tableId.PathId.ToProto(rec.MutablePathId());
+        }
 
-            VectorIndexSettings settings;
-            settings.set_vector_dimension(dims);
-            settings.set_vector_type(type);
-            settings.set_metric(metric);
-            *rec.MutableSettings() = settings;
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
 
-            if (!rec.HasK()) {
-                rec.SetK(2);
-            }
-            rec.SetSeed(1337);
+        rec.SetK(2);
+        rec.SetSeed(1337);
 
-            rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING);
+        rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING);
 
-            rec.SetNeedsRounds(3);
+        rec.SetNeedsRounds(3);
 
-            rec.SetChild(1);
+        rec.SetChild(1);
 
-            if (rec.HasEmbeddingColumn()) {
-                rec.ClearEmbeddingColumn();
-            } else {
-                rec.SetEmbeddingColumn("embedding");
-            }
+        rec.SetEmbeddingColumn("embedding");
+        rec.SetPrefixColumns(1);
+        
+        rec.SetLevelName(kLevelTable);
+        rec.SetPostingName(kPostingTable);
+        rec.SetPrefixName(kPrefixTable);
 
-            rec.SetLevelName(kLevelTable);
-            rec.SetPostingName(kPostingTable);
+        setupRequest(rec);
 
-            runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(datashards[0], sender, ev.release(), 0, GetPipeConfigWithRetries());
 
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvPrefixKMeansResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvPrefixKMeansResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        if (expectedErrorSubstring) {
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToOneLineString(), expectedError);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(issues.ToOneLineString(), expectedError);
         }
     }
 
@@ -155,7 +158,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         return {std::move(prefix), std::move(level), std::move(posting)};
     }
 
-    static void DropTable(Tests::TServer::TPtr server, TActorId sender, const char* name)
+    static void DropTable(Tests::TServer::TPtr server, TActorId sender, const TString& name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
         WaitTxNotification(server, sender, txId);
@@ -193,8 +196,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         CreateShardedTable(server, sender, "/Root", "table-posting", options);
     }
 
-    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                                 const char* name)
+    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const TString& name)
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
@@ -206,8 +208,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         CreateShardedTable(server, sender, "/Root", name, options);
     }
 
-    static void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                                       const char* name)
+    static void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const TString& name)
     {
         options.Columns({
             {"user", "String", true, true},
@@ -232,65 +233,73 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-main", 1);
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+        CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-            auto& rec = ev->Record;
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetTabletId(0);
+        }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kMainTable)[0] << " }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            TPathId(0, 0).ToProto(request.MutablePathId());
+        }, "{ <main>: Error: Unknown table id: 0 }");
 
-            rec.SetK(0);
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-            auto& rec = ev->Record;
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
+        }, "{ <main>: Error: Wrong vector type }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
+        }, "{ <main>: Error: TODO(mbkkt) bit vector type is not supported }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
+        }, "{ <main>: Error: Wrong similarity }");
 
-            rec.SetK(1);
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-            auto& rec = ev->Record;
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetUpload(NKikimrTxDataShard::UNSPECIFIED);
+        }, "{ <main>: Error: Wrong upload }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetUpload(NKikimrTxDataShard::SAMPLE);
+        }, "{ <main>: Error: Wrong upload }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD);
+        }, "{ <main>: Error: Wrong upload }");
 
-            rec.SetEmbeddingColumn("some");
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-            auto& rec = ev->Record;
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetK(0);
+        }, "{ <main>: Error: Should be requested partition on at least two rows }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetK(1);
+        }, "{ <main>: Error: Should be requested partition on at least two rows }");
 
-            rec.SetTabletId(0);
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-            auto& rec = ev->Record;
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearLevelName();
+        }, "{ <main>: Error: Empty level table name }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearPostingName();
+        }, "{ <main>: Error: Empty posting table name }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearPrefixName();
+        }, "{ <main>: Error: Empty prefix table name }");
 
-            TPathId(0, 0).ToProto(rec.MutablePathId());
-            DoBadRequest(server, sender, ev);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetEmbeddingColumn("some");
+        }, "{ <main>: Error: Unknown embedding column: some }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.AddDataColumns("some");
+        }, "{ <main>: Error: Unknown data column: some }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetPrefixColumns(0);
+        }, "{ <main>: Error: Should be requested on at least one prefix column }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetPrefixColumns(99);
+        }, "{ <main>: Error: Should not be requested on more than 2 prefix columns }");
 
-            DoBadRequest(server, sender, ev, 0);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-
-            // TODO(mbkkt) bit vector not supported for now
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_BIT);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
-        }
-        {
-            auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
-
-            DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                         VectorIndexSettings::METRIC_UNSPECIFIED);
-        }
+        // test multiple issues:
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.SetK(1);
+            request.SetEmbeddingColumn("some");
+        }, "[ { <main>: Error: Should be requested partition on at least two rows } { <main>: Error: Unknown embedding column: some } ]");
     }
 
     Y_UNIT_TEST (BuildToPosting) {

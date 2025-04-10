@@ -523,16 +523,36 @@ public:
     }
 
 protected:
+    // Should call AddData or Seal for each data part
     virtual void DoSendData(TUnboxedValueBatch& data, bool finished) = 0;
 
+    // For each partition key at most one file write actor is not sealed (last in FileWriteActors[key]),
+    // add data into this actor or create new if all actors are sealed for this key
     void AddData(const TString& key, TString&& data) {
-        TS3FileWriteActor* actor = GetOrCreateFileWriter(key);
+        const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
+        if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
+            auto fileWriteActor = std::make_unique<TS3FileWriteActor>(
+                TxId, Gateway, Credentials, key,
+                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
+                Compression, RetryPolicy, DirtyWrite, Token
+            );
+            keyIt->second.emplace_back(fileWriteActor.get());
+            RegisterWithSameMailbox(fileWriteActor.release());
+        }
+
+        auto* actor = keyIt->second.back();
         actor->AddData(std::move(data));
         ProcessedActors.insert(actor);
     }
 
+    // Seal last file write actor if it is not already sealed
     void Seal(const TString& key) {
-        TS3FileWriteActor* actor = GetOrCreateFileWriter(key);
+        const auto keyIt = FileWriteActors.find(key);
+        if (keyIt == FileWriteActors.end() || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
+            return;
+        }
+
+        TS3FileWriteActor* actor = keyIt->second.back();
         actor->Seal();
         ProcessedActors.insert(actor);
     }
@@ -648,20 +668,6 @@ private:
         }
 
         TBase::PassAway();
-    }
-
-    TS3FileWriteActor* GetOrCreateFileWriter(const TString& key) {
-        const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
-        if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
-            auto fileWrite = std::make_unique<TS3FileWriteActor>(
-                TxId, Gateway, Credentials, key,
-                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
-                Compression, RetryPolicy, DirtyWrite, Token
-            );
-            keyIt->second.emplace_back(fileWrite.get());
-            RegisterWithSameMailbox(fileWrite.release());
-        }
-        return keyIt->second.back();
     }
 
 protected:

@@ -40,10 +40,11 @@
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
 #include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
-#include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/client/metadata/types_metadata.h>

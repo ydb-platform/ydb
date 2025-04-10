@@ -916,7 +916,7 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
     struct TBatching {
         TDuration FlushInterval;
-        ui64 BatchSizeBytes;
+        std::optional<ui64> BatchSizeBytes;
     };
 
     TMaybe<TString> ConsumerName;

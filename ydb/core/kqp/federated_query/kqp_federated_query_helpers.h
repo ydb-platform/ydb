@@ -11,6 +11,10 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
+
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>

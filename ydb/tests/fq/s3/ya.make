@@ -26,7 +26,6 @@ TEST_SRCS(
     test_bindings_1.py
     test_compressions.py
     test_early_finish.py
-    test_empty.py
     test_explicit_partitioning_0.py
     test_explicit_partitioning_1.py
     test_format_setting.py
@@ -41,6 +40,7 @@ TEST_SRCS(
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
+    test_validation.py
     test_ydb_over_fq.py
     test_yq_v2.py
 )

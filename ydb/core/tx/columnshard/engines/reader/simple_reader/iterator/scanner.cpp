@@ -16,6 +16,8 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
     if (!tableExt || !tableExt->num_rows()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
     }
+    Context->GetCommonContext()->GetCounters().OnSourceFinished(
+        source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
 
     source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
     while (FetchingSources.size()) {

@@ -244,7 +244,7 @@ public:
         databases.SetType(NJson::JSON_ARRAY);
 
         NJson::TJsonValue::TArray tenantArray(TenantInfo["TenantInfo"].GetArray());
-        TString filterDatabase = Request.Parameters["database"];
+        TString filterDatabase = Request.Parameters["database_name"];
         if (!filterDatabase) {
             std::sort(tenantArray.begin(), tenantArray.end(), [](const NJson::TJsonValue& a, const NJson::TJsonValue& b) -> bool {
                 return a["Name"].GetStringRobust() < b["Name"].GetStringRobust();

@@ -668,9 +668,6 @@ class StaticConfigGenerator(object):
             for elem in self.__cluster_details.selector_config:
                 dynconfig['selector_config'].append(elem)
 
-            # blob_storage_config is not required in `dynconfig.yaml`
-            del dynconfig['config']['blob_storage_config']
-
         # emulate dumping ordered dict to yaml
         lines = []
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:

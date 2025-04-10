@@ -40,14 +40,20 @@ private:
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) = 0;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) = 0;
     const NActors::TActorId TabletActorId;
+    const TTabletId TabletId;
 
 public:
     const NActors::TActorId& GetTabletActorId() const {
         return TabletActorId;
     }
 
-    IDataAccessorsManager(const NActors::TActorId& tabletActorId)
-        : TabletActorId(tabletActorId) {
+    const TTabletId& GetTabletId() const {
+        return TabletId;
+    }
+
+    IDataAccessorsManager(const TTabletId tabletId, const NActors::TActorId& tabletActorId)
+        : TabletActorId(tabletActorId)
+        , TabletId(tabletId) {
     }
 
     virtual ~IDataAccessorsManager() = default;
@@ -102,8 +108,8 @@ private:
     }
 
 public:
-    TActorAccessorsManager(const NActors::TActorId& actorId, const NActors::TActorId& tabletActorId)
-        : TBase(tabletActorId)
+    TActorAccessorsManager(const NActors::TActorId& actorId, const TTabletId tabletId, const NActors::TActorId& tabletActorId)
+        : TBase(tabletId, tabletActorId)
         , ActorId(actorId)
         , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId)) {
         AFL_VERIFY(!!tabletActorId);
@@ -113,7 +119,12 @@ public:
 class TLocalManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
-    THashMap<TInternalPathId, std::unique_ptr<IGranuleDataAccessor>> Managers;
+    using TManagerKey = std::pair<TTabletId, TInternalPathId>;
+
+    TManagerKey makeManagerKey(const TInternalPathId pathId) {
+        return std::make_pair(GetTabletId(), pathId);
+    }
+    THashMap<TManagerKey, std::unique_ptr<IGranuleDataAccessor>> Managers;
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
     TAccessorSignals Counters;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
@@ -142,11 +153,11 @@ private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override;
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
     virtual void DoUnregisterController(const TInternalPathId pathId) override {
-        AFL_VERIFY(Managers.erase(pathId));
+        AFL_VERIFY(Managers.erase(makeManagerKey(pathId)));
     }
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portionInfo) override {
-        auto it = Managers.find(portionInfo->GetPathId());
+        auto it = Managers.find(makeManagerKey(portionInfo->GetPathId()));
         AFL_VERIFY(it != Managers.end());
         it->second->ModifyPortions({}, { portionInfo->GetPortionId() });
     }
@@ -171,15 +182,15 @@ public:
         }
     };
 
-    static std::shared_ptr<TLocalManager> BuildForTests() {
+    static std::shared_ptr<TLocalManager> BuildForTests(const TTabletId tabletId = (NOlap::TTabletId)0) {
         auto callback = std::make_shared<TTestingCallback>();
-        std::shared_ptr<TLocalManager> result = std::make_shared<TLocalManager>(callback);
+        std::shared_ptr<TLocalManager> result = std::make_shared<TLocalManager>(tabletId, callback);
         callback->InitManager(result);
         return result;
     }
 
-    TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
-        : TBase(NActors::TActorId())
+    TLocalManager(const TTabletId tabletId, const std::shared_ptr<IAccessorCallback>& callback)
+        : TBase(tabletId, NActors::TActorId())
         , AccessorCallback(callback) {
     }
 };

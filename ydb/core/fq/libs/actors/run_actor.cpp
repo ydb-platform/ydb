@@ -1023,7 +1023,7 @@ private:
 
                 if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(header->column())) {
                     header->clear_column();
-                    Abort("Internal error. Invalid result set columns, please contact internal support", FederatedQuery::QueryMeta::FAILED, issues);
+                    Abort("Invalid result set columns, please contact internal support", FederatedQuery::QueryMeta::FAILED, issues);
                     return;
                 }
             }

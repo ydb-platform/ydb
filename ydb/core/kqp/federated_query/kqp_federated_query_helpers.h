@@ -21,6 +21,9 @@ namespace NKikimrConfig {
 }
 
 namespace NKikimr::NKqp {
+
+    bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth);
+
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);

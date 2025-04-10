@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/db_pool/protos
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/solomon/gateway
     yql/essentials/core/dq_integration/transform
     yql/essentials/public/issue
@@ -23,3 +24,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

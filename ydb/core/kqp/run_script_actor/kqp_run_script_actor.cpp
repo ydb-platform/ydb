@@ -387,7 +387,7 @@ private:
                     *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
 
                     if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
-                        NYql::TIssue rootIssue(TStringBuilder() << "Internal error. Invalid result set " << resultSetIndex << " columns, please contact internal support");
+                        NYql::TIssue rootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support");
                         for (const NYql::TIssue& issue : issues) {
                             rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
                         }

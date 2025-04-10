@@ -8,9 +8,9 @@
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
-#include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/actors/proxy.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
@@ -26,10 +26,11 @@
 
 namespace NKikimr::NKqp {
 
-namespace {
-
-    size_t GetNestingDepth(const google::protobuf::Message& message) {
-        size_t depth = 0;
+    bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
+        if (!maxDepth) {
+            return false;
+        }
+        --maxDepth;
 
         const auto* descriptor = message.GetDescriptor();
         const auto* reflection = message.GetReflection();
@@ -41,17 +42,17 @@ namespace {
 
             if (field->is_repeated()) {
                 for (int j = 0; j < reflection->FieldSize(message, field); ++j) {
-                    depth = std::max(depth, GetNestingDepth(reflection->GetRepeatedMessage(message, field, j)) + 1);
+                    if (!CheckNestingDepth(reflection->GetRepeatedMessage(message, field, j), maxDepth)) {
+                        return false;
+                    }
                 }
-            } else if (reflection->HasField(message, field)) {
-                depth = std::max(depth, GetNestingDepth(reflection->GetMessage(message, field)) + 1);
+            } else if (reflection->HasField(message, field) && !CheckNestingDepth(reflection->GetMessage(message, field), maxDepth)) {
+                return false;
             }
         }
 
-        return depth;
+        return true;
     }
-
-}  // anonymous namespace
 
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         NYql::TYtNativeServices ytServices;
@@ -262,8 +263,8 @@ namespace {
     NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth) {
         NYql::TIssues issues;
         for (const auto& column : columns) {
-            if (const auto depth = GetNestingDepth(column.type()); depth > maxNestingDepth) {
-                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' is " << depth << ", it is large than allowed limit " << maxNestingDepth));
+            if (!CheckNestingDepth(column.type(), maxNestingDepth)) {
+                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' large than allowed limit " << maxNestingDepth));
             }
         }
         return issues;

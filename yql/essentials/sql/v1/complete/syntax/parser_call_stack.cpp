@@ -44,6 +44,7 @@ namespace NSQLComplete {
 
     const TVector<TRuleId> HintNameRules = {
         RULE(Id_hint),
+        RULE(An_id),
     };
 
     TVector<std::string> Symbolized(const TParserCallStack& stack) {
@@ -96,12 +97,13 @@ namespace NSQLComplete {
     }
 
     bool IsLikelyHintStack(const TParserCallStack& stack) {
-        return ContainsRule(RULE(Id_hint), stack);
+        return ContainsRule(RULE(Id_hint), stack) ||
+               Contains({RULE(External_call_param), RULE(An_id)}, stack);
     }
 
     std::optional<EStatementKind> StatementKindOf(const TParserCallStack& stack) {
         for (TRuleId rule : std::ranges::views::reverse(stack)) {
-            if (rule == RULE(Select_core)) {
+            if (rule == RULE(Process_core) || rule == RULE(Reduce_core) || rule == RULE(Select_core)) {
                 return EStatementKind::Select;
             }
             if (rule == RULE(Into_table_stmt)) {

@@ -64,11 +64,16 @@ public:
     }
 
     bool HasData() const {
-        return Accessors.size();
+        return Accessors.size() || !!RecordsCountActual;
     }
 
     bool IsEmptyData() const {
-        return !GetRecordsCountActualVerified();
+        if (HasAccessors()) {
+            return !GetRecordsCountActualVerified();
+        } else if (auto count = GetRecordsCountActualOptional()) {
+            return !*count;
+        }
+        return true;
     }
 
     bool HasAccessors() const {

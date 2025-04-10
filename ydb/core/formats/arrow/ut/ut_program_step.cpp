@@ -149,7 +149,16 @@ struct TSumData {
     }
 
     static void CheckResult(ETest test, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
-        AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        if (test == ETest::EMPTY) {
+            if (const auto count = batch->GetRecordsCountOptional()) {
+                UNIT_ASSERT_VALUES_EQUAL(*count, 0);
+            }
+            UNIT_ASSERT(!batch->HasAccessors());
+            return;
+        } else {
+            AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        }
+
         auto aggXOriginal = batch->GetArrayVerified(3);
         auto aggYOriginal = batch->GetArrayVerified(4);
         auto colXOriginal = batch->GetArrayVerified(1);

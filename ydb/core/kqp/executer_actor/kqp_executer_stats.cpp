@@ -276,7 +276,7 @@ void TOperatorStats::Resize(ui32 taskCount) {
 
 void TStageExecutionStats::Resize(ui32 taskCount) {
 
-    Y_DEBUG_ABORT_UNLESS((taskCount & 3) == 0);
+    AFL_ENSURE((taskCount & 3) == 0);
 
     CpuTimeUs.Resize(taskCount);
     SourceCpuTimeUs.resize(taskCount);
@@ -438,7 +438,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
 
-    Y_DEBUG_ABORT_UNLESS(TaskCount >= Task2Index.size());
+    AFL_ENSURE(TaskCount >= Task2Index.size());
 
     ui32 index;
     if (it == Task2Index.end()) {
@@ -1263,7 +1263,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
 
 ui64 ExportMinStats(std::vector<ui64>& data) {
 
-    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+    AFL_ENSURE((data.size() & 3) == 0);
 
     ui64 min4[4] = {0, 0, 0, 0};
 
@@ -1282,7 +1282,7 @@ ui64 ExportMinStats(std::vector<ui64>& data) {
 
 ui64 ExportMaxStats(std::vector<ui64>& data) {
 
-    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+    AFL_ENSURE((data.size() & 3) == 0);
 
     ui64 max4[4] = {0, 0, 0, 0};
 
@@ -1301,7 +1301,7 @@ ui64 ExportMaxStats(std::vector<ui64>& data) {
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats) {
 
-    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+    AFL_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 min4[4] = {0, 0, 0, 0};
@@ -1334,7 +1334,7 @@ void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& sta
 
 void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats, ui64 offset) {
 
-    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+    AFL_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 sum = 0;
@@ -1379,7 +1379,7 @@ void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr&
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats) {
 
-    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+    AFL_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 sum = 0;

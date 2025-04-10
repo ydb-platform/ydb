@@ -25,6 +25,22 @@ TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
     return pgmBuilder.FromFlow(wideFlow);
 }
 
+// List<Tuple<T1, ..., Tn, Tlast>> -> List<Struct<"0": Block<T1>, ..., "n": Block<Tn>, "_yql_block_length": Scalar<Tlast>>>
+TRuntimeNode ToBlockList(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
+    return pgmBuilder.Map(list,
+        [&](TRuntimeNode tupleNode) -> TRuntimeNode {
+            TTupleType* tupleType = AS_TYPE(TTupleType, tupleNode.GetStaticType());
+            std::vector<const std::pair<std::string_view, TRuntimeNode>> items;
+            items.emplace_back(NYql::BlockLengthColumnName, pgmBuilder.Nth(tupleNode, tupleType->GetElementsCount() - 1));
+            for (size_t i = 0; i < tupleType->GetElementsCount() - 1; i++) {
+                const auto& memberName = pgmBuilder.GetTypeEnvironment().InternName(ToString(i));
+                items.emplace_back(memberName.Str(), pgmBuilder.Nth(tupleNode, i));
+            }
+            return pgmBuilder.NewStruct(items);
+        }
+    );
+}
+
 // Stream<Multi<...>> -> List<Tuple<...>>
 TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Collect(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream),
@@ -44,21 +60,21 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny
 ) {
     const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
-    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+    const auto rightBlockList = ToBlockList(pgmBuilder, rightList);
 
     const auto joinReturnType = MakeJoinType(pgmBuilder,
         joinKind,
         leftStream.GetStaticType(),
         leftKeyDrops,
-        rightStream.GetStaticType(),
+        rightBlockList.GetStaticType(),
         rightKeyDrops
     );
 
-    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightBlockList, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
     if (joinKind != EJoinKind::Cross) {
         rightBlockStorageNode = pgmBuilder.BlockMapJoinIndex(
             rightBlockStorageNode,
-            AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+            AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
             rightKeyColumns,
             rightAny,
             pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
@@ -68,7 +84,7 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     auto joinNode = pgmBuilder.BlockMapJoinCore(
         leftStream,
         rightBlockStorageNode,
-        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
         joinKind,
         leftKeyColumns,
         leftKeyDrops,
@@ -92,20 +108,20 @@ TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, E
     const auto leftStream2 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
     const auto leftStream3 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
 
-    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+    const auto rightBlockList = ToBlockList(pgmBuilder, rightList);
 
     const auto joinReturnType = MakeJoinType(pgmBuilder,
         joinKind,
         leftStream.GetStaticType(),
         leftKeyDrops,
-        rightStream.GetStaticType(),
+        rightBlockList.GetStaticType(),
         rightKeyDrops
     );
 
-    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightBlockList, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
     auto rightBlockIndexNode = pgmBuilder.BlockMapJoinIndex(
         rightBlockStorageNode,
-        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
         rightKeyColumns,
         rightAny,
         pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
@@ -114,7 +130,7 @@ TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, E
     auto joinNode = pgmBuilder.BlockMapJoinCore(
         leftStream,
         rightBlockIndexNode,
-        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
         EJoinKind::Inner,
         leftKeyColumns,
         leftKeyDrops,
@@ -126,7 +142,7 @@ TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, E
     auto joinNode2 = pgmBuilder.BlockMapJoinCore(
         leftStream2,
         rightBlockIndexNode,
-        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
         EJoinKind::Inner,
         leftKeyColumns,
         leftKeyDrops,
@@ -138,7 +154,7 @@ TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, E
     auto joinNode3 = pgmBuilder.BlockMapJoinCore(
         leftStream3,
         rightBlockStorageNode,
-        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        AS_TYPE(TListType, rightBlockList.GetStaticType())->GetItemType(),
         EJoinKind::Cross,
         {},
         {},

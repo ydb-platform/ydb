@@ -419,7 +419,22 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
+                // .DefaultValue(TimestampStandardDeviationMinutes)
+                .Optional()
+                .StoreResult(&TimestampStandardDeviationMinutes);
+            
+            opts.AddLongOption("date-from", "Left boundary of the interval to generate "
+                "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
+                "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+                .Optional().StoreResult(&TimestampDateFrom);
+            opts.AddLongOption("date-to", "Right boundary of the interval to generate "
+                "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
+                "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+                .Optional().StoreResult(&TimestampDateTo);
+
+            opts.MutuallyExclusive("timestamp_deviation", "date-from");
+            opts.MutuallyExclusive("timestamp_deviation", "date-to");
+    
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);
             opts.AddLongOption("null-percent", "Percent of nulls in generated data")

@@ -16,7 +16,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui32>, MemoryBufferLimit);
 
     ui64 CurrentBytesUsed = 0;
-    bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
+    bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2) const;
 
 public:
 

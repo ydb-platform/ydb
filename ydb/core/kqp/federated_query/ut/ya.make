@@ -7,6 +7,7 @@ PEERDIR(
     ydb/library/yql/public/issue/protos
     ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/dq
     ydb/library/yql/providers/yt/comp_nodes/llvm14
 )

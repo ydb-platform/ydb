@@ -1,0 +1,14 @@
+{%- include "[generator]/repositories.jinja" -%}
+{%- include "[generator]/publish.jinja" -%}
+
+{#- Compiler flags -#}
+{%- include "[generator]/javac_flags.jinja" -%}
+{%- include "[generator]/kotlinc_flags.jinja" -%}
+
+{#- Codegen -#}
+{%- include "[generator]/run_program.jinja" -%}
+{%- include "[generator]/run_java_program.jinja" -%}
+{%- include "[generator]/run_common.jinja" -%}
+{%- include "[generator]/copy_file.jinja" -%}
+
+{%- include "[generator]/javadoc.jinja" -%}

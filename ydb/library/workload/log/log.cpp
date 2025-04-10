@@ -438,6 +438,9 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
                 "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
                 .Optional().StoreResult(&TimestampDateTo);
+
+            opts.MutuallyExclusive("timestamp_deviation", "date-from");
+            opts.MutuallyExclusive("timestamp_deviation", "date-to");
     
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);

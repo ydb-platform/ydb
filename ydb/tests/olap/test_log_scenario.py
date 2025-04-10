@@ -176,17 +176,17 @@ class TestLogScenario(object):
 
         for thread in threads:
             thread.join()
-    
+
     def test_log_uniform(self):
         """As per https://github.com/ydb-platform/ydb/issues/13531"""
 
         wait_time: int = int(get_external_param("wait_seconds", "30"))
         self.table_name: str = "log"
 
-        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, 
-                                                      database=self.ydb_client.database, 
-                                                      table_name=self.table_name, 
-                                                      date_from=0, 
+        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint,
+                                                      database=self.ydb_client.database,
+                                                      table_name=self.table_name,
+                                                      date_from=0,
                                                       date_to=2678400000)  # Sunday, 1 February 1970, 0:00:00
         ydb_workload.create_table(self.table_name)
         ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)

@@ -140,6 +140,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Iceberg),
             BuildIcebergSource(hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Redis),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

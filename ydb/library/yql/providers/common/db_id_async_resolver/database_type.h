@@ -19,7 +19,8 @@ enum class EDatabaseType {
     Oracle,
     Logging,
     Solomon,
-    Iceberg
+    Iceberg,
+    Redis
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

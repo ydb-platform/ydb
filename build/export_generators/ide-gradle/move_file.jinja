@@ -6,7 +6,7 @@
 
 val codegen{{ move['_object_index'] }} = tasks.register("codegen{{ move['_object_index'] }}") {
     doLast {
-        file("{{ PatchRoots(src) }}").renameTo(file("{{ PatchRoots(dst) }}"))
+        file({{ PatchRoots(src) }}).renameTo(file({{ PatchRoots(dst) }}))
     }
 }
 {%      endfor -%}

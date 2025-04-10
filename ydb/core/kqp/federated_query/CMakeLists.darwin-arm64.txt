@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(ut)
+
 add_library(core-kqp-federated_query)
 
 
@@ -28,8 +30,10 @@ target_link_libraries(core-kqp-federated_query PUBLIC
   library-db_pool-protos
   providers-common-http_gateway
   generic-connector-libcpp
+  providers-s3-actors_factory
   providers-solomon-gateway
   core-dq_integration-transform
+  essentials-public-issue
   yt-gateway-native
   yt-lib-yt_download
   providers-yt-mkql_dq

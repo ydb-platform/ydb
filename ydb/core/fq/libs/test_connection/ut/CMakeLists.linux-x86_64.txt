@@ -48,6 +48,7 @@ target_link_options(ydb-core-fq-libs-test_connection-ut PRIVATE
   -fPIC
   -lrt
   -ldl
+  -lutil
 )
 
 target_sources(ydb-core-fq-libs-test_connection-ut PRIVATE

@@ -25,14 +25,25 @@ target_link_libraries(fq-libs-db_id_async_resolver_impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-json
   cpp-threading-future
+  fq-libs-common
+  libs-config-protos
   fq-libs-events
+  ydb-core-util
+  library-actors-core
+  library-actors-http
+  ydb-library-services
   providers-common-db_id_async_resolver
+  common-token_accessor-client
   providers-dq-actors
+  yql-essentials-utils
 )
 
 target_sources(fq-libs-db_id_async_resolver_impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.cpp
 )
 

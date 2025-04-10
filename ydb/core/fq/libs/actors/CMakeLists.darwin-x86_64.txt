@@ -55,6 +55,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   fq-libs-result_formatter
   fq-libs-shared_resources
   fq-libs-signer
+  core-kqp-federated_query
   ydb-core-protos
   ydb-core-util
   ydb-library-mkql_proto
@@ -99,12 +100,10 @@ target_link_libraries(fq-libs-actors PUBLIC
 
 target_sources(fq-libs-actors PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/clusters_from_connections.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/database_resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/error.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_health_check.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/pending_fetcher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy_private.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp

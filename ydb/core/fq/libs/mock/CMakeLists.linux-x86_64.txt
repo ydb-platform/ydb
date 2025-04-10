@@ -33,6 +33,7 @@ target_link_libraries(fq-libs-mock PUBLIC
   ydb-core-base
   fq-libs-actors
   fq-libs-common
+  fq-libs-db_id_async_resolver_impl
   fq-libs-db_schema
   libs-shared_resources-interface
   ydb-core-protos

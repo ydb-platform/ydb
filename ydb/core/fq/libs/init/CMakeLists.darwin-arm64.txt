@@ -33,6 +33,7 @@ target_link_libraries(fq-libs-init PUBLIC
   fq-libs-control_plane_config
   fq-libs-control_plane_proxy
   fq-libs-control_plane_storage
+  fq-libs-db_id_async_resolver_impl
   fq-libs-events
   fq-libs-gateway
   fq-libs-health

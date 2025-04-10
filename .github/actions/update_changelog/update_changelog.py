@@ -181,6 +181,13 @@ def main():
     changelog_path = sys.argv[2]
     base_branch = sys.argv[3]
     suffix = sys.argv[4]
+
+    # Fetch latest changes
+    run_command("git fetch origin")
+    # Check out existing branch
+    run_command(f"git checkout {base_branch}")
+    # Make sure it's up to date
+    run_command(f"git pull origin {base_branch}")
    
     try:
         with open(pr_data_file, 'r') as file:
@@ -210,13 +217,6 @@ def main():
         except Exception as e:
             print(f"::error::Failed to fetch PR details for PR #{pr['id']}: {e}")
             sys.exit(1)
-           
-    # Fetch latest changes
-    run_command("git fetch origin")
-    # Check out existing branch
-    run_command(f"git checkout {base_branch}")
-    # Make sure it's up to date
-    run_command(f"git pull origin {base_branch}")
    
     update_changelog(changelog_path, pr_data)
 

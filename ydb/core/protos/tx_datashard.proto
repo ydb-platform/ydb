@@ -1481,9 +1481,10 @@ message TEvSampleKRequest {
     optional NKikimrProto.TPathID PathId = 3;
 
     optional uint64 K = 4;
-    // For now we use tablet id as seed value, but it's not convinient for tests
+
     optional uint64 Seed = 5;
-    // We want to sample small instead of large probabilites
+
+    // We want to sample small instead of large probabilities
     // because size of message will be smaller (varint)
     optional uint64 MaxProbability = 6;
 

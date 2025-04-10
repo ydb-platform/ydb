@@ -60,26 +60,21 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
-                 const TActorId& responseActorId,
-                 const TSerializedTableRange& range,
-                 ui64 k,
-                 ui64 seed,
-                 ui64 maxProbability,
-                 TProtoColumnsCRef columns,
-                 const TUserTable& tableInfo)
+    TSampleKScan(const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
+                 const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
+                 const TSerializedTableRange& range)
         : TActor(&TThis::StateWork)
         , Response(std::move(response))
         , ResponseActorId(responseActorId)
-        , ScanTags(BuildTags(tableInfo, columns))
-        , KeyTypes(tableInfo.KeyColumnTypes)
-        , TableRange(tableInfo.Range)
+        , ScanTags(BuildTags(table, request.GetColumns()))
+        , KeyTypes(table.KeyColumnTypes)
+        , TableRange(table.Range)
         , RequestedRange(range)
-        , K(k)
-        , BuildId(Response->Record.GetId())
-        , MaxProbability(maxProbability)
-        , Rng(seed) {
-        Y_ASSERT(MaxProbability != 0);
+        , K(request.GetK())
+        , BuildId(request.GetId())
+        , MaxProbability(request.GetMaxProbability())
+        , Rng(request.GetSeed()) 
+    {
         LOG_I("Create " << Debug());
     }
 
@@ -231,50 +226,106 @@ void TDataShard::Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorC
 }
 
 void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    const bool needsSnapshot = record.HasSnapshotStep() || record.HasSnapshotTxId();
-    TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
-    if (!needsSnapshot) {
-        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
-    }
-
-    // Note: it's very unlikely that we have volatile txs before this snapshot
-    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion,
-                                                     std::unique_ptr<IEventHandle>(ev.Release()));
-        return;
-    }
-    const ui64 id = record.GetId();
+    auto& request = ev->Get()->Record;
+    const ui64 id = request.GetId();
+    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
+        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
     response->Record.SetId(id);
     response->Record.SetTabletId(TabletID());
-
-    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
+
+    LOG_N("Starting TSampleKScan " << request.ShortDebugString()
+        << " row version " << rowVersion);
+
+    // Note: it's very unlikely that we have volatile txs before this snapshot
+    if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
+        return;
+    }
 
     auto badRequest = [&](const TString& error) {
         response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
         auto issue = response->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
-        ctx.Send(ev->Sender, std::move(response));
+    };
+    auto trySendBadRequest = [&] {
+        if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+            LOG_E("Rejecting TSampleKScan bad request " << request.ShortDebugString()
+                << " with response " << response->Record.ShortDebugString());
+            ctx.Send(ev->Sender, std::move(response));
+            return true;
+        } else {
+            return false;
+        }
     };
 
-    if (const ui64 shardId = record.GetTabletId(); shardId != TabletID()) {
-        badRequest(TStringBuilder() << "Wrong shard " << shardId << " this is " << TabletID());
-        return;
+    // 1. Validating table and path existence
+    if (request.GetTabletId() != TabletID()) {
+        badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
     }
-
-    const auto pathId = TPathId::FromProto(record.GetPathId());
+    if (!IsStateActive()) {
+        badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+    }
+    const auto pathId = TPathId::FromProto(request.GetPathId());
     const auto* userTableIt = GetUserTables().FindPtr(pathId.LocalPathId);
     if (!userTableIt) {
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
+    }
+    if (trySendBadRequest()) {
         return;
     }
-    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
+
+    // 2. Validating request fields
+    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
+                << ", snapshot step is " << snapshotKey.Step << ", snapshot tx is " << snapshotKey.TxId);
+        }
+    }
+
+    if (request.GetK() < 1) {
+        badRequest("Should be requested on at least one row");
+    }
+
+    if (request.GetMaxProbability() <= 0) {
+        badRequest("Max probability should be positive");
+    }
+
+    TSerializedTableRange requestedRange;
+    requestedRange.Load(request.GetKeyRange());
+    auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
+    if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
+        badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
+            << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
+            << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+            << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
+    }
+
+    if (request.ColumnsSize() < 1) {
+        badRequest("Should be requested at least one column");
+    }
+    auto tags = GetAllTags(userTable);
+    for (auto column : request.GetColumns()) {
+        if (!tags.contains(column)) {
+            badRequest(TStringBuilder() << "Unknown column: " << column);
+        }
+    }
+
+    if (trySendBadRequest()) {
+        return;
+    }
+
+    TAutoPtr<NTable::IScan> scan = new TSampleKScan(userTable,
+        request, ev->Sender, std::move(response),
+        requestedRange);
 
     if (const auto* recCard = ScanManager.Get(id)) {
         if (recCard->SeqNo == seqNo) {
@@ -288,61 +339,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         ScanManager.Drop(id);
     }
 
-    TSerializedTableRange requestedRange;
-    requestedRange.Load(record.GetKeyRange());
-
-    auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
-
-    if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
-                                    << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
-                                    << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-                                    << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
-        return;
-    }
-
-    const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder()
-                   << "no snapshot has been found"
-                   << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
-                   << " , snapshot step is " << snapshotKey.Step
-                   << " , snapshot tx is " << snapshotKey.TxId);
-        return;
-    }
-
-    if (!IsStateActive()) {
-        badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
-        return;
-    }
-
-    if (record.GetK() < 1) {
-        badRequest("Should be requested at least single row");
-        return;
-    }
-
-    if (record.ColumnsSize() < 1) {
-        badRequest("Should be requested at least single column");
-        return;
-    }
-
     TScanOptions scanOpts;
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-
-    const auto scanId = QueueScan(userTable.LocalTid,
-                                  new TSampleKScan(
-                                      std::move(response),
-                                      ev->Sender,
-                                      requestedRange,
-                                      record.GetK(),
-                                      record.GetSeed(),
-                                      record.GetMaxProbability(),
-                                      record.GetColumns(),
-                                      userTable),
-                                  0,
-                                  scanOpts);
-
+    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
     ScanManager.Set(id, seqNo).push_back(scanId);
 }
 

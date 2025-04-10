@@ -594,18 +594,22 @@ public:
                 }
             }
 
-            auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, true);
-            if (transform) {
-                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
-                inputs.clear();
-                inputs.emplace_back(transform->TransformOutput);
-                entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                        {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
+            auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
+            if (entryNode) {
+                if (transform) {
+                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
+                    inputs.clear();
+                    inputs.emplace_back(transform->TransformOutput);
+                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
+                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
+                } else {
+                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
+                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
+                }
             } else {
-                entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                    DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                        {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
+                // In some cases we don't need input. For example, for joining EmptyIterator with table.
             }
         }
 

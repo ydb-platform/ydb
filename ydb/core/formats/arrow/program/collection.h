@@ -68,7 +68,7 @@ public:
     }
 
     bool IsEmptyData() const {
-        return Accessors.empty() || !GetRecordsCountActualVerified();
+        return !GetRecordsCountActualVerified();
     }
 
     bool HasAccessors() const {

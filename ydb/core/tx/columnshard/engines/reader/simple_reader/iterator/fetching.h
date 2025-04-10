@@ -104,24 +104,6 @@ public:
     }
 };
 
-class TCheckLimitStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    virtual TString DoDebugString() const override {
-        return TStringBuilder();
-    }
-
-public:
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const override {
-        return 0;
-    }
-    TCheckLimitStep()
-        : TBase("CHECK_LIMIT") {
-    }
-};
-
 class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

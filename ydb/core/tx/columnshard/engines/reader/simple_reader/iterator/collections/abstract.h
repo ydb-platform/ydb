@@ -22,29 +22,14 @@ private:
         return "";
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const = 0;
-    virtual void DoOnSourceCheckLimit(const std::shared_ptr<IDataSource>& source) = 0;
     virtual bool DoHasData() const = 0;
-    virtual bool DoHasWaitingSources() const = 0;
-    virtual bool DoIsSourceReadyForResult(const std::shared_ptr<IDataSource>& source) const = 0;
 
 protected:
     const std::shared_ptr<TSpecialReadContext> Context;
 
 public:
-    bool IsSourceReadyForResult(const std::shared_ptr<IDataSource>& source) const {
-        return DoIsSourceReadyForResult(source);
-    }
-
-    bool HasWaitingSources() const {
-        return DoHasWaitingSources();
-    }
-
     bool HasData() const {
         return DoHasData();
-    }
-
-    void OnSourceCheckLimit(const std::shared_ptr<IDataSource>& source) {
-        DoOnSourceCheckLimit(source);
     }
 
     std::shared_ptr<IScanCursor> BuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const {

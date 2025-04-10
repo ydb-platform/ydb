@@ -32,32 +32,27 @@ private:
     virtual bool DoHasData() const override {
         return HeapSources.size();
     }
-    THashSet<ui32> WaitingToFinish;
+    ui32 SourceIdxCurrent = 0;
     std::shared_ptr<IDataSource> NextSource;
     std::deque<TSourceConstructor> HeapSources;
     ui64 Limit = 0;
     ui64 InFlightLimit = 1;
-    ui64 FetchedCount = 0;
     std::set<ui32> FetchingInFlightSources;
-    std::optional<ui32> PKPrefixSize;
-
-    virtual bool DoIsSourceReadyForResult(const std::shared_ptr<IDataSource>& source) const override {
-        return source->HasStageResult() && (source->GetStageResult().IsEmpty() || source->IsStartedInLimit());
-    }
-
+    bool Aborted = false;
+    bool Cleared = false;
 
     void DrainToLimit();
-
-    virtual void DoOnSourceCheckLimit(const std::shared_ptr<IDataSource>& source) override;
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
     }
     virtual void DoClear() override {
+        Cleared = true;
         HeapSources.clear();
         FetchingInFlightSources.clear();
     }
     virtual void DoAbort() override {
+        Aborted = true;
         HeapSources.clear();
         FetchingInFlightSources.clear();
     }
@@ -68,14 +63,15 @@ private:
     virtual bool DoCheckInFlightLimits() const override {
         return (FetchingInFlightSources.size() < InFlightLimit) || (HeapSources.size() && HeapSources.front().NeedForceToExtract());
     }
-    virtual bool DoHasWaitingSources() const override {
-        return WaitingToFinish.size() || HeapSources.size() || FetchingInFlightSources.size();
-    }
 
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
+    const std::shared_ptr<IDataSource>& GetNextSource() const {
+        return NextSource;
+    }
+
     TScanWithLimitCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
         const std::shared_ptr<IScanCursor>& cursor);
 };

@@ -2,6 +2,7 @@
 #include "source.h"
 
 #include "collections/abstract.h"
+#include "sync_points/abstract.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -12,331 +13,42 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 class TPlainReadData;
 
-class ISyncPoint {
-private:
-    YDB_READONLY(ui32, PointIndex, 0);
-    YDB_READONLY_DEF(TString, PointName);
-    std::optional<ui32> LastSourceIdx;
-    virtual void OnSourceAdded(const std::shared_ptr<IDataSource>& source) = 0;
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source) const = 0;
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const = 0;
-
-protected:
-    std::shared_ptr<ISyncPoint> Next;
-    std::deque<std::shared_ptr<IDataSource>> SourcesSequentially;
-
-public:
-    ISyncPoint(const ui32 pointIndex, const TString& pointName)
-        : PointIndex(pointIndex)
-        , PointName(pointName) {
-    }
-
-    void AddSource(const std::shared_ptr<IDataSource>& source) {
-        source->SetPurposeSyncPoint(GetPointIndex());
-        AFL_VERIFY(!!source);
-        if (!LastSourceIdx) {
-            LastSourceIdx = source->GetSourceIdx();
-        } else {
-            AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx());
-        }
-        LastSourceIdx = source->GetSourceIdx();
-        SourcesSequentially.emplace_back(source);
-        source->InitFetchingPlan(BuildFetchingPlan());
-        source->StartProcessing(source);
-    }
-
-    void OnSourcePrepared(const std::shared_ptr<IDataSource>& sourceInput, TPlainReadData& reader) {
-        AFL_VERIFY(sourceInput->IsSyncSection());
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("f"));
-        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
-            "source_id", sourceInput->GetSourceId());
-        AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event", "OnSourcePrepared")("syn_point", GetPointName())(
-            "source_id", sourceInput->GetSourceId());
-        if (SourcesSequentially.size()) {
-            AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
-                "source_id", sourceInput->GetSourceId())("first_source_id", SourcesSequentially.front()->GetSourceId());
-        }
-        while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
-            auto source = SourcesSequentially.front();
-            AFL_WARN(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event", "ready_source")("source_id", source->GetSourceId());
-            if (OnSourceReady(source)) {
-                if (Next) {
-                    Next->AddSource(source);
-                } else {
-                    reader.GetScanner().MutableSourcesCollection().OnSourceFinished(source);
-                }
-                SourcesSequentially.pop_front();
-            } else {
-                break;
-            }
-        }
-    }
-};
-
-class TSyncPointResult: public ISyncPoint {
-private:
-    using TBase = ISyncPoint;
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const override {
-    }
-
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) const override {
-        auto resultChunk = source->MutableStageResult().ExtractResultChunk(false);
-        const bool isFinished = source->GetStageResult().IsFinished();
-        std::optional<ui32> sourceIdxToContinue;
-        if (!isFinished) {
-            sourceIdxToContinue = source->GetSourceIdx();
-        }
-        if (resultChunk && resultChunk->HasData()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", source->GetSourceId())(
-                "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows());
-            auto cursor = SourcesCollection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount());
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(source->GetResourceGuards(), source->GetGroupGuard(),
-                resultChunk->GetTable(), cursor, Context->GetCommonContext(), sourceIdxToContinue));
-        } else if (sourceIdxToContinue) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", source->GetSourceId())(
-                "source_idx", source->GetSourceIdx());
-            source->ContinueSource(source);
-            return false;
-        }
-        if (!isFinished) {
-            return false;
-        }
-        AFL_VERIFY(FetchingSourcesByIdx.erase(source->GetSourceIdx()));
-        source->ClearResult();
-        return true;
-    }
-
-public:
-    TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex)
-        : TBase(pointIndex, "RESULT")
-        , Limit(limit) {
-    }
-};
-
-class TSyncPointLimitControl: public ISyncPoint {
-private:
-    using TBase = ISyncPoint;
-
-    const ui32 Limit;
-    ui32 FetchedCount = 0;
-
-    class TSourceIterator {
-    private:
-        std::shared_ptr<IDataSource> Source;
-        bool Reverse;
-        int Delta = 0;
-        i64 Start = 0;
-        i64 Finish = 0;
-        std::shared_ptr<NArrow::NMerger::TRWSortableBatchPosition> SortableRecord;
-        std::shared_ptr<NArrow::TColumnFilter> Filter;
-        std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
-        bool IsValidFlag = true;
-
-        bool ShiftWithFilter() const {
-            AFL_VERIFY(IsValidFlag);
-            while (!FilterIterator->GetCurrentAcceptance()) {
-                if (!FilterIterator->Next(1)) {
-                    AFL_VERIFY(!SortableRecord->NextPosition(Delta));
-                    return false;
-                } else {
-                    AFL_VERIFY(SortableRecord->NextPosition(Delta));
-                }
-            }
-            return true;
-        }
-
-        bool StartedWithLimit = false;
-
-    public:
-        const std::shared_ptr<IDataSource>& GetSource() const {
-            AFL_VERIFY(Source);
-            return Source;
-        }
-
-        bool StartWithLimit() {
-            if (!StartedWithLimit) {
-                Source->MarkAsStartedInLimit();
-                StartedWithLimit = true;
-                Source->ContinueCursor(Source);
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        TSourceIterator(const std::shared_ptr<IDataSource>& source)
-            : Source(source)
-            , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
-            , Delta(Reverse ? -1 : 1) {
-            AFL_VERIFY(Source);
-            auto arr = Source->GetStart().GetValue().GetArrays();
-            auto batch =
-                arrow::RecordBatch::Make(Source->GetSourceSchema()->GetIndexInfo().GetReplaceKey(), arr.front()->length(), std::move(arr));
-            SortableRecord =
-                std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Source->GetStart().GetValue().GetMonoPosition(), Reverse);
-        }
-
-        TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
-            const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::shared_ptr<IDataSource>& source)
-            : Source(source)
-            , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
-            , Delta(Reverse ? -1 : 1)
-            , Start(Reverse ? (arrs.front()->GetRecordsCount() - 1) : 0)
-            , Finish(Reverse ? 0 : (arrs.front()->GetRecordsCount() - 1))
-            , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter())) {
-            AFL_VERIFY(arrs.size());
-            AFL_VERIFY(arrs.front()->GetRecordsCount());
-            FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(Reverse, arrs.front()->GetRecordsCount()));
-            auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
-            auto copyArrs = arrs;
-            auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse);
-            IsValidFlag = ShiftWithFilter();
-        }
-
-        ui64 GetSourceId() const {
-            AFL_VERIFY(Source);
-            return Source->GetSourceId();
-        }
-
-        bool IsFilled() const {
-            return !!Filter;
-        }
-
-        bool IsValid() const {
-            return IsValidFlag;
-        }
-
-        bool Next() {
-            AFL_VERIFY(IsValidFlag);
-            AFL_VERIFY(!!SortableRecord);
-            AFL_VERIFY(!!Filter);
-            IsValidFlag = SortableRecord->NextPosition(Delta);
-            AFL_VERIFY(FilterIterator->Next(1) == IsValidFlag);
-            if (IsValidFlag) {
-                IsValidFlag = ShiftWithFilter();
-            }
-            return IsValidFlag;
-        }
-
-        bool operator<(const TSourceIterator& item) const {
-            const auto cmp = SortableRecord->ComparePartial(*item.SortableRecord);
-            if (cmp == std::partial_ordering::equivalent) {
-                return item.Source->GetSourceId() < Source->GetSourceId();
-            }
-            return cmp == std::partial_ordering::greater;
-        }
-    };
-
-    THashMap<ui32, TSourceIterator> FilledIterators;
-    std::vector<TSourceIterator> Iterators;
-
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const override {
-        AFL_VERIFY(FetchedCount < Limit);
-    }
-
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) const override {
-        if (FetchedCount >= Limit) {
-            return true;
-        }
-        const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
-        const auto& g = *source->GetStageResult().GetBatch();
-        AFL_VERIFY(g.GetRecordsCount());
-        std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
-        for (auto&& i : rk.fields()) {
-            auto acc = g.GetAccessorByNameOptional(i->name());
-            if (!acc) {
-                break;
-            }
-            arrs.emplace_back(acc);
-        }
-        AFL_VERIFY(arrs.size());
-        if (!PKPrefixSize) {
-            PKPrefixSize = arrs.size();
-        } else {
-            AFL_VERIFY(*PKPrefixSize == arrs.size())("prefix", PKPrefixSize)("arr", arrs.size());
-        }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_id", source->GetSourceId())(
-            "fetched", FetchedCount)("limit", Limit);
-        AFL_VERIFY(FilledIterators.emplace(source->GetSourceId(),
-            TSourceIterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source)).second);
-        AFL_VERIFY(Iterators.size());
-        AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId());
-        DrainToLimit();
-        return true;
-    }
-
-    void DrainToLimit(TPlainReadData& reader) {
-        while (Iterators.size()) {
-            if (!Iterators.front().IsFilled()) {
-                auto it = FilledIterators.find(Iterators.front().GetSourceId());
-                if (it == FilledIterators.end()) {
-                    break;
-                }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "RemoveFilledIterator")("source_id", Iterators.front().GetSourceId())(
-                    "fetched", FetchedCount)("limit", Limit);
-                std::pop_heap(Iterators.begin(), Iterators.end());
-                AFL_VERIFY(it->second.IsFilled());
-                Iterators.back() = std::move(it->second);
-                AFL_VERIFY(Iterators.back().IsValid());
-                std::push_heap(Iterators.begin(), Iterators.end());
-                FilledIterators.erase(it);
-            } else {
-                std::pop_heap(Iterators.begin(), Iterators.end());
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "LimitIteratorNext")("source_id", Iterators.back().GetSourceId())(
-                    "fetched", FetchedCount)("limit", Limit)("max", GetMaxInFlight())("in_flight_limit", InFlightLimit)(
-                    "count", FetchingInFlightSources.size())("iterators", Iterators.size());
-                if (!Iterators.back().Next()) {
-                    Iterators.pop_back();
-                } else {
-                    std::push_heap(Iterators.begin(), Iterators.end());
-                    if (++FetchedCount >= Limit) {
-                        reader.GetScanner().MutableSourcesCollection().Clear();
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-public:
-    TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex)
-        : TBase(pointIndex, "SYNC_LIMIT")
-        , Limit(limit) {
-    }
-};
-
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
-    THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
-    std::deque<std::shared_ptr<IDataSource>> FetchingSources;
-    TPositiveControlInteger IntervalsInFlightCount;
-    std::unique_ptr<ISourcesCollection> SourcesCollection;
-
-    void StartNextSource(const std::shared_ptr<TPortionDataSource>& source);
+    std::shared_ptr<ISourcesCollection> SourcesCollection;
+    std::vector<std::shared_ptr<ISyncPoint>> SyncPoints;
 
 public:
-    void OnSourceCheckLimit(const std::shared_ptr<IDataSource>& source);
+    const std::shared_ptr<ISyncPoint>& GetResultSyncPoint() const {
+        return SyncPoints.back();
+    }
 
-    ISourcesCollection& MutableSourcesCollection() {
+    const std::shared_ptr<ISyncPoint>& GetSyncPoint(const ui32 index) const {
+        AFL_VERIFY(index < SyncPoints.size());
+        return SyncPoints[index];
+    }
+
+    ISourcesCollection& MutableSourcesCollection() const {
+        return *SourcesCollection;
+    }
+
+    const ISourcesCollection& GetSourcesCollection() const {
         return *SourcesCollection;
     }
 
     ~TScanHead();
 
-    void ContinueSource(const ui32 sourceIdx) const {
-        auto it = FetchingSourcesByIdx.find(sourceIdx);
-        AFL_VERIFY(it != FetchingSourcesByIdx.end())("source_idx", sourceIdx)("count", FetchingSourcesByIdx.size());
-        it->second->ContinueCursor(it->second);
-    }
-
     bool IsReverse() const;
     void Abort();
 
     bool IsFinished() const {
-        return FetchingSources.empty() && SourcesCollection->IsFinished();
+        for (auto&& i : SyncPoints) {
+            if (!i->IsFinished()) {
+                return false;
+            }
+        }
+        return SourcesCollection->IsFinished();
     }
 
     const TReadContext& GetContext() const;
@@ -344,14 +56,13 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "S:{" << SourcesCollection->DebugString() << "};";
-        sb << "F:";
-        for (auto&& i : FetchingSources) {
-            sb << i->GetSourceId() << ";";
+        sb << "SP:[";
+        for (auto&& i : SyncPoints) {
+            sb << "{" << i->DebugString() << "};";
         }
+        sb << "]";
         return sb;
     }
-
-    void OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader);
 
     TConclusionStatus Start();
 

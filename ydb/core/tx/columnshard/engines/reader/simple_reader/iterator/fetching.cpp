@@ -133,51 +133,12 @@ public:
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->SetCursor(Step);
         Source->StartSyncSection();
-        plainReader->MutableScanner().OnSourceReady(Source, *plainReader);
-        return true;
-    }
-};
-
-class TCheckLimitTask: public IDataTasksProcessor::ITask {
-private:
-    using TBase = IDataTasksProcessor::ITask;
-    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    NColumnShard::TCounterGuard Guard;
-    TFetchingScriptCursor Step;
-
-public:
-    virtual TString GetTaskClassIdentifier() const override {
-        return "TCheckLimitTask";
-    }
-
-    TCheckLimitTask(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-        : TBase(NActors::TActorId())
-        , Source(source)
-        , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForCheckLimitGuard())
-        , Step(step) {
-    }
-
-    virtual TConclusionStatus DoExecuteImpl() override {
-        AFL_VERIFY(false)("event", "not applicable");
-        return TConclusionStatus::Success();
-    }
-    virtual bool DoApply(IDataReader& indexedDataRead) const override {
-        auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
-        Source->SetCursor(Step);
-        Source->StartSyncSection();
-        plainReader->MutableScanner().OnSourceCheckLimit(Source);
+        plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(Source, *plainReader);
         return true;
     }
 };
 
 }   // namespace
-
-TConclusion<bool> TCheckLimitStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    auto context = source->GetContext();
-    NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TCheckLimitTask>(source, step)));
-    return false;
-}
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto context = source->GetContext();
@@ -216,10 +177,6 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
     AFL_VERIFY(!source->GetStageResult().IsEmpty());
-    if (context->GetReadMetadata()->IsSorted() && context->GetReadMetadata()->HasLimit()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_check_limit")("source_id", source->GetSourceId());
-        acc.AddStep(std::make_shared<TCheckLimitStep>());
-    }
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
         if (source->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
@@ -231,11 +188,14 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->InitFetchingPlan(plan);
-
-    TFetchingScriptCursor cursor(plan, 0);
-    auto task = std::make_shared<TStepAction>(source, std::move(cursor), context->GetCommonContext()->GetScanActorId(), false);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
-    return false;
+    if (source->NeedFullAnswer()) {
+        TFetchingScriptCursor cursor(plan, 0);
+        auto task = std::make_shared<TStepAction>(source, std::move(cursor), context->GetCommonContext()->GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        return false;
+    } else {
+        return true;
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -142,8 +142,7 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
-    bool FinishedFlag = false;
-    bool StartedInLimitFlag = false;
+    bool NeedFullAnswerFlag = true;
     std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
@@ -156,6 +155,14 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    bool NeedFullAnswer() const {
+        return NeedFullAnswerFlag;
+    }
+
+    void SetNeedFullAnswer(const bool value) {
+        NeedFullAnswerFlag = value;
+    }
+
     ui32 GetPurposeSyncPointIndex() const {
         AFL_VERIFY(PurposeSyncPointIndex);
         return *PurposeSyncPointIndex;
@@ -166,27 +173,13 @@ public:
         PurposeSyncPointIndex.reset();
     }
 
-    ui32 SetPurposeSyncPointIndex(const ui32 value) {
-        AFL_VERIFY(!PurposeSyncPointIndex);
+    void SetPurposeSyncPointIndex(const ui32 value) {
+        if (!PurposeSyncPointIndex) {
+            AFL_VERIFY(value == 0);
+        } else {
+            AFL_VERIFY(*PurposeSyncPointIndex < value);
+        }
         PurposeSyncPointIndex = value;
-    }
-
-    bool IsStartedInLimit() const {
-        return StartedInLimitFlag;
-    }
-    void MarkAsStartedInLimit() {
-        AFL_VERIFY(IsSyncSection());
-        AFL_VERIFY(!StartedInLimitFlag);
-        StartedInLimitFlag = true;
-    }
-    void MarkAsFinished() {
-        AFL_VERIFY(IsSyncSection());
-        AFL_VERIFY(!FinishedFlag);
-        FinishedFlag = true;
-    }
-
-    bool IsFinished() const {
-        return FinishedFlag;
     }
 
     virtual void InitUsedRawBytes() = 0;
@@ -266,6 +259,9 @@ public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
+    bool HasFetchingPlan() const {
+        return !!FetchingPlan;
+    }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
@@ -519,10 +515,10 @@ public:
         return item.Start < Start;
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const {
+    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
         const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
-        AFL_VERIFY(PortionIdx < portions.size());
-        auto result = std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        AFL_VERIFY(sourceIdx < portions.size());
+        auto result = std::make_shared<TPortionDataSource>(sourceIdx, portions[PortionIdx], context);
         if (IsStartedByCursorFlag) {
             result->SetIsStartedByCursor();
         }

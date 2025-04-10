@@ -10,6 +10,7 @@ private:
     using TBase = ISourcesCollection;
     std::deque<TSourceConstructor> HeapSources;
     TPositiveControlInteger InFlightCount;
+    ui32 SourceIdx = 0;
     virtual void DoClear() override {
         HeapSources.clear();
     }
@@ -22,18 +23,12 @@ private:
     virtual bool DoIsFinished() const override {
         return HeapSources.empty();
     }
-    virtual bool DoIsSourceReadyForResult(const std::shared_ptr<IDataSource>& /*source*/) const override {
-        return true;
-    }
-    virtual bool DoHasWaitingSources() const override {
-        return HeapSources.size() || InFlightCount.Val();
-    }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(source->GetStartPKRecordBatch(), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
         AFL_VERIFY(HeapSources.size());
-        auto result = HeapSources.front().Construct(Context);
+        auto result = HeapSources.front().Construct(SourceIdx++, Context);
         std::pop_heap(HeapSources.begin(), HeapSources.end());
         HeapSources.pop_back();
         InFlightCount.Inc();
@@ -44,10 +39,6 @@ private:
     }
     virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& /*source*/) override {
         InFlightCount.Dec();
-    }
-
-    virtual void DoOnSourceCheckLimit(const std::shared_ptr<IDataSource>& /*source*/) override {
-        AFL_VERIFY(false)("reason", "not_applicable");
     }
 
 public:

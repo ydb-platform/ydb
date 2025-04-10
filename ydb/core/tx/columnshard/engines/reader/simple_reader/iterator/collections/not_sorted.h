@@ -11,6 +11,7 @@ private:
     std::deque<TSourceConstructor> Sources;
     TPositiveControlInteger InFlightCount;
     ui32 FetchedCount = 0;
+    ui32 SourceIdx = 0;
     virtual bool DoHasData() const override {
         return Sources.size();
     }
@@ -20,15 +21,6 @@ private:
     virtual void DoAbort() override {
         Sources.clear();
     }
-    virtual void DoOnSourceCheckLimit(const std::shared_ptr<IDataSource>& /*source*/) override {
-        AFL_VERIFY(false)("reason", "not_applicable");
-    }
-    virtual bool DoHasWaitingSources() const override {
-        return (Limit ? (FetchedCount < *Limit) : Sources.size()) || InFlightCount.Val();
-    }
-    virtual bool DoIsSourceReadyForResult(const std::shared_ptr<IDataSource>& /*source*/) const override {
-        return true;
-    }
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override;
     virtual bool DoIsFinished() const override {
@@ -36,7 +28,7 @@ private:
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
         AFL_VERIFY(Sources.size());
-        auto result = Sources.front().Construct(Context);
+        auto result = Sources.front().Construct(SourceIdx++, Context);
         Sources.pop_front();
         InFlightCount.Inc();
         return result;

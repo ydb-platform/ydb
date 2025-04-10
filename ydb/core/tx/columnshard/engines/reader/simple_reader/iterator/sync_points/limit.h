@@ -3,12 +3,16 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+class TScanWithLimitCollection;
+
 class TSyncPointLimitControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
 
     const ui32 Limit;
+    std::shared_ptr<TScanWithLimitCollection> Collection;
     ui32 FetchedCount = 0;
+    std::optional<ui32> PKPrefixSize;
 
     class TSourceIterator {
     private:
@@ -35,23 +39,10 @@ private:
             return true;
         }
 
-        bool StartedWithLimit = false;
-
     public:
         const std::shared_ptr<IDataSource>& GetSource() const {
             AFL_VERIFY(Source);
             return Source;
-        }
-
-        bool StartWithLimit() {
-            if (!StartedWithLimit) {
-                Source->MarkAsStartedInLimit();
-                StartedWithLimit = true;
-                Source->ContinueCursor(Source);
-                return true;
-            } else {
-                return false;
-            }
         }
 
         TSourceIterator(const std::shared_ptr<IDataSource>& source)
@@ -118,84 +109,25 @@ private:
         }
     };
 
-    THashMap<ui32, TSourceIterator> FilledIterators;
     std::vector<TSourceIterator> Iterators;
 
-    virtual std::shared_ptr<TFetchingScript> BuildFetchingPlan(const std::shared_ptr<IDataSource>& source) const override {
+    virtual void OnAddSource(const std::shared_ptr<IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit);
+        Iterators.emplace_back(TSourceIterator(source));
+        std::push_heap(Iterators.begin(), Iterators.end());
     }
 
-    virtual bool OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) const override {
-        if (FetchedCount >= Limit) {
-            return true;
-        }
-        const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
-        const auto& g = *source->GetStageResult().GetBatch();
-        AFL_VERIFY(g.GetRecordsCount());
-        std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
-        for (auto&& i : rk.fields()) {
-            auto acc = g.GetAccessorByNameOptional(i->name());
-            if (!acc) {
-                break;
-            }
-            arrs.emplace_back(acc);
-        }
-        AFL_VERIFY(arrs.size());
-        if (!PKPrefixSize) {
-            PKPrefixSize = arrs.size();
-        } else {
-            AFL_VERIFY(*PKPrefixSize == arrs.size())("prefix", PKPrefixSize)("arr", arrs.size());
-        }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_id", source->GetSourceId())(
-            "fetched", FetchedCount)("limit", Limit);
-        AFL_VERIFY(FilledIterators.emplace(source->GetSourceId(),
-            TSourceIterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source)).second);
-        AFL_VERIFY(Iterators.size());
-        AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId());
-        if (DrainToLimit()) {
-            reader.GetScanner().MutableSourcesCollection().Clear();
-        }
-        return true;
+    virtual void DoAbort() override {
+        Iterators.clear();
     }
 
-    bool DrainToLimit() {
-        while (Iterators.size()) {
-            if (!Iterators.front().IsFilled()) {
-                auto it = FilledIterators.find(Iterators.front().GetSourceId());
-                if (it == FilledIterators.end()) {
-                    return false;
-                }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "RemoveFilledIterator")("source_id", Iterators.front().GetSourceId())(
-                    "fetched", FetchedCount)("limit", Limit);
-                std::pop_heap(Iterators.begin(), Iterators.end());
-                AFL_VERIFY(it->second.IsFilled());
-                Iterators.back() = std::move(it->second);
-                AFL_VERIFY(Iterators.back().IsValid());
-                std::push_heap(Iterators.begin(), Iterators.end());
-                FilledIterators.erase(it);
-            } else {
-                std::pop_heap(Iterators.begin(), Iterators.end());
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "LimitIteratorNext")("source_id", Iterators.back().GetSourceId())(
-                    "fetched", FetchedCount)("limit", Limit)("max", GetMaxInFlight())("in_flight_limit", InFlightLimit)(
-                    "count", FetchingInFlightSources.size())("iterators", Iterators.size());
-                if (!Iterators.back().Next()) {
-                    Iterators.pop_back();
-                } else {
-                    std::push_heap(Iterators.begin(), Iterators.end());
-                    if (++FetchedCount >= Limit) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
+    virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override;
+
+    bool DrainToLimit();
 
 public:
-    TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex)
-        : TBase(pointIndex, "SYNC_LIMIT")
-        , Limit(limit) {
-    }
+    TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
+        const std::shared_ptr<TScanWithLimitCollection>& collection);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

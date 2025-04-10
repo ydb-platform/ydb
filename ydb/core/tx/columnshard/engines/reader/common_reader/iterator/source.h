@@ -291,6 +291,10 @@ public:
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
+    void ResetSourceFinishedFlag() {
+        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
+    }
+
     void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
         AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
         AFL_VERIFY(sourcePtr);

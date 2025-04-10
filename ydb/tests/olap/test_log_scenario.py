@@ -105,11 +105,6 @@ class YdbWorkloadLog:
 
 
 class TestLogScenario(object):
-    class InsertMode(Enum):
-        BULK_UPSERT = 1
-        INSERT = 2
-        UPSERT = 3
-
     @classmethod
     def setup_class(cls):
         cls._setup_ydb()

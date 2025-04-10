@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NReader {
 
 TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames);
+    NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);
     TFiltersBuilder filtersBuilder;
     for (const auto& [id, source] : SourcesById) {
         merger.AddSource(source.GetData(), source.GetFilter(), id);

@@ -104,7 +104,8 @@ target_link_libraries(query_replay_yt PUBLIC
   url_udf
   yson2_udf
   dsv_udf
-  essentials-sql-pg_dummy
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(query_replay_yt

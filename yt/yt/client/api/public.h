@@ -119,7 +119,7 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
 
 struct TConnectionOptions;
 
-using TClientOptions = NAuth::TAuthenticationOptions;
+struct TClientOptions;
 
 struct TTransactionParticipantOptions;
 

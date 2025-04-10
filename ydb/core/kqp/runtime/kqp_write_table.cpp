@@ -548,6 +548,7 @@ public:
     }
 
     void AddBatch(IDataBatchPtr&& batch) override {
+        TGuard guard(*Alloc);
         auto columnshardBatch = dynamic_cast<TColumnBatch*>(batch.Get());
         AFL_ENSURE(columnshardBatch);
         if (columnshardBatch->IsEmpty()) {
@@ -555,11 +556,10 @@ public:
         }
         auto data = columnshardBatch->Extract();
         AFL_ENSURE(data);
-        ShardAndFlushBatch(data, false);
+        ShardAndFlushBatch(std::move(data), false);
     }
 
-    void ShardAndFlushBatch(const TRecordBatchPtr& unshardedBatch, bool force) {
-        TGuard guard(*Alloc);
+    void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
         for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
                                                     unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
@@ -647,6 +647,7 @@ public:
     }
 
     void Close() override {
+        TGuard guard(*Alloc);
         AFL_ENSURE(!Closed);
         Closed = true;
         FlushUnpreparedForce();
@@ -665,6 +666,7 @@ public:
     }
 
     TBatches FlushBatchesForce() override {
+        TGuard guard(*Alloc);
         FlushUnpreparedForce();
 
         TBatches newBatches;
@@ -678,6 +680,7 @@ public:
     }
 
     IDataBatchPtr FlushBatch(ui64 shardId) override {
+        TGuard guard(*Alloc);
         if (!Batches.contains(shardId)) {
             return {};
         }

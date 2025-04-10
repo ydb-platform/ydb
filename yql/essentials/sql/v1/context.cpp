@@ -68,6 +68,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverWindow", &TContext::DistinctOverWindow},
     {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
+    {"DistinctOverKeys", &TContext::DistinctOverKeys},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

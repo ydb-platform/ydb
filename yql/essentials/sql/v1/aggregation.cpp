@@ -196,7 +196,7 @@ protected:
                     DistinctKey = DotJoin(*sourcePtr, DistinctKey);
                 }
             }
-            if (src->IsGroupByColumn(DistinctKey)) {
+            if (!ctx.DistinctOverKeys && src->IsGroupByColumn(DistinctKey)) {
                 ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey);
                 return false;
             }

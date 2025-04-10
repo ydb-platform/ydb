@@ -26,7 +26,7 @@ namespace NKafka {
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D(TStringBuilder() << "Receieved ADD_OFFSETS_TO_TXN request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TAddPartitionsToTxnResponseData>(ev);
+            SendInvalidTransactionActorStateResponse<TAddOffsetsToTxnResponseData>(ev);
             Die(ctx);
             return;
         }
@@ -36,7 +36,7 @@ namespace NKafka {
     void TKafkaTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D(TStringBuilder() << "Receieved TXN_OFFSET_COMMIT request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TAddPartitionsToTxnResponseData>(ev);
+            SendInvalidTransactionActorStateResponse<TTxnOffsetCommitResponseData>(ev);
             Die(ctx);
             return;
         }
@@ -52,7 +52,7 @@ namespace NKafka {
                 };
             }
         }
-        SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
+        SendOkResponse<TTxnOffsetCommitResponseData>(ev);
     }
 
     /* 
@@ -69,7 +69,7 @@ namespace NKafka {
     void TKafkaTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D(TStringBuilder() << "Receieved END_TXN request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TAddPartitionsToTxnResponseData>(ev);
+            SendInvalidTransactionActorStateResponse<TEndTxnResponseData>(ev);
             Die(ctx);
             return;
         }

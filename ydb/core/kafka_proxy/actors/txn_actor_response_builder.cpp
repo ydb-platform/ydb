@@ -9,6 +9,10 @@ namespace NKafka {
             response->ErrorCode = errorCode;
             return response;
         };
+        
+        template std::shared_ptr<TAddOffsetsToTxnResponseData> TResponseBuilder::Build<TAddOffsetsToTxnResponseData, TAddOffsetsToTxnRequestData>(TMessagePtr<TAddOffsetsToTxnRequestData> request, EKafkaErrors errorCode);
+        
+        template std::shared_ptr<TEndTxnResponseData> TResponseBuilder::Build<TEndTxnResponseData, TEndTxnRequestData>(TMessagePtr<TEndTxnRequestData> request, EKafkaErrors errorCode);
 
         template<>
         std::shared_ptr<TAddPartitionsToTxnResponseData> TResponseBuilder::Build<TAddPartitionsToTxnResponseData, TAddPartitionsToTxnRequestData>(TMessagePtr<TAddPartitionsToTxnRequestData> request, EKafkaErrors errorCode) {

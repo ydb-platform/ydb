@@ -3,11 +3,6 @@ name: Run tests
 on:
   workflow_call:
     inputs:
-      runner_label:
-        description: 'Label of the runner to be used'
-        required: false
-        type: string
-        default: self-hosted
       test_targets:
         description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
         required: true
@@ -40,10 +35,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      runner_label:
-        description: 'Label of the runner to be used'
-        required: false
-        default: self-hosted
       test_targets:
         description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
         required: true
@@ -106,7 +97,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: ${{ inputs.runner_label }}
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
     strategy:
       fail-fast: false
       matrix:

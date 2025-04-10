@@ -49,7 +49,7 @@ jobs:
       - name: Set up date range
         id: date-setup
         run: |
-          LAST_WEEK_DATE=$(date -d "7 days ago" '+%Y-%m-%dT%H:%M:%SZ')
+          LAST_WEEK_DATE=$(date -d "20 days ago" '+%Y-%m-%dT%H:%M:%SZ')
           echo "LAST_WEEK_DATE=$LAST_WEEK_DATE" >> $GITHUB_ENV
 
       - name: Get merged PRs

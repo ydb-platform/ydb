@@ -234,6 +234,7 @@ private:
     std::vector<std::optional<ui64>> ColumnIndexes;  // Output column index in schema passed into RowDispatcher
     const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
+    // Set on Parent
     ui64 CpuMicrosec = 0;
     // Set on both Parent (cumulative) and Childern (separate)
 
@@ -485,9 +486,13 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
 {
-    if (Parent == this) {
-        State = EState::START_CLUSTER_DISCOVERY;
+
+    SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
+        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
+    if (Parent != this) {
+        return;
     }
+    State = EState::START_CLUSTER_DISCOVERY;
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
@@ -510,8 +515,6 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType);
 
     IngressStats.Level = statsLevel;
-    SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
 }
 
 void TDqPqRdReadActor::Init() {

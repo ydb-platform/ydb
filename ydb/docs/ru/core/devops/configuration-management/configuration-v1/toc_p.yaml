@@ -2,15 +2,13 @@ items:
 - name: Обзор конфигурации
   href: config-overview.md
 - name: Статическая конфигурация
-  href: config-settings.md
+  href: ../../../reference/configuration/index.md
 - name: Динамическая конфигурация
   href: dynamic-config.md
 - name: Временная конфигурация
   href: dynamic-config-volatile-config.md
 - name: DSL конфигурации кластера
   href: dynamic-config-selectors.md
-- name: Параметры конфигурации
-  href: config-settings.md
 - name: Изменение конфигураций через CMS
   href: cms.md
 - name: Изменение конфигурации актор-системы

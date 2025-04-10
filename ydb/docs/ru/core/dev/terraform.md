@@ -92,7 +92,7 @@
 
 {% endnote %}
 
-Если вы используете создание ресурсов `ydb_table_changefeed` или `ydb_topic` и на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../devops/configuration-management/configuration-v1/config-settings.md) нужно указать:
+Если вы используете создание ресурсов `ydb_table_changefeed` или `ydb_topic` и на сервере {{ ydb-short-name }} не включена авторизация, то в конфиге БД [config.yaml](../reference/configuration/index.md) нужно указать:
 
 ```yaml
 ...

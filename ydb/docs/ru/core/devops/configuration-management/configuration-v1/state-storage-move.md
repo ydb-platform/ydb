@@ -2,7 +2,7 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
-Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state), необходимо переместить её на другой хост.
+Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 
@@ -21,7 +21,7 @@ domains_config:
 ...
 ```
 
-На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v1/config-settings.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
+На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../reference/configuration/index.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
 
 Для замены `node_id:1` мы [добавили](cluster-expansion.md#add-host) в кластер новый хост с `node_id:10` и [развернули](cluster-expansion.md#add-static-node) на нём статический узел.
 

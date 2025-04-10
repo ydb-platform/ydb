@@ -4,7 +4,7 @@
 
 {% include [new](_includes/new.md) %}
 
-Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state), необходимо переместить её на другой узел.
+Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой узел.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 

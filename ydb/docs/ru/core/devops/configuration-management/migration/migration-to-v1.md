@@ -45,7 +45,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 ydb -e grpc://<node.ydb.tech>:2135 admin storage fetch --full > config.yaml
 ```
 
-Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state) и [статической группы](../../../devops/configuration-management/configuration-v1/config-settings.md#blob_storage_config).
+Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
 
 2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `self_management_config.enabled` с `true` на `false`:
 

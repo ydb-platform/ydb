@@ -38,6 +38,7 @@ items:
     mode: link
     path: kafka-api/toc_p.yaml
 - name: Конфигурация
+  href: configuration/index.md
   include:
     mode: link
     path: configuration/toc_p.yaml

@@ -167,4 +167,4 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
     ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
     ```
 
-В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state) и [статической группой](../../../devops/configuration-management/configuration-v1/config-settings.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../concepts/glossary.md#distributed-configuration).
+В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группой](../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../concepts/glossary.md#distributed-configuration).

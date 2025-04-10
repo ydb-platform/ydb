@@ -276,7 +276,7 @@ An **authentication token** or **auth token** is a token that {{ ydb-short-name 
 
 ### User token {#user-token}
 
-When a YDB node gets a request from a [user](#access-user), it validates the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
+When a YDB node gets a request from a [user](#access-user), it requests the service where the user was created to validate the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
 
 ### Cluster scheme {#scheme}
 

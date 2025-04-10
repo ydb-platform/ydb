@@ -1825,7 +1825,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("operation=%s", operation.c_str()));
 
             if (!details.empty()) {
-                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_modify_user_change=%s", render(details).c_str()));
+                UNIT_ASSERT_STRING_CONTAINS(last, Sprintf("login_user_change=%s", render(details).c_str()));
             }
 
             UNIT_ASSERT_STRING_CONTAINS(last, "component=schemeshard");

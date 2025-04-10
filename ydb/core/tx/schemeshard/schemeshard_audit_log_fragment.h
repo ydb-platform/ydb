@@ -21,7 +21,7 @@ struct TAuditLogFragment {
     TString LoginUser;
     TString LoginGroup;
     TString LoginMember;
-    TVector<TString> LoginModifyUserChange;
+    TVector<TString> LoginUserChange;
 };
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);

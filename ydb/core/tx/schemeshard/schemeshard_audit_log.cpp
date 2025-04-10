@@ -156,7 +156,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         AUDIT_PART("login_group", logEntry.LoginGroup)
         AUDIT_PART("login_member", logEntry.LoginMember)
 
-        AUDIT_PART("login_modify_user_change", RenderList(logEntry.LoginModifyUserChange), logEntry.LoginModifyUserChange)
+        AUDIT_PART("login_user_change", RenderList(logEntry.LoginUserChange), logEntry.LoginUserChange)
     );
 }
 

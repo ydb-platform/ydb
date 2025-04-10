@@ -2211,6 +2211,73 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT(result.GetStatus() == NYdb::EStatus::OVERLOADED);
         }
     }
+
+    Y_UNIT_TEST(TableSinkWithSubquery) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/table1` (
+                p1 Utf8,
+                PRIMARY KEY (p1)
+            )
+            WITH (
+                STORE = ROW
+            );
+
+            CREATE TABLE `/Root/table2` (
+                p1 Utf8,
+                PRIMARY KEY (p1)
+            )
+            WITH (
+                STORE = ROW
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/table1` (p1) VALUES ("a") , ("b"), ("c");
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $data2 = Cast(AsList() As List<Struct<p1: Utf8>>);
+
+                /* query */
+                SELECT d1.p1 AS p1,
+                FROM `/Root/table1` AS d1
+                CROSS JOIN AS_TABLE($data2) AS d2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                $data2 = Cast(AsList() As List<Struct<p1: Utf8>>);
+
+                /* query */
+                INSERT INTO `/Root/table1`
+                SELECT d1.p1 AS p1,
+                FROM `/Root/table2` AS d1
+                CROSS JOIN AS_TABLE($data2) AS d2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

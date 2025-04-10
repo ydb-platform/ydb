@@ -2416,8 +2416,7 @@ void TPersQueue::HandleForgetReadRequest(
     THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
-
-    forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult();
+    forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
     ctx.Send(SelfId(), forgetDoneEvent.Release());
 
     PQ_LOG_D("Forget direct read id " << key.ReadId << " for session " << key.SessionId);

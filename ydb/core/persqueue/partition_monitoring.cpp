@@ -237,7 +237,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}
                                     TABLED() {out << userInfo.Offset;}
-                                    TABLED() {out << (EndOffset - userInfo.Offset);}
+                                    TABLED() {out << (WorkZone.EndOffset - userInfo.Offset);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}

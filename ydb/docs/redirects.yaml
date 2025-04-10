@@ -83,8 +83,6 @@ common:
     to: /devops/manual/initial-deployment.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
-  - from: /reference/configuration/index.md
-    to: /devops/configuration-management/configuration-v1/index.md
   - from: /deploy/manual/connector.md
     to: /devops/manual/federated-queries/connector-deployment.md
   - from: /deploy/manual/deploy-ydb-federated-query.md

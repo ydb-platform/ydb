@@ -487,6 +487,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
     CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
     CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
+    UpdateTimeMs = std::max(UpdateTimeMs, taskStats.GetUpdateTimeMs());
 
     SpillingComputeBytes.SetNonZero(index, taskStats.GetSpillingComputeWriteBytes());
     SpillingChannelBytes.SetNonZero(index, taskStats.GetSpillingChannelWriteBytes());
@@ -877,6 +878,7 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     UpdateAggr(stageStats->MutableDurationUs(), stats.GetDurationUs());
     UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
     UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
+    stageStats->SetUpdateTimeMs(std::max(stageStats->GetUpdateTimeMs(), task.GetUpdateTimeMs()));
 
     UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
     UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
@@ -1518,6 +1520,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
             stageStat.WaitInputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitInputTimeUs());
             stageStat.WaitOutputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitOutputTimeUs());
+            stageStats.SetUpdateTimeMs(stageStat.UpdateTimeMs - BaseTimeMs);
 
             stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
             stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
@@ -1648,6 +1651,8 @@ void TQueryExecutionStats::AdjustBaseTime(NDqProto::TDqStageStats* stageStats) {
     for (auto& p : *stageStats->MutableEgress()) {
         AdjustAsyncBufferAggr(p.second);
     }
+    auto updateTimeMs = stageStats->GetUpdateTimeMs();
+    stageStats->SetUpdateTimeMs(updateTimeMs > BaseTimeMs ? updateTimeMs - BaseTimeMs : 0);
 }
 
 void TQueryExecutionStats::Finish() {

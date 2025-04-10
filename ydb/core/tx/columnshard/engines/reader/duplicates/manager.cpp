@@ -445,9 +445,15 @@ void TDuplicateFilterConstructor::StartMergingColumns(const ui32 intervalIdx) {
 
     AFL_VERIFY(!ActiveSources.empty());
     const std::shared_ptr<NCommon::TSpecialReadContext> readContext = ActiveSources.begin()->second->GetSource()->GetContext();
+        NArrow::NMerger::TCursor maxVersion = [snapshot=readContext->GetReadMetadata()->GetRequestSnapshot()]() {
+            NArrow::TGeneralContainer batch(1);
+            IIndexInfo::AddSnapshotColumns(batch, snapshot, 0);
+            return
+                NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+        }();
     const std::shared_ptr<TBuildDuplicateFilters> task =
         std::make_shared<TBuildDuplicateFilters>(readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(),
-            intervalIdx, SelfId(), readContext->GetCommonContext()->GetCounters());
+            intervalIdx, SelfId(), readContext->GetCommonContext()->GetCounters(), maxVersion);
 
     std::vector<ui64> emptySources;
     std::vector<ui64> nonEmptySources;

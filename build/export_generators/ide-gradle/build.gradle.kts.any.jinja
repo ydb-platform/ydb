@@ -26,26 +26,6 @@
 {%-     endmacro -%}
 {%- endif -%}
 
-{%- macro Depends(prefix, index) -%}
-{%-     if proto_template %}
-tasks.getByName("prepareMainProtos").dependsOn({{ prefix }}{{ index }})
-{%-     endif %}
-tasks.compileJava.configure {
-    dependsOn({{ prefix }}{{ index }})
-}
-tasks.compileTestJava.configure {
-    dependsOn({{ prefix }}{{ index }})
-}
-{%-    if with_kotlin %}
-tasks.compileKotlin.configure {
-    dependsOn({{ prefix }}{{ index }})
-}
-tasks.compileTestKotlin.configure {
-    dependsOn({{ prefix }}{{ index }})
-}
-{%     endif -%}
-{%- endmacro -%}
-
 {%- if proto_template -%}
 {%-     include "[generator]/proto_vars.jinja" -%}
 {%-     include "[generator]/proto_import.jinja" -%}

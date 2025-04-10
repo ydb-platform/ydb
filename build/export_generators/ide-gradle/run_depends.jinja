@@ -1,0 +1,54 @@
+{%- macro TopDepends(taskvar) -%}
+{%-     if proto_template %}
+
+tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
+{%-     endif %}
+
+tasks.compileJava.configure {
+    dependsOn({{ taskvar }})
+}
+tasks.compileTestJava.configure {
+    dependsOn({{ taskvar }})
+}
+{%-    if with_kotlin %}
+tasks.compileKotlin.configure {
+    dependsOn({{ taskvar }})
+}
+tasks.compileTestKotlin.configure {
+    dependsOn({{ taskvar }})
+}
+{%     endif -%}
+{%- endmacro -%}
+
+{%- if target.custom_runs|length -%}
+{%-     for obj in target.custom_runs -%}
+{%-         if obj['_parent_object_index'] %}
+
+codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
+{%-         else -%}
+{{ TopDepends("codegen" + obj['_object_index'])}}
+{%-         endif  -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if target.runs|length -%}
+{%-     for obj in target.runs -%}
+{%-         if obj['_parent_object_index'] %}
+
+codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
+{%-         else -%}
+{{ TopDepends("codegen" + obj['_object_index'])}}
+{%-         endif  -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if copies|length -%}
+{%-     for obj in copies -%}
+{%-         if obj['_parent_object_index'] %}
+
+codegen{{ obj['_parent_object_index'] }}.dependsOn(codegen{{ obj['_object_index'] }})
+{%-         else -%}
+{{ TopDepends("codegen" + obj['_object_index'])}}
+{%-         endif  -%}
+{%-     endfor -%}
+{%- endif -%}

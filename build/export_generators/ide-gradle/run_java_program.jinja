@@ -1,7 +1,7 @@
 {%- if target.runs|length -%}
 {%-     for run in target.runs %}
 
-val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
+val codegen{{ run['_object_index'] }} = task<JavaExec>("runJavaProgram{{ run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run java program"
 
@@ -88,6 +88,5 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     run-tool="list"
 #}
 }
-{{ Depends("runJav", loop.index) }}
 {%-     endfor -%}
 {%- endif -%}

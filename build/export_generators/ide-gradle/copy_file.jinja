@@ -2,52 +2,22 @@
 {%- if copies|length -%}
 {%-     for copy in copies -%}
 {%-         set src = copy.args[0] -%}
-{%-         set srcs = [ src ] -%}
-{%-         set from_arcadia = srcs|select("startsWith", arcadia_root)|length -%}
-{%-         set from_build = srcs|select("startsWith", export_root)|length -%}
 {%-         set dst = copy.args[1] -%}
-{%-         set dsts = [ dst ] -%}
-{%-         set to_arcadia = dsts|select("startsWith", arcadia_root)|length -%}
-{%-         set to_build = dsts|select("startsWith", export_root)|length -%}
-{%-         if (from_arcadia or from_build) and (to_arcadia or to_build) -%}
-{%-             set src_split = rsplit(src, "/", 2) -%}
-{%-             set src_path = src_split[0] -%}
-{%-             set src_name = src_split[1] -%}
-{%-             set dst_split = rsplit(dst, "/", 2) -%}
-{%-             set dst_path = dst_split[0] -%}
-{%-             set dst_name = dst_split[1] %}
+{%-         set src_split = rsplit(src, "/", 2) -%}
+{%-         set src_path = src_split[0] -%}
+{%-         set src_name = src_split[1] -%}
+{%-         set dst_split = rsplit(dst, "/", 2) -%}
+{%-         set dst_path = dst_split[0] -%}
+{%-         set dst_name = dst_split[1] %}
 
-val copy{{ loop.index }} = tasks.register<Copy>("copy{{ loop.index }}") {
+val codegen{{ copy['_object_index'] }} = tasks.register<Copy>("copy{{ copy['_object_index'] }}") {
     from({{ PatchRoots(src_path) }}) {
         include("{{ src_name }}")
     }
     into({{ PatchRoots(dst_path) }})
-{%-             if src_name != dst_name %}
+{%-         if src_name != dst_name %}
     rename("{{ src_name }}", "{{ dst_name }}")
-{%-             endif %}
 }
-{%-             set copy_index = loop.index %}
-{%-             if target.runs|length -%}
-{%-                 for run in target.runs %}
-{%-                     if from_arcadia %}
-runJav{{ loop.index }}.dependsOn(copy{{ copy_index }})
-{%-                     else  %}
-copy{{ copy_index }}.dependsOn(runJav{{ loop.index }})
-{%-                     endif -%}
-{%                  endfor -%}
-{%-             endif -%}
-{%-             if target.custom_runs|length -%}
-{%-                 for custom_run in target.custom_runs %}
-{%-                     if from_arcadia %}
-runProg{{ loop.index }}.dependsOn(copy{{ copy_index }})
-{%-                     else  %}
-copy{{ copy_index }}.dependsOn(runProg{{ loop.index }})
-{%-                     endif -%}
-{%                  endfor -%}
-{%-             endif -%}
-{%-             if from_build -%}
-{{ Depends("copy", loop.index) }}
-{%-             endif -%}
-{%-         endif -%}
+{%          endif -%}
 {%-     endfor -%}
 {%- endif -%}

@@ -1,7 +1,7 @@
 {%- if target.custom_runs|length -%}
 {%-     for custom_run in target.custom_runs %}
 
-val runProg{{ loop.index }} = task<Exec>("runProgram{{ loop.index }}") {
+val codegen{{ custom_run['_object_index'] }} = task<Exec>("runProgram{{ custom_run['_object_index'] }}") {
     group = "build"
     description = "Code generation by run custom program"
 
@@ -50,6 +50,5 @@ val runProg{{ loop.index }} = task<Exec>("runProgram{{ loop.index }}") {
     custom_run-env="list"
 #}
 }
-{{ Depends("runProg", loop.index) }}
 {%-     endfor -%}
 {%- endif -%}

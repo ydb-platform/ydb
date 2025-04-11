@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64) 
+        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         // - this is not needed because constant folding eliminates this now
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
@@ -1487,7 +1487,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = queryClient.GetSession().GetValueSync().GetSession();
         {
             const auto res = session.ExecuteQuery(R"(
-                INSERT INTO `/Root/foo` (id, str, u_str) VALUES 
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
                     (1, "hello", "hello")
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
@@ -1541,7 +1541,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             const auto& query = TString(R"(
                 PRAGMA OptimizeSimpleILike;
                 PRAGMA AnsiLike;
-                SELECT id FROM `/Root/foo` WHERE 
+                SELECT id FROM `/Root/foo` WHERE
                 )") + predicates[i];
             Cerr
                 << "QUERY " << i << Endl
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ts64    Timestamp64,
                 --inter  Interval, -- NOT SUPPORTED?
                 inter64  Interval64,
-                primary key(id)	
+                primary key(id)
             )
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN);
@@ -1633,12 +1633,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
-            VALUES (1, 
-                CAST('1998-12-01' AS Date), 
-                CAST('1998-12-01' AS Date32), 
-                CAST('1998-12-01' AS DateTime), 
-                CAST('1998-12-01' AS DateTime64), 
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64)
+            VALUES (1,
+                CAST('1998-12-01' AS Date),
+                CAST('1998-12-01' AS Date32),
+                CAST('1998-12-01' AS DateTime),
+                CAST('1998-12-01' AS DateTime64),
                 CAST('1998-12-01' AS Timestamp),
                 CAST('1998-12-01' AS Timestamp64),
                 CAST('1D' AS Interval64));
@@ -1649,26 +1649,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
             R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
-            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
-            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             // TPCH Q6:
             R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             R"(CAST(dt as Timestamp) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
-            R"(dt <= dt - inter64)", 
+            R"(dt <= dt - inter64)",
             R"(dt32 <= dt - inter64)",
             R"(CAST(dt32 as Date) <= dt - inter64)",
             R"(dt <= dt - CAST(inter64 as Interval))",
@@ -1698,7 +1698,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             TString plan = *result.GetStats()->GetPlan();
             auto ast = *result.GetStats()->GetAst();
-    
+
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                               TStringBuilder() << "Predicate not pushed down. Query: " << query);
             //if (ast.find("KqpOlapFilter") != std::string::npos) {
@@ -1744,7 +1744,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ts64    Timestamp64,
                 --inter  Interval, -- NOT SUPPORTED?
                 inter64  Interval64,
-                primary key(id)	
+                primary key(id)
             )
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN);
@@ -1752,42 +1752,42 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = queryClient.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
-            VALUES (1, 
-                CAST('1998-12-01' AS Date), 
-                CAST('1998-12-01' AS Date32), 
-                CAST('1998-12-01' AS DateTime), 
-                CAST('1998-12-01' AS DateTime64), 
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64)
+            VALUES (1,
+                CAST('1998-12-01' AS Date),
+                CAST('1998-12-01' AS Date32),
+                CAST('1998-12-01' AS DateTime),
+                CAST('1998-12-01' AS DateTime64),
                 CAST('1998-12-01' AS Timestamp),
                 CAST('1998-12-01' AS Timestamp64),
                 CAST('1D' AS Interval64));
             )", NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).GetValueSync();
-        UNIT_ASSERT(insertRes.IsSuccess());    
-        
+        UNIT_ASSERT(insertRes.IsSuccess());
+
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
             R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
-            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
-            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             // TPCH Q6:
             R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             R"(CAST(dt as Timestamp) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
-            R"(dt <= dt - inter64)", 
+            R"(dt <= dt - inter64)",
             R"(dt32 <= dt - inter64)",
             R"(CAST(dt32 as Date) <= dt - inter64)",
             R"(dt <= dt - CAST(inter64 as Interval))",
@@ -1812,7 +1812,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto result = CollectStreamResult(it);
             auto ast = result.QueryStats->Getquery_ast();
-    
+
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                               TStringBuilder() << "Predicate not pushed down. Query: " << query);
 
@@ -4044,7 +4044,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 CREATE TABLE `/Root/query_stat` (
                     ts      Timestamp NOT NULL,
                     folder_id String,
-                    primary key(ts)	
+                    primary key(ts)
                 )
                 PARTITION BY HASH(ts)
                 WITH (STORE = COLUMN);
@@ -4054,7 +4054,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto result = querySession.ExecuteQuery(R"(
-                    INSERT INTO `/Root/query_stat` (ts, folder_id) 
+                    INSERT INTO `/Root/query_stat` (ts, folder_id)
                     VALUES (
                         CurrentUtcTimestamp(),
                         "abc"
@@ -4065,12 +4065,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto result = querySession.ExecuteQuery(R"(
-                    SELECT 
+                    SELECT
                         ts1, count(*)
-                    FROM 
-                        query_stat 
-                    where 
-                        folder_id not in [ "b1g0gammoel2iuh0hir6" ] 
+                    FROM
+                        query_stat
+                    where
+                        folder_id not in [ "b1g0gammoel2iuh0hir6" ]
                     GROUP BY DateTime::MakeDatetime(DateTime::StartOf(ts, DateTime::IntervalFromDays(1))) as ts1
                 )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -4102,6 +4102,37 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
         }
+    }
+
+    Y_UNIT_TEST(PredicateWithLimit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto runnerSettings = TKikimrSettings()
+                                  .SetAppConfig(appConfig)
+                                  .SetWithSampleTables(true)
+                                  .SetColumnShardAlterObjectEnabled(true)
+                                  .SetColumnShardReaderClassName("SIMPLE");
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("a").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "a", "b" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(1);
+            tableInserter.AddRow().Add(2).Add(2);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT a, b FROM `/Root/ColumnTableTest` WHERE b = 2 LIMIT 2", "[[2u;2u]]");
     }
 }
 }

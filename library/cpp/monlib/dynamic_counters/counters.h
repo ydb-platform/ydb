@@ -137,7 +137,7 @@ namespace NMonitoring {
             Visibility_ = vis;
         }
 
-        void Collect(double value) {
+        void Collect(i64 value) {
             Collector_->Collect(value);
         }
 

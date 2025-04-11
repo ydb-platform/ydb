@@ -413,7 +413,16 @@ private:
 private:
     const TTypeAnnotationNode* AnnotateTargetBase(TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TExprContext& ctx) {
         const auto keysCount = keys.size();
-        if (!keysCount && format == "parquet") {
+        if (State_->Configuration->UseBlocksSink.Get().GetOrElse(false)) {
+            if (keysCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), "Block sink is not supported for partitioned output"));
+                return nullptr;
+            }
+            if (format != "parquet") {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Block sink supported only for parquet output format"));
+                return nullptr;
+            }
+
             TTypeAnnotationNode::TListType items;
             items.reserve(structType->GetSize() + 1);
             for (const auto* item : structType->GetItems()) {

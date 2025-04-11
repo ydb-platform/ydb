@@ -215,7 +215,10 @@ public:
         }
 
         const auto* structType = input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (format == "parquet" && keys.empty()) {
+        if (State_->Configuration->UseBlocksSink.Get().GetOrElse(false)) {
+            YQL_ENSURE(format == "parquet");
+            YQL_ENSURE(keys.empty());
+
             TExprNode::TListType pair;
             pair.push_back(ctx.NewAtom(target.Pos(), "block_output"));
             pair.push_back(ctx.NewAtom(target.Pos(), "true"));

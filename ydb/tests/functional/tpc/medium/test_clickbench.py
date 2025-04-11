@@ -12,4 +12,4 @@ class TestClickbench(clickbench.TestClickbench, FunctionalTestBase):
         cls.setup_cluster()
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
-        clickbench.TestClickbench.setup_class()
+        super().setup_class()

@@ -48,7 +48,7 @@ default_tablet_preference:
 
 {% note info %}
 
-В подсекциях `default_tablet_limit` и `default_tablet_preference` нужно указывать типы таблеток. Точные названия типов таблеток можно посмотреть, например, на вкладке Tablets в [YDB UI](../embedded-ui/ydb-monitoring.md).
+В подсекциях `default_tablet_limit` и `default_tablet_preference` нужно указывать типы таблеток. Точные названия типов таблеток указаны в [глоссарии](../../concepts/glossary.md#tablet-types).
 
 {% endnote %}
 
@@ -131,7 +131,7 @@ hive_config:
   object_imbalance_to_balance: 1.0
 ```
 
-Таким файлом конфигурации можно отключить все виды автобалансировки между узлами для таблеток, участвующих в распределении транзакций, то есть [координаторов](../../concepts/glossary.md#coordinator) и [медиаторов](../../concepts/glossary.md#mediator). Точные названия типов таблеток можно посмотреть, например, на вкладке Tablets в [YDB UI](../embedded-ui/ydb-monitoring.md).
+Таким файлом конфигурации можно отключить все виды автобалансировки между узлами для таблеток, участвующих в распределении транзакций, то есть [координаторов](../../concepts/glossary.md#coordinator) и [медиаторов](../../concepts/glossary.md#mediator). Точные названия типов таблеток указаны в [глоссарии](../../concepts/glossary.md#tablet-types).
 
 
 ```yaml

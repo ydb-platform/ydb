@@ -99,7 +99,6 @@ class TestDML(TestBase):
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
-        print(insert_sql)
         self.query(insert_sql)
 
     def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -198,7 +197,6 @@ class TestDML(TestBase):
 
     def create_update(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
         update_sql = f""" UPDATE `{table_name}` SET {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)} """
-        print(update_sql)
         self.query(update_sql)
 
     def create_update_unique(self, value: int, search: int, index: dict[str, str], table_name: str):
@@ -207,7 +205,6 @@ class TestDML(TestBase):
             WHERE
             {" and ".join(f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](search), type_name)}" for type_name in index.keys())}
         """
-        print(update_sql)
         self.query(update_sql)
 
     def upsert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -291,7 +288,6 @@ class TestDML(TestBase):
                     )
                     ;
                 """
-        print(upsert_sql)
         self.query(upsert_sql)
 
     def delete(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -382,7 +378,6 @@ class TestDML(TestBase):
         delete_sql = f"""
             DELETE FROM {table_name} WHERE {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)};
         """
-        print(delete_sql)
         self.query(delete_sql)
 
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):

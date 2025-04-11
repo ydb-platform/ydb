@@ -2,7 +2,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
-#include <ydb/core/tx/columnshard/engines/reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {

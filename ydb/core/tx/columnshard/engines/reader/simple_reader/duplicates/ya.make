@@ -1,3 +1,7 @@
+RECURSE_FOR_TESTS(
+    ut
+)
+
 LIBRARY()
 
 SRCS(
@@ -5,6 +9,8 @@ SRCS(
     events.cpp
     merge.cpp
     common.cpp
+    subscriber.cpp
+    fetching.cpp
 )
 
 PEERDIR(

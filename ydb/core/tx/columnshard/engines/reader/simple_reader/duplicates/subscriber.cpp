@@ -1,3 +1,3 @@
-#include "events.h"
+#include "subscriber.h"
 
 namespace NKikimr::NOlap::NReader::NSimple {}

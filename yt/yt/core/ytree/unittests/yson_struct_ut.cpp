@@ -11,6 +11,8 @@
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/ytree/unittests/proto/test.pb.h>
+
 #include <util/stream/buffer.h>
 
 #include <util/ysaveload.h>
@@ -3739,6 +3741,64 @@ TEST(TYsonStructTest, DefaultUnrecognizedStrategy3)
     THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy yson = {};
     EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithProto
+    : public virtual TYsonStruct
+{
+    NProto::TTestMessage DefaultProto;
+    TProtoSerializedAsYson<NProto::TTestMessage> YsonProto;
+    TProtoSerializedAsString<NProto::TTestMessage> StringProto;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithProto);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("default_proto", &TThis::DefaultProto)
+            .Default();
+        registrar.Parameter("yson_proto", &TThis::YsonProto)
+            .Default();
+        registrar.Parameter("string_proto", &TThis::StringProto)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithProtoPtr = TIntrusivePtr<TTestYsonStructWithProto>;
+
+TEST(TYsonStructTest, ProtoSerialize)
+{
+    NProto::TTestMessage proto;
+    proto.set_int32_field(532);
+    proto.set_string_field("abcdef");
+    auto serialized = proto.SerializeAsString();
+
+    auto ysonStruct = New<TTestYsonStructWithProto>();
+    ysonStruct->DefaultProto.CopyFrom(proto);
+    ysonStruct->YsonProto.CopyFrom(proto);
+    ysonStruct->StringProto.CopyFrom(proto);
+
+    auto node = ConvertToNode(ysonStruct);
+    const auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("default_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("yson_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("string_proto").Value(serialized)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(node, expectedNode));
+    auto otherStruct = ConvertTo<TTestYsonStructWithProtoPtr>(node);
+    EXPECT_EQ(*otherStruct, *ysonStruct);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYTree

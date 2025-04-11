@@ -382,7 +382,9 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
         auto [state, sentinelState] = MockCmsState(1, 8, 1, disksPerNode, true, false);
         TClusterMap all(sentinelState);
-        TGuardian changed(sentinelState, 100, 100, 100, disksPerShelf);
+        // Setting max faulty disks per node to disksPerShelf - 1
+        // to not allow the whole shelf move.
+        TGuardian changed(sentinelState, 100, 100, 100, disksPerShelf - 1);
 
         const auto& nodes = state->ClusterInfo->AllNodes();
 
@@ -392,14 +394,14 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             for (ui32 i = 0; i < disksPerNode; i++) {
                 const TPDiskID id(nodeId, i);
     
-                if (i < disksPerShelf - 4) {
+                if (i < disksPerShelf - 2) {
                     all.AddPDisk(id, EPDiskStatus::FAULTY);
                 } else {
                     all.AddPDisk(id, EPDiskStatus::ACTIVE);
                 }
             }
 
-            for (ui32 i = disksPerShelf; i < disksPerNode; i++) {
+            for (ui32 i = disksPerShelf - 1; i < disksPerNode; i++) {
                 const TPDiskID id(nodeId, i);
     
                 changed.AddPDisk(id, EPDiskStatus::FAULTY);
@@ -425,8 +427,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
         for (const auto& node : nodes) {
             const ui64 nodeId = node.second->NodeId;
-            UNIT_ASSERT_VALUES_EQUAL(allowedDisksByNode[nodeId], 4);
-            UNIT_ASSERT_VALUES_EQUAL(disallowedDisksByNode[nodeId], disksPerShelf - 4);
+            UNIT_ASSERT_VALUES_EQUAL(allowedDisksByNode[nodeId], 1);
+            UNIT_ASSERT_VALUES_EQUAL(disallowedDisksByNode[nodeId], disksPerShelf);
         }
     }
 
@@ -592,12 +594,14 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         ui32 disksPerShelf = 5;
         ui32 disksPerNode = 2 * disksPerShelf;
         NKikimrCms::TCmsConfig config;
-        config.MutableSentinelConfig()->SetMaxFaultyPDisksPerNode(disksPerShelf);
+        // Setting max faulty disks per node to disksPerShelf - 1
+        // to not allow the whole shelf move.
+        config.MutableSentinelConfig()->SetMaxFaultyPDisksPerNode(disksPerShelf - 1);
         TTestEnv env(nodes, disksPerNode, config);
         env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
 
         for (ui32 nodeId = 0; nodeId < nodes; ++nodeId) {
-            for (ui32 pdiskId = 0; pdiskId < disksPerShelf; ++pdiskId) {
+            for (ui32 pdiskId = 0; pdiskId < disksPerShelf - 1; ++pdiskId) {
                 const TPDiskID id = env.PDiskId(nodeId, pdiskId);
 
                 for (ui32 i = 1; i < DefaultErrorStateLimit; ++i) {
@@ -607,7 +611,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                 env.SetPDiskState({id}, FaultyStates[0], EPDiskStatus::FAULTY);
             }
 
-            const TPDiskID id = env.PDiskId(nodeId, disksPerShelf);
+            const TPDiskID id = env.PDiskId(nodeId, disksPerShelf - 1);
 
             auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
                 const auto& request = event->Get()->Record;

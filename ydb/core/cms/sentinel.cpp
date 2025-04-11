@@ -378,10 +378,10 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
                 if (changedCount > allowedCount) {
                     auto disallowedPdisks = disallowed | std::views::keys;
                     issuesBuilder
-                        << "Ignore state updates due to MaxFaultyPDisksPerNode" \
-                        << ": changed# " << changedCount \
-                        << ", total# " << currentCount \
-                        << ", allowed# " << allowedCount \
+                        << "Ignore state updates due to MaxFaultyPDisksPerNode"
+                        << ": changed# " << changedCount
+                        << ", total# " << currentCount
+                        << ", allowed# " << allowedCount
                         << ", affected pdisks# " << JoinSeq(", ", disallowedPdisks) << Endl;
                 }
             }

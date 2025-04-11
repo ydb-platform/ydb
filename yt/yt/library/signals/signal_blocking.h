@@ -27,14 +27,14 @@ YT_DEFINE_ERROR_ENUM(
     __attribute__((constructor(std::numeric_limits<i32>::min()))) void Block ## signal ## Signal() \
     { \
         try { \
-            NDetail::TryVerifyThreadIsOnly(); \
-            NSignals::BlockSignal(signal); \
+            ::NYT::NSignals::NDetail::TryVerifyThreadIsOnly(); \
+            ::NYT::NSignals::BlockSignal(signal); \
         } catch (const std::exception& ex) { \
             Cerr << "Failed to block signal " << #signal << ": " << ex.what() << Endl; \
-            ::exit(static_cast<int>(EErrorCode::SetBlockedSignalError)); \
+            ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError)); \
         } catch (...) { \
             Cerr << "Failed to block signal " << #signal << ": unknown exception" << Endl; \
-            ::exit(static_cast<int>(EErrorCode::SetBlockedSignalError)); \
+            ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError)); \
         } \
     }
 

@@ -150,7 +150,7 @@ public:
     }
 
     bool IsEmptyWithData() const {
-        return (Table->HasData()) && (Table->IsEmptyData() || Table->IsEmptyFilter());
+        return Table->HasDataAndResultIsEmpty();
     }
 
     void Clear() {

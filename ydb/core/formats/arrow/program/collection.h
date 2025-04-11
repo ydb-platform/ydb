@@ -67,17 +67,18 @@ public:
         return Accessors.size() || !!RecordsCountActual;
     }
 
-    bool IsEmptyData() const {
-        if (HasAccessors()) {
-            return !GetRecordsCountActualVerified();
-        } else if (auto count = GetRecordsCountActualOptional()) {
-            return !*count;
+    bool HasDataAndDataIsEmpty() const {
+        if (!HasData()) {
+            return false;
         }
-        return true;
+        return !GetRecordsCountActualVerified();
     }
 
-    bool HasAccessors() const {
-        return Accessors.size();
+    bool HasDataAndResultIsEmpty() const {
+        if (!HasData()) {
+            return false;
+        }
+        return !GetRecordsCountActualVerified() || IsEmptyFilter();
     }
 
     std::optional<ui32> GetRecordsCountActualOptional() const {

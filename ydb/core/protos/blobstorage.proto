@@ -1036,6 +1036,7 @@ message TNodeWardenServiceSet {
         optional TDonorMode DonorMode = 9; // vdisk runs in read-only limited mode without interaction with other disks of group
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
         optional bool ReadOnly = 11;
+        // TODO optional NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 12;
     }
 
     message TReplBrokerConfig {
@@ -1201,7 +1202,7 @@ message TEvControllerSelectGroups {
         optional uint64 RequiredThroughput = 5;
         optional uint64 RequiredDataSize = 6;
         optional TStoragePoolSpecifier StoragePoolSpecifier = 7;
-
+        // TODO NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 8;
     }
     reserved 1;
     reserved 2;

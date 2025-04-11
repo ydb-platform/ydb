@@ -956,6 +956,9 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
+            if (pool.OccupySlotUnitSize.Defined()) {
+                pb->MutableOccupySlotUnitSize()->SetValue(*pool.OccupySlotUnitSize.Get());
+            }
 
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));

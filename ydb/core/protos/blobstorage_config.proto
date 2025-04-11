@@ -699,6 +699,7 @@ message TBaseConfig {
         TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
         TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
         TVirtualGroupInfo VirtualGroupInfo = 10;
+        NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 11;
     }
     message TNode {
         uint32 NodeId = 1;

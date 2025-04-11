@@ -279,6 +279,7 @@ message TGroupInfo {
     // down/persisted down ?
     // metrics ?
     optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    // TODO optional uint32 OccupySlotUnitSize = 17;
 }
 
 message TGroupEntry {
@@ -318,6 +319,7 @@ message TStoragePoolInfo {
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
     // metrics ?
+    // TODO optional uint32 OccupySlotUnitSize = 15;
 }
 
 message TStoragePoolEntry {

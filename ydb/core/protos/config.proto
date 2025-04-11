@@ -339,6 +339,7 @@ message TSelfManagementConfig {
     optional NKikimrBlobStorage.TGroupGeometry Geometry = 12;
     repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 13;
     optional NKikimrBlobStorage.EPDiskType PDiskType = 14;
+    // TODO NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 15;
 
     // some extra settings
     optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically

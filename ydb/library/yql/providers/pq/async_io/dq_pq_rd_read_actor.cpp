@@ -1016,7 +1016,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         SRC_LOG_T("TEvMessageBatch NextOffset " << nextOffset);
     }
     activeBatch.UsedSpace = bytes;
-    ReadyBufferSizeBytes += bytes;
+    Parent->ReadyBufferSizeBytes += bytes;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     Parent->NotifyCA();
 }

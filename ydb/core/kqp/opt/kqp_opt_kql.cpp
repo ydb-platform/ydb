@@ -205,6 +205,10 @@ TExprNode::TPtr GetPgNotNullColumns(
 TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
+            .Name().Build("Mode")
+            .Value<TCoAtom>().Build("update")
+        .Build()
+        .Add()
             .Name().Build("IsUpdate")
         .Build()
     .Done().Ptr();
@@ -212,6 +216,10 @@ TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
 
 TExprNode::TPtr IsConditionalUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
     return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("Mode")
+            .Value<TCoAtom>().Build("update")
+        .Build()
         .Add()
             .Name().Build("IsUpdate")
         .Build()

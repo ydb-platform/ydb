@@ -29,7 +29,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiUpdate"
                 }
             ]
         }

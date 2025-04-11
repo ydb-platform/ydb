@@ -831,7 +831,7 @@ private:
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
             } else if (settings.Mode().StringValue() == "fill_table") {
                 op.Properties["Name"] = "FillTable";
-                writeInfo.Type = EPlanTableWriteType::MultiUpsert;
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }

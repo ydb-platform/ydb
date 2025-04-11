@@ -162,6 +162,7 @@ public:
     const NJson::TJsonValue* StatsNode = nullptr;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
+    ui64 UpdateTime = 0;
     bool External = false;
 };
 
@@ -296,6 +297,7 @@ public:
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
     ui32 Tasks = 0;
+    ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
     std::vector<std::pair<std::string, std::pair<std::shared_ptr<TStage>, ui32>>> MemberRefs;
     TPlanViewConfig& Config;
@@ -316,6 +318,7 @@ public:
     std::vector<TPlan> Plans;
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
+    ui64 UpdateTime = 0;
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
     std::map<std::string, std::string> CteSubPlans;

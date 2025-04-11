@@ -27,8 +27,8 @@ get_built_tool_path(
 )
 
 add_subdirectory(ut_common)
+add_subdirectory(build_index)
 add_subdirectory(ut_background_compaction)
-add_subdirectory(ut_build_index)
 add_subdirectory(ut_change_collector)
 add_subdirectory(ut_change_exchange)
 add_subdirectory(ut_column_stats)
@@ -44,21 +44,17 @@ add_subdirectory(ut_keys)
 add_subdirectory(ut_kqp)
 add_subdirectory(ut_kqp_errors)
 add_subdirectory(ut_kqp_scan)
-add_subdirectory(ut_local_kmeans)
 add_subdirectory(ut_locks)
 add_subdirectory(ut_minikql)
 add_subdirectory(ut_minstep)
 add_subdirectory(ut_object_storage_listing)
 add_subdirectory(ut_order)
-add_subdirectory(ut_prefix_kmeans)
 add_subdirectory(ut_range_ops)
 add_subdirectory(ut_read_iterator)
 add_subdirectory(ut_read_table)
 add_subdirectory(ut_reassign)
 add_subdirectory(ut_replication)
-add_subdirectory(ut_reshuffle_kmeans)
 add_subdirectory(ut_rs)
-add_subdirectory(ut_sample_k)
 add_subdirectory(ut_sequence)
 add_subdirectory(ut_snapshot)
 add_subdirectory(ut_stats)
@@ -134,7 +130,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_data_tx_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_distributed_erase_tx_out_rs_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_kqp_data_tx_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_scheme_tx_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_write_out_rs_unit.cpp
@@ -271,11 +266,9 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/initiate_build_index_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/key_conflicts.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/key_validator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/kmeans_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/load_and_wait_in_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/load_tx_details_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/load_write_details_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/local_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/make_scan_snapshot_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/make_snapshot_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/memory_state_migration.cpp
@@ -283,7 +276,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/move_table_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/plan_queue_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prefix_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_data_tx_in_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_distributed_erase_tx_in_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_kqp_data_tx_in_rs_unit.cpp
@@ -300,9 +292,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/remove_lock_change_records.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/remove_schema_snapshots.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/reshuffle_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/restore_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/sample_k.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/scan_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_out_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/store_and_send_write_out_rs_unit.cpp
@@ -319,6 +309,12 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/prefix_kmeans.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/kmeans_helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/local_kmeans.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/sample_k.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/secondary_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/build_index/reshuffle_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp

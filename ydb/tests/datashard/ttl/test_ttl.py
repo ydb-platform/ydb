@@ -6,16 +6,16 @@ import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
-from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, index_first_not_Bool
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
 
 
 ttl_types = {
-    "Datetime": "CAST({} AS Datetime)",
-    "Timestamp": "CAST({}000000 AS Timestamp)",
-    "DyNumber": "CAST('{}' AS DyNumber)",
-    "Uint32": "CAST({} AS Uint32)",
-    "Uint64": "CAST({} AS Uint64)",
-    "Date": "CAST('{}' AS Date)",
+    "Datetime": lambda i: i,
+    "Timestamp": lambda i: i * 1000000,
+    "DyNumber": lambda i: i,
+    "Uint32": lambda i: i,
+    "Uint64": lambda i: i,
+    "Date": lambda i: i,
 }
 
 
@@ -116,7 +116,7 @@ class TestTTL(TestBase):
         self.query(sql_create_table)
         if ttl != "":
             sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
-                                 "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index)
@@ -126,16 +126,16 @@ class TestTTL(TestBase):
         old_date = now_date - timedelta(weeks=1)
         future_time_5_sec = now_date + timedelta(seconds=5)
         future_time = now_date + timedelta(weeks=2)
-        if ttl != "Date":
+        if ttl != "Date" and ttl != "Datetime":
             now_date = int(datetime.timestamp(now_date))
             old_date = int(datetime.timestamp(old_date))
             future_time_5_sec = int(datetime.timestamp(future_time_5_sec))
             future_time = int(datetime.timestamp(future_time))
-        else:
-            now_date = now_date.date()
-            old_date = old_date.date()
-            future_time_5_sec = future_time_5_sec.date()
-            future_time = future_time.date()
+        elif ttl != "Datetime":
+            now_date = str(now_date.date())
+            old_date = str(old_date.date())
+            future_time_5_sec = str(future_time_5_sec.date())
+            future_time = str(future_time.date())
         print(f"{table_name} insert")
         for i in range(1, 3):
             self.create_insert(table_name, pk_types,

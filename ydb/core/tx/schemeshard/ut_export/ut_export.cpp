@@ -1248,7 +1248,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        
+
         UNIT_ASSERT_STRINGS_EQUAL(expected.DebugString(), afterExport.DebugString());
 
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);

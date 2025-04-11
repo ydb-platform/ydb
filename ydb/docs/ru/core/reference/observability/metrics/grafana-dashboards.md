@@ -91,7 +91,6 @@
 | hive+balancer | Процессорное время, потребляемое акторами HIVE_ACTOR и HIVE_BALANCER_ACTOR |
 | hive event response time | Время ответа таблеткой Hive на запросы |
 | hive local transaction times | Процессорное время, потребляемое таблеткой Hive при выполнении транзакций |
-| Tablet latencies | Гистограммы времен выполнения транзакций таблетки |
 | {{local-tx}} avg time | Количество и среднее время выполнения транзакций {{local-tx}}. Тип транзакции {{local-tx}} задается в фильтре на дашборде |
 | tablet count | Общее число таблеток в базе данных |
 | event queue size | Размер очереди событий |

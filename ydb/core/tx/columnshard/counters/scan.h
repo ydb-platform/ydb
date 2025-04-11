@@ -445,7 +445,6 @@ public:
     }
 
     bool InWaiting() const {
-        // TODO: use specific counters in duplicates manager
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
                FilterFetchingGuard->Val();

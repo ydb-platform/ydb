@@ -213,6 +213,7 @@ private:
     // As main and child actors resides on same mailbox, their handlers are never concurrently executed
     // and can modify other side state
     TDqPqRdReadActor* Parent;
+    std::shared_ptr<bool> Alive;
     TString Cluster;
     const TString Token;
     TMaybe<NActors::TActorId> CoordinatorActorId;
@@ -490,9 +491,11 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
         << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
     if (Parent != this) {
+        Alive = Parent->Alive;
         return;
     }
     State = EState::START_CLUSTER_DISCOVERY;
+    Alive = std::make_shared<bool>(true);
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
@@ -670,6 +673,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         StopSession(sessionInfo);
     }
+    *Alive = false;
     for (auto& clusterState : Clusters) {
         if (clusterState.Child == this) {
             continue;
@@ -743,6 +747,9 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_I("Received TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() <<  ", generation " << ev->Cookie);
     Counters.StartSessionAck++;
@@ -755,6 +762,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_I("Received TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     Counters.SessionError++;
@@ -769,6 +779,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
@@ -803,12 +816,18 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     auto response = std::make_unique<NFq::TEvRowDispatcher::TEvGetInternalStateResponse>();
     response->Record.SetInternalState(GetInternalState());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     auto partitionId = ev->Get()->Record.GetPartitionId();
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", partition " << partitionId << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
@@ -829,6 +848,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_T("Received TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
     Counters.Retry++;
 
@@ -847,6 +869,9 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_T("TEvRetryQueuePrivate::TEvEvHeartbeat");
     Counters.PrivateHeartbeat++;
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
@@ -869,12 +894,18 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
 }
 
 void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_T("Received TEvHeartbeat from " << ev->Sender << ", generation " << ev->Cookie);
     Counters.Heartbeat++;
     FindAndUpdateSession(ev);
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_D("TEvCoordinatorChanged, new coordinator " << ev->Get()->CoordinatorActorId);
     Counters.CoordinatorChanged++;
 
@@ -903,6 +934,9 @@ void TDqPqRdReadActor::ScheduleProcessState() {
 }
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_I("ReInit state, reason " << reason);
     Parent->Metrics.ReInit->Inc();
 
@@ -918,6 +952,9 @@ void TDqPqRdReadActor::Stop(NDqProto::StatusIds::StatusCode status, TIssues issu
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_I("Received TEvCoordinatorResult from " << ev->Sender.ToString() << ", cookie " << ev->Cookie);
     Counters.CoordinatorResult++;
     if (ev->Cookie != CoordinatorRequestCookie) {
@@ -937,6 +974,9 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
 }
 
 void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
     Counters.NodeConnected++;
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
@@ -945,6 +985,9 @@ void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& 
 }
 
 void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_D("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     Counters.NodeDisconnected++;
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
@@ -956,6 +999,9 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason << ", cookie " << ev->Cookie);
     Counters.Undelivered++;
     
@@ -981,6 +1027,9 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
+    if (!*Alive) {
+        return;
+    }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
     SRC_LOG_T("Received TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.MessageBatch++;
@@ -1057,6 +1106,9 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvPong::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
+    if (!*Alive) {
+        return;
+    }
     Counters.PrintState++;
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     PrintInternalState();
@@ -1072,15 +1124,24 @@ void TDqPqRdReadActor::PrintInternalState() {
 
 TString TDqPqRdReadActor::GetInternalState() {
     TStringStream str;
-    str << LogPrefix << "State: used buffer size " << Parent->ReadyBufferSizeBytes << " ready buffer event size " << Parent->ReadyBuffer.size()  << " state " << static_cast<ui64>(State) << " InFlyAsyncInputData " << Parent->InFlyAsyncInputData << "\n";
-    str << "Counters: GetAsyncInputData " << Parent->Counters.GetAsyncInputData
-        << " CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
+    str << LogPrefix << "State:";
+    if (*Alive) {
+        str << " used buffer size " << Parent->ReadyBufferSizeBytes << " ready buffer event size " << Parent->ReadyBuffer.size()
+            << " InFlyAsyncInputData " << Parent->InFlyAsyncInputData;
+    }
+    str << " state " << static_cast<ui64>(State) << "\n";
+    str << "Counters: CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
         << " MessageBatch " << Counters.MessageBatch << " StartSessionAck " << Counters.StartSessionAck << " NewDataArrived " << Counters.NewDataArrived
         << " SessionError " << Counters.SessionError << " Statistics " << Counters.Statistics << " NodeDisconnected " << Counters.NodeDisconnected
         << " NodeConnected " << Counters.NodeConnected << " Undelivered " << Counters.Undelivered << " Retry " << Counters.Retry
         << " PrivateHeartbeat " << Counters.PrivateHeartbeat << " SessionClosed " << Counters.SessionClosed << " Pong " << Counters.Pong
         << " Heartbeat " << Counters.Heartbeat << " PrintState " << Counters.PrintState << " ProcessState " << Counters.ProcessState
-        << " NotifyCA " << Parent->Counters.NotifyCA << "\n";
+        ;
+    if (*Alive) {
+        str << " GetAsyncInputData " << Counters.GetAsyncInputData
+            << " NotifyCA " << Parent->Counters.NotifyCA;
+    }
+    str << "\n";
     
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         str << " " << rowDispatcherActorId << " status " << static_cast<ui64>(sessionInfo.Status)
@@ -1104,6 +1165,9 @@ TString TDqPqRdReadActor::GetInternalState() {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {
+    if (!*Alive) {
+        return;
+    }
     ProcessStateScheduled = false;
     Counters.ProcessState++;
     ProcessState();
@@ -1370,6 +1434,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         PqGateway,
         this,
         TString(Clusters[clusterIndex].Info.Name));
+    Clusters[clusterIndex].Child = actor;
     Clusters[clusterIndex].ChildId = RegisterWithSameMailbox(actor);
     actor->Init();
     actor->InitChild();

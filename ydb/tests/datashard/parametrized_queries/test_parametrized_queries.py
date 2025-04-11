@@ -155,48 +155,47 @@ class TestParametrizedQueries(TestBase):
 
     def create_paramerts(self, type_name: str, value: int, key):
         if type_name == "Int64":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Int64)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Int64)
         if type_name == "Int32":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Int32)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Int32)
         if type_name == "Int16":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Int16)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Int16)
         if type_name == "Int8":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Int8)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Int8)
         if type_name == "Uint64":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Uint64)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Uint64)
         if type_name == "Uint32":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Uint32)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Uint32)
         if type_name == "Uint16":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Uint16)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Uint16)
         if type_name == "Uint8":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Uint8)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Uint8)
         if type_name == "Bool":
-            return ydb.TypedValue(bool(value), ydb.PrimitiveType.Bool)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Bool)
         if type_name == "Date" or type_name == "Date32":
-            return ydb.TypedValue(int("26962{:03}00".format(value)), ydb.PrimitiveType.Date)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Date)
         if type_name == "Double":
             return ydb.TypedValue(value + 0.2, ydb.PrimitiveType.Double)
         if type_name == "Datetime" or type_name == "Datetime64":
-            return ydb.TypedValue(int("26962{:03}00".format(value)), ydb.PrimitiveType.Datetime)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Datetime)
         if type_name == "DyNumber":
-            return ydb.TypedValue('3742656{:03}e10'.format(value), ydb.PrimitiveType.DyNumber)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.DyNumber)
         if type_name == "UUID":
-            return ydb.TypedValue(UUID('3{:03}5678-e89b-12d3-a456-556642440000'.format(value)), ydb.PrimitiveType.UUID)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.UUID)
         if type_name == "Float":
-            return ydb.TypedValue(value + 0.1, ydb.PrimitiveType.Float)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Float)
         if type_name == "Interval" or type_name == "Interval64":
-            return ydb.TypedValue(value, ydb.PrimitiveType.Interval)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Interval)
         if type_name == "Json":
-            return ydb.TypedValue('{{\"another_key\": {}}}'.format(value), ydb.PrimitiveType.Json)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Json)
         if type_name == "JsonDocument":
-            return ydb.TypedValue('{{\"another_doc_key\": {}}}'.format(value), ydb.PrimitiveType.JsonDocument)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.JsonDocument)
         if type_name == "Yson":
-            return ydb.TypedValue('[{}]'.format(value), ydb.PrimitiveType.Yson)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Yson)
         if type_name == "String":
-            return ydb.TypedValue(bytes('String {}'.format(value), 'UTF-8'), ydb.PrimitiveType.String)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.String)
         if type_name == "Timestamp" or type_name == "Timestamp64":
-            return ydb.TypedValue(int("26962{:03}00000000".format(value)), ydb.PrimitiveType.Timestamp)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Timestamp)
         if type_name == "Utf8":
-            return ydb.TypedValue("'Utf8 {}'".format(value), ydb.PrimitiveType.Utf8)
-        return ydb.TypedValue(float(key[type_name].replace("CAST(", "").replace("'", "").replace("'", "").replace(
-                f" AS {type_name})", "").replace("T", " ").replace("Z", "").format(value)), ydb.PrimitiveType.Double)
+            return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Utf8)
+        return ydb.TypedValue(float(key[type_name](value)), ydb.PrimitiveType.Double)

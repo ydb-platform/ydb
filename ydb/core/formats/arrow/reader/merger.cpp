@@ -154,12 +154,24 @@ void TMergePartialStream::DrainCurrentPosition(
     IMergeResultBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
     Y_ABORT_UNLESS(SortHeap.Size());
     Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
+    CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
+    const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
+    const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
+    const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
     if (MaxVersion) {
+        bool changed = false;
         while (SortHeap.Size() && SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater) {
             if (builder) {
                 builder->SkipRecord(SortHeap.Current());
             }
             SortHeap.Next();
+            changed = true;
+        }
+        if (changed) {
+            if (SortHeap.Empty() || SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
+                SortHeap.CleanFinished();
+                return;
+            }
         }
     }
     if (!SortHeap.Current().IsDeleted()) {
@@ -177,30 +189,23 @@ void TMergePartialStream::DrainCurrentPosition(
             builder->SkipRecord(SortHeap.Current());
         }
     }
-    CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
-    const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
-    const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
-    const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
-    bool isFirst = true;
-    while (SortHeap.Size() && (isFirst || SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
-        if (!isFirst) {
-            if (builder) {
-                builder->SkipRecord(SortHeap.Current());
-            }
+    SortHeap.Next();
+    while (SortHeap.Size() && (SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
+        if (builder) {
+            builder->SkipRecord(SortHeap.Current());
+        }
 //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
-            auto& anotherIterator = SortHeap.Current();
-            if (PossibleSameVersionFlag) {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)
-                    ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
-                    ("key", startSorting->BuildCursor(startPosition).DebugJson());
-            } else {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less)
-                    ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
-                    ("key", startSorting->BuildCursor(startPosition).DebugJson());
-            }
+        auto& anotherIterator = SortHeap.Current();
+        if (PossibleSameVersionFlag) {
+            AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)
+                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
+                ("key", startSorting->BuildCursor(startPosition).DebugJson());
+        } else {
+            AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less)
+                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
+                ("key", startSorting->BuildCursor(startPosition).DebugJson());
         }
         SortHeap.Next();
-        isFirst = false;
     }
     SortHeap.CleanFinished();
 }

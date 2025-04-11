@@ -1,9 +1,10 @@
 import pytest
+import math
 from datetime import datetime, timedelta
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
-from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, pk_types, non_pk_types, index_first, index_second, ttl_types, \
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
 
@@ -80,7 +81,6 @@ class TestDML(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
-            print(count)
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
 
@@ -93,12 +93,13 @@ class TestDML(TestBase):
                 {f"ttl_{ttl}" if ttl != "" else ""}
             )
             VALUES(
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {ttl_types[ttl].format(value) if ttl != "" else ""}
+                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join([format_sql_value(all_types[type_name](value), type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
+        print(insert_sql)
         self.query(insert_sql)
 
     def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -113,15 +114,15 @@ class TestDML(TestBase):
             for type_name in all_types.keys():
                 if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                     create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(count)}")
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
             sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}" for type_name in pk_types.keys()])}
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(count)}" for type_name in index.keys()])}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}" for type_name in index.keys()])}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(count)}" if ttl != "" else ""}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" else ""}
                 """
             rows = self.query(sql_select)
             assert len(
@@ -136,18 +137,18 @@ class TestDML(TestBase):
 
         if ttl != "":
             self.create_update(
-                count, f"ttl_{ttl}", ttl_types[ttl], table_name)
+                count, "ttl_", ttl, ttl_types[ttl], table_name)
             count += 1
 
         for type_name in all_types.keys():
             self.create_update(
-                count, f"col_{type_name}", all_types[type_name], table_name)
+                count, "col_", type_name, all_types[type_name], table_name)
             count += 1
 
         if unique == "":
             for type_name in index.keys():
                 self.create_update(
-                    count, f"col_index_{type_name}", index[type_name], table_name)
+                    count, "col_index_", type_name, index[type_name], table_name)
                 count += 1
         else:
             number_of_columns = len(pk_types) + len(all_types) + len(index)+1
@@ -165,7 +166,7 @@ class TestDML(TestBase):
 
         if ttl != "":
             rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(count_assert)}")
+                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={format_sql_value(ttl_types[ttl](count_assert), ttl)}")
             assert len(
                 rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in ttl_{cleanup_type_name(ttl)}, table {table_name}"
             count_assert += 1
@@ -173,14 +174,14 @@ class TestDML(TestBase):
         for type_name in all_types.keys():
             if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                 rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={all_types[type_name].format(count_assert)}")
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count_assert), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
         if unique == "":
             for type_name in index.keys():
                 rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count_assert), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 count_assert += 1
@@ -190,21 +191,23 @@ class TestDML(TestBase):
                 number_of_columns += 1
             for type_name in index.keys():
                 rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(number_of_columns)}")
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 number_of_columns += 1
 
-    def create_update(self, value: int, type_name: str, key: str, table_name: str):
-        update_sql = f""" UPDATE `{table_name}` SET {cleanup_type_name(type_name)} = {key.format(value)} """
+    def create_update(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
+        update_sql = f""" UPDATE `{table_name}` SET {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)} """
+        print(update_sql)
         self.query(update_sql)
 
     def create_update_unique(self, value: int, search: int, index: dict[str, str], table_name: str):
         update_sql = f""" UPDATE `{table_name}` SET 
-            {", ".join([f"col_index_{cleanup_type_name(type_name)} = {index[type_name].format(value)}" for type_name in index.keys()])}
+            {", ".join([f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](value), type_name)}" for type_name in index.keys()])}
             WHERE
-            {" and ".join(f"col_index_{cleanup_type_name(type_name)} = {index[type_name].format(search)}" for type_name in index.keys())}
+            {" and ".join(f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](search), type_name)}" for type_name in index.keys())}
         """
+        print(update_sql)
         self.query(update_sql)
 
     def upsert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -225,15 +228,15 @@ class TestDML(TestBase):
             for type_name in all_types.keys():
                 if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                     create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(number_of_columns - count + 1)}")
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](number_of_columns - count + 1), type_name)}")
             sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}" for type_name in pk_types.keys()])}
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(number_of_columns - count + 1)}" for type_name in index.keys()])}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns - count + 1), type_name)}" for type_name in index.keys()])}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(number_of_columns - count + 1)}" if ttl != "" else ""}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
                 """
             rows = self.query(sql_select)
             assert len(
@@ -244,17 +247,17 @@ class TestDML(TestBase):
             for type_name in all_types.keys():
                 if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument" and ((type_name != "Date" and type_name != "Datetime") or count < 106):
                     create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(count)}")
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
             create_pk = []
             for type_name in pk_types.keys():
                 if (type_name != "Date" and type_name != "Datetime") or count < 106:
                     create_pk.append(
-                        f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}")
+                        f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}")
             create_index = []
             for type_name in index.keys():
                 if (type_name != "Date" and type_name != "Datetime") or count < 106:
                     create_index.append(
-                        f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(count)}")
+                        f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}")
             sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
                 {" and ".join(create_pk)}
@@ -262,7 +265,7 @@ class TestDML(TestBase):
                 {" and ".join(create_index)}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(count)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
                 """
             rows = self.query(sql_select)
             assert len(
@@ -281,13 +284,14 @@ class TestDML(TestBase):
                     )
                     VALUES
                     (
-                    {", ".join([pk_types[type_name].format(search) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                    {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                    {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                    {ttl_types[ttl].format(value) if ttl != "" else ""}
+                    {", ".join([format_sql_value(pk_types[type_name](search), type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                    {", ".join([format_sql_value(all_types[type_name](value), type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                    {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                    {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
                     )
                     ;
                 """
+        print(upsert_sql)
         self.query(upsert_sql)
 
     def delete(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -298,34 +302,34 @@ class TestDML(TestBase):
 
         if ttl != "":
             self.create_delete(number_of_columns,
-                               f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+                               "ttl_", ttl, ttl_types[ttl], table_name)
             number_of_columns += 1
 
         for type_name in pk_types.keys():
             if type_name != "Bool":
                 self.create_delete(
-                    number_of_columns, f"pk_{cleanup_type_name(type_name)}", pk_types[type_name], table_name)
+                    number_of_columns, "pk_", type_name, pk_types[type_name], table_name)
             else:
                 self.create_delete(
-                    number_of_columns, "pk_Int64", pk_types["Int64"], table_name)
+                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
             number_of_columns += 1
 
         for type_name in all_types.keys():
             if type_name != "Bool" and type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                 self.create_delete(
-                    number_of_columns, f"col_{cleanup_type_name(type_name)}", all_types[type_name], table_name)
+                    number_of_columns, "col_", type_name, all_types[type_name], table_name)
             else:
                 self.create_delete(
-                    number_of_columns, "pk_Int64", pk_types["Int64"], table_name)
+                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
             number_of_columns += 1
 
         for type_name in index.keys():
             if type_name != "Bool":
                 self.create_delete(
-                    number_of_columns, f"col_index_{cleanup_type_name(type_name)}", index[type_name], table_name)
+                    number_of_columns, "col_index_", type_name, index[type_name], table_name)
             else:
                 self.create_delete(
-                    number_of_columns, "pk_Int64", pk_types["Int64"], table_name)
+                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
             number_of_columns += 1
 
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -338,15 +342,15 @@ class TestDML(TestBase):
             for type_name in all_types.keys():
                 if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                     create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(number_of_columns - count + 1)}")
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](number_of_columns - count + 1), type_name)}")
             sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}" for type_name in pk_types.keys()])}
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(number_of_columns - count + 1)}" for type_name in index.keys()])}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns - count + 1), type_name)}" for type_name in index.keys()])}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(number_of_columns - count + 1)}" if ttl != "" else ""}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
                 """
             rows = self.query(sql_select)
             assert len(
@@ -357,15 +361,15 @@ class TestDML(TestBase):
             for type_name in all_types.keys():
                 if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                     create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(count)}")
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
             sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}" for type_name in pk_types.keys()])}
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(count)}" for type_name in index.keys()])}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}" for type_name in index.keys()])}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(count)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
                 """
             rows = self.query(sql_select)
             assert len(
@@ -374,10 +378,11 @@ class TestDML(TestBase):
         assert len(
             rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
 
-    def create_delete(self, value: int, type_name: str, key: str, table_name: str):
+    def create_delete(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
         delete_sql = f"""
-            DELETE FROM {table_name} WHERE {type_name} = {key.format(value)};
+            DELETE FROM {table_name} WHERE {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)};
         """
+        print(delete_sql)
         self.query(delete_sql)
 
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -418,25 +423,20 @@ class TestDML(TestBase):
             count += 1
 
     def assert_type(self, key, type: str, values: int, values_from_rows):
-        if type == "Bool":
-            assert values_from_rows == bool(values), f"{type}"
-        elif type == "String" or type == "Yson":
-            assert values_from_rows.decode("utf-8") == key[type].replace(
-                "CAST(", "").replace("'", "").replace(f" AS {type})", "").format(values), f"{type}"
-        elif type == "Timestamp" or type == "Timestamp64":
-            assert values_from_rows == datetime.fromtimestamp(int(key[type].replace("CAST(", "").replace(
-                "'", "").replace(f" AS {type})", "").replace("T", " ").replace("Z", "").format(values))/1_000_000), f"{type}"
+        if type == "String" or type == "Yson":
+            assert values_from_rows.decode(
+                "utf-8") == key[type](values), f"{type}"
+        elif type == "Float" or type == "DyNumber":
+            assert math.isclose(float(values_from_rows), float(
+                key[type](values)), rel_tol=1e-3), f"{type}"
         elif type == "Interval" or type == "Interval64":
-            assert values_from_rows == timedelta(microseconds=values)
-        elif type == "Float":
-            str(round(values_from_rows, 2)) == key[type].replace("CAST(", "").replace("'", "").replace(
-                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"
+            assert values_from_rows == timedelta(
+                microseconds=key[type](values)), f"{type}"
+        elif type == "Timestamp" or type == "Timestamp64":
+            assert values_from_rows == datetime.fromtimestamp(
+                key[type](values)/1_000_000), f"{type}"
         elif type == "Json" or type == "JsonDocument":
-            assert str(values_from_rows).replace("'", "\"") == key[type].replace("CAST(", "").replace("'", "").replace(
-                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"
-        elif type == "DyNumber":
-            assert float(values_from_rows) == float(key[type].replace("CAST(", "").replace("'", "").replace(
-                f" AS {type})", "").replace("T", " ").replace("Z", "").replace(".", "").format(values)), f"{type}"
+            assert str(values_from_rows).replace(
+                "'", "\"") == str(key[type](values)), f"{type}"
         else:
-            assert str(values_from_rows) == key[type].replace("CAST(", "").replace("'", "").replace(
-                f" AS {type})", "").replace("T", " ").replace("Z", "").format(values), f"{type}"
+            assert str(values_from_rows) == str(key[type](values)), f"{type}"

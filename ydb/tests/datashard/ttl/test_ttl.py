@@ -5,8 +5,8 @@ import subprocess
 import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
+from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, index_first_not_Bool
 
 
 ttl_types = {
@@ -111,11 +111,11 @@ class TestTTL(TestBase):
         index_columns = {
             "col_index_": index.keys()
         }
-        sql_create_table = create_table(
+        sql_create_table = create_table_sql_request(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
         if ttl != "":
-            sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
+            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
                                  "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
@@ -160,10 +160,10 @@ class TestTTL(TestBase):
                 {f"ttl_{ttl}" if ttl != "" else ""}
             )
             VALUES(
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {ttl_types[ttl].format(date) if ttl != "" else ""}
+                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join([format_sql_value(all_types[type_name](value), type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {format_sql_value(ttl_types[ttl](date), ttl) if ttl != "" else ""}
             );
         """
         self.query(insert_sql)
@@ -182,12 +182,12 @@ class TestTTL(TestBase):
         for type_name in all_types.keys():
             if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
                 create_all_type.append(
-                    f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(value)}")
+                    f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](value), type_name)}")
         sql_select = f"""
                 SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(value)}" for type_name in pk_types.keys()])}
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](value), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)}" for type_name in index.keys()])}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](value), type_name)}" for type_name in index.keys()])}
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
                 """

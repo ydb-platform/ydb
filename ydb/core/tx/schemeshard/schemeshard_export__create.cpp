@@ -953,7 +953,7 @@ private:
                     txId = GetActiveBackupTxId(exportInfo, itemIdx);
                 }
                 break;
-            
+
             case EState::AutoDropping:
             case EState::Dropping:
                 if (isMultipleMods || isNotExist) {

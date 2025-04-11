@@ -53,7 +53,6 @@ public:
     void ApplyChanges(TString& reason);
     void ApplyChanges();
     EPDiskStatus GetStatus() const;
-    EPDiskStatus GetNewStatus() const;
     bool IsNewStatusGood() const;
 
     bool IsChangingAllowed() const;
@@ -155,11 +154,11 @@ public:
     TDistribution ByRoom;
     TDistribution ByRack;
     THashMap<TString, TNodeIDSet> NodeByRack;
-    TDistribution FaultyByNode;
+    TDistribution BadByNode;
 
     explicit TClusterMap(TSentinelState::TPtr state);
 
-    void AddPDisk(const TPDiskID& id, const EPDiskStatus status);
+    void AddPDisk(const TPDiskID& id, const bool inGoodState = true);
 
 }; // TClusterMap
 

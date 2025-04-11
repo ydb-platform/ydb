@@ -168,6 +168,26 @@ public:
         return info->PDisks;
     }
 
+    void SetNodeFaulty(ui32 nodeId, bool faulty) {
+        if (faulty) {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {NKikimrCms::EMarker::MARKER_DISK_FAULTY},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        } else {
+            auto v = TVector<NCms::TEvSentinel::TEvUpdateHostMarkers::THostMarkers>();
+            v.push_back({
+                .NodeId = nodeId,
+                .Markers = {},
+            });
+
+            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateHostMarkers(std::move(v))));
+        }
+    }
+
     void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state) {
         SetPDiskStateImpl(pdisks, state);
 

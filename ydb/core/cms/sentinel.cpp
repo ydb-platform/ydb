@@ -208,11 +208,6 @@ EPDiskStatus TPDiskStatus::GetStatus() const {
     return Current;
 }
 
-EPDiskStatus TPDiskStatus::GetNewStatus() const {
-    TString unused;
-    return Compute(Current, unused);
-}
-
 bool TPDiskStatus::IsNewStatusGood() const {
     TString unused;
     switch (Compute(Current, unused)) {
@@ -273,7 +268,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 {
 }
 
-void TClusterMap::AddPDisk(const TPDiskID& id, const EPDiskStatus status) {
+void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
     const auto& location = State->Nodes[id.NodeId].Location;
 
@@ -282,8 +277,8 @@ void TClusterMap::AddPDisk(const TPDiskID& id, const EPDiskStatus status) {
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
     NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
 
-    if (status == EPDiskStatus::FAULTY) {
-        FaultyByNode[ToString(id.NodeId)].insert(id);
+    if (!inGoodState) {
+        BadByNode[ToString(id.NodeId)].insert(id);
     }
 }
 
@@ -358,30 +353,21 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     }
 
     if (MaxFaultyPDisksPerNode != 0) {
-        for (const auto& kv : FaultyByNode) {
+        for (const auto& kv : BadByNode) {
             if (kv.first) {
-                ui32 changedCount = kv.second.size();
+                auto it = all.BadByNode.find(kv.first);
+                ui32 currentCount = it != all.BadByNode.end() ? it->second.size() : 0;
 
-                auto it = all.FaultyByNode.find(kv.first);
-                ui32 currentCount = it != all.FaultyByNode.end() ? it->second.size() : 0;
-    
-                ui32 allowedCount = (MaxFaultyPDisksPerNode > currentCount) ? MaxFaultyPDisksPerNode - currentCount : 0;
-    
-                ui32 counter = 0;
-                for (const auto& pdisk : kv.second) {
-                    if (++counter > allowedCount) {
+                if (currentCount > MaxFaultyPDisksPerNode) {
+                    for (const auto& pdisk : kv.second) {
                         disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::MAX_FAULTY_PER_NODE);
                         result.erase(pdisk);
                     }
-                }
-
-                if (changedCount > allowedCount) {
                     auto disallowedPdisks = disallowed | std::views::keys;
                     issuesBuilder
                         << "Ignore state updates due to MaxFaultyPDisksPerNode"
-                        << ": changed# " << changedCount
+                        << ": changed# " << kv.second.size()
                         << ", total# " << currentCount
-                        << ", allowed# " << allowedCount
                         << ", affected pdisks# " << JoinSeq(", ", disallowedPdisks) << Endl;
                 }
             }
@@ -997,21 +983,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
-            TMaybe<EPDiskStatus> forcedStatus;
+            bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
 
             if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
-                forcedStatus = *Config.EvictVDisksStatus;
-                info.SetForcedStatus(*forcedStatus);
+                hasGoodState = false;
+                info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
                 info.ResetForcedStatus();
             }
-
-            all.AddPDisk(id, forcedStatus.GetOrElse(info.GetStatus()));
+            
+            all.AddPDisk(id, hasGoodState);
             if (info.IsChanged()) {
                 if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
-                    changed.AddPDisk(id, info.GetNewStatus());
+                    changed.AddPDisk(id, hasGoodState);
                 }
             } else {
                 info.AllowChanging();

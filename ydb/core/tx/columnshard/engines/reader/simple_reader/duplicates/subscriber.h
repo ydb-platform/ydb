@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
-namespace NKikimr::NOlap::NReader {
+namespace NKikimr::NOlap::NReader::NSimple {
 
 class IFilterSubscriber {
 public:
@@ -11,4 +11,4 @@ public:
     virtual ~IFilterSubscriber() = default;
 };
 
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NOlap::NReader::NSimple

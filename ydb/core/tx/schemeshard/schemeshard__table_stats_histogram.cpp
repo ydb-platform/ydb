@@ -222,7 +222,6 @@ TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram
 
 enum struct ESplitReason {
     NO_SPLIT = 0,
-    FAST_SPLIT_INDEX,
     SPLIT_BY_SIZE,
     SPLIT_BY_LOAD
 };
@@ -231,8 +230,6 @@ const char* ToString(ESplitReason splitReason) {
     switch (splitReason) {
     case ESplitReason::NO_SPLIT:
         return "No split";
-    case ESplitReason::FAST_SPLIT_INDEX:
-        return "Fast split index table";
     case ESplitReason::SPLIT_BY_SIZE:
         return "Split by size";
     case ESplitReason::SPLIT_BY_LOAD:

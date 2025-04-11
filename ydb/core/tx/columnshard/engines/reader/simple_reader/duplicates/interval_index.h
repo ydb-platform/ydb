@@ -53,27 +53,27 @@ private:
 public:
     class TCursor {
     private:
-        using TIdsByIdx = THashMap<ui32, std::vector<ui64>>;
+        using TIdsByPosition = THashMap<TPosition, std::vector<TIntervalId>>;
 
         const TIntervalSet* Container;
-        YDB_READONLY(ui32, IntervalIdx, 0);
-        YDB_READONLY_DEF(THashSet<ui64>, IntersectingSources);
+        YDB_READONLY_DEF(TPosition, Position);
+        YDB_READONLY_DEF(THashSet<ui64>, IntersectingIntervals);
 
         void NextImpl(const bool init) {
             if (!init) {
-                if (const auto findIntervals = Container->IntervalsByRight.find(IntervalIdx);
+                if (const auto findIntervals = Container->IntervalsByRight.find(Position);
                     findIntervals != Container->IntervalsByRight.end()) {
                     for (const TIntervalId source : findIntervals->second) {
-                        AFL_VERIFY(IntersectingSources.erase(source));
+                        AFL_VERIFY(IntersectingIntervals.erase(source));
                     }
                 }
 
-                ++IntervalIdx;
+                ++Position;
             }
 
-            if (const auto findIntervals = Container->IntervalsByLeft.find(IntervalIdx); findIntervals != Container->IntervalsByLeft.end()) {
+            if (const auto findIntervals = Container->IntervalsByLeft.find(Position); findIntervals != Container->IntervalsByLeft.end()) {
                 for (const TIntervalId source : findIntervals->second) {
-                    AFL_VERIFY(IntersectingSources.emplace(source).second);
+                    AFL_VERIFY(IntersectingIntervals.emplace(source).second);
                 }
             }
         }
@@ -91,25 +91,25 @@ public:
         }
 
         void Prev() {
-            AFL_VERIFY(IntervalIdx);
-            if (const auto findIntervals = Container->IntervalsByLeft.find(IntervalIdx); findIntervals != Container->IntervalsByLeft.end()) {
+            AFL_VERIFY(Position);
+            if (const auto findIntervals = Container->IntervalsByLeft.find(Position); findIntervals != Container->IntervalsByLeft.end()) {
                 for (const TIntervalId source : findIntervals->second) {
-                    AFL_VERIFY(IntersectingSources.erase(source));
+                    AFL_VERIFY(IntersectingIntervals.erase(source));
                 }
             }
-            --IntervalIdx;
-            if (const auto findIntervals = Container->IntervalsByRight.find(IntervalIdx); findIntervals != Container->IntervalsByRight.end()) {
+            --Position;
+            if (const auto findIntervals = Container->IntervalsByRight.find(Position); findIntervals != Container->IntervalsByRight.end()) {
                 for (const TIntervalId source : findIntervals->second) {
-                    AFL_VERIFY(IntersectingSources.emplace(source).second);
+                    AFL_VERIFY(IntersectingIntervals.emplace(source).second);
                 }
             }
         }
 
-        void Move(const ui64 intervalIdx) {
-            while (IntervalIdx < intervalIdx) {
+        void Move(const TPosition pos) {
+            while (Position < pos) {
                 Next();
             }
-            while (IntervalIdx > intervalIdx) {
+            while (Position > pos) {
                 Prev();
             }
         }
@@ -136,8 +136,8 @@ public:
         AFL_VERIFY(IntervalsByRight[r].emplace(id).second);
 
         const auto addInterval = [l, r, id](const std::shared_ptr<TCursor>& cursor) {
-            if (cursor->IntervalIdx >= l && cursor->IntervalIdx <= r) {
-                AFL_VERIFY(cursor->IntersectingSources.emplace(id).second);
+            if (cursor->Position >= l && cursor->Position <= r) {
+                AFL_VERIFY(cursor->IntersectingIntervals.emplace(id).second);
             }
         };
         UpdateCursors(addInterval);
@@ -165,16 +165,16 @@ public:
         }
 
         const auto eraseInterval = [l, r, id](const std::shared_ptr<TCursor>& cursor) {
-            if (cursor->IntervalIdx >= l && cursor->IntervalIdx <= r) {
-                AFL_VERIFY(cursor->IntersectingSources.erase(id));
+            if (cursor->Position >= l && cursor->Position <= r) {
+                AFL_VERIFY(cursor->IntersectingIntervals.erase(id));
             }
         };
         UpdateCursors(eraseInterval);
     }
 
     THashSet<ui64> GetIntersections(const ui32 l, const ui32 r, const std::shared_ptr<TCursor>& cursor) const {
-        AFL_VERIFY(cursor->GetIntervalIdx() >= l && cursor->GetIntervalIdx() <= r);
-        THashSet<ui64> intervals = cursor->GetIntersectingSources();
+        AFL_VERIFY(cursor->GetPosition() >= l && cursor->GetPosition() <= r);
+        THashSet<ui64> intervals = cursor->GetIntersectingIntervals();
         for (auto it = Borders.lower_bound(TBorder::Begin(l, std::numeric_limits<TIntervalId>::min()));
              it != Borders.end() && *it <= TBorder::End(r, std::numeric_limits<TIntervalId>::max()); ++it) {
             intervals.insert(it->GetInterval());

@@ -18,7 +18,7 @@
     1. [Сборка с использованием компилятора Go](#go)
     2. [Сборка внутри docker-контейнера](#docker)
 
-Для сборки с помощью [Docker](https://en.wikipedia.org/wiki/Docker_(software)) используется официальный docker image для [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) [v1.22](https://hub.docker.com/_/golang/tags?name=1.22), это гарантирует то, что сборка будет проведена успешно. Описание работы Docker контейнера в Dockerfile репозитория. Так же сборка в Docker проводит дополнительные манипуляции: делаются проверки линтером, подставляет версию для сборки ydbops, чтобы она прописалась в исполняемом файле ydbops.
+Для сборки с помощью [Docker](https://en.wikipedia.org/wiki/Docker_(software)) используется официальный docker image для [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) [v1.22](https://hub.docker.com/_/golang/tags?name=1.22), это гарантирует то, что сборка будет проведена успешно. Описание работы docker-контейнера в `Dockerfile` репозитория. Так же сборка в Docker проводит дополнительные манипуляции: выполняет проверки линтером, подставляет версию для сборки ydbops, чтобы она прописалась в исполняемом файле ydbops.
 
 ### Сборка с использованием компилятора Go {#go}
 

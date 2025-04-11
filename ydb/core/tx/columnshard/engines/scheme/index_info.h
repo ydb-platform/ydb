@@ -382,6 +382,16 @@ public:
         return PKColumnIds[0];
     }
 
+    std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
+        AFL_VERIFY(size);
+        AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
+        if (size == (ui32)PrimaryKey->num_fields()) {
+            return PrimaryKey;
+        } else {
+            std::vector<std::shared_ptr<arrow::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
+            return std::make_shared<arrow::Schema>(std::move(fields));
+        }
+    }
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }

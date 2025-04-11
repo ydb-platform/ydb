@@ -168,7 +168,7 @@ TConclusionStatus TCompiledGraph::Apply(
                 AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
             }
         }
-        if (resources->IsEmptyFiltered()) {
+        if (resources->HasDataAndResultIsEmpty()) {
             resources->Clear();
             return TConclusionStatus::Success();
         }

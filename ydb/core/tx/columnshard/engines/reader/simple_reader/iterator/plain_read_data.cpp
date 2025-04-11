@@ -57,4 +57,11 @@ void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>&
     PartialResults.emplace_back(result);
 }
 
+void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) {
+    if (!SpecialReadContext->IsActive()) {
+        return;
+    }
+    Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple

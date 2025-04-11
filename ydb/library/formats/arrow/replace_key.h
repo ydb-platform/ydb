@@ -245,6 +245,23 @@ private:
     std::vector<ui32> Positions;
 
 public:
+    ui32 GetMonoPosition() const {
+        std::optional<ui32> result;
+        for (auto&& i : Positions) {
+            if (!result) {
+                result = i;
+            } else {
+                AFL_VERIFY(*result == i);
+            }
+        }
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    const std::vector<std::shared_ptr<arrow::Array>>& GetArrays() const {
+        return Arrays;
+    }
+
     TComparablePosition(const TReplaceKey& key)
         : Arrays(*key.GetColumns())
         , Positions(Arrays.size(), key.GetPosition()) {

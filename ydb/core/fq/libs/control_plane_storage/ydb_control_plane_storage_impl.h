@@ -520,11 +520,13 @@ protected:
 
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::THistogramPtr LeaseLeftMs;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NFq::TControlPlaneStorageConfig& config)
             : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , Counters(counters)
+            , LeaseLeftMs(Counters->GetHistogram("LeaseLeftMs", ::NMonitoring::ExplicitHistogram({100, 1000, 5000, 10000, 20000})))
         {
             for (auto& request: CommonRequests) {
                 request->Register(Counters);

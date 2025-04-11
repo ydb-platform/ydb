@@ -51,6 +51,10 @@ private:
     NArrow::TComparablePosition Value;
 
 public:
+    const NArrow::TComparablePosition& GetValue() const {
+        return Value;
+    }
+
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
         : Reverse(reverse)
         , Value(rk) {
@@ -138,6 +142,8 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
+    bool NeedFullAnswerFlag = true;
+    std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
     std::optional<ui64> UsedRawBytes;
@@ -149,6 +155,33 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    bool NeedFullAnswer() const {
+        return NeedFullAnswerFlag;
+    }
+
+    void SetNeedFullAnswer(const bool value) {
+        NeedFullAnswerFlag = value;
+    }
+
+    ui32 GetPurposeSyncPointIndex() const {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        return *PurposeSyncPointIndex;
+    }
+
+    void ResetPurposeSyncPointIndex() {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        PurposeSyncPointIndex.reset();
+    }
+
+    void SetPurposeSyncPointIndex(const ui32 value) {
+        if (!PurposeSyncPointIndex) {
+            AFL_VERIFY(value == 0);
+        } else {
+            AFL_VERIFY(*PurposeSyncPointIndex < value);
+        }
+        PurposeSyncPointIndex = value;
+    }
+
     virtual void InitUsedRawBytes() = 0;
 
     ui64 GetUsedRawBytes() const {
@@ -226,6 +259,9 @@ public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
+    bool HasFetchingPlan() const {
+        return !!FetchingPlan;
+    }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
@@ -470,10 +506,10 @@ public:
         return item.Start < Start;
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const {
+    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
         const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
-        AFL_VERIFY(PortionIdx < portions.size());
-        auto result = std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        AFL_VERIFY(sourceIdx < portions.size());
+        auto result = std::make_shared<TPortionDataSource>(sourceIdx, portions[PortionIdx], context);
         if (IsStartedByCursorFlag) {
             result->SetIsStartedByCursor();
         }

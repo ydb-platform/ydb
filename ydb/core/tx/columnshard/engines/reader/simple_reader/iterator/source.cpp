@@ -26,40 +26,46 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 }
 
 void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
-    AFL_VERIFY(!ProcessingStarted);
-    InitStageData(std::make_unique<TFetchedData>(
-        GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCount()));
     AFL_VERIFY(FetchingPlan);
-    ProcessingStarted = true;
-    SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-        GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
-    SetMemoryGroupId(SourceGroupGuard->GetGroupId());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
-    //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+    if (!ProcessingStarted) {
+        InitStageData(std::make_unique<TFetchedData>(
+            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCount()));
+        ProcessingStarted = true;
+        SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
+            GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
+        SetMemoryGroupId(SourceGroupGuard->GetGroupId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
+        //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+    }
     TFetchingScriptCursor cursor(FetchingPlan, 0);
-    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId());
+    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
-    AFL_VERIFY(!!ScriptCursor);
+    AFL_VERIFY(!!ScriptCursor)("source_id", GetSourceId());
     if (ScriptCursor->Next()) {
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(*ScriptCursor), GetContext()->GetCommonContext()->GetScanActorId());
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
+        auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
     }
 }
 
 void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
-    plainReader->MutableScanner().OnSourceReady(std::static_pointer_cast<IDataSource>(sourcePtr), nullptr, 0, GetRecordsCount(), *plainReader);
+    auto sourceSimple = std::static_pointer_cast<IDataSource>(sourcePtr);
+    plainReader->MutableScanner().GetSyncPoint(sourceSimple->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceSimple, *plainReader);
 }
 
 void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT_EMPTY", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     ResourceGuards.clear();
     StageResult = TFetchedResult::BuildEmpty();
-    StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
+    StageResult->SetPages({});
     ClearStageData();
 }
 
@@ -69,6 +75,7 @@ void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>
 
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+    AFL_VERIFY(!GetStageData().IsEmptyWithData());
     if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = GetStageData().GetPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
@@ -76,6 +83,10 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
+    }
+    if (StageResult->IsEmpty()) {
+        StageResult = TFetchedResult::BuildEmpty();
+        StageResult->SetPages({});
     }
     ClearStageData();
 }
@@ -374,7 +385,7 @@ private:
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
+        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
         NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
 

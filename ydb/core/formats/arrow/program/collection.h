@@ -59,12 +59,19 @@ public:
         AFL_VERIFY(Markers.erase(marker));
     }
 
-    bool IsEmptyFiltered() const {
+    bool IsEmptyFilter() const {
         return Filter->IsTotalDenyFilter();
     }
 
-    bool HasAccessors() const {
-        return Accessors.size();
+    bool HasData() const {
+        return Accessors.size() || !!RecordsCountActual;
+    }
+
+    bool HasDataAndResultIsEmpty() const {
+        if (!HasData()) {
+            return false;
+        }
+        return !GetRecordsCountActualVerified() || IsEmptyFilter();
     }
 
     std::optional<ui32> GetRecordsCountActualOptional() const {

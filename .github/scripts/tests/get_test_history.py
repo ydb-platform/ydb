@@ -66,6 +66,8 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
                 run_timestamp, 
                 status, 
                 status_description,
+                job_id,
+                job_name,
                 ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
             FROM 
                 `test_results/test_runs_column` AS t
@@ -93,6 +95,8 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
             run_timestamp, 
             status, 
             status_description,
+            job_id,
+            job_name,
             rn
         FROM 
             $filtered_tests
@@ -123,7 +127,9 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
                     "status": row["status"],
                     "commit": row["commit"],
                     "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                    "status_description": row["status_description"],
+                    "status_description": row["status_description"].replace(';;','\n'),
+                    "job_id": row["job_id"],
+                    "job_name": row["job_name"]
                 }
         end_time = time.time()
         print(

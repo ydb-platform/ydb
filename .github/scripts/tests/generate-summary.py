@@ -308,7 +308,9 @@ def render_testlist_html(rows, fn, build_preset, branch):
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
-        build_preset=buid_preset_params
+        build_preset=build_preset,
+        buid_preset_params=buid_preset_params,
+        branch=branch
     )
 
     with open(fn, "w") as fp:

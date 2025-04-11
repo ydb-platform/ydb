@@ -236,7 +236,9 @@ public:
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         if (session.has_value()) {
             request.set_session_id(TStringType{session->GetId()});
-        } else if ((txControl.TxSettings_.has_value() && !txControl.CommitTx_) || txControl.Tx_.has_value()) {
+        } else if ((std::holds_alternative<TTxSettings>(txControl.Tx_) && !txControl.CommitTx_) ||
+                    std::holds_alternative<TTransaction>(txControl.Tx_) && !txControl.CommitTx_ ||
+                    std::holds_alternative<std::string>(txControl.Tx_)) {
             throw TContractViolation("Interactive tx must use explisit session");
         }
 
@@ -255,11 +257,15 @@ public:
         if (txControl.HasTx()) {
             auto requestTxControl = request.mutable_tx_control();
             requestTxControl->set_commit_tx(txControl.CommitTx_);
-            if (txControl.Tx_) {
-                requestTxControl->set_tx_id(TStringType{txControl.Tx_->GetId()});
+
+            if (auto* tx = std::get_if<TTransaction>(&txControl.Tx_)) {
+                requestTxControl->set_tx_id(TStringType{tx->GetId()});
+            } else if (auto* txId = std::get_if<std::string>(&txControl.Tx_)) {
+                requestTxControl->set_tx_id(TStringType{*txId});
+            } else if (auto* txSettings = std::get_if<TTxSettings>(&txControl.Tx_)) {
+                SetTxSettings(*txSettings, requestTxControl->mutable_begin_tx());
             } else {
-                Y_ASSERT(txControl.TxSettings_);
-                SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+                Y_DEBUG_ABORT("Unexpected tx control type");
             }
         } else {
             Y_ASSERT(!txControl.CommitTx_);
@@ -316,10 +322,7 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         ? &params->GetProtoMap()
         : nullptr;
 
-    if (!txControl.Tx_.has_value() || !txControl.CommitTx_) {
-        TExecQueryInternal::ExecuteQueryCommon(connections, driverState, query, txControl, paramsProto, settings, session)
-            .Subscribe(iteratorCallback);
-    } else {
+    if (auto* tx = std::get_if<TTransaction>(&txControl.Tx_); tx && txControl.CommitTx_) {
         auto onPrecommitCompleted = [connections, driverState, session, query, txControl, paramsProto,
                                      settings, iteratorCallback, promise](const NThreading::TFuture<TStatus>& f) mutable {
             TStatus status = f.GetValueSync();
@@ -331,7 +334,10 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
             }
         };
 
-        txControl.Tx_->Precommit().Subscribe(onPrecommitCompleted);
+        tx->Precommit().Subscribe(onPrecommitCompleted);
+    } else {
+        TExecQueryInternal::ExecuteQueryCommon(connections, driverState, query, txControl, paramsProto, settings, session)
+            .Subscribe(iteratorCallback);
     }
 
     return promise.GetFuture();

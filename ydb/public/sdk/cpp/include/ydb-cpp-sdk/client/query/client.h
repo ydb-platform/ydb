@@ -205,6 +205,12 @@ public:
         return TTxControl(tx);
     }
 
+    [[deprecated("This is bug-provoking API. Use TTxControl::Tx(TTransaction) instead. "
+                 "This constructor will be removed in upcomming release")]]
+    static TTxControl Tx(const std::string& txId) {
+        return TTxControl(txId);
+    }
+
     static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
         return TTxControl(settings);
     }
@@ -215,7 +221,7 @@ public:
 
     FLUENT_SETTING_FLAG(CommitTx);
 
-    bool HasTx() const { return Tx_.has_value() || TxSettings_.has_value(); }
+    bool HasTx() const { return !std::holds_alternative<std::monostate>(Tx_); }
 
 private:
     TTxControl() {}
@@ -224,10 +230,12 @@ private:
         : Tx_(tx) {}
 
     TTxControl(const TTxSettings& txSettings)
-        : TxSettings_(txSettings) {}
+        : Tx_(txSettings) {}
+    
+    TTxControl(const std::string& txId)
+        : Tx_(txId) {}
 
-    const std::optional<TTransaction> Tx_;
-    const std::optional<TTxSettings> TxSettings_;
+    const std::variant<std::monostate, TTransaction, TTxSettings, std::string> Tx_;
 };
 
 class TBeginTransactionResult : public TStatus {

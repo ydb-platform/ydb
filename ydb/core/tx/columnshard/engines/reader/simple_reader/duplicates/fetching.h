@@ -6,7 +6,7 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
-namespace NKikimr::NOlap::NReader {
+namespace NKikimr::NOlap::NReader::NSimple {
 
 class TColumnFetchingContext {
 private:
@@ -43,12 +43,13 @@ private:
     }
 
 public:
-    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>& info,
-        const TActorId& owner, const std::shared_ptr<NSimple::TSpecialReadContext>& context, const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
+    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>& info, const TActorId& owner,
+        const std::shared_ptr<TSpecialReadContext>& context,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
         : Owner(owner)
         , WaitingInfo(info)
-        , Source(info->Construct(context)),
-        MemoryGroupGuard(memoryGroupGuard) {
+        , Source(info->Construct(context))
+        , MemoryGroupGuard(memoryGroupGuard) {
         std::set<ui32> columnIds = context->GetReadMetadata()->GetPKColumnIds();
         for (const ui32 columnId : context->GetReadMetadata()->GetIndexInfo().GetSnapshotColumnIds()) {
             columnIds.emplace(columnId);
@@ -146,8 +147,7 @@ private:
                                              Context->GetSource()->RestoreBlobRange(range)) } });
         }
         AFL_VERIFY(blobsData.IsEmpty());
-        NConveyor::TScanServiceOperator::SendTaskToExecute(
-            task, Context->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Context->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
     }
     virtual bool DoOnError(const TString& /*storageId*/, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         Context->OnError(TStringBuilder() << "Error reading blob range for columns: " << range.ToString() << ", error: "
@@ -249,4 +249,4 @@ public:
         : Context(context) {
     }
 };
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NOlap::NReader::NSimple

@@ -1,7 +1,7 @@
-UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/duplicates)
+UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates)
 
 PEERDIR(
-    ydb/core/tx/columnshard/engines/reader/duplicates
+    ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates
     ydb/core/tx/columnshard/engines/reader/simple_reader
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines

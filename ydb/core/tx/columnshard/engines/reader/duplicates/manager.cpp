@@ -157,8 +157,6 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::SetColumnData(std::s
     for (ui32 localIntervalIdx = 1; localIntervalIdx < RightIntervalBorders.size(); ++localIntervalIdx) {
         const std::vector<std::string>& sortingFields = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()->field_names();
         std::shared_ptr<NArrow::TGeneralContainer> keysData = [this, &sortingFields]() {
-            // TODO: optimize?
-            // TODO: simplify?
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
             for (const auto& field : sortingFields) {
                 columns.emplace_back(ColumnData->GetAccessorByNameOptional(field));
@@ -289,16 +287,6 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vecto
         }
     }
     AFL_VERIFY(SourceRanges.size() == sources.size());
-
-    // for (const auto& border : borders) {
-    //     if (border.GetIsLast()) {
-    //         SourcesSortedByRight.emplace_back(border.GetSourceId());
-    //     } else {
-    //         SourcesSortedByLeft.emplace_back(border.GetSourceId());
-    //     }
-    // }
-    // AFL_VERIFY(SourcesSortedByLeft.size() == sources.size());
-    // AFL_VERIFY(SourcesSortedByRight.size() == sources.size());
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
@@ -424,8 +412,7 @@ void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std
         (*findWaiting)->Construct(requester->GetContextAsVerified<NSimple::TSpecialReadContext>());
     Y_UNUSED(ActiveSources.emplace(sourceId, std::make_shared<TSourceFilterConstructor>(source, Intervals)).second);
 
-    std::shared_ptr<TColumnFetchingContext> fetchingContext = std::make_shared<TColumnFetchingContext>(
-        source->GetSourceId(), *findWaiting, SelfId(), source->GetContextAsVerified<NSimple::TSpecialReadContext>(), requester->GetGroupGuard());
+    std::shared_ptr<TColumnFetchingContext> fetchingContext = std::make_shared<TColumnFetchingContext>(*findWaiting, SelfId(), source->GetContextAsVerified<NSimple::TSpecialReadContext>(), requester->GetGroupGuard());
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("DUPLICATES");
     request->AddPortion(source->GetPortionInfoPtr());
     request->SetColumnIds(

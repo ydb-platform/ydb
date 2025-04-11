@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -190,6 +191,36 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     TFetchingScriptCursor cursor(plan, 0);
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    return false;
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
+    if (auto source = Source.lock()) {
+        if (source->GetContext()->IsAborted()) {
+            return;
+        }
+        source->MutableStageData().AddFilter(source->GetStageData().AdaptFullFilter(filter));
+        Step.Next();
+        auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    }
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    if (auto source = Source.lock()) {
+        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+    }
+}
+
+TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+    : Source(source)
+    , Step(step)
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()) {
+}
+
+TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
+        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));
     return false;
 }
 

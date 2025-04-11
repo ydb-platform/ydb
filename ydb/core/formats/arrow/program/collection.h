@@ -445,6 +445,14 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
+    TColumnFilter AdaptFullFilter(TColumnFilter filter) const {
+        if (!UseFilter || Filter->IsTotalAllowFilter()) {
+            return filter;
+        } else {
+            return filter.ApplyFilter(*Filter);
+        }
+    }
+
     void AddFilter(const TColumnFilter& filter) {
         if (!UseFilter) {
             *Filter = Filter->And(filter);

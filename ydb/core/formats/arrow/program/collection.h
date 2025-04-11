@@ -64,7 +64,7 @@ public:
     }
 
     bool HasAccessors() const {
-        return Accessors.size() || !!RecordsCountActual;
+        return Accessors.size();
     }
 
     bool HasData() const {

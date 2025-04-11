@@ -1,6 +1,6 @@
 # Vector indexes
 
-{{ ydb-short-name }} supports [vector indexes](https://en.wikipedia.org/wiki/Vector_database) to efficiently find the top k rows with vector values closest to a query vector. Unlike secondary indexes that optimize equality or range queries, vector indexes enable similarity search based on distance or similarity functions.
+{{ ydb-short-name }} supports [vector indexes](https://en.wikipedia.org/wiki/Vector_database) to efficiently find the top k rows with vector values closest to a query vector. Unlike [secondary indexes](secondary_indexes.md) that optimize equality or range queries, vector indexes enable similarity search based on distance or similarity functions.
 
 Vector indexes are particularly useful for:
 

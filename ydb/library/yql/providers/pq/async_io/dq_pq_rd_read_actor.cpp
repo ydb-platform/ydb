@@ -383,13 +383,13 @@ public:
     STRICT_STFUNC(IgnoreFunc, {
         // ignore all events except for retry queue
         cFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvMessageBatch, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvSessionError, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvStatistics, Ignore);
-        cFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, Ignore);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, ReplyNoSessionn);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionError, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -399,7 +399,7 @@ public:
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
 
         // ignore all row dispatcher events
-        cFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Ignore);
+        hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, ReplyNoSession);
         cFunc(TEvPrivate::TEvPrintState, Ignore);
         cFunc(TEvPrivate::TEvProcessState, Ignore);
         cFunc(TEvPrivate::TEvNotifyCA, Ignore);
@@ -409,6 +409,11 @@ public:
     })
 
     void Ignore() {
+    }
+
+    template <class TEvent>
+    void ReplyNoSession(TEvent::TPtr& ev) {
+        SendNoSession(ev->Sender, ev->Cookie);
     }
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";

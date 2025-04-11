@@ -22,6 +22,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/string/vector.h>
 
 namespace {
 
@@ -804,11 +805,23 @@ public:
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
-        for (const auto& column : Settings->GetColumns()) {
+
+        BatchOperationReadColumns.clear();
+
+        auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        for (size_t i = 0; i < columnsSize; ++i) {
+            const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
+
+                if (Settings->GetIsBatch()) {
+                    NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetType(), column.GetTypeInfo());
+                    BatchOperationReadColumns.emplace_back(column.GetId(), typeInfo, column.GetIsPrimary());
+                }
             }
         }
+
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -1036,6 +1049,10 @@ public:
 
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
+
+        if (Settings->GetIsBatch()) {
+            SetBatchOperationMaxRow(ev->Get());
+        }
 
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
@@ -1486,6 +1503,22 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        if (Settings->GetIsBatch() && !BatchOperationMaxRow.empty()) {
+            std::vector<TCell> keyRow;
+            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
+                if (const auto& column = BatchOperationReadColumns[i]; column.IsPrimary) {
+                    keyRow.push_back(BatchOperationMaxRow[i]);
+                    resultInfo.AddBatchOperationKeyIds(column.Id);
+                }
+            }
+
+            if (!keyRow.empty()) {
+                YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
+
+                TConstArrayRef<TCell> keyRef(keyRow);
+                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRef));
+            }
+        }
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1532,6 +1565,13 @@ private:
                 }
                 DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
             }
+        }
+    }
+
+    void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
+        if (ev->GetRowsCount() > 0) {
+            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
+            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
         }
     }
 
@@ -1605,6 +1645,15 @@ private:
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
+
+    struct TReadColumnInfo {
+        ui32 Id;
+        NScheme::TTypeInfo TypeInfo;
+        bool IsPrimary = false;
+    };
+
+    TVector<TReadColumnInfo> BatchOperationReadColumns;
+    TOwnedCellVec BatchOperationMaxRow;
 };
 
 

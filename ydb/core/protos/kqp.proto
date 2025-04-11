@@ -764,7 +764,7 @@ message TKqpTableSinkSettings {
         MODE_INSERT = 2;
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
-        MODE_FILL = 5; // CTAS
+        MODE_FILL = 5;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;

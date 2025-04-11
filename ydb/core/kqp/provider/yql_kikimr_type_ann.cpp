@@ -597,7 +597,7 @@ private:
         }
 
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
-            op == TYdbOperation::Upsert || op == TYdbOperation::Replace) { // NEW TYdbOperation!!!
+            op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {

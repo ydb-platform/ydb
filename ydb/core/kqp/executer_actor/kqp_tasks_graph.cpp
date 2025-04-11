@@ -90,7 +90,6 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
 }
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs) {
-    Cerr << "TEST " << "TASK GRAPH" << Endl;
     for (size_t txIdx = 0; txIdx < txs.size(); ++txIdx) {
         auto& tx = txs[txIdx];
 

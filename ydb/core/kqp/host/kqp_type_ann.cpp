@@ -1959,7 +1959,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqlFillTable::Match(input.Get())) {
-                Cerr << "Here " << Endl;
                 return AnnotateFillTable(input, ctx);
             }
 

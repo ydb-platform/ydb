@@ -302,17 +302,11 @@ TCoAtomList ExtendGenerateOnInsertColumnsList(const TKiWriteTable& write, TCoAto
 
 TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
 {
-    //auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
-    //settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("fill_table").Done().Ptr(), ctx);
-
-    auto effect = Build<TKqlFillTable>(ctx, write.Pos())
+    return Build<TKqlFillTable>(ctx, write.Pos())
         .Input(write.Input())
         .Table(write.Table())
         .Cluster(write.DataSink().Cluster())
-        //.Settings(settings)
         .Done();
-
-    return effect;
 }
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,

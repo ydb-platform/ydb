@@ -71,7 +71,6 @@ private:
         }
         auto& results = ev->Get()->Request->ResultSet;
         if (results.size() != TableRequestPathes.size()) {
-            // TableRequestPathes is used only for CTAS, so it can't have intersections with TableRequestIds.
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
@@ -84,7 +83,6 @@ private:
                 return;
             }
 
-            Cerr << "TEST>> " << entry.TableId << " " << CanonizePath(entry.Path) << Endl;
             auto iterTableRequestPathes = TableRequestPathes.find(CanonizePath(entry.Path));
             if (iterTableRequestPathes == TableRequestPathes.end()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -343,14 +341,11 @@ private:
             auto& stageInfo = pair.second;
 
             if (!stageInfo.Meta.ShardOperations.empty()) {
-                //AFL_ENSURE(stageInfo.Meta.TableId);
-
                 for (const auto& operation : stageInfo.Meta.ShardOperations) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {
                             AFL_ENSURE(stageInfo.Meta.TableId);
-                            //Y_ENSURE(tableInfo);
                             TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
                             stageInfo.Meta.TableKind = tableInfo->TableKind;
 
@@ -389,13 +384,11 @@ private:
                         }
                     } else if (!ResolvingNamesFinished) {
                         // CTAS 
-                        //AFL_ENSURE(!ResolvingNamesFinished);
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         if (TableRequestPathes.find(stageInfo.Meta.TablePath) == TableRequestPathes.end()) {
                             auto& entry = requestNavigate->ResultSet.emplace_back();
 
-                            Cerr << "REQ :: " << stageInfo.Meta.TablePath << Endl;
                             entry.Path = SplitPath(stageInfo.Meta.TablePath);
                             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
                             entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
@@ -411,7 +404,7 @@ private:
 
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
-                        AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Updata operation
+                        AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
                         entry.Access = NACLib::EAccessRights::UpdateRow;
                     }
                 }

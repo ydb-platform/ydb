@@ -117,6 +117,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     auto path = readTable.Path();
 
     if (readTable.PathId() == "") {
+        // CTAS don't have created table during compilation.
         return;
     }
 

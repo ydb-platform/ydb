@@ -50,9 +50,6 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
 TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     TStringBuf ownerStr;
     TStringBuf idStr;
-    if (!str.TrySplit(':', ownerStr, idStr)) {
-        FormatBackTrace(&Cerr);
-    }
     YQL_ENSURE(str.TrySplit(':', ownerStr, idStr));
 
     return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr));

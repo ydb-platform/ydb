@@ -272,7 +272,6 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
             .Build()
         .Settings().Build()
         .Done();
-    Y_UNUSED(isBatch);
 }
 
 TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
@@ -717,14 +716,12 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
             TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
                 .Name("inputArg")
                 .Done();
-            if (auto maybeFillTable = effect.Maybe<TKqlFillTable>()) {
-                if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, input, newEffect, sinkEffect, order)) {
-                    return false;
-                }
-                ++order;
-            } else {
-                YQL_ENSURE(false);
+            const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
+            AFL_ENSURE(maybeFillTable);
+            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, input, newEffect, sinkEffect, order)) {
+                return false;
             }
+            ++order;
 
             if (input) {
                 inputArgs.push_back(inputArg);
@@ -777,8 +774,6 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 .Stage(maybeStage.Cast().Ptr())
                 .SinkIndex().Build("0")
                 .Done();
-        } else {
-            YQL_ENSURE(false);
         }
 
         YQL_ENSURE(newEffect);

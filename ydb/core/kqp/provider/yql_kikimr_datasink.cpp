@@ -456,9 +456,7 @@ private:
                     mode == "update_on" ||
                     mode == "fill_table")
                 {
-                    Cerr << "HERE <<< START " << Endl;
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
-                    Cerr << "HERE <<< FINISH " << Endl;
                     return TStatus::Ok;
                 } else if (mode == "fill_table") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());

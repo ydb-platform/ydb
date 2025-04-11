@@ -226,9 +226,6 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 
 TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {
     auto info = TableConstInfoById->Map.FindPtr(tableId);
-    if (!info) {
-        FormatBackTrace(&Cerr);
-    }
     MKQL_ENSURE_S(info);
     return *info;
 }

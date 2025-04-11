@@ -447,7 +447,7 @@ void TDuplicateFilterConstructor::StartMergingColumns(const ui32 intervalIdx) {
     const std::shared_ptr<NCommon::TSpecialReadContext> readContext = ActiveSources.begin()->second->GetSource()->GetContext();
         NArrow::NMerger::TCursor maxVersion = [snapshot=readContext->GetReadMetadata()->GetRequestSnapshot()]() {
             NArrow::TGeneralContainer batch(1);
-            IIndexInfo::AddSnapshotColumns(batch, snapshot, 0);
+            IIndexInfo::AddSnapshotColumns(batch, snapshot, std::numeric_limits<ui64>::max());
             return
                 NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
         }();

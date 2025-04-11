@@ -89,6 +89,7 @@ class TestParametrizedQueries(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
+            print(count)
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
 
@@ -198,4 +199,9 @@ class TestParametrizedQueries(TestBase):
             return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Timestamp)
         if type_name == "Utf8":
             return ydb.TypedValue(key[type_name](value), ydb.PrimitiveType.Utf8)
-        return ydb.TypedValue(float(key[type_name](value)), ydb.PrimitiveType.Double)
+        if type_name == "Decimal(15,0)":
+            return ydb.TypedValue(key[type_name](value), ydb.DecimalType(15, 0))
+        if type_name == "Decimal(22,9)":
+            return ydb.TypedValue(key[type_name](value), ydb.DecimalType(22, 9))
+        if type_name == "Decimal(35,10)":
+            return ydb.TypedValue(key[type_name](value), ydb.DecimalType(35, 10))

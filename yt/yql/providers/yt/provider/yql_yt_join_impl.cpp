@@ -3301,6 +3301,8 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     TJoinSideStats leftStats;
     TJoinSideStats rightStats;
 
+    bool mapJoinUseBlocks = state->Configuration->BlockMapJoin.Get().GetOrElse(state->Types->UseBlocks);
+
     const bool allowLookupJoin = !isCross && leftTablesReady && rightTablesReady && !forceMergeJoin;
     if (allowLookupJoin) {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::RawSize, mapSettings, leftStats, rightStats,
@@ -3362,12 +3364,12 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
                 DoSwap(mapSettings.LeftUnique, mapSettings.RightUnique);
                 YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the right table, use content of the left one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
 
-                return RewriteYtMapJoin(equiJoin, labels, true, op, rightLeaf, leftLeaf, ctx, mapSettings, false, false, state) ?
+                return RewriteYtMapJoin(equiJoin, labels, true, op, rightLeaf, leftLeaf, ctx, mapSettings, false, mapJoinUseBlocks, state) ?
                        TStatus::Ok : TStatus::Error;
             } else {
                 YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the left table, use content of the right one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
 
-                return RewriteYtMapJoin(equiJoin, labels, true, op, leftLeaf, rightLeaf, ctx, mapSettings, false, false, state) ?
+                return RewriteYtMapJoin(equiJoin, labels, true, op, leftLeaf, rightLeaf, ctx, mapSettings, false, mapJoinUseBlocks, state) ?
                        TStatus::Ok : TStatus::Error;
             }
         }
@@ -3645,7 +3647,6 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             }
 
             bool mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
-            bool mapJoinUseBlocks = state->Configuration->BlockMapJoin.Get().GetOrElse(state->Types->UseBlocks);
 
             if (leftTablesReady) {
                 auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables, mapJoinUseFlow);

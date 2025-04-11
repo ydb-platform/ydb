@@ -215,10 +215,14 @@ namespace {
             const auto name = item->GetName();
             auto currentType = item->GetItemType();
 
+            // All CTAS columns are created as nullable columns. Exception: primary keys for OLAP table.
             const bool notNull = primariKeyColumns.contains(name) && isOlap;
 
             if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
-                currentType = currentType->Cast<NYql::TOptionalExprType>()->GetItemType();
+                exprCtx.AddError(NYql::TIssue(
+                    exprCtx.GetPosition(pos),
+                    TStringBuilder() << "Can't create column table with nullable primary key column `" << name << "`."));
+                return std::nullopt;
             }
 
             auto typeNode = NYql::ExpandType(pos, *currentType, exprCtx);

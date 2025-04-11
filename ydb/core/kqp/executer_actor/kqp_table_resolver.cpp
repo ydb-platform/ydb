@@ -36,7 +36,6 @@ public:
         , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
     void Bootstrap() {
-        FillKqpTasksGraphStages(TasksGraph, Transactions);
         ResolveKeys();
     }
 
@@ -94,8 +93,10 @@ private:
                 return;
             }
 
+            AFL_ENSURE(entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath);
             if (iterTableRequestPathes != TableRequestPathes.end()) {
                 TVector<TStageId> stageIds(std::move(iterTableRequestPathes->second));
+                const bool isOlap = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
                 for (auto stageId : stageIds) {
                     auto& stageMeta = TasksGraph.GetStageInfo(stageId).Meta;
@@ -103,18 +104,109 @@ private:
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
                         stageMeta.TableKind = ETableKind::Datashard;
                     } else {
-                        AFL_ENSURE(entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+                        AFL_ENSURE(isOlap);
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
                     auto& stage = stageMeta.GetStage(stageId);
                     AFL_ENSURE(stage.GetSinks().size() == 1);
-                    for (const auto& sink : stage.GetSinks()) {
-                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-                        NKikimrKqp::TKqpTableSinkSettings settings;
-                        AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
-                        
+                    const auto& sink = stage.GetSinks(0);
+
+                    AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
+                    AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                    AFL_ENSURE(CanonizePath(entry.Path) == settings.GetTable().GetPath());
+                    settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
+                    settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
+                    settings.MutableTable()->SetSysView(entry.TableId.SysViewInfo);
+                    settings.MutableTable()->SetVersion(entry.TableId.SchemaVersion);
+
+                    settings.SetIsOlap(isOlap);
+
+                    auto fillColumnProto = [] (const NKikimr::TSysTables::TTableColumnInfo& columnInfo, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                        columnProto->SetId(columnInfo.Id);
+                        columnProto->SetName(columnInfo.Name);
+                        columnProto->SetTypeId(columnInfo.PType.GetTypeId());
+
+                        if (NScheme::NTypeIds::IsParametrizedType(columnInfo.PType.GetTypeId())) {
+                            ProtoFromTypeInfo(columnInfo.PType, columnInfo.PTypeMod, *columnProto->MutableTypeInfo());
+                        }
+                    };
+
+                    THashMap<TString, ui32> columnNameToIndex;
+                    TMap<ui32, ui32> keyPositionToIndex;
+                    TMap<ui32, ui32> columnIdToIndex;
+                    TVector<NScheme::TTypeInfo> keyTypes;
+
+                    // CTAS writes all columns
+                    AFL_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
+
+                    for (const auto& [index, columnInfo] : entry.Columns) {
+                        columnNameToIndex[columnInfo.Name] = index;
+                        columnIdToIndex[columnInfo.Id] = index;
+                        if (columnInfo.KeyOrder != -1) {
+                            AFL_ENSURE(columnInfo.KeyOrder >= 0);
+                            keyPositionToIndex[columnInfo.KeyOrder] = index;
+                        }
                     }
+
+                    keyTypes.reserve(keyPositionToIndex.size());
+                    for (const auto& [_, index] : keyPositionToIndex) {
+                        const auto columnInfo = entry.Columns.FindPtr(index);
+                        AFL_ENSURE(columnInfo);
+
+                        auto keyColumnProto = settings.AddKeyColumns();
+                        fillColumnProto(*columnInfo, keyColumnProto);
+
+                        keyTypes.push_back(columnInfo->PType);
+                    }
+                    AFL_ENSURE(!keyPositionToIndex.empty());
+
+                    stageMeta.ShardKey = ExtractKey(
+                        stageMeta.TableId,
+                        keyTypes,
+                        TKeyDesc::ERowOperation::Update); // CTAS is Update operation
+
+                    for (const auto& columnName : settings.GetInputColumns()) {
+                        const auto index = columnNameToIndex.FindPtr(columnName);
+                        AFL_ENSURE(index);
+                        const auto columnInfo = entry.Columns.FindPtr(*index);
+                        AFL_ENSURE(columnInfo);
+
+                        auto columnProto = settings.AddColumns();
+                        fillColumnProto(*columnInfo, columnProto);
+                    }
+
+                    {
+                        THashMap<TStringBuf, ui32> columnToOrder;
+                        ui32 currentIndex = 0;
+                        if (!isOlap) {
+                            for (const auto& [_, index] : keyPositionToIndex) {
+                                const auto columnInfo = entry.Columns.FindPtr(index);
+                                AFL_ENSURE(columnInfo);
+                                columnToOrder[columnInfo->Name] = currentIndex++;
+                            }
+                        }
+                        for (const auto& [id, index] : columnIdToIndex) {
+                            const auto columnInfo = entry.Columns.FindPtr(index);
+                            AFL_ENSURE(columnInfo);
+                            AFL_ENSURE(columnInfo->Id == id);
+                            if (isOlap || columnInfo->KeyOrder == -1) {
+                                columnToOrder[columnInfo->Name] = currentIndex++;
+                            } else {
+                                AFL_ENSURE(columnToOrder.contains(columnInfo->Name));
+                            }
+                        }
+
+                        for (const auto& columnName : settings.GetInputColumns()) {
+                            settings.AddWriteIndexes(columnToOrder.at(columnName));
+                        }
+                    }
+
+                    AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
+
+                    stageMeta.ResolvedSinkSettings = settings;
                 }
             }
         }
@@ -319,19 +411,8 @@ private:
 
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
-                        switch (operation) {
-                            case TKeyDesc::ERowOperation::Read:
-                                entry.Access = NACLib::EAccessRights::SelectRow;
-                                break;
-                            case TKeyDesc::ERowOperation::Update:
-                                entry.Access = NACLib::EAccessRights::UpdateRow;
-                                break;
-                            case TKeyDesc::ERowOperation::Erase:
-                                entry.Access = NACLib::EAccessRights::EraseRow;
-                                break;
-                            default:
-                                YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
-                        }
+                        AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Updata operation
+                        entry.Access = NACLib::EAccessRights::UpdateRow;
                     }
                 }
             }
@@ -354,10 +435,12 @@ private:
 
 private:
     THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
-        auto range = GetFullRange(tableInfo->KeyColumnTypes.size());
+        return ExtractKey(table, tableInfo->KeyColumnTypes, operation);
+    }
 
-        return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, tableInfo->KeyColumnTypes,
-            TVector<TKeyDesc::TColumnOp>{});
+    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TVector<NScheme::TTypeInfo>& keyTypes, TKeyDesc::ERowOperation operation) {
+        auto range = GetFullRange(keyTypes.size());
+        return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, keyTypes, TVector<TKeyDesc::TColumnOp>{});
     }
 
     static TSerializedTableRange GetFullRange(ui32 columnsCount) {

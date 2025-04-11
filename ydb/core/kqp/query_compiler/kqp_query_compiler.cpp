@@ -1244,18 +1244,23 @@ private:
                 }
 
                 settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
+
+                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
+                settingsProto.SetInconsistentTx(false);
             } else {
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));
                 for (const auto& column : columns) {
                     settingsProto.AddInputColumns(TString(column));
                 }
+
+                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "true");
+                settingsProto.SetInconsistentTx(true);
+
+                AFL_ENSURE(settings.Priority().Cast().StringValue() == "0");
+                AFL_ENSURE(settings.StreamWrite().Cast().StringValue() == "true");
             }
 
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
-
-            if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
-                settingsProto.SetInconsistentTx(true);
-            }
 
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);

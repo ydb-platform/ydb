@@ -971,9 +971,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
 }
 
 void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_D("EvNodeConnected " << ev->Get()->NodeId);
     Counters.NodeConnected++;
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
@@ -982,9 +979,6 @@ void TDqPqRdReadActor::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& 
 }
 
 void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_D("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     Counters.NodeDisconnected++;
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {

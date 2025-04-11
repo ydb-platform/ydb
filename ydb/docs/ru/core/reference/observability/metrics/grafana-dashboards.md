@@ -81,3 +81,19 @@
 | Compactions | Сведения о производимых операциях LSM compaction |
 | ReadSets | Сведения о пересылаемых ReadSets при исполнении пользовательской транзакции |
 | Other | Прочие метрики |
+
+## Database hive {#database-hive-detailed}
+
+Метрики таблетки [Hive](../../../contributor/hive.md) выбранной базы данных.
+
+| Имя | Описание |
+|---|---|
+| hive+balancer | Процессорное время, потребляемое акторами HIVE_ACTOR и HIVE_BALANCER_ACTOR |
+| hive event response time | Время ответа таблеткой Hive на запросы |
+| hive local transaction times | Процессорное время, потребляемое таблеткой Hive при выполнении транзакций |
+| Tablet latencies | Гистограммы времен выполнения транзакций таблетки |
+| {{local-tx}} avg time | Количество и среднее время выполнения транзакций {{local-tx}}. Тип транзакции {{local-tx}} задается в фильтре на дашборде |
+| tablet count | Общее число таблеток в базе данных |
+| event queue size | Размер очереди событий |
+| versions | Версии YDB, запущенные на узлах кластера |
+| hive node | Узел, на котором запущен Hive |

@@ -700,7 +700,7 @@ private:
         const auto usedSpace = GetUsedSpace(/* storedOnly */ false);
         if (usedSpace > i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
             // If all data is not inflight and all uploads running now -- deadlock occurred
-            Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes)")}, NDqProto::StatusIds::INTERNAL_ERROR);
+            Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
         }
     }
 
@@ -809,6 +809,9 @@ class TS3BlockWriteActor : public TS3WriteActorBase {
         {}
 
         arrow::Status Write(const void* data, int64_t nbytes) override {
+            if (Closed) {
+                return arrow::Status::IOError("Cannot write to closed stream");
+            }
             Position += nbytes;
             SerializedOutput << TStringBuf(reinterpret_cast<const char*>(data), nbytes);
             Self.BatchSize += nbytes;
@@ -870,16 +873,6 @@ private:
         }
     }
 
-    void SetupWriter() {
-        std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder()
-            .compression(arrow::Compression::SNAPPY)->build();
-
-        std::shared_ptr<parquet::ArrowWriterProperties> arrowProps = parquet::ArrowWriterProperties::Builder()
-            .store_schema()->build();
-
-        ARROW_OK(parquet::arrow::FileWriter::Open(*ArrowSchema, arrow::default_memory_pool(), std::make_shared<TBlockWriter>(*this), props, arrowProps, &Writer));
-    }
-
     void SerializeValue(NYql::NUdf::TUnboxedValue* values, ui32 width) {
         YQL_ENSURE(width, "Expected non zero width for block output");
 
@@ -897,12 +890,22 @@ private:
         const auto table = std::move(tableResult).ValueOrDie();
 
         if (!Writer) {
-            SetupWriter();
+            ARROW_OK(parquet::arrow::FileWriter::Open(
+                *ArrowSchema,
+                arrow::default_memory_pool(),
+                std::make_shared<TBlockWriter>(*this),
+                parquet::WriterProperties::Builder().compression(arrow::Compression::SNAPPY)->build(),
+                &Writer
+            ));
         }
         ARROW_OK(Writer->WriteTable(*table, numRows));
     }
 
     void FlushWriter(bool close) {
+        if (!Writer) {
+            return;
+        }
+
         if (close) {
             ARROW_OK(Writer->Close());
             Writer.reset();
@@ -915,7 +918,7 @@ private:
         }
 
         SerializedData = TString();
-        SerializedData.reserve(1_MB);
+        SerializedData.reserve(std::min(MaxBlockSize, MaxFileSize));
         BatchSize = 0;
     }
 

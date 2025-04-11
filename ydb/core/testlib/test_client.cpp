@@ -406,10 +406,10 @@ std::unique_ptr<NMsgBusProxy::TBusResponse> TTestMkqlInvoker::ReplyWithResult(NM
 
 namespace Tests {
 
-    TServerSettings& TServerSettings::SetDomainName(const TString& value) {
+    TServerSettings& TServerSettings::SetDomainName(const TString& value, ui32 numGroups) {
         StoragePoolTypes.erase("test");
         DomainName = value;
-        AddStoragePool("test", "/" + DomainName + ":test");
+        AddStoragePool("test", "/" + DomainName + ":test", numGroups);
         return *this;
     }
 

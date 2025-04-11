@@ -116,6 +116,10 @@ namespace NKikimr {
                 : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
                 , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
             {}
+
+            TIntrusivePtr<NFake::TProxyDS> GetModel() {
+                return Model;
+            }
         };
     } // anon
 
@@ -125,6 +129,13 @@ namespace NKikimr {
 
     IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
+    }
+
+    TIntrusivePtr<NFake::TProxyDS> Model(IActor *actor) {
+        Y_ABORT_UNLESS(actor);
+        auto *proxy = dynamic_cast<TBlobStorageGroupProxyMockActor*>(actor);
+        Y_ABORT_UNLESS(proxy);
+        return proxy->GetModel();
     }
 
 } // NKikimr

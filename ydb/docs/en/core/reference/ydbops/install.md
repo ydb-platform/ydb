@@ -2,7 +2,7 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-## Download the binary from releases page
+## Download the binary from the releases page
 
 You can download binary releases from [{#T}](../../downloads/index.md#ydbops).
 

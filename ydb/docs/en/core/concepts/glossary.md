@@ -158,9 +158,13 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
+A special type of **secondary index** is singled out separately - [vector index] (#vector-index).
+
 #### Vector Index {#vector-index}
 
 A **vector index** is an additional data structure used to speed up the [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search), typically when the data is too large for the [index-less approach](../yql/reference/udf/list/knn.md) to handle the load. Unlike the primary index, vector indexes are managed independently of the underlying table data. Thus, a table can have multiple vector indexes for different scenarios. For more information about using vector indexes in {{ ydb-short-name }}, see [{#T}](vector_indexes.md).
+
+A **vector index** is allocated separately from the [secondary index] (#secondary-index), as it solves other tasks.
 
 #### Column family {#column-family}
 

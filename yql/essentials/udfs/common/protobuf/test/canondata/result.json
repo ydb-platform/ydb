@@ -39,11 +39,44 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1923547/edc65c62e064cae64c748b355e12a480cac0c768/resource.tar.gz#test.test_YQL-8307_/results.txt"
         }
     ],
-    "test.test[recursion_bytes]": [
+    "test.test[map_bytes_v1]": [
         {
-            "checksum": "eeb1ca24bdc09529bd0a320965b3123d",
-            "size": 1241,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937492/9579ab43fa70f08e465aa7673b27a5da5460a75e/resource.tar.gz#test.test_recursion_bytes_/results.txt"
+            "uri": "file://test.test_map_bytes_v1_/results.txt"
+        }
+    ],
+    "test.test[map_bytes_v2]": [
+        {
+            "uri": "file://test.test_map_bytes_v2_/results.txt"
+        }
+    ],
+    "test.test[oneof_bytes_v1_fail]": [
+        {
+            "uri": "file://test.test_oneof_bytes_v1_fail_/extracted"
+        }
+    ],
+    "test.test[oneof_bytes_v1_success]": [
+        {
+            "uri": "file://test.test_oneof_bytes_v1_success_/results.txt"
+        }
+    ],
+    "test.test[oneof_bytes_v2]": [
+        {
+            "uri": "file://test.test_oneof_bytes_v2_/results.txt"
+        }
+    ],
+    "test.test[recursion_bytes_v1_fail_empty_optional]": [
+        {
+            "uri": "file://test.test_recursion_bytes_v1_fail_empty_optional_/extracted"
+        }
+    ],
+    "test.test[recursion_bytes_v1_success]": [
+        {
+            "uri": "file://test.test_recursion_bytes_v1_success_/results.txt"
+        }
+    ],
+    "test.test[recursion_bytes_v2]": [
+        {
+            "uri": "file://test.test_recursion_bytes_v2_/results.txt"
         }
     ],
     "test.test[recursion_fail]": [
@@ -89,6 +122,16 @@
             "checksum": "67b8ad859a21d7f0c8203daa08194cf3",
             "size": 21224,
             "uri": "https://storage.yandex-team.ru/get-devtools/1936947/d770c9a45c5df4db61873fc48e1cb5961f774af6/resource.tar.gz#test.test_yt_mode_map_/results.txt"
+        }
+    ],
+    "test.test[yt_mode_map_recursive_v1]": [
+        {
+            "uri": "file://test.test_yt_mode_map_recursive_v1_/results.txt"
+        }
+    ],
+    "test.test[yt_mode_map_recursive_v2]": [
+        {
+            "uri": "file://test.test_yt_mode_map_recursive_v2_/results.txt"
         }
     ],
     "test.test[yt_mode_no_ser]": [

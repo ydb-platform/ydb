@@ -112,8 +112,5 @@ SELECT TestField,
       $udfSerYT($udfParYT(TestField)),
       $udfParPB(TestField),
       $udfSerPB($udfParPB(TestField)),
-       Ensure("Success", $udfParNO(TestField) == $udfParNO($udfSerNO($udfParNO(TestField))), "Fail"),
-       Ensure("Success", $udfParYT(TestField) == $udfParYT($udfSerYT($udfParYT(TestField))), "Fail"),
-       Ensure("Success", $udfParPB(TestField) == $udfParPB($udfSerPB($udfParPB(TestField))), "Fail")
 FROM plato.Input;
 

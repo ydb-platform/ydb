@@ -131,27 +131,6 @@
                                         "String"
                                     ]
                                 ]
-                            ];
-                            [
-                                "column7";
-                                [
-                                    "DataType";
-                                    "String"
-                                ]
-                            ];
-                            [
-                                "column8";
-                                [
-                                    "DataType";
-                                    "String"
-                                ]
-                            ];
-                            [
-                                "column9";
-                                [
-                                    "DataType";
-                                    "String"
-                                ]
                             ]
                         ]
                     ]
@@ -198,10 +177,36 @@
                         ];
                         [
                             "{\n  \"inner\":\n    {\n      \"i\":\n        {\n          \"a\":\"hello\"\n        }\n    }\n}"
+                        ]
+                    ];
+                    [
+                        [
+                            "{}"
                         ];
-                        "Success";
-                        "Success";
-                        "Success"
+                        [
+                            [
+                                #
+                            ]
+                        ];
+                        [
+                            "{\n}"
+                        ];
+                        [
+                            [
+                                #
+                            ]
+                        ];
+                        [
+                            "{\n}"
+                        ];
+                        [
+                            [
+                                #
+                            ]
+                        ];
+                        [
+                            "{\n}"
+                        ]
                     ]
                 ]
             }

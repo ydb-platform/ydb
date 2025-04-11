@@ -1,0 +1,48 @@
+/*
+syntax='proto3';
+
+import "yt/yt_proto/yt/formats/extension.proto";
+
+message Test {
+  option (NYT.default_field_flags) = SERIALIZATION_YT;
+
+  message Inner {
+    string a = 1;
+  }
+  map<string, Test> dict1 = 1 [(NYT.flags) = MAP_AS_DICT];
+  map<string, Test> dict2 = 2 [(NYT.flags) = MAP_AS_OPTIONAL_DICT];
+  map<string, Test> dict3 = 3 [(NYT.flags) = MAP_AS_LIST_OF_STRUCTS_LEGACY];
+  map<string, Test> dict4 = 4 [(NYT.flags) = MAP_AS_LIST_OF_STRUCTS];
+  map<string, Test> dict5 = 5 [(NYT.flags) = MAP_AS_DICT];
+  map<string, Test> dict6 = 6 [(NYT.flags) = MAP_AS_OPTIONAL_DICT];
+  map<string, Test> dict7 = 7 [(NYT.flags) = MAP_AS_LIST_OF_STRUCTS_LEGACY];
+  map<string, Test> dict8 = 8 [(NYT.flags) = MAP_AS_LIST_OF_STRUCTS];
+  map<string, Test> dict9 = 9
+}
+*/
+
+$config = @@{
+  "name": "Test",
+  "format": "json",
+  "skip": 0,
+  "lists": {
+    "optional": false
+  },
+  "meta": "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",
+  "view": {
+    "recursion": "bytesV2",
+    "enum": "number",
+    "yt_mode": true
+  }
+}
+@@;
+
+$udfParse = Udf(Protobuf::Parse, $config as TypeConfig);
+$udfSerialize = Udf(Protobuf::Serialize, $config as TypeConfig);
+
+SELECT
+    TestField,
+    $udfParse(TestField),
+    $udfSerialize($udfParse(TestField)),
+    Ensure("Success", StablePickle($udfParse(TestField)) == StablePickle($udfParse($udfSerialize($udfParse(TestField)))), "Fail"),
+FROM plato.Input;

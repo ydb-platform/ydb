@@ -748,6 +748,7 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
@@ -763,6 +764,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
@@ -780,6 +782,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
@@ -817,6 +820,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     auto response = std::make_unique<NFq::TEvRowDispatcher::TEvGetInternalStateResponse>();
@@ -826,6 +830,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest:
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     auto partitionId = ev->Get()->Record.GetPartitionId();
@@ -848,9 +853,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_T("Received TEvRetry, EventQueueId " << ev->Get()->EventQueueId);
     Counters.Retry++;
 
@@ -869,9 +871,6 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
 }
 
 void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_T("TEvRetryQueuePrivate::TEvEvHeartbeat");
     Counters.PrivateHeartbeat++;
     auto readActorIt = ReadActorByEventQueueId.find(ev->Get()->EventQueueId);
@@ -894,9 +893,6 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
 }
 
 void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_T("Received TEvHeartbeat from " << ev->Sender << ", generation " << ev->Cookie);
     Counters.Heartbeat++;
     FindAndUpdateSession(ev);
@@ -953,6 +949,7 @@ void TDqPqRdReadActor::Stop(NDqProto::StatusIds::StatusCode status, TIssues issu
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     SRC_LOG_I("Received TEvCoordinatorResult from " << ev->Sender.ToString() << ", cookie " << ev->Cookie);
@@ -999,9 +996,6 @@ void TDqPqRdReadActor::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::
 }
 
 void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    if (!*Alive) {
-        return;
-    }
     SRC_LOG_D("Received TEvUndelivered, " << ev->Get()->ToString() << " from " << ev->Sender.ToString() << ", reason " << ev->Get()->Reason << ", cookie " << ev->Cookie);
     Counters.Undelivered++;
     
@@ -1028,6 +1022,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     if (!*Alive) {
+        SendNoSession(ev->Sender, ev->Cookie);
         return;
     }
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();

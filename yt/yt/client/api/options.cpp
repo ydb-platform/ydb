@@ -25,11 +25,11 @@ TClientOptions TClientOptions::FromUserAndToken(std::string user, std::string to
     return options;
 }
 
-TClientOptions TClientOptions::FromUser(std::string user, const std::optional<std::string>& userTag)
+TClientOptions TClientOptions::FromUser(std::string user, std::optional<std::string> userTag)
 {
     TClientOptions options;
     options.User = std::move(user);
-    options.UserTag = userTag.value_or(user);
+    options.UserTag = std::move(userTag);
     return options;
 }
 

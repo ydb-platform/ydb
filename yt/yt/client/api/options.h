@@ -28,7 +28,7 @@ struct TClientOptions
      *  Such options works in internal YT code and can work in tests.
      *  Production clusters reject such options.
     */
-    static TClientOptions FromUser(std::string user, const std::optional<std::string>& userTag = {});
+    static TClientOptions FromUser(std::string user, std::optional<std::string> userTag = {});
 
     //! Creates options for authenticating as root.
     /*!

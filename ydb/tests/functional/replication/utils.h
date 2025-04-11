@@ -47,9 +47,19 @@ struct Checker : public IChecker {
         UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
     }
 
-    T Get(const ::Ydb::Value& value);
+    virtual T Get(const ::Ydb::Value& value);
 
     T Expected;
+};
+
+struct DateTimeChecker : public Checker<TInstant> {
+    DateTimeChecker(TInstant&& expected)
+        : Checker<TInstant>(std::move(expected)) {
+    }
+
+    TInstant Get(const ::Ydb::Value& value) override {
+        return TInstant::Seconds(value.uint32_value());
+    }
 };
 
 template<>
@@ -92,6 +102,14 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(TString&& name, T&& expected) {
     return {
         std::move(name),
         std::make_shared<Checker<T>>(std::move(expected))
+    };
+}
+
+template<typename C, typename T>
+std::pair<TString, std::shared_ptr<IChecker>> _T(TString&& name, T&& expected) {
+    return {
+        std::move(name),
+        std::make_shared<C>(std::move(expected))
     };
 }
 
@@ -150,6 +168,7 @@ struct MainTestCase {
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
         , TopicName(TStringBuilder() << "Topic_" << Id)
         , SourceTableName(TStringBuilder() << "SourceTable_" << Id)
+        , ChangefeedName(TStringBuilder() << "cdc_" << Id)
         , TableName(TStringBuilder() << "Table_" << Id)
         , ReplicationName(TStringBuilder() << "Replication_" << Id)
         , TransferName(TStringBuilder() << "Transfer_" << Id)
@@ -209,6 +228,16 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP TABLE `%s`", SourceTableName.data()));
     }
 
+    void AddChangefeed() {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TABLE `%s`
+            ADD CHANGEFEED `%s` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON'
+            )
+        )", SourceTableName.data(), ChangefeedName.data()));
+    }
+
     void CreateTopic(size_t partitionCount = 10) {
         ExecuteDDL(Sprintf(R"(
             CREATE TOPIC `%s`
@@ -230,14 +259,19 @@ struct MainTestCase {
     }
 
     struct CreateTransferSettings {
+        std::optional<TString> TopicName = std::nullopt;
         std::optional<TString> ConsumerName = std::nullopt;
-        std::optional<TDuration> FlushInterval;
-        std::optional<ui64> BatchSizeBytes;
+        std::optional<TDuration> FlushInterval = TDuration::Seconds(1);
+        std::optional<ui64> BatchSizeBytes = 8_MB;
 
-        CreateTransferSettings()
-            : ConsumerName(std::nullopt)
-            , FlushInterval(TDuration::Seconds(1))
-            , BatchSizeBytes(8_MB) {}
+        CreateTransferSettings() {};
+
+        static CreateTransferSettings WithTopic(const TString& topicName, std::optional<TString> consumerName = std::nullopt) {
+            CreateTransferSettings result;
+            result.TopicName = topicName;
+            result.ConsumerName = consumerName;
+            return result;
+        }
 
         static CreateTransferSettings WithConsumerName(const TString& consumerName) {
             CreateTransferSettings result;
@@ -265,6 +299,8 @@ struct MainTestCase {
             sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
         }
 
+        TString topicName = settings.TopicName.value_or(TopicName);
+
         auto ddl = Sprintf(R"(
             %s;
 
@@ -274,7 +310,7 @@ struct MainTestCase {
                 CONNECTION_STRING = 'grpc://%s'
                 %s
             );
-        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), sb.data());
+        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), ConnectionString.data(), sb.data());
 
         ExecuteDDL(ddl);
     }
@@ -558,6 +594,7 @@ struct MainTestCase {
 
     const TString TopicName;
     const TString SourceTableName;
+    const TString ChangefeedName;
     const TString TableName;
     const TString ReplicationName;
     const TString TransferName;

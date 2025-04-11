@@ -10,11 +10,21 @@ namespace NKikimr::NOlap::NReader {
 
 class TColumnFetchingContext {
 private:
+    enum class EState {
+        FETCH_PORTION_ACCESSOR = 0,
+        ALLOCATE_MEMORY,
+        INIT_CONSTRUCTOR,
+        FETCH_BLOBS,
+        ASSEMBLE_BLOBS,
+    };
+
+private:
+    EState State = (EState)0;
     YDB_READONLY_DEF(ui64, SourceId);
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>, WaitingInfo);
     std::optional<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocatedMemory;
-    std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor> Constructor;
+    std::optional<std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>> Constructor;
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
     std::optional<TPortionDataAccessor> PortionAccessor;
     THashMap<TChunkAddress, TString> Blobs;
@@ -27,11 +37,15 @@ private:
         IsDone = true;
     }
 
+    void AdvanceState(const EState expectedCurrent) {
+        AFL_VERIFY(State == expectedCurrent);
+        State = (EState)((ui64)State + 1);
+    }
+
 public:
-    TColumnFetchingContext(const ui64 sourceId, const std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>& info,
+    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>& info,
         const TActorId& owner, const std::shared_ptr<NSimple::TSpecialReadContext>& context, const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroupGuard)
-        : SourceId(sourceId)
-        , Owner(owner)
+        : Owner(owner)
         , WaitingInfo(info)
         , Source(info->Construct(context)),
         MemoryGroupGuard(memoryGroupGuard) {
@@ -42,50 +56,52 @@ public:
         ResultSchema = std::make_shared<TFilteredSnapshotSchema>(context->GetReadMetadata()->GetResultSchema(), columnIds);
     }
 
-    void SetConstructor(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor) {
-        AFL_VERIFY(!Constructor);
-        Constructor = constructor;
-        AFL_VERIFY(Constructor);
-
-        AFL_VERIFY(AllocatedMemory);
-        Constructor->SetMemoryGuard(std::move(*AllocatedMemory));
-        AllocatedMemory->reset();
-    }
-
-    void ContinueFetching(const std::shared_ptr<NBlobOperations::NRead::ITask>& action) {
-        NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(std::move(action)));
-    }
-
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(SourceId, TConclusionStatus::Fail(message)));
+        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(), TConclusionStatus::Fail(message)));
         OnDone();
     }
 
     void SetPortionAccessor(TPortionDataAccessor&& portionAccessor) {
+        AdvanceState(EState::FETCH_PORTION_ACCESSOR);
         AFL_VERIFY(!PortionAccessor);
         PortionAccessor = std::move(portionAccessor);
     }
     void SetResourceGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
+        AdvanceState(EState::ALLOCATE_MEMORY);
         AFL_VERIFY(!AllocatedMemory);
         AFL_VERIFY(!Constructor);
         AllocatedMemory = std::move(guard);
     }
-    void BuildResult() {
-        // AFL_VERIFY(result->schema ... )
-        AFL_VERIFY(PortionAccessor);
-        AFL_VERIFY(Constructor);
-        Constructor->SetColumnData(
-            PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Constructor->GetSource()->GetDataSnapshot())
-                .AssembleToGeneralContainer({})
-                .DetachResult());
-        TActorContext::AsActorContext().Send(
-            Owner, new TEvDuplicateFilterDataFetched(Constructor->GetSource()->GetSourceId(), TConclusionStatus::Success()));
-        OnDone();
+    void SetConstructor(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor) {
+        AdvanceState(EState::INIT_CONSTRUCTOR);
+        AFL_VERIFY(!Constructor);
+        Constructor = constructor;
+        AFL_VERIFY(*Constructor);
+
+        AFL_VERIFY(AllocatedMemory);
+        (*Constructor)->SetMemoryGuard(std::move(*AllocatedMemory));
+        AllocatedMemory->reset();
+    }
+    void ContinueFetching(const std::shared_ptr<NBlobOperations::NRead::ITask>& action) {
+        AFL_VERIFY(State == EState::FETCH_BLOBS);
+        NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(std::move(action)));
     }
     void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
+        AdvanceState(EState::FETCH_BLOBS);
         for (auto&& i : blobData) {
             AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
+    }
+    void BuildResult() {
+        AdvanceState(EState::ASSEMBLE_BLOBS);
+        AFL_VERIFY(PortionAccessor);
+        AFL_VERIFY(Constructor);
+        (*Constructor)
+            ->SetColumnData(PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Source->GetDataSnapshot())
+                                .AssembleToGeneralContainer({})
+                                .DetachResult());
+        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(), TConclusionStatus::Success()));
+        OnDone();
     }
 };
 

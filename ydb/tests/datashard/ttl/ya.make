@@ -14,7 +14,6 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/datashard/lib
-    ydb/tests/stress/oltp_workload/workload
     ydb/tests/sql/lib
 )
 

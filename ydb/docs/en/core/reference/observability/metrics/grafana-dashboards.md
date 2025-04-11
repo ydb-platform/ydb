@@ -109,3 +109,18 @@ DataShard tablet metrics.
 | Other | Other metrics |
 
 Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/datashard.json) file with the **DataShard** dashboard.
+
+## Database Hive {#database-hive-detailed}
+
+[Hive](../../../contributor/hive.md) metrics for the selected database.
+
+| Name | Description |
+|---|---|
+| hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR |
+| hive event response time | How much time it takes for Hive to respond |
+| hive local transaction times | CPU time utilized by Hive when executing local transactions |
+| {{local-tx}} avg time | Count and average execution time of {{local-tx}} transactions. Transaction type {{local-tx}} is set in the filter on the dashboard |
+| tablet count | Total tablets count in the database |
+| event queue size | Database hive event queue size |
+| versions | Versions of YDB running on cluster nodes |
+| hive node | Node where the database hive is running |

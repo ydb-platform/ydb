@@ -1251,8 +1251,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(CheckItemProgress) {
         TTestBasicRuntime runtime;
-        auto options = TTestEnvOptions();
-        TTestEnv env(runtime, options);
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition0(runtime, [](auto&& ev) {

@@ -202,7 +202,9 @@ public:
         }
 
         std::vector<TCoArgument> stageArgs;
-        TExprBase stageBody = input;
+        TExprBase stageBody = Build<TCoToFlow>(ctx, writePos)
+            .Input(input)
+            .Done();
 
         const bool pureDqExpr = IsDqPureExpr(input);
         if (!pureDqExpr || !keys.empty()) {

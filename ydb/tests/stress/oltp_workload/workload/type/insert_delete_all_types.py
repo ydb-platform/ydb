@@ -1,6 +1,6 @@
 import threading
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, null_types, cleanup_type_name
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, null_types, cleanup_type_name, format_sql_value
 
 
 class WorkloadInsertDeleteAllTypes(WorkloadBase):
@@ -47,9 +47,9 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
                 VALUES
                 (
                 {i},
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])},
+                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])},
                 {", ".join(['NULL' for type_name in null_types.keys()])},
-                {", ".join([non_pk_types[type_name].format(value) for type_name in non_pk_types.keys()])},
+                {", ".join([format_sql_value(non_pk_types[type_name](value), type_name) for type_name in non_pk_types.keys()])},
                 {", ".join(['NULL' for type_name in null_types.keys()])}
                 )
                 ;

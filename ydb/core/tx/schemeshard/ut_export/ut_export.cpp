@@ -1187,7 +1187,7 @@ partitioning_settings {
                 return statsCollected.size() == count;
             });
             runtime.DispatchEvents(opts);
-            
+
             return DescribePath(runtime, "/MyRoot")
                 .GetPathDescription()
                 .GetDomainDescription()

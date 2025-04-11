@@ -8,19 +8,19 @@ void TIntervalCounter::PropagateDelta(const TPosition& node) {
         return;
     }
 
-    const ui64 left = node.GetIndex() * 2 + 1;
-    const ui64 right = node.GetIndex() * 2 + 2;
-    if (left < PropagatedDeltas.size()) {
-        AFL_VERIFY(right < PropagatedDeltas.size());
-        PropagatedDeltas[left] += PropagatedDeltas[node.GetIndex()];
-        PropagatedDeltas[right] += PropagatedDeltas[node.GetIndex()];
+    const TPosition left = node.LeftChild();
+    const TPosition right = node.RightChild();
+    if (left.GetIndex() < PropagatedDeltas.size()) {
+        AFL_VERIFY(right.GetIndex() < PropagatedDeltas.size());
+        PropagatedDeltas[left.GetIndex()] += PropagatedDeltas[node.GetIndex()];
+        PropagatedDeltas[right.GetIndex()] += PropagatedDeltas[node.GetIndex()];
     } else {
-        AFL_VERIFY((i64)Count[left] >= -PropagatedDeltas[node.GetIndex()]);
-        AFL_VERIFY((i64)Count[right] >= -PropagatedDeltas[node.GetIndex()]);
-        Count[left] += PropagatedDeltas[node.GetIndex()];
-        Count[right] += PropagatedDeltas[node.GetIndex()];
-        MinValue[left] += PropagatedDeltas[node.GetIndex()];
-        MinValue[right] += PropagatedDeltas[node.GetIndex()];
+        AFL_VERIFY((i64)Count[left.GetIndex()] >= -PropagatedDeltas[node.GetIndex()]);
+        AFL_VERIFY((i64)Count[right.GetIndex()] >= -PropagatedDeltas[node.GetIndex()]);
+        Count[left.GetIndex()] += PropagatedDeltas[node.GetIndex()];
+        Count[right.GetIndex()] += PropagatedDeltas[node.GetIndex()];
+        MinValue[left.GetIndex()] += PropagatedDeltas[node.GetIndex()];
+        MinValue[right.GetIndex()] += PropagatedDeltas[node.GetIndex()];
     }
     const i64 delta = PropagatedDeltas[node.GetIndex()] * (node.IntervalSize());
     AFL_VERIFY((i64)Count[node.GetIndex()] >= -delta);

@@ -725,7 +725,8 @@ public:
                          << ", tableStr: " << info.GetTablePath()
                          << ", tableId: " << pathId
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+                         << ", at schemeshard: " << ssId
+                         << " " << info.ShortDebugString());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;

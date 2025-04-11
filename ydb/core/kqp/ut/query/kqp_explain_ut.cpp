@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
 
-        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", UseSink ? "Update" : "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, UseSink ? 2 : 2);
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         countOperationsByType("reads");
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter[UseSink ? "MultiUpdate" : "MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseSink ? deletesCount : deletesConstCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);

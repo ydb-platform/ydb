@@ -25,7 +25,6 @@ class TChecker {
 public:
 #define CHECK_EXP(cond, err) if (!(cond)) { \
         Failures.push_back(TStringBuilder() << err); \
-    
     }
 
     void AddFailure(const TString& failure) {

@@ -1,6 +1,6 @@
 # admin cluster config generate
 
-С помощью команды `admin cluster config generate` вы можете сгенерировать [динамическую конфигурацию](../../../../../maintenance/manual/dynamic-config.md) на основе [статической конфигурации](../../../../../reference/configuration/index.md) на кластере {{ ydb-short-name }}.
+С помощью команды `admin cluster config generate` вы можете сгенерировать файл [динамической конфигурацию](../../../../../maintenance/manual/dynamic-config.md) на основе файла [статической конфигурации](../../../../../reference/configuration/index.md) на кластере {{ ydb-short-name }}.
 Динамическая конфигурация имеет формат расширенной статической конфигурации, команда автоматизирует процесс преобразования.
 
 Общий вид команды:

@@ -22,7 +22,7 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
             {", ".join(create_columns)},
             PRIMARY KEY(
                 {", ".join(create_primary_key)}
-                ),
+                ),åå
             {", ".join(create_index)}
             )
     """

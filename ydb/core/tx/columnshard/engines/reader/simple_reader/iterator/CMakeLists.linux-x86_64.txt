@@ -12,6 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(collections)
+add_subdirectory(sync_points)
+
 add_library(reader-simple_reader-iterator)
 
 
@@ -22,6 +25,8 @@ target_link_libraries(reader-simple_reader-iterator PUBLIC
   core-formats-arrow
   tx-columnshard-blobs_action
   reader-common_reader-iterator
+  simple_reader-iterator-collections
+  simple_reader-iterator-sync_points
   tx-conveyor-usage
   limiter-grouped_memory-usage
 )
@@ -34,6 +39,5 @@ target_sources(reader-simple_reader-iterator PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/fetching.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/iterator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections.cpp
 )
 

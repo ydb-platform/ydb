@@ -26,6 +26,18 @@ using namespace NYdb::NScheme;
 
 Y_UNIT_TEST_SUITE(KqpOlap) {
 
+    TKikimrSettings GetDefaultKikimrSettings() {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetColumnShardAlterObjectEnabled(true);
+        
+        TFeatureFlags featureFlags;
+        TFeatureFlags().SetEnableDuplicateFilterInColumnShard(true);
+        settings.SetFeatureFlags(featureFlags);
+
+        return settings;
+    }
+
     class TExtLocalHelper: public TLocalHelper {
     private:
         using TBase = TLocalHelper;
@@ -217,9 +229,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AlterObjectDisabled) {
-        auto settings = TKikimrSettings()
-             .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
 
         {
@@ -302,9 +312,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleQueryOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -331,9 +339,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(EmptyColumnsRead) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -356,9 +362,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleQueryOlapStats) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -404,9 +408,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleQueryOlapMeta) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -462,9 +464,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleLookupOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -490,9 +490,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleRangeOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -519,9 +517,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CompositeRangeOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -675,9 +671,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ScanQueryOltpAndOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         auto client = kikimr.GetTableClient();
 
@@ -705,9 +699,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(YqlScriptOltpAndOlap) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
@@ -733,9 +725,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(EmptyRange) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
@@ -758,9 +748,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         static bool enableLog = false;
 
         auto doTest = [](std::optional<bool> viaPragma, bool pushdownPresent) {
-            auto settings = TKikimrSettings()
-                .SetWithSampleTables(false);
-
             if (enableLog) {
                 Cerr << "Run test:" << Endl;
                 Cerr << "viaPragma is " << (viaPragma.has_value() ? "" : "not ") << "present.";
@@ -771,7 +758,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 Cerr << "Expected result: " << pushdownPresent << Endl;
             }
 
-            TKikimrRunner kikimr(settings);
+            TKikimrRunner kikimr(GetDefaultKikimrSettings());
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
             auto client = kikimr.GetTableClient();
@@ -822,9 +809,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PKDescScan) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -926,8 +911,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -958,9 +942,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRangesSimple) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -1002,8 +984,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRangesSimpleLimit) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -1044,8 +1025,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRanges) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -1077,9 +1057,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ExtractRangesReverse) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -1135,9 +1113,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1287,9 +1263,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicateDoNotPushdown) {
         constexpr bool logQueries = false;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1329,9 +1303,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdownPartial) {
         constexpr bool logQueries = false;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1390,9 +1362,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
     Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1438,9 +1408,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdown_LikePushedDownForStringType) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -1460,9 +1428,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2036,9 +2002,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdownWithParametersILike) {
         constexpr bool logQueries = true;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2117,9 +2081,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {
         constexpr bool logQueries = true;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2195,9 +2157,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdownParameterTypesValidation) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2249,8 +2209,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapLayout) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings();
         settings.AppConfig.MutableColumnShardConfig()->MutableTablesStorageLayoutPolicy()->MutableIdentityGroups();
         Y_ABORT_UNLESS(settings.AppConfig.GetColumnShardConfig().GetTablesStorageLayoutPolicy().HasIdentityGroups());
         TKikimrRunner kikimr(settings);
@@ -2293,8 +2252,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
+        auto settings = GetDefaultKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -2519,10 +2477,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     // Unit test for https://github.com/ydb-platform/ydb/issues/7967
     Y_UNIT_TEST(PredicatePushdownNulls) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2548,9 +2503,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
@@ -2705,9 +2658,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2730,9 +2681,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_UsesScanOnJoin) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2752,9 +2701,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_UsesScanOnJoinWithDataShardTable) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2774,9 +2721,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_UsesGenericQueryOnJoinWithDataShardTable) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2799,9 +2744,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_GenericQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2824,9 +2767,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_StreamGenericQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2849,9 +2790,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(OlapRead_ScanQuery) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
@@ -2874,9 +2813,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(DuplicatesInIncomingBatch) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
+        TTestHelper testHelper(GetDefaultKikimrSettings());
         Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -2905,10 +2842,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(BulkUpsertUpdate) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        TTestHelper testHelper(runnerSettings);
+        TTestHelper testHelper(GetDefaultKikimrSettings());
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
@@ -2946,7 +2881,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         appConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
-        auto settings = TKikimrSettings()
+        auto settings = GetDefaultKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);
 
@@ -3101,9 +3036,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CompactionPlanner) {
-        auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3269,8 +3203,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(CompactionPlannerQueryService) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
 
@@ -3295,10 +3228,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(MetadataMemoryManager) {
-        auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
@@ -3354,10 +3284,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(NormalizeAbsentColumn) {
-        auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         TLocalHelper testHelper(kikimr);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -3394,9 +3321,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(MultiInsertWithSinks) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings()
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3427,9 +3353,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CountWhereColumnIsNull) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3488,9 +3412,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SimpleCount) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(GetDefaultKikimrSettings());
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3521,7 +3443,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings().SetAppConfig(appConfig);
         TTestHelper testHelper(settings);
 
         TTestHelper::TColumnTable cnt;
@@ -3546,7 +3468,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings().SetAppConfig(appConfig);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -3595,7 +3517,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings().SetAppConfig(appConfig);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -3630,7 +3552,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(DoubleOutOfRangeInJson) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardDoubleOutOfRangeHandling(
+        auto settings = GetDefaultKikimrSettings().SetColumnShardDoubleOutOfRangeHandling(
             NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY);
         TKikimrRunner kikimr(settings);
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3681,8 +3603,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(SingleShardRead) {
         std::unique_ptr<TKikimrRunner> Kikimr;
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        auto kikimr = std::make_unique<TKikimrRunner>(GetDefaultKikimrSettings());
         Tests::NCommon::TLoggerInit(*kikimr).Initialize();
         auto queryClient = kikimr->GetQueryClient();
         const auto noTx = NQuery::TTxControl::NoTx();
@@ -3732,7 +3653,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(CountWithPredicate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true);
+        auto runnerSettings = GetDefaultKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true);
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
@@ -3759,8 +3680,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(WithDefaultValue) {
         std::unique_ptr<TKikimrRunner> Kikimr;
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        auto kikimr = std::make_unique<TKikimrRunner>(GetDefaultKikimrSettings());
         Tests::NCommon::TLoggerInit(*kikimr).Initialize();
         auto queryClient = kikimr->GetQueryClient();
         {
@@ -3781,10 +3701,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(PredicateWithLimit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings()
+        auto runnerSettings = GetDefaultKikimrSettings()
                                   .SetAppConfig(appConfig)
                                   .SetWithSampleTables(true)
-                                  .SetColumnShardAlterObjectEnabled(true)
                                   .SetColumnShardReaderClassName("SIMPLE");
 
         TTestHelper testHelper(runnerSettings);

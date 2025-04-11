@@ -2851,7 +2851,7 @@ private:
 
         const auto entry = execCtx->GetEntry();
 
-        toRemove = entry->CancelDeleteAtFinalize(toRemove);
+        toRemove = entry->FilterTablesToDeleteAtFinalize(toRemove);
         if (toRemove.empty()) {
             return MakeFuture();
         }
@@ -2862,7 +2862,12 @@ private:
             batchResults.push_back(batch->Remove(p, TRemoveOptions().Force(true)));
         }
         batch->ExecuteBatch();
-        return WaitExceptionOrAll(batchResults);
+        return WaitExceptionOrAll(batchResults).Apply([entry = std::move(entry), toRemove = std::move(toRemove)] (const TFuture<void>& f) {
+            if (f.HasValue()) {
+                entry->CancelDeleteAtFinalize(toRemove);
+            }
+            return f;
+        });
     }
 
     static void FillMetadataResult(

@@ -48,8 +48,8 @@ make install INSTALL_DIR=install_folder BUILD_DIR=.
 
 #### Требования
 
-- make
-- [Установка docker engine](https://docs.docker.com/engine/install/)
+- make;
+- [docker engine](https://docs.docker.com/engine/install/).
 
 #### Компиляция
 

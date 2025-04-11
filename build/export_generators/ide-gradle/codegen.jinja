@@ -1,0 +1,9 @@
+{%- set copy_files = target.target_commands|selectattr("macro", "eq", "copy_file") -%}
+{%- set move_files = target.target_commands|selectattr("macro", "eq", "move_file") -%}
+
+{%- include "[generator]/codegen_run_program.jinja" -%}
+{%- include "[generator]/codegen_run_java_program.jinja" -%}
+{%- include "[generator]/codegen_copy_file.jinja" -%}
+{%- include "[generator]/codegen_move_file.jinja" -%}
+{%- include "[generator]/codegen_common.jinja" -%}
+{%- include "[generator]/codegen_depends.jinja" -%}

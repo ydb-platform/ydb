@@ -1,6 +1,5 @@
-{%- set copies = target.target_commands|selectattr("macro", "eq", "copy_file") -%}
-{%- if copies|length -%}
-{%-     for copy in copies -%}
+{%- if copy_files|length -%}
+{%-     for copy in copy_files -%}
 {%-         set src = copy.args[0] -%}
 {%-         set dst = copy.args[1] -%}
 {%-         set src_split = rsplit(src, "/", 2) -%}
@@ -11,10 +10,10 @@
 {%-         set dst_name = dst_split[1] %}
 
 val codegen{{ copy['_object_index'] }} = tasks.register<Copy>("codegen{{ copy['_object_index'] }}") {
-    from({{ PatchRoots(src_path) }}) {
+    from({{ PatchRoots(src_path, copy['flags']|select("eq", "src_is_depend")|length) }}) {
         include("{{ src_name }}")
     }
-    into({{ PatchRoots(dst_path) }})
+    into({{ PatchRoots(dst_path, false, true) }})
 {%-         if src_name != dst_name %}
     rename("{{ src_name }}", "{{ dst_name }}")
 }

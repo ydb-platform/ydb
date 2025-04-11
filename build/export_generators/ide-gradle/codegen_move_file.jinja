@@ -1,12 +1,11 @@
-{%- set moves = target.target_commands|selectattr("macro", "eq", "move_file") -%}
-{%- if moves|length -%}
-{%-     for move in moves -%}
+{%- if move_files|length -%}
+{%-     for move in move_files -%}
 {%-         set src = move.args[0] -%}
 {%-         set dst = move.args[1] %}
 
 val codegen{{ move['_object_index'] }} = tasks.register("codegen{{ move['_object_index'] }}") {
     doLast {
-        file({{ PatchRoots(src) }}).renameTo(file({{ PatchRoots(dst) }}))
+        file({{ PatchRoots(src, move['flags']|select("eq", "src_is_depend")|length) }}).renameTo(file({{ PatchRoots(dst) }}))
     }
 }
 {%      endfor -%}

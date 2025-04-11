@@ -90,6 +90,7 @@ target_commands-ITEM="dict"
 target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
+target_commands-flags="list"
 
 [attrs.root]
 

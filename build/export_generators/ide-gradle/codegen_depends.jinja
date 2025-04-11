@@ -43,14 +43,14 @@ tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
 {%-     endfor -%}
 {%- endif -%}
 
-{%- if copies|length -%}
-{%-     for copy in copies -%}
+{%- if copy_files|length -%}
+{%-     for copy in copy_files -%}
 {{ ObjDepends(copy) }}
 {%-     endfor -%}
 {%- endif -%}
 
-{%- if moves|length -%}
-{%-     for move in moves -%}
+{%- if move_files|length -%}
+{%-     for move in move_files -%}
 {{ ObjDepends(move) }}
 {%-     endfor -%}
 {%- endif -%}

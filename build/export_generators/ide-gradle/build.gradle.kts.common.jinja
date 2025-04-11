@@ -5,12 +5,6 @@
 {%- include "[generator]/javac_flags.jinja" -%}
 {%- include "[generator]/kotlinc_flags.jinja" -%}
 
-{#- Codegen -#}
-{%- include "[generator]/run_program.jinja" -%}
-{%- include "[generator]/run_java_program.jinja" -%}
-{%- include "[generator]/copy_file.jinja" -%}
-{%- include "[generator]/move_file.jinja" -%}
-{%- include "[generator]/run_common.jinja" -%}
-{%- include "[generator]/run_depends.jinja" -%}
+{%- include "[generator]/codegen.jinja" -%}
 
 {%- include "[generator]/javadoc.jinja" -%}

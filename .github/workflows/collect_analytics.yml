@@ -59,7 +59,7 @@ jobs:
         wget -O .github/config/muted_ya.txt $URL
 
         # Run the script
-        python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type ${{ matrix.build_type }}
+        python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH 
 
         # Restore the original muted_ya.txt file
         mv .github/config/muted_ya.txt.bak .github/config/muted_ya.txt

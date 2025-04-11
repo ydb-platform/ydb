@@ -87,11 +87,9 @@ public:
         AFL_VERIFY(State == EState::FETCH_BLOBS);
         NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(std::move(action)));
     }
-    void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
+    void SetBlobs(THashMap<TChunkAddress, TString>&& blobData) {
         AdvanceState(EState::FETCH_BLOBS);
-        for (auto&& i : blobData) {
-            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
-        }
+        Blobs = std::move(blobData);
     }
     void BuildResult() {
         AdvanceState(EState::ASSEMBLE_BLOBS);
@@ -142,11 +140,13 @@ private:
         NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
 
         auto task = std::make_shared<TColumnsAssembleTask>(Context, resourcesGuard);
+        THashMap<TChunkAddress, TString> blobs;
         for (const auto& [chunk, range] : Chunks) {
-            Context->AddBlobs({ { chunk, blobsData.Extract(Context->GetSource()->GetColumnStorageId(chunk.GetColumnId()),
-                                             Context->GetSource()->RestoreBlobRange(range)) } });
+            AFL_VERIFY(blobs.emplace(chunk, blobsData.Extract(Context->GetSource()->GetColumnStorageId(chunk.GetColumnId()),
+                                             Context->GetSource()->RestoreBlobRange(range))).second);
         }
         AFL_VERIFY(blobsData.IsEmpty());
+        Context->SetBlobs(std::move(blobs));
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, Context->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
     }
     virtual bool DoOnError(const TString& /*storageId*/, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {

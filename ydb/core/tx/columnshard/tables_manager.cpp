@@ -163,7 +163,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             AFL_VERIFY(info.HasSchema());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)(
-                "version", info.GetSchema().GetVersion());
+                "version", info.GetSchema().GetVersion())("has_diff", info.HasDiff());
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,

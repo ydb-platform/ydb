@@ -79,6 +79,7 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     auto getLastSchema = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)->bool {
         auto foundKeys = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
         AFL_VERIFY(foundKeys != Self->VersionCounters->GetVersionToKey().end());
+        AFL_VERIFY(foundKeys->second.size());
         return getSchemaPresetInfo(foundKeys->second.back(), info);
     };
 
@@ -225,6 +226,7 @@ void TTxSchemaVersionsCleanup::Complete(const TActorContext& /*ctx*/) {
     for (const ui64 version: VersionsToRemove) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from memory")("vesion", version)("tablet_id", Self->TabletID());
         Self->TablesManager.MutablePrimaryIndex().RemoveSchemaVersion(version);
+        NYDBTest::TControllers::GetColumnShardController()->OnRemoveSchemaVersion(version);
     }
 
     Self->BackgroundController.FinishActiveCleanupUnusedSchemaVersions();

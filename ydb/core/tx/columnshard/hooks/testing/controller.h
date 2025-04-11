@@ -50,6 +50,7 @@ private:
     std::set<ui64> ActiveTablets;
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
+    THashSet<ui64> RemovedSchemaVersions;
 
     class TBlobInfo {
     private:
@@ -330,6 +331,32 @@ public:
 
     virtual void OnAfterLocalTxCommitted(
         const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
+    virtual void OnRemoveSchemaVersion(ui64 schemaVersion) override {
+        TGuard<TMutex> g(Mutex);
+        RemovedSchemaVersions.insert(schemaVersion);
+    }
+
+    bool IsAllVersionsRemoved(const THashSet<ui64>& schemaVersions) const {
+        TGuard<TMutex> g(Mutex);
+        for (const ui64 schemaVersion: schemaVersions) {
+            if (RemovedSchemaVersions.find(schemaVersion) == RemovedSchemaVersions.end()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    virtual bool WaitRemovingSchemaVersions(const THashSet<ui64>& schemaVersions, const TDuration& timeout) override {
+        TInstant finish = TInstant::Now() + timeout;
+        while (TInstant::Now() < finish) {
+            if (IsAllVersionsRemoved(schemaVersions)) {
+                return true;
+            }
+            sleep(1);
+        }
+        return false;
+    }
 };
 
 }

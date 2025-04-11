@@ -29,6 +29,7 @@ SRCS(
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp
+    erase_schema_ut.cpp
 )
 
 PEERDIR(

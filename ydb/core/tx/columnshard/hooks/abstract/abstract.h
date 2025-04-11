@@ -356,6 +356,14 @@ public:
     virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
         return {};
     }
+
+    virtual void OnRemoveSchemaVersion(ui64 /*schemaVersion*/) {
+        return;
+    }
+
+    virtual bool WaitRemovingSchemaVersions(const THashSet<ui64>& /*schemaVersions*/, const TDuration& /*timeout*/) {
+        return true;
+    }
 };
 
 class TControllers {

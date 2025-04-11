@@ -3663,9 +3663,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
 
+    NeedDeletePartition = true;
+
     if (TopicQuotaRequestCookie != 0) {
         // wait for TEvPQ::TEvApproveWriteQuota
-        NeedDeletePartition = true;
         return;
     }
 

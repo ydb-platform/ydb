@@ -3,10 +3,10 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 
 PY_SRCS(
+    dml.py
     create_table.py
     types_of_variables.py
     base_async_replication.py
-    create_table.py
 )
 
 PEERDIR(

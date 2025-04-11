@@ -10,6 +10,8 @@ SRCS(
     merge.cpp
     subscriber.cpp
     fetching.cpp
+    interval_index.cpp
+    interval_counter.cpp
 )
 
 PEERDIR(

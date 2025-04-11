@@ -168,7 +168,6 @@ private:
     }
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
-        AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
 
@@ -242,7 +241,7 @@ private:
         if (SourceId != entity.GetEntityId()) {
             return false;
         }
-        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
+        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
         usage = RecordIndex < entity.GetEntityRecordsCount();
         return true;
     }

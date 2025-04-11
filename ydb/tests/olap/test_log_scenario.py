@@ -11,6 +11,7 @@ import yatest.common
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.olap.common.thread_helper import TestThread
 from ydb.tests.olap.common.ydb_client import YdbClient
 
@@ -97,6 +98,9 @@ class TestLogScenario(object):
             extra_feature_flags={
                 "enable_immediate_writing_on_bulk_upsert": True
             },
+            additional_log_configs={
+                "TX_COLUMNSHARD_SCAN": LogLevels.TRACE
+            }
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

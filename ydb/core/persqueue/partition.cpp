@@ -512,7 +512,7 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         ReplyError(ctx, ev->Cookie, errorCode, ss);
     }
 
-    for (const auto& w : PendingRequests) {
+    for (auto& w : PendingRequests) {
         ReplyError(ctx, w.GetCookie(), errorCode, ss);
         w.Span.EndError(static_cast<const TString&>(ss));
     }

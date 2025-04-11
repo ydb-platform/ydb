@@ -142,7 +142,7 @@ namespace NYql {
                 partitions.clear();
 
                 for (size_t i = 0; i < totalSplits; i++) {
-                    NGeneric::TPartition partition;
+                    Generic::TPartition partition;
                     *partition.add_splits() = tableMeta->Splits[i];
                     TString partitionStr;
                     YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
@@ -177,7 +177,7 @@ namespace NYql {
                     }
 
                     // prepare select
-                    NGeneric::TSource source;
+                    Generic::TSource source;
                     auto select = source.mutable_select();
                     select->mutable_from()->set_table(TString(tableName));
                     *select->mutable_data_source_instance() = tableMeta->DataSourceInstance;
@@ -321,7 +321,7 @@ namespace NYql {
                     throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                NGeneric::TLookupSource source;
+                Generic::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 

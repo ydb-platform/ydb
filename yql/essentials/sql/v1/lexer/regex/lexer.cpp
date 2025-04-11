@@ -19,6 +19,7 @@ namespace NSQLTranslationV1 {
 
     class TRegexLexer: public NSQLTranslation::ILexer {
         static constexpr const char* CommentTokenName = "COMMENT";
+        static constexpr const char* StringValueName = "STRING_VALUE";
 
     public:
         TRegexLexer(
@@ -28,14 +29,17 @@ namespace NSQLTranslationV1 {
             : Grammar_(std::move(grammar))
             , Ansi_(ansi)
         {
-            RE2::Options custom;
-            custom.set_longest_match(true);
-
             for (const auto& [token, regex] : RegexByOtherName) {
+                RE2::Options custom;
+                if (token != CommentTokenName && token != StringValueName) {
+                    custom.set_longest_match(true);
+                }
+
+                RE2* re2 = new RE2(regex, custom);
                 if (token == CommentTokenName) {
-                    CommentRegex_.Reset(new RE2(regex));
+                    CommentRegex_.Reset(re2);
                 } else {
-                    OtherRegexes_.emplace_back(token, new RE2(regex, custom));
+                    OtherRegexes_.emplace_back(token, re2);
                 }
             }
         }
@@ -112,8 +116,9 @@ namespace NSQLTranslationV1 {
         bool MatchKeyword(const TStringBuf prefix, TParsedTokenList& matches) {
             size_t count = 0;
             for (const auto& keyword : Grammar_.KeywordNames) {
-                const TStringBuf content = prefix.substr(0, keyword.length());
-                if (AsciiEqualsIgnoreCase(content, NSQLReflect::TLexerGrammar::KeywordBlock(keyword))) {
+                const TStringBuf block = NSQLReflect::TLexerGrammar::KeywordBlock(keyword);
+                const TStringBuf content = prefix.substr(0, block.length());
+                if (AsciiEqualsIgnoreCase(content, block)) {
                     matches.emplace_back(keyword, TString(content));
                     count += 1;
                 }

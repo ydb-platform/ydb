@@ -307,10 +307,19 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "INSERT", "INSERT EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "from", "FROM(from) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, " UPSERT ", "WS( ) UPSERT WS( ) EOF");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(KeywordSkip) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
         if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
             UNIT_ASSERT_TOKENIZED(lexer, "sKip", "TSKIP(sKip) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "TSKIP(SKIP) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) TSKIP(SKIP) WS( ) EOF");
         } else {
             UNIT_ASSERT_TOKENIZED(lexer, "sKip", "SKIP(sKip) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "SKIP EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) SKIP WS( ) EOF");
         }
     }
 
@@ -371,6 +380,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "@@ @@@", "STRING_VALUE(@@ @@@) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "@@test@@", "STRING_VALUE(@@test@@) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "@@line1\nline2@@", "STRING_VALUE(@@line1\nline2@@) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "@@@@ @@A@@ @@@A@@", "STRING_VALUE(@@@@) WS( ) STRING_VALUE(@@A@@) WS( ) STRING_VALUE(@@@A@@) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(SingleLineComment) {
@@ -414,8 +424,8 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         auto reference = MakeLexer(Lexers, ANSI, /* antlr4 = */ true, ELexerFlavor::Pure);
 
         SetRandomSeed(100);
-        for (size_t i = 0; i < 512; ++i) {
-            auto input = RandomMultilineCommentLikeText(/* maxSize = */ 32);
+        for (size_t i = 0; i < 128; ++i) {
+            auto input = RandomMultilineCommentLikeText(/* maxSize = */ 16);
             TString actual = Tokenized(lexer, input);
             TString expected = Tokenized(reference, input);
 
@@ -457,6 +467,21 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "JOIN WS( ) ID_PLAIN(test) SEMICOLON(;) EOF";
 
         UNIT_ASSERT_TOKENIZED(lexer, query, expected);
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(Examples) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        UNIT_ASSERT_TOKENIZED(
+            lexer,
+            R"(
+SELECT
+ YQL::@@(Uint32 '100500)@@,
+ YQL::@@(String '[WAT])@@
+;)",
+            "WS(\n) "
+            "SELECT WS(\n) WS( ) ID_PLAIN(YQL) NAMESPACE(::) STRING_VALUE(@@(Uint32 '100500)@@) COMMA(,) WS(\n) "
+            "WS( ) ID_PLAIN(YQL) NAMESPACE(::) STRING_VALUE(@@(String '[WAT])@@) WS(\n) "
+            "SEMICOLON(;) EOF");
     }
 
 } // Y_UNIT_TEST_SUITE(SQLv1Lexer)

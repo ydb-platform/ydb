@@ -133,7 +133,7 @@ namespace NSQLReflect {
         SubstGlobal(block, "'", "");
         SubstGlobal(block, " ", "");
 
-        Y_ENSURE(name == block || (name == "TSKIP" && block == TLexerGrammar::KeywordBlock("SKIP")));
+        Y_ENSURE(name == block || (name == "TSKIP" && block == TLexerGrammar::KeywordBlock("TSKIP")));
         grammar.KeywordNames.emplace(std::move(name));
     }
 

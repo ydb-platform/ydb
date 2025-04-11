@@ -1,14 +1,20 @@
 #include "signal_registry.h"
 
-#include <yt/yt/build/config.h>
+#include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/system/thread_id.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/singleton.h>
 
-#include <signal.h>
+#include <chrono>
+#include <thread>
 
-namespace NYT {
+#ifdef _unix_
+    #include <signal.h>
+#endif // _unix_
+
+namespace NYT::NSignals {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -155,7 +161,7 @@ void TSignalRegistry::Handle(int signal)
                 // Another thread is dumping stuff. Let's wait until that thread
                 // finishes the job and kills the process.
                 while (true) {
-                    sleep(1);
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
                 }
             }
         }
@@ -190,4 +196,4 @@ void TSignalRegistry::DispatchMultiSignal(int multiSignal, const TCallback& call
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NSignals

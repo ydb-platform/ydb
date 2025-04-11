@@ -112,8 +112,6 @@ DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
 
-class TSignalRegistry;
-
 class TBloomFilterBuilder;
 class TBloomFilter;
 

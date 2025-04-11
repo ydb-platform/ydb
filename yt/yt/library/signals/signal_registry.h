@@ -1,10 +1,14 @@
 #pragma once
 
-#include "public.h"
+#include <library/cpp/yt/misc/property.h>
 
-#include <yt/yt/core/misc/property.h>
+#include <util/system/platform.h>
 
-namespace NYT {
+#include <signal.h>
+
+#include <functional>
+
+namespace NYT::NSignals {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -72,4 +76,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NSignals

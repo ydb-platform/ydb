@@ -1124,7 +1124,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Hive detailed, tenant",
-  "uid": "hive-detailed-tenant",
+  "title": "Database hive",
+  "uid": "database-hive-detailed",
   "weekStart": ""
 }

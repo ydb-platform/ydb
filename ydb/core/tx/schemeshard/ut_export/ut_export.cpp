@@ -1231,10 +1231,24 @@ partitioning_settings {
             }
         )", port));
         const ui64 exportId = txId;
+        ::NKikimrSubDomains::TDiskSpaceUsage afterExport;
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (auto* p = event->CastAsLocal<TEvSchemeShard::TEvModifySchemeTransaction>()) {
+                auto& record = p->Record;
+                if (record.TransactionSize() >= 1 && 
+                    record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable) {
+                    afterExport = waitForStats(2);
+                }
+            }
+            return prevObserverFunc(event);
+        });
+
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        const auto afterExport = waitForStats(2);
+        
         UNIT_ASSERT_STRINGS_EQUAL(expected.DebugString(), afterExport.DebugString());
 
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);

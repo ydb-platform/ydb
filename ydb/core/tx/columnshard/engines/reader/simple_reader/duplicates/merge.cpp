@@ -1,7 +1,7 @@
 #include "manager.h"
 #include "merge.h"
 
-namespace NKikimr::NOlap::NReader {
+namespace NKikimr::NOlap::NReader::NSimple {
 
 TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);
@@ -27,4 +27,4 @@ void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
     TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(TConclusionStatus::Fail(reason), IntervalIdx));
 }
 
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NOlap::NReader::NSimple

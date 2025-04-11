@@ -8,14 +8,11 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NOlap::NReader {
+namespace NKikimr::NOlap::NReader::NSimple {
 
-namespace NSimple {
 class TSpecialReadContext;
 class IDataSource;
 class TPortionDataSource;
-}
-
 class TColumnFetchingContext;
 
 class TEvDuplicateFilterIntervalResult
@@ -223,7 +220,8 @@ public:
 
         void NextImpl(const bool init) {
             if (!init) {
-                if (const auto findIntervals = Container->IntervalsByRight.find(IntervalIdx); findIntervals != Container->IntervalsByRight.end()) {
+                if (const auto findIntervals = Container->IntervalsByRight.find(IntervalIdx);
+                    findIntervals != Container->IntervalsByRight.end()) {
                     for (const TIntervalId source : findIntervals->second) {
                         AFL_VERIFY(IntersectingSources.erase(source));
                     }
@@ -417,29 +415,29 @@ private:
     };
 
     class TRowRange {
-     private:
-         YDB_READONLY_DEF(ui64, Begin);
-         YDB_READONLY_DEF(ui64, End);
- 
-     public:
-         ui64 Size() const {
-             return End - Begin;
-         }
- 
-         bool Empty() const {
-             return Begin == End;
-         }
- 
-         TString DebugString() const {
-             return TStringBuilder() << "[" << Begin << ";" << End << ")";
-         }
- 
-         TRowRange(const ui64 begin, const ui64 end)
-             : Begin(begin)
-             , End(end) {
-             AFL_VERIFY(Begin <= End)("begin", Begin)("end", End);
-         }
-     };
+    private:
+        YDB_READONLY_DEF(ui64, Begin);
+        YDB_READONLY_DEF(ui64, End);
+
+    public:
+        ui64 Size() const {
+            return End - Begin;
+        }
+
+        bool Empty() const {
+            return Begin == End;
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "[" << Begin << ";" << End << ")";
+        }
+
+        TRowRange(const ui64 begin, const ui64 end)
+            : Begin(begin)
+            , End(end) {
+            AFL_VERIFY(Begin <= End)("begin", Begin)("end", End);
+        }
+    };
 
     class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor>, TMoveOnly {
     private:
@@ -447,14 +445,14 @@ private:
         YDB_READONLY_DEF(std::vector<std::optional<NArrow::TColumnFilter>>, IntervalFilters);
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, ColumnData);
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> MemoryGuard;
-        YDB_READONLY_DEF(std::shared_ptr<NSimple::TPortionDataSource>, Source);
+        YDB_READONLY_DEF(std::shared_ptr<TPortionDataSource>, Source);
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
         std::vector<NArrow::TReplaceKey> RightIntervalBorders;
         ui64 ReadyFilterCount = 0;
 
     public:
-        TSourceFilterConstructor(const std::shared_ptr<NSimple::TPortionDataSource>& source, const TSourceIntervals& intervals);
+        TSourceFilterConstructor(const std::shared_ptr<TPortionDataSource>& source, const TSourceIntervals& intervals);
 
         void SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter);
         void SetMemoryGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -509,7 +507,7 @@ private:
             return !IsFetchingStarted.exchange(true);
         }
 
-        std::shared_ptr<NSimple::TPortionDataSource> Construct(const std::shared_ptr<NSimple::TSpecialReadContext>& context) const;
+        std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const;
     };
 
 private:
@@ -543,14 +541,14 @@ private:
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
     void AbortAndPassAway(const TString& reason);
-    void StartAllocation(const ui64 sourceId, const std::shared_ptr<NSimple::IDataSource>& requester);
+    void StartAllocation(const ui64 sourceId, const std::shared_ptr<IDataSource>& requester);
     void StartMergingColumns(const ui32 intervalIdx);
 
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
-    TDuplicateFilterConstructor(const NSimple::TSpecialReadContext& context, const bool reverseFetchingOrder);
+    TDuplicateFilterConstructor(const TSpecialReadContext& context, const bool reverseFetchingOrder);
 };
 
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NOlap::NReader::NSimple

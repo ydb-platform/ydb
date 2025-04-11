@@ -33,12 +33,15 @@ jobs:
     runs-on: [ self-hosted ]
     needs: main
     strategy:
+      fail-fast: false
       matrix:
         branch: [ main, stable-25-1, stable-25-1-1 ]
         build_type: [ relwithdebinfo, release-asan, release-msan, release-tsan ]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas

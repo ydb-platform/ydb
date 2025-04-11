@@ -1,6 +1,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/interval_counter.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/join.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;

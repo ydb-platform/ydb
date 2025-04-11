@@ -3,6 +3,10 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/string/builder.h>
+
+#include <vector>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class TIntervalCounter {
@@ -71,17 +75,19 @@ private:
         }
     };
 
-    // Segment tree: Count[i] = GetCount(i * 2 + 1) + GetCount(i * 2 + 2)
+    // Segment tree: Count[node] = GetCount(node.LeftChild()) + GetCount(node.RightChild())
     std::vector<ui64> Count;
     std::vector<ui64> MinValue;
     std::vector<i64> PropagatedDeltas;
     ui32 MaxIndex = 0;
 
 private:
+    void OnNodeUpdated(const TPosition& node, TZeroCollector* callback);
     void PropagateDelta(const TPosition& node);
     void Update(const TPosition& node, const TModification& modification, TZeroCollector* callback);
     void Inc(const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r);
+
     ui64 GetCount(const TPosition& node) const {
         AFL_VERIFY(node.GetIndex() < Count.size());
         return Count[node.GetIndex()] +
@@ -91,6 +97,7 @@ private:
         AFL_VERIFY(node.GetIndex() < MinValue.size());
         return MinValue[node.GetIndex()] + (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0);
     }
+
     TPosition GetRoot() const {
         return TPosition(MaxIndex);
     }
@@ -98,7 +105,7 @@ private:
         return TStringBuilder() << "node=" << node.GetIndex() << ";max_index=" << MaxIndex << ";count=" << GetCount(node)
                                 << ";min=" << GetMinValue(node);
     }
-    void OnNodeUpdated(const TPosition& node, TZeroCollector* callback);
+
     bool IsLeaf(const TPosition& node) const {
         return node.GetIndex() >= MaxIndex;
     }

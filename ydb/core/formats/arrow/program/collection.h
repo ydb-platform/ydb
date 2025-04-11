@@ -63,19 +63,8 @@ public:
         return Filter->IsTotalDenyFilter();
     }
 
-    bool HasAccessors() const {
-        return Accessors.size();
-    }
-
     bool HasData() const {
         return Accessors.size() || !!RecordsCountActual;
-    }
-
-    bool HasDataAndDataIsEmpty() const {
-        if (!HasData()) {
-            return false;
-        }
-        return !GetRecordsCountActualVerified();
     }
 
     bool HasDataAndResultIsEmpty() const {

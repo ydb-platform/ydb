@@ -1633,7 +1633,7 @@ bool TPartition::RequestBlobQuota()
 
 void TPartition::HandlePendingRequests(const TActorContext& ctx)
 {
-    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx) || NeedDeletePartition) {
         return;
     }
     if (RequestBlobQuota()) {

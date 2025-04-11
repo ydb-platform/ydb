@@ -67,14 +67,6 @@ class TDuplicateFilterConstructor: public NActors::TActor<TDuplicateFilterConstr
 private:
     friend class TColumnFetchingContext;
 
-    class TNoOpSubscriber: public IFilterSubscriber {
-    private:
-        virtual void OnFilterReady(const NArrow::TColumnFilter&) {
-        }
-        virtual void OnFailure(const TString&) {
-        }
-    };
-
     class TIntervalsRange {
     private:
         YDB_READONLY_DEF(ui32, FirstIdx);
@@ -99,7 +91,6 @@ private:
     class TSourceIntervals {
     private:
         using TRangeBySourceId = THashMap<ui64, TIntervalsRange>;
-        using TIdsByIdx = std::map<ui32, std::vector<ui64>>;
         YDB_READONLY_DEF(TRangeBySourceId, SourceRanges);
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
@@ -156,18 +147,22 @@ private:
 
     class TSourceFilterConstructor: NColumnShard::TMonitoringObjectsCounter<TSourceFilterConstructor>, TMoveOnly {
     private:
-        ui32 FirstIntervalIdx;
+        YDB_READONLY_DEF(std::shared_ptr<TPortionDataSource>, Source);
+        std::shared_ptr<TSourceIntervals> Intervals;
+        TIntervalsRange Range;
+
         YDB_READONLY_DEF(std::vector<std::optional<NArrow::TColumnFilter>>, IntervalFilters);
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, ColumnData);
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> MemoryGuard;
-        YDB_READONLY_DEF(std::shared_ptr<TPortionDataSource>, Source);
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
-        std::vector<NArrow::TReplaceKey> RightIntervalBorders;
         ui64 ReadyFilterCount = 0;
 
+    private:
+        void InitIntervalOffsets();
+
     public:
-        TSourceFilterConstructor(const std::shared_ptr<TPortionDataSource>& source, const TSourceIntervals& intervals);
+        TSourceFilterConstructor(const std::shared_ptr<TPortionDataSource>& source, const std::shared_ptr<TSourceIntervals>& intervals);
 
         void SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter);
         void SetMemoryGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -230,7 +225,7 @@ private:
     THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
 
     const bool ReverseFetchingOrder;
-    const TSourceIntervals Intervals;
+    const std::shared_ptr<TSourceIntervals> Intervals;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalSet NotFetchedSourcesIndex;
     std::shared_ptr<TIntervalSet::TCursor> StableBorderCursor;
@@ -258,9 +253,6 @@ private:
     void AbortAndPassAway(const TString& reason);
     void StartAllocation(const ui64 sourceId, const std::shared_ptr<IDataSource>& requester);
     void StartMergingColumns(const ui32 intervalIdx);
-
-    std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
-    std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
     TDuplicateFilterConstructor(const TSpecialReadContext& context, const bool reverseFetchingOrder);

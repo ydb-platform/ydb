@@ -302,10 +302,13 @@ TCoAtomList ExtendGenerateOnInsertColumnsList(const TKiWriteTable& write, TCoAto
 
 TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
 {
+    auto originalPathNode = GetSetting(write.Settings().Ref(), "OriginalPath");
+    AFL_ENSURE(originalPathNode);
     return Build<TKqlFillTable>(ctx, write.Pos())
         .Input(write.Input())
         .Table(write.Table())
         .Cluster(write.DataSink().Cluster())
+        .OriginalPath(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>())
         .Done();
 }
 

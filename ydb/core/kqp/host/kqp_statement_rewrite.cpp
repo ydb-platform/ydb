@@ -294,6 +294,11 @@ namespace {
             }));
         insertSettings.push_back(
             exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "OriginalPath"),
+                exprCtx.NewAtom(pos, tableName),
+            }));
+        insertSettings.push_back(
+            exprCtx.NewList(pos, {
                 exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
             }));
 

@@ -233,8 +233,12 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionH
 
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
-        const TStringBuf mode, const i64 order, TExprContext& ctx) {
+        const TStringBuf mode, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
+
+    auto settingsNode = Build<TCoNameValueTupleList>(ctx, expr.Pos())
+        .Add(settings)
+        .Done();
 
     return Build<TDqStage>(ctx, expr.Pos())
         .Inputs()
@@ -265,8 +269,7 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
                     .IsBatch(isBatch
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
-                    .Settings()
-                        .Build()
+                    .Settings(settingsNode)
                     .Build()
                 .Build()
             .Build()
@@ -317,11 +320,18 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         .Version(ctx.NewAtom(node.Pos(), ""))
         .Done();
 
+    TVector<TCoNameValueTuple> settings;
+    settings.emplace_back(
+        Build<TCoNameValueTuple>(ctx, node.Pos())
+            .Name().Build("OriginalPath")
+            .Value<TCoAtom>().Build(node.OriginalPath())
+            .Done());
+
     if (IsDqPureExpr(node.Input())) {
         stageInput = RebuildPureStageWithSink(
             node.Input(), table,
             /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
-            /* isBatch */ false, "fill_table",
+            /* isBatch */ false, "fill_table", settings,
             priority, ctx);
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
             .Stage(stageInput.Cast().Ptr())
@@ -333,6 +343,10 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     if (!EnsureDqUnion(node.Input(), ctx)) {
         return false;
     }
+
+    auto settingsNode = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
     auto stage = dqUnion.Output().Stage();
@@ -352,8 +366,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Mode(ctx.NewAtom(node.Pos(), "fill_table"))
             .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
             .IsBatch(ctx.NewAtom(node.Pos(), "false"))
-            .Settings()
-                .Build()
+            .Settings(settingsNode)
             .Build()
         .Done();
 
@@ -412,7 +425,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
-                node.IsBatch() == "true", settings.Mode, priority, ctx);
+                node.IsBatch() == "true", settings.Mode, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -574,7 +587,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
-                "delete", priority, ctx);
+                "delete", {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")

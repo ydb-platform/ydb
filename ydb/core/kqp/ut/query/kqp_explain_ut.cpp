@@ -996,8 +996,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT(sink.IsDefined());
 
             UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
         }
 
         {    
@@ -1029,8 +1029,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT(sink.IsDefined());
 
             UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/Destination2");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/Destination2");
         }
 
         {    
@@ -1064,8 +1064,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT(sink.IsDefined());
 
             UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
-            //UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/test2/Destination3");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/test2/Destination3");
         }
     }
 }

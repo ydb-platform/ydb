@@ -613,7 +613,7 @@ TStatus AnnotateKeyTuple(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 TStatus AnnotateFillTable(const TExprNode::TPtr& node, TExprContext& ctx)
 {
-    if (!EnsureMinMaxArgsCount(*node, 3, 3, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 4, 4, ctx)) {
         return TStatus::Error;
     }
 

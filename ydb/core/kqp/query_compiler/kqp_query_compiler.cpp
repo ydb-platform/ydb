@@ -1248,6 +1248,7 @@ private:
                 AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
                 settingsProto.SetInconsistentTx(false);
             } else {
+                // Table info will be filled during execution after resolving table by name.
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));
                 for (const auto& column : columns) {
                     settingsProto.AddInputColumns(TString(column));

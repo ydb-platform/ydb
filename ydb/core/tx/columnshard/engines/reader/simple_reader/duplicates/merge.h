@@ -2,10 +2,10 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
-#include <ydb/core/tx/columnshard/engines/reader/duplicates/subscriber.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/subscriber.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
-namespace NKikimr::NOlap::NReader {
+namespace NKikimr::NOlap::NReader::NSimple {
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
     class TFiltersBuilder: public NArrow::NMerger::IMergeResultBuilder {
@@ -95,4 +95,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader
+}   // namespace NKikimr::NOlap::NReader::NSimple

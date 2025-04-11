@@ -10,7 +10,7 @@
 
 {% endnote %}
 
-Конструкция INDEX используется для определения {% if concept_vector_index %}[векторного индекса]({{ concept_vector_index }}){% else %}векторного индекса{% endif %} в [строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables) таблицах:
+Конструкция INDEX используется для определения [векторного индекса](../../../../concepts/vector_indexes.md) в [строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables) таблицах:
 
 ```yql
 CREATE TABLE table_name (

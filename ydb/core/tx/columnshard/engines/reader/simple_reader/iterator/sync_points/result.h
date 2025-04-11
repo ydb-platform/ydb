@@ -10,6 +10,9 @@ private:
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) override;
+    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
+        return source->IsSyncSection() && source->HasStageResult() && source->GetStageResult().HasResultChunk();
+    }
 
 public:
     TSyncPointResult(

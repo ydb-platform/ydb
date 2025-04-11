@@ -24,9 +24,7 @@ private:
     std::optional<ui32> LastSourceIdx;
     virtual void OnAddSource(const std::shared_ptr<IDataSource>& /*source*/) {
     }
-    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const {
-        return source->IsSyncSection() && source->HasStageResult();
-    }
+    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const = 0;
     virtual ESourceAction OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) = 0;
     virtual void DoAbort() = 0;
     bool AbortFlag = false;

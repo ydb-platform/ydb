@@ -14,6 +14,13 @@ private:
     ui32 FetchedCount = 0;
     std::optional<ui32> PKPrefixSize;
 
+    virtual bool IsSourcePrepared(const std::shared_ptr<IDataSource>& source) const override {
+        if (source->IsSyncSection() && source->HasStageResult()) {
+            AFL_VERIFY(!source->GetStageResult().HasResultChunk());
+            return true;
+        }
+        return false;
+    }
     class TSourceIterator {
     private:
         std::shared_ptr<IDataSource> Source;

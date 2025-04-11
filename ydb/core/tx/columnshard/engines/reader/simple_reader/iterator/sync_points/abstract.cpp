@@ -57,12 +57,14 @@ TString ISyncPoint::DebugString() const {
     return sb;
 }
 
-void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& reader) {
+void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceId() == continueAddress.GetSourceId());
+    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceId() == continueAddress.GetSourceId())("first_source_id",
+                                                                                           SourcesSequentially.front()->GetSourceId())(
+                                                                                           "continue_source_id", continueAddress.GetSourceId());
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", SourcesSequentially.front()->GetSourceId());
-    OnSourcePrepared(SourcesSequentially.front(), reader);
+    SourcesSequentially.front()->ContinueCursor(SourcesSequentially.front());
 }
 
 void ISyncPoint::AddSource(const std::shared_ptr<IDataSource>& source) {

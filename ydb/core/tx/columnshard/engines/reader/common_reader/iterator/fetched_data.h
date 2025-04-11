@@ -259,15 +259,11 @@ public:
         return !!ChunkToReply;
     }
 
-    std::optional<TSourceChunkToReply> ExtractResultChunk(const bool strictExists = true) {
-        if (!!ChunkToReply) {
-            auto result = std::move(*ChunkToReply);
-            ChunkToReply.reset();
-            return result;
-        } else {
-            AFL_VERIFY(!strictExists);
-            return std::nullopt;
-        }
+    std::optional<TSourceChunkToReply> ExtractResultChunk() {
+        AFL_VERIFY(!!ChunkToReply);
+        auto result = std::move(*ChunkToReply);
+        ChunkToReply.reset();
+        return result;
     }
 
     bool IsEmpty() const {

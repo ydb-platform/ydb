@@ -5,6 +5,9 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& reader) {
+    if (source->GetStageResult().IsEmpty()) {
+        return ESourceAction::Finish;
+    }
     auto resultChunk = source->MutableStageResult().ExtractResultChunk();
     const bool isFinished = source->GetStageResult().IsFinished();
     if (resultChunk && resultChunk->HasData()) {

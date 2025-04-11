@@ -75,7 +75,11 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const std::share
     if (DrainToLimit()) {
         Collection->Clear();
     }
-    return ESourceAction::ProvideNext;
+    if (source->GetStageResult().IsEmpty()) {
+        return ESourceAction::Finish;
+    } else {
+        return ESourceAction::ProvideNext;
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

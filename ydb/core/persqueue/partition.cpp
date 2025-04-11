@@ -492,23 +492,31 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 {
     // Reply to all outstanding requests in order to destroy corresponding actors
 
+    NPersQueue::NErrorCode::EErrorCode errorCode;
     TStringBuilder ss;
-    ss << "Tablet is restarting, topic '" << TopicName() << "'";
+
+    if (IsSupportive()) {
+        errorCode = NPersQueue::NErrorCode::ERROR;
+        ss << "The transaction is completed";
+    } else {
+        errorCode = NPersQueue::NErrorCode::INITIALIZING;
+        ss << "Tablet is restarting, topic '" << TopicName() << "'";
+    }
 
     for (const auto& ev : WaitToChangeOwner) {
-        ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, ev->Cookie, errorCode, ss);
     }
 
     for (const auto& w : PendingRequests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, w.GetCookie(), errorCode, ss);
     }
 
     for (const auto& w : Responses) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, TStringBuilder() << ss << " (WriteResponses)");
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
     }
 
     for (const auto& ri : ReadInfo) {
-        ReplyError(ctx, ri.second.Destination, NPersQueue::NErrorCode::INITIALIZING,
+        ReplyError(ctx, ri.second.Destination, errorCode,
             TStringBuilder() << ss << " (ReadInfo) cookie " << ri.first);
     }
 

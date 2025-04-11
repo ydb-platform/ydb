@@ -19,18 +19,18 @@ private:
     };
 
 private:
-    EState State = (EState)0;
-    YDB_READONLY_DEF(ui64, SourceId);
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TWaitingSourceInfo>, WaitingInfo);
-    std::optional<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocatedMemory;
-    std::optional<std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>> Constructor;
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
-    std::optional<TPortionDataAccessor> PortionAccessor;
-    THashMap<TChunkAddress, TString> Blobs;
-    bool IsDone = false;
     YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroupGuard);
+
+    EState State = (EState)0;
+    std::optional<TPortionDataAccessor> PortionAccessor;
+    std::optional<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocatedMemory;
+    std::optional<std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>> Constructor;
+    THashMap<TChunkAddress, TString> Blobs;
+    bool IsDone = false;
 
     void OnDone() {
         AFL_VERIFY(!IsDone);

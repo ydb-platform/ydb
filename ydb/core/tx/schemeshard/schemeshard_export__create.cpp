@@ -885,12 +885,15 @@ private:
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
                 itemIdx = PopFront(exportInfo->PendingDropItems);
+                // PersistExportState(db, exportInfo);
                 if (exportInfo->State == EState::AutoDropping)
-                Cerr << "AutoDropping allocate table: " << itemIdx << Endl; 
+                Cerr << "AutoDropping allocate table: " << itemIdx << Endl;
+                else Cerr << "Dropping allocate table: " << itemIdx << Endl;
                 DropTable(exportInfo, itemIdx, txId);
             } else {
                 if (exportInfo->State == EState::AutoDropping)
                 Cerr << "AutoDropping allocate dir" << Endl; 
+                else Cerr << "Dropping allocate dir" << Endl; 
                 DropDir(exportInfo, txId);
             }
             break;
@@ -957,7 +960,8 @@ private:
                     txId = GetActiveBackupTxId(exportInfo, itemIdx);
                 }
                 break;
-
+            
+            case EState::AutoDropping:
             case EState::Dropping:
                 if (isMultipleMods || isNotExist) {
                     if (record.GetPathDropTxId()) {
@@ -1070,11 +1074,13 @@ private:
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
                 if (exportInfo->State == EState::AutoDropping)
                 Cerr << "AutoDropping modify item: " << itemIdx << Endl;
+                else Cerr << "Dropping modify item: " << itemIdx << Endl;
             } else {
                 exportInfo->WaitTxId = txId;
                 Self->PersistExportState(db, exportInfo);
                 if (exportInfo->State == EState::AutoDropping)
                 Cerr << "AutoDropping modify dir" << Endl;
+                else Cerr << "Dropping allocate dir" << Endl;
             }
             break;
 
@@ -1369,6 +1375,7 @@ private:
 
                 if (exportInfo->State == EState::AutoDropping)
                 Cerr << "AutoDropping notify item: " << itemIdx << Endl;
+                else Cerr << "Dropping allocate dir" << Endl;
 
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 auto& item = exportInfo->Items.at(itemIdx);
@@ -1378,13 +1385,23 @@ private:
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
                 if (exportInfo->AllItemsAreDropped() || exportInfo->State == EState::AutoDropping) {
+                    // Cerr << "AllItemsAreDropped Go TO DropDir" << Endl; 
+                    // exportInfo->WaitTxId = InvalidTxId;
+                    // Self->PersistExportState(db, exportInfo);
+                    if (exportInfo->State == EState::AutoDropping && !exportInfo->AllItemsAreDropped()) {
+                        AllocateTxId(exportInfo, ++itemIdx);
+                    } else
                     AllocateTxId(exportInfo);
                 }
+                // if (exportInfo->AllItemsAreDropped()) {
+                //     AllocateTxId(exportInfo);
+                // }
             } else {
                 SendNotificationsIfFinished(exportInfo, true); // for tests
 
                 if (exportInfo->State == EState::AutoDropping)
                 Cerr << "AutoDropping notify dir" << Endl;
+                else Cerr << "Dropping allocate dir" << Endl;
 
                 if (exportInfo->State == EState::AutoDropping) {
                     return EndExport(exportInfo, EState::Done, db);

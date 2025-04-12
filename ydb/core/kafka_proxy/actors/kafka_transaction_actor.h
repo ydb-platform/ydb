@@ -90,12 +90,13 @@ namespace NKafka {
             void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
             void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
             
+            // Poison pill
             void Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx);
 
             // Transaction commit logic
             void StartKqpSession(const TActorContext& ctx);
             void SendToKqpValidationRequests(const TActorContext& ctx);
-            void SendCommitTxnRequest(const TActorContext& ctx);
+            void SendCommitTxnRequest(const TString& kqpTransactionId);
 
             // Response senders
             template<class ErrorResponseType, class EventType>
@@ -112,7 +113,7 @@ namespace NKafka {
             TString GetFullTopicPath(const TString& topicName);
             TString GetYqlWithTablesNames(const TString& templateStr);
             NYdb::TParams BuildSelectParams();
-            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp();
+            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKikimrKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
@@ -139,11 +140,10 @@ namespace NKafka {
             const TActorId TxnCoordinatorActorId;
 
             // communication with KQP
-            TActorId KqpActorId;
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
+            TActorId KqpActorId;
             TString KqpSessionId;
             ui64 KqpCookie = 0;
-            TString KqpTxnId;
             EKafkaTxnKqpRequests LastSentToKqpRequest;
     };
 } // namespace NKafka

@@ -143,10 +143,10 @@ namespace NKafka {
         LastSentToKqpRequest = EKafkaTxnKqpRequests::SELECT;
     }
 
-    void TKafkaTransactionActor::SendCommitTxnRequest(const TActorContext& ctx) {
-        auto request = BuildCommitTxnRequestToKqp();
+    void TKafkaTransactionActor::SendCommitTxnRequest(const TString& kqpTransactionId) {
+        auto request = BuildCommitTxnRequestToKqp(kqpTransactionId);
 
-        ctx.Send(KqpActorId, request.Release(), 0, ++KqpCookie);
+        Send(KqpActorId, request.Release(), 0, ++KqpCookie);
         
         LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
@@ -241,7 +241,7 @@ namespace NKafka {
         return params.Build();
     }
 
-    THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TKafkaTransactionActor::BuildCommitTxnRequestToKqp() {
+    THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> TKafkaTransactionActor::BuildCommitTxnRequestToKqp(const TString& kqpTransactionId) {
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
 
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
@@ -250,7 +250,7 @@ namespace NKafka {
         ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
 
         ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(KqpTxnId);
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(kqpTransactionId);
 
         ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
 
@@ -315,9 +315,9 @@ namespace NKafka {
         }
 
         KAFKA_LOG_D(TStringBuilder() << "Validated producer and consumers states. Everything is alright, sending commit");
-        KqpTxnId = response.GetResponse().GetTxMeta().id();
+        auto kqpTxnId = response.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can attempt to commit
-        SendCommitTxnRequest(ctx);
+        SendCommitTxnRequest(kqpTxnId);
     }
 
     void TKafkaTransactionActor::HandleCommitResponse(const TActorContext& ctx) {

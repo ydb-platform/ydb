@@ -130,16 +130,27 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
     }
     auto& portion = accessor.GetPortionInfo();
-    if (Tiering) {
+    Cerr << "QQQ: " << __FILE__ << ":" << __LINE__ << " " << portion.GetPortionId() << Endl;
+
+    const bool applicableForTiering = portion.GetMeta().Produced > NPortion::INSERTED;
+    if (Tiering && applicableForTiering) {
+        Cerr << "QQQ: portion is applicable for tiering\n";
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
         std::shared_ptr<arrow::Scalar> max;
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
         if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
-            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            //if (!data.empty()) {
+                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                Cerr << "QQQ:" << "MaxSalar: " << TInstant::MicroSeconds(std::static_pointer_cast<arrow::UInt64Scalar>(max)->value);
+            //} else {
+            //    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "update_max_scalar")("status", "absent");
+            //}
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
+    } else {
+        Cerr << "QQQ: portion is NOT  applicable for tiering\n";
     }
     AddPortionImpl(portion, context.GetNow());
 }

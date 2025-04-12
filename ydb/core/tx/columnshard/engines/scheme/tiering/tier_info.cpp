@@ -23,8 +23,8 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
     AFL_VERIFY(OrderedTiers.size());
     std::optional<TString> nextTierName;
     std::optional<TDuration> nextTierDuration;
-    for (auto& tierRef : GetOrderedTiers()) {
-        auto& tierInfo = tierRef.Get();
+    for (const auto& tierRef : GetOrderedTiers()) {
+        const auto& tierInfo = tierRef.Get();
         if (skipEviction && tierInfo.GetExternalStorageId()) {
             continue;
         }
@@ -32,6 +32,7 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
         auto mpiOpt = tierInfo.ScalarToInstant(max);
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;
+        Cerr << "QQQ: " << __FILE__ << ":" << __LINE__ << " " << maxTieringPortionInstant << Endl;
         const TDuration dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(now);
         if (!dWaitLocal) {
             return TTieringContext(tierName, tierInfo.GetEvictInstant(now) - maxTieringPortionInstant, nextTierName, nextTierDuration);

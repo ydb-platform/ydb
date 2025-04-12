@@ -166,15 +166,19 @@ enum class EExpectedResult {
     ERROR
 };
 
-static constexpr ui32 PORTION_ROWS = 80 * 1000;
+static constexpr ui32 PORTION_ROWS = 100 * 1000;
 
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
-void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
+void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writePortionsOnInsert, NScheme::TTypeId ttlColumnTypeId)
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
+    csControllerGuard->SetOverrideCompactionActualizationLag(TDuration::Zero());
+    csControllerGuard->SetSmallSizeDetector(0);
+    csControllerGuard->SetOverrideOptimizerFreshnessCheckDuration(TDuration::Zero());
+    // csControllerGuard->SetOverrideBlobSplitSettings(std::nullopt);
     std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     auto ydbSchema = TTestSchema::YdbSchema();
@@ -187,6 +191,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
 
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(writePortionsOnInsert);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -199,6 +204,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     runtime.DispatchEvents(options);
 
     //
+    Cerr << __LINE__ << " QQQ\n";
 
     ui64 writeId = 0;
     ui64 tableId = 1;
@@ -212,6 +218,8 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     } else {
         ttlSec -= ts[0] + ttlIncSeconds;
     }
+    Cerr << __LINE__ << " QQQ\n";
+
     TTestSchema::TTableSpecials spec;
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = TDuration::Seconds(ttlSec);
@@ -221,10 +229,15 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
     //
+    Cerr << __LINE__ << " QQQ\n";
 
     auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
+    UNIT_ASSERT(blobs[0].size() > NOlap::TCompactionLimits::MAX_BLOB_SIZE / 2);
+    UNIT_ASSERT(blobs[0].size() < NOlap::TCompactionLimits::MAX_BLOB_SIZE);
     auto lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
+    Cerr << __LINE__ << " QQQ " << lastTtlFinishedCount << "\n";
+
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, ydbSchema, true, &writeIds));
@@ -233,21 +246,25 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     }
 
     // TODO: write into path 2 (no ttl)
+    Cerr << __LINE__ << " QQQ\n";
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+    Cerr << __LINE__ << " QQQ\n";
+    csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount) {
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
+    Cerr << __LINE__ << " QQQ\n";
 
     TAutoPtr<IEventHandle> handle;
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
+    Cerr << __LINE__ << " QQQ\n";
 
     {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
@@ -256,6 +273,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[1]));
     }
+    Cerr << __LINE__ << " QQQ\n";
 
     // Alter TTL
     ttlSec = TAppData::TimeProvider->Now().Seconds() - (ts[1] + 1);
@@ -271,9 +289,13 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     }
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+    Cerr << __LINE__ << " QQQ\n";
+
     while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
+    Cerr << __LINE__ << " QQQ\n";
+
 
     {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
@@ -284,6 +306,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(!rb || !rb->num_rows());
     }
+Cerr << __LINE__ << " QQQ\n";
 
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
@@ -293,12 +316,15 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
     PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+Cerr << __LINE__ << " QQQ\n";
 
 
     std::vector<ui64> writeIds;
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, blobs[0], ydbSchema, true, &writeIds));
     planStep  = ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
+
+Cerr << __LINE__ << " QQQ\n";
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
 
@@ -309,6 +335,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
+Cerr << __LINE__ << " QQQ\n";
 
     if (spec.NeedTestStatistics(testYdbPk)) {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
@@ -1161,9 +1188,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
     }
 
-    Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {
+    Y_UNIT_TEST_SEDECIM(TTL, Reboot, Internal, FirstPkColumn, WritePortionsOnInsert) {
         for (auto typeId : {NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
-            TestTtl(Reboot, Internal, FirstPkColumn, typeId);
+            TestTtl(Reboot, Internal, FirstPkColumn, WritePortionsOnInsert, typeId);
         }
     }
 

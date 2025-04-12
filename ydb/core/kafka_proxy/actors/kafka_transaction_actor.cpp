@@ -9,7 +9,7 @@
 namespace NKafka {
 
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
-        KAFKA_LOG_D(TStringBuilder() << "Receieved ADD_PARTITIONS_TO_TXN request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
+        KAFKA_LOG_D("Receieved ADD_PARTITIONS_TO_TXN request");
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
             SendInvalidTransactionActorStateResponse<TAddPartitionsToTxnResponseData>(ev);
             Die(ctx);
@@ -24,7 +24,7 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Receieved ADD_OFFSETS_TO_TXN request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
+        KAFKA_LOG_D("Receieved ADD_OFFSETS_TO_TXN request");
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
             SendInvalidTransactionActorStateResponse<TAddOffsetsToTxnResponseData>(ev);
             Die(ctx);
@@ -34,7 +34,7 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Receieved TXN_OFFSET_COMMIT request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
+        KAFKA_LOG_D("Receieved TXN_OFFSET_COMMIT request");
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
             SendInvalidTransactionActorStateResponse<TTxnOffsetCommitResponseData>(ev);
             Die(ctx);
@@ -67,7 +67,7 @@ namespace NKafka {
     7. Die, close KQP session,
     */
     void TKafkaTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Receieved END_TXN request for transactionalId " << ev->Get()->Request->TransactionalId->c_str());
+        KAFKA_LOG_D("Receieved END_TXN request");
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {
             SendInvalidTransactionActorStateResponse<TEndTxnResponseData>(ev);
             Die(ctx);
@@ -186,7 +186,7 @@ namespace NKafka {
 
     // helper methods
     void TKafkaTransactionActor::Die(const TActorContext &ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Dying. TransactionalId: " << TransactionalId << ", ProducerId: " << ProducerId << ", ProducerEpoch: " << ProducerEpoch);
+        KAFKA_LOG_D("Dying.");
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }

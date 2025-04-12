@@ -38,9 +38,9 @@ using THash = ui64;
 // -------------------------------------------------------------------
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
-[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
-[[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
+[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 32 * KB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE = 256 * KB;
+[[maybe_unused]] constexpr size_t L3_CACHE_SIZE = 16 * MB;
 
 // -------------------------------------------------------------------
 TDefaultBlockGraceJoinPolicy globalDefaultPolicy{};
@@ -1076,7 +1076,7 @@ public:
         const size_t leftTupleSize = leftRowsNum * LeftConverter_->GetTupleLayout()->TotalRowSize;
         const size_t rightTupleSize = rightRowsNum * RightConverter_->GetTupleLayout()->TotalRowSize;
         const size_t minTupleSize = std::min(leftTupleSize, rightTupleSize);
-        constexpr size_t bucketDesiredSize = L2_CACHE_SIZE;
+        constexpr size_t bucketDesiredSize = 4 * L2_CACHE_SIZE;
 
         BucketsLogNum_ = minTupleSize ? sizeof(size_t) * 8 - std::countl_zero((minTupleSize - 1) / bucketDesiredSize) : 0;
         LeftBuckets_.resize(1u << BucketsLogNum_);

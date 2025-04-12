@@ -12,9 +12,9 @@ namespace {
 // -------------------------------------------------------------------
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
-[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
-[[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
+[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 32 * KB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE = 256 * KB;
+[[maybe_unused]] constexpr size_t L3_CACHE_SIZE = 16 * MB;
 
 // -------------------------------------------------------------------
 #define DEFINE_TEST_POLICY(name, useExternal, algo)             \

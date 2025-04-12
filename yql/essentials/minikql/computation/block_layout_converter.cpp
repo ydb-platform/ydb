@@ -148,6 +148,39 @@ protected:
     TType* Type_;
 };
 
+class TSingularColumnDataExtractor : public IColumnDataExtractor {
+public:
+    TSingularColumnDataExtractor(arrow::MemoryPool* pool, TType* type) {
+        Y_UNUSED(pool, type);
+    }
+
+    TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+        return {array->GetMutableValues<ui8>(0)}; // nullptr
+    }
+
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_UNUSED(array);
+        return {nullptr};
+    }
+
+    ui32 GetElementSize() override {
+        return 1; // or 0?
+    }
+
+    NPackedTuple::EColumnSizeType GetElementSizeType() override {
+        return NPackedTuple::EColumnSizeType::Fixed;
+    }
+
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+        Y_UNUSED(bytes);
+        return arrow::ArrayData::Make(arrow::null(), len, {nullptr}, len);
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        extractors.push_back(this);
+    }
+};
+
 template <typename TStringType, bool Nullable>
 class TStringColumnDataExtractor : public IColumnDataExtractor {
     using TOffset = typename TStringType::offset_type;
@@ -191,10 +224,10 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto offsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * len, Pool_);
+        auto offsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * (len + 1), Pool_);
         // zeroize offsets buffer, or your code will die
         // low-level unpack expects that first offset is set to null
-        std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * len);
+        std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * (len + 1));
         auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
@@ -373,6 +406,7 @@ struct TColumnDataExtractorTraits {
     using TResource = TResourceColumnDataExtractor<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
+    using TSingular = TSingularColumnDataExtractor;
 
     constexpr static bool PassType = false;
 
@@ -383,6 +417,10 @@ struct TColumnDataExtractorTraits {
         } else {
             return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>(pool, type);
         }
+    }
+
+    static TResult::TPtr MakeSingular(arrow::MemoryPool* pool, TType* type) {
+        return std::make_unique<TSingular>(pool, type);
     }
 
     static TResult::TPtr MakeResource(bool isOptional, arrow::MemoryPool* pool, TType* type) {

@@ -58,9 +58,9 @@ class TDefaultBlockGraceJoinPolicy : public IBlockGraceJoinPolicy {
 private:
     static constexpr size_t KB{1024};
     static constexpr size_t MB{KB * KB};
-    static constexpr size_t L1_CACHE_SIZE{256 * KB};
-    static constexpr size_t L2_CACHE_SIZE{  1 * MB};
-    static constexpr size_t L3_CACHE_SIZE{ 16 * MB};
+    static constexpr size_t L1_CACHE_SIZE{32 * KB};
+    static constexpr size_t L2_CACHE_SIZE{256 * KB};
+    static constexpr size_t L3_CACHE_SIZE{16 * MB};
 
 public:
     TDefaultBlockGraceJoinPolicy() {

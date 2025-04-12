@@ -17,9 +17,9 @@ namespace {
 // -------------------------------------------------------------------
 [[maybe_unused]] constexpr size_t KB = 1024;
 [[maybe_unused]] constexpr size_t MB = KB * KB;
-[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 256 * KB;
-[[maybe_unused]] constexpr size_t L2_CACHE_SIZE =   1 * MB;
-[[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
+[[maybe_unused]] constexpr size_t L1_CACHE_SIZE = 32 * KB;
+[[maybe_unused]] constexpr size_t L2_CACHE_SIZE = 256 * KB;
+[[maybe_unused]] constexpr size_t L3_CACHE_SIZE = 16 * MB;
 
 // -------------------------------------------------------------------
 #define DEFINE_TEST_POLICY(name, algo)                              \
@@ -106,86 +106,107 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, JoinType blockJoinKind,
     TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops
 ) {
-    const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
-    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+    if (blockJoinKind == JoinType::BlockMapJoin) {
+        const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+        const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+    
+        const auto joinReturnType = MakeJoinType(pgmBuilder,
+            EJoinKind::Inner,
+            leftStream.GetStaticType(),
+            leftKeyDrops,
+            rightStream.GetStaticType(),
+            rightKeyDrops
+        );
 
-    const auto leftStreamItems = ValidateBlockStreamType(leftStream.GetStaticType());
-    const auto rightStreamItems = ValidateBlockStreamType(rightStream.GetStaticType());
+        auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+        rightBlockStorageNode = pgmBuilder.BlockMapJoinIndex(
+            rightBlockStorageNode,
+            AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+            rightKeyColumns,
+            false,
+            pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
+        );
 
-    TVector<TType*> joinReturnItems;
-
-    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
-        if (leftKeyDropsSet.contains(i)) {
-            continue;
-        }
-        joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
-    }
-
-    const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
-    for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
-        if (rightKeyDropsSet.contains(i)) {
-            continue;
-        }
-
-        joinReturnItems.push_back(pgmBuilder.NewBlockType(rightStreamItems[i], TBlockType::EShape::Many));
-    }
-
-    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-
-    TType* joinReturnType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
-    switch (blockJoinKind) {
-    case JoinType::BlockMapJoin: {
         auto joinNode = pgmBuilder.BlockMapJoinCore(
             leftStream,
-            rightStream,
+            rightBlockStorageNode,
+            AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
             EJoinKind::Inner,
             leftKeyColumns,
             leftKeyDrops,
             rightKeyColumns,
             rightKeyDrops,
-            false,
             joinReturnType
         );
         return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
-    }
-    case JoinType::BlockGraceJoin_HashJoin: {
-        // Set large maximum initially fetched data size to run benches with large build stream
-        gpTAlwaysHashJoinPolicy->SetMaximumInitiallyFetchedData(200 * MB);
-        auto joinNode = pgmBuilder.BlockGraceJoinCore(
-            leftStream,
-            rightStream,
-            EJoinKind::Inner,
-            leftKeyColumns,
-            leftKeyDrops,
-            rightKeyColumns,
-            rightKeyDrops,
-            false,
-            joinReturnType,
-            static_cast<const void*>(gpTAlwaysHashJoinPolicy)
-        );
-        return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
-    }
-    case JoinType::BlockGraceJoin_InMemoryGraceJoin: {
-        // Set large maximum initially fetched data size to run InMemoryGraceJoin
-        gpTAlwaysInMemGraceJoinPolicy->SetMaximumInitiallyFetchedData(200 * MB);
-        auto joinNode = pgmBuilder.BlockGraceJoinCore(
-            leftStream,
-            rightStream,
-            EJoinKind::Inner,
-            leftKeyColumns,
-            leftKeyDrops,
-            rightKeyColumns,
-            rightKeyDrops,
-            false,
-            joinReturnType,
-            static_cast<const void*>(gpTAlwaysInMemGraceJoinPolicy)
-        );
-        return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
-    }
-    default:
-        Y_UNREACHABLE();
-        UNIT_ASSERT(false);
+    } else {
+        const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+        const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+    
+        const auto leftStreamItems = ValidateBlockStreamType(leftStream.GetStaticType());
+        const auto rightStreamItems = ValidateBlockStreamType(rightStream.GetStaticType());
+    
+        TVector<TType*> joinReturnItems;
+    
+        const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+        for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
+            if (leftKeyDropsSet.contains(i)) {
+                continue;
+            }
+            joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
+        }
+    
+        const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
+        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
+            if (rightKeyDropsSet.contains(i)) {
+                continue;
+            }
+    
+            joinReturnItems.push_back(pgmBuilder.NewBlockType(rightStreamItems[i], TBlockType::EShape::Many));
+        }
+    
+        joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    
+        TType* joinReturnType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
+        switch (blockJoinKind) {
+        case JoinType::BlockGraceJoin_HashJoin: {
+            // Set large maximum initially fetched data size to run benches with large build stream
+            gpTAlwaysHashJoinPolicy->SetMaximumInitiallyFetchedData(200 * MB);
+            auto joinNode = pgmBuilder.BlockGraceJoinCore(
+                leftStream,
+                rightStream,
+                EJoinKind::Inner,
+                leftKeyColumns,
+                leftKeyDrops,
+                rightKeyColumns,
+                rightKeyDrops,
+                false,
+                joinReturnType,
+                static_cast<const void*>(gpTAlwaysHashJoinPolicy)
+            );
+            return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
+        }
+        case JoinType::BlockGraceJoin_InMemoryGraceJoin: {
+            // Set large maximum initially fetched data size to run InMemoryGraceJoin
+            gpTAlwaysInMemGraceJoinPolicy->SetMaximumInitiallyFetchedData(200 * MB);
+            auto joinNode = pgmBuilder.BlockGraceJoinCore(
+                leftStream,
+                rightStream,
+                EJoinKind::Inner,
+                leftKeyColumns,
+                leftKeyDrops,
+                rightKeyColumns,
+                rightKeyDrops,
+                false,
+                joinReturnType,
+                static_cast<const void*>(gpTAlwaysInMemGraceJoinPolicy)
+            );
+            return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
+        }
+        default:
+            Y_UNREACHABLE();
+            UNIT_ASSERT(false);
+        }
     }
 }
 

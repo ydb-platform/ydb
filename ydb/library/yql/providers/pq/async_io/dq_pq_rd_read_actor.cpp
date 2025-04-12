@@ -1120,7 +1120,7 @@ TString TDqPqRdReadActor::GetInternalState() {
         << " NodeConnected " << Counters.NodeConnected << " Undelivered " << Counters.Undelivered << " Retry " << Counters.Retry
         << " PrivateHeartbeat " << Counters.PrivateHeartbeat << " SessionClosed " << Counters.SessionClosed << " Pong " << Counters.Pong
         << " Heartbeat " << Counters.Heartbeat << " PrintState " << Counters.PrintState << " ProcessState " << Counters.ProcessState
-        << " GetAsyncInputData " << Counters.GetAsyncInputData
+        << " GetAsyncInputData " << Parent->Counters.GetAsyncInputData
         << " NotifyCA " << Parent->Counters.NotifyCA
         << "\n";
     

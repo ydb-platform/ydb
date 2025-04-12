@@ -3,6 +3,8 @@
 #include "graph_optimization.h"
 #include "visitor.h"
 
+#include <yql/essentials/minikql/mkql_terminator.h>
+
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
 class TResourceUsageInfo {
@@ -152,12 +154,13 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
     }
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-//    Cerr << DebugDOT() << Endl;
+    //    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::Apply(
     const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const {
     TProcessorContext context(source, resources, std::nullopt, false);
+    NMiniKQL::TThrowingBindTerminator bind;
     std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(context);
     for (auto it = BuildIterator(visitor); it->IsValid();) {
         {

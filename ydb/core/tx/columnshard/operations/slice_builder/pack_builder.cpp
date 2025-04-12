@@ -46,7 +46,7 @@ private:
         }
         if (putResult->GetPutStatus() != NKikimrProto::OK) {
             for (auto&& i : WriteResults) {
-                i.SetErrorMessage("cannot put blobs: " + ::ToString(putResult->GetPutStatus()));
+                i.SetErrorMessage("cannot put blobs: " + ::ToString(putResult->GetPutStatus()), true);
             }
         }
         NColumnShard::TInsertedPortions pack(std::move(WriteResults), std::move(portions));
@@ -226,12 +226,12 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
         }
     } else {
         for (auto&& i : writeResults) {
-            i.SetErrorMessage(cancelWritingReason);
+            i.SetErrorMessage(cancelWritingReason, false);
         }
-        NColumnShard::TInsertedPortions pack(std::move(writeResults), std::vector<TPortionWriteController::TInsertPortion>());
+        NColumnShard::TInsertedPortions pack(std::move(writeResults), std::vector<NColumnShard::TInsertedPortion>());
         auto result =
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
-        ctx.Send(Context.GetTabletActorId(), result.release());
+        TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
     
     }
     return TConclusionStatus::Success();

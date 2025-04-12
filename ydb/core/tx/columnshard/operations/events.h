@@ -30,14 +30,24 @@ private:
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
     TString ErrorMessage;
+    std::optional<bool> IsInternalErrorFlag;
     std::shared_ptr<arrow::RecordBatch> PKBatch;
     ui32 RecordsCount;
 
 public:
-    TWriteResult& SetErrorMessage(const TString& value) {
+    TWriteResult& SetErrorMessage(const TString& value, const bool isInternal) {
         AFL_VERIFY(!ErrorMessage);
+        IsInternalErrorFlag = isInternal;
         ErrorMessage = value;
         return *this;
+    }
+
+    bool IsInternalError() const {
+        AFL_VERIFY_DEBUG(!!IsInternalErrorFlag);
+        if (!IsInternalErrorFlag) {
+            return true;
+        }
+        return *IsInternalErrorFlag;
     }
 
     const TString& GetErrorMessage() const {

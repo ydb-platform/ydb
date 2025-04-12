@@ -153,8 +153,10 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
         Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
 
-        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            Self->TabletID(), op->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, wResult.GetErrorMessage());
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
+            wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
+                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

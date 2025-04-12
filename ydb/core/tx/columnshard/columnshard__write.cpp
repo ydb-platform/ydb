@@ -126,7 +126,7 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
             i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         }
 
-        Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenData)), ctx);
+        Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
     }
 }
 

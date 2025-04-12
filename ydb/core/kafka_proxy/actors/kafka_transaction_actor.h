@@ -19,7 +19,7 @@ namespace NKafka {
         public:
             struct TTopicPartition {
                 TString TopicPath;
-                i32 PartitionId;
+                ui32 PartitionId;
 
                 bool operator==(const TTopicPartition &other) const
                 { return (TopicPath == other.TopicPath
@@ -47,11 +47,13 @@ namespace NKafka {
                 COMMIT // request commit txn to kqp
             };
 
-            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath) : 
+            // we need kqpActorId for unit tests
+            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId) : 
                 TransactionalId(transactionalId),
                 ProducerId(producerId),
                 ProducerEpoch(producerEpoch),
-                DatabasePath(DatabasePath) {};
+                DatabasePath(DatabasePath),
+                KqpActorId(kqpActorId) {};
 
             void Bootstrap(const NActors::TActorContext&) {
                 TBase::Become(&TKafkaTransactionActor::StateWork);
@@ -68,9 +70,9 @@ namespace NKafka {
                     HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);
                     HFunc(TEvKafka::TEvTxnOffsetCommitRequest, Handle);
                     HFunc(TEvKafka::TEvEndTxnRequest, Handle);
+                    HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+                    HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                     HFunc(TEvents::TEvPoison, Handle);
-                    // will be eimplemented in a future PR
-                    // ToDo: add poison pill handler
                 }
             }
 
@@ -128,8 +130,10 @@ namespace NKafka {
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+            bool CommitStarted = false;
 
             // communication with KQP
+            TActorId KqpActorId;
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
             TString KqpSessionId;
             ui64 KqpCookie = 0;

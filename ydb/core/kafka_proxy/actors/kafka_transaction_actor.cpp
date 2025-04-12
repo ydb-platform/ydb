@@ -17,7 +17,7 @@ namespace NKafka {
         }
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                PartitionsInTxn.insert({GetFullTopicPath(topicInRequest.Name->c_str()), partitionInRequest});
+                PartitionsInTxn.insert({GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest});
             }
         }
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
@@ -43,7 +43,7 @@ namespace NKafka {
         // save offsets for future use
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), partitionInRequest.PartitionIndex};
+                TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest.PartitionIndex};
                 OffsetsToCommit[topicPartition] = TPartitionCommit{
                         .Partition = partitionInRequest.PartitionIndex,
                         .Offset = partitionInRequest.CommittedOffset,
@@ -75,9 +75,12 @@ namespace NKafka {
         }
 
         bool txnAborted = !ev->Get()->Request->Committed;
-        if (txnAborted) {
+        if (CommitStarted) {
+            return; // we just ignore second and subsequent requests
+        } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
         } else {
+            CommitStarted = true;
             EndTxnRequestPtr = std::move(ev);
             StartKqpSession(ctx);
         }
@@ -88,6 +91,7 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
+        KAFKA_LOG_D(TStringBuilder() << "KQP session created");
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
             SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
@@ -98,6 +102,7 @@ namespace NKafka {
     }
 
     void TKafkaTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        KAFKA_LOG_D(TStringBuilder() << "Receieved query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
         if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
             SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
@@ -121,15 +126,18 @@ namespace NKafka {
     void TKafkaTransactionActor::StartKqpSession(const TActorContext& ctx) {
         Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
         KAFKA_LOG_D("Sending create session request to KQP.");
-        Kqp->SendCreateSessionRequest(ctx);
+        Kqp->SendCreateSessionRequest(ctx, KqpActorId);
     }
 
     void TKafkaTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
+        KAFKA_LOG_D("Sending select request to KQP.");
         Kqp->SendYqlRequest(
             GetYqlWithTablesNames(NKafkaTransactionSql::SELECT_FOR_VALIDATION), 
             BuildSelectParams(), 
             ++KqpCookie, 
-            ctx
+            ctx,
+            false,
+            KqpActorId
         );
         
         LastSentToKqpRequest = EKafkaTxnKqpRequests::SELECT;
@@ -138,7 +146,7 @@ namespace NKafka {
     void TKafkaTransactionActor::SendCommitTxnRequest(const TActorContext& ctx) {
         auto request = BuildCommitTxnRequestToKqp();
 
-        ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, ++KqpCookie);
+        ctx.Send(KqpActorId, request.Release(), 0, ++KqpCookie);
         
         LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
@@ -160,6 +168,8 @@ namespace NKafka {
     void TKafkaTransactionActor::SendResponseFail(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
             KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+        } else {
+            KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode);
         }
 
         std::shared_ptr<ErrorResponseType> response = ResponseBuilder.Build<ErrorResponseType>(evHandle->Get()->Request, errorCode);
@@ -212,7 +222,7 @@ namespace NKafka {
 
     NYdb::TParams TKafkaTransactionActor::BuildSelectParams() {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(TransactionalId).Build();
         
         // select unique consumer group names
@@ -224,7 +234,7 @@ namespace NKafka {
         // add unique consumer group names to request as params
         auto& consumerGroupsParamBuilder = params.AddParam("$ConsumerGroups").BeginList();
         for (auto& consumerGroupName : uniqueConsumerGroups) {
-            consumerGroupsParamBuilder.AddListItem().Utf8(consumerGroupName).Build();
+            consumerGroupsParamBuilder.AddListItem().Utf8(consumerGroupName);
         }
         consumerGroupsParamBuilder.EndList().Build();
 
@@ -304,6 +314,7 @@ namespace NKafka {
             return;
         }
 
+        KAFKA_LOG_D(TStringBuilder() << "Validated producer and consumers states. Everything is alright, sending commit");
         KqpTxnId = response.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can attempt to commit
         SendCommitTxnRequest(ctx);
@@ -384,11 +395,19 @@ namespace NKafka {
             if (consumerGenerationByName.contains(offsetCommit.ConsumerName)) {
                 i32 consumerGenerationInTable = consumerGenerationByName.at(offsetCommit.ConsumerName);
                 if (consumerGenerationInTable != offsetCommit.ConsumerGeneration) {
-                    foundError = true;
+                    if (foundError) {
+                        builder << ", ";
+                    } else {
+                        foundError = true;
+                    }
                     builder << "Consumer " << offsetCommit.ConsumerName << " has different generation in table than requested in transaction. Generation in table: " << consumerGenerationInTable << ", Generation requested in txn: " << offsetCommit.ConsumerGeneration << ".";
                 }
             } else {
-                foundError = true;
+                if (foundError) {
+                    builder << ", ";
+                } else {
+                    foundError = true;
+                }
                 builder << "There is no consumer state in table for group " << offsetCommit.ConsumerName;
             }
         }

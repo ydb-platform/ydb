@@ -14,13 +14,14 @@ using namespace NActors;
 class TKqpTxHelper {
 public:
     TKqpTxHelper(TString database);
-    void SendCreateSessionRequest(const TActorContext& ctx);
+    // kqp actor id can be changed for testing purposes
+    void SendCreateSessionRequest(const TActorContext& ctx, const TMaybe<TActorId>& kqpActorId = {});
     void BeginTransaction(ui64 cookie, const TActorContext& ctx);
     bool HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void CloseKqpSession(const TActorContext& ctx);
     void SendRequest(THolder<TEvKqp::TEvQueryRequest> request, ui64 cookie, const TActorContext& ctx);
     void CommitTx(ui64 cookie, const TActorContext& ctx);
-    void SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit = false);
+    void SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit = false, const TMaybe<TActorId>& kqpActorId = {});
     void SendInitTableRequest(const TActorContext& ctx, std::shared_ptr<NKikimr::NMetadata::IClassBehaviour> prepareManager);
     void SetTxId(const TString& txId);
     void ResetTxId();

@@ -34,7 +34,6 @@ namespace {
             }
 
             void Handle(NKqp::TEvKqp::TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx) {
-                Cout << "Sending session opened response" << Endl;
                 auto response = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
                 response->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
                 response->Record.MutableResponse()->SetSessionId("123");
@@ -76,10 +75,8 @@ namespace {
                 NKikimrKqp::TEvQueryResponse record;
 
                 record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-                Cout << "Creating producer state" << Endl;
                 auto* producerState = record.MutableResponse()->AddYdbResults();
                 *producerState = CreateProducerStateResultsSet();
-                Cout << "Creating consumer states" << Endl;
                 auto* consumersState = record.MutableResponse()->AddYdbResults();
                 *consumersState = CreateConsumersStatesResultSet();
                 
@@ -284,8 +281,6 @@ namespace {
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationsToReturnInValidationRequest);
 
                 auto observer = [callback, this](TAutoPtr<IEventHandle>& input) {
-                    Cout << "observed event: "  << input->ToString() << Endl;
-
                     // handle query request
                     if (auto* event = input->CastAsLocal<TEvKqp::TEvQueryRequest>()) {
                         // first request is a validation request with select statements
@@ -293,7 +288,6 @@ namespace {
                         if (QueryRequestsCounter == 0) {
                             QueryRequestsCounter++;
                         } else {
-                            Cout << event->ToString();
                             callback(event);
                         }
                     }
@@ -301,7 +295,6 @@ namespace {
                     return TTestActorRuntimeBase::EEventAction::PROCESS;
                 };
 
-                Cout << "Adding observer" << Endl;
                 Ctx->Runtime->SetObserverFunc(observer);
             }
 

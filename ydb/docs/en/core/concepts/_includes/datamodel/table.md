@@ -137,3 +137,23 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
 
+### Column groups {#column-groups}
+
+{{ ydb-short-name }} allows grouping columns in a table to optimize their storage and usage. The column group mechanism improves performance for partial row reads by separating table columns into multiple storage groups. The most common use case involves storing rarely used attributes in a separate column group (potentially with compression and on slower storage devices).
+
+Each column group has its own name, unique within the table. Column group composition is set during [table creation](../../../yql/reference/syntax/create_table/family.md) and can be [modified](../../../yql/reference/syntax/alter_table/family.md) later. Removing column groups from an existing table is not supported.
+
+A column group may contain any number of columns from its table, including zero. Each table column belongs to one and only one column group (column groups don't overlap). Column assignments to groups are established during table creation but can be modified later.
+
+Every table has a primary column group named `default` containing all columns not explicitly assigned to another group. Primary key columns always belong to the primary column group and cannot be moved to another group.
+
+The following storage attributes are configured for column groups:
+
+* Storage device type (SSD or HDD, availability depends on {{ ydb-short-name }} cluster configuration);
+* Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4) algorithm compression).
+
+Column group attributes are set during table creation (including explicit definitions for the primary group) and can be modified later. Storage attribute changes aren't immediately applied to existing data; instead, they take effect during subsequent background [LSM compaction](../../glossary.md#compaction).
+
+Accessing data in primary column group fields is faster and less resource-intensive than accessing the same table row's data stored in additional column groups. Primary key lookups always occur in the primary column group. Accessing fields in other column groups requires additional search operations to locate specific storage positions after the primary key lookup.
+
+Thus, moving some columns into a separate group accelerates reads for critical, frequently used columns (in the primary group) while slightly slowing access to other columns. Additionally, column groups enable storage parameter management - selecting device types and compression modes.

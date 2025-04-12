@@ -214,7 +214,8 @@ namespace {
                     ProducerId,
                     ProducerEpoch,
                     Database,
-                    KqpActorId
+                    KqpActorId,
+                    Ctx->Edge
                 ));
             }
 
@@ -270,6 +271,10 @@ namespace {
                 message->Committed = commit;
                 auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+            }
+
+            void SendPoisonPill() {
+                Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, new NActors::TEvents::TEvPoison()));
             }
 
             // Arguments:
@@ -594,6 +599,17 @@ namespace {
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
             const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
             UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
+        }
+
+        Y_UNIT_TEST(OnDie_ShouldSendRemoveTransactionActorRequestToTxnCoordinator) {
+            SendPoisonPill();
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->TransactionalId, TransactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(response->ProducerId, ProducerId);
+            UNIT_ASSERT_VALUES_EQUAL(response->ProducerEpoch, ProducerEpoch);
         }
     }
 } // namespace

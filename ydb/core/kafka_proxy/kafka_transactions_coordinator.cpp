@@ -44,6 +44,23 @@ namespace NKafka {
         HandleTransactionalRequest<TEndTxnResponseData>(ev, ctx);
     };
 
+    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext&) {
+        TProducerState deadActorState = {ev->Get()->ProducerId, ev->Get()->ProducerEpoch};
+        TProducerState currentProducerState = ProducersByTransactionalId[ev->Get()->TransactionalId];
+
+        if (deadActorState != currentProducerState) {
+            // new actor was already registered, we can just ignore this event
+            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already reinitialized with new epoch. Ignoring this event");
+        } else {
+            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
+                << " and producerId " << ev->Get()->ProducerId 
+                << " and producerEpoch " << ev->Get()->ProducerEpoch
+                << ". Erasing info about this actor.");
+            // erase info about actor to prevent future zombie requests from this producer
+            TxnActorByTransactionalId.erase(ev->Get()->TransactionalId);
+        }
+    };
+
     void TKafkaTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
         KAFKA_LOG_D("Got poison pill, killing all transaction actors");
         for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
@@ -95,7 +112,7 @@ namespace NKafka {
         if (TxnActorByTransactionalId.contains(ev->Request->TransactionalId->c_str())) {
             txnActorId = TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()];
         } else {
-            txnActorId = ctx.Register(new TKafkaTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath, NKikimr::NKqp::MakeKqpProxyID(ctx.SelfID.NodeId())));
+            txnActorId = ctx.Register(new TKafkaTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath, NKikimr::NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ctx.SelfID));
             TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
             KAFKA_LOG_D(TStringBuilder() << "Registered TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         }

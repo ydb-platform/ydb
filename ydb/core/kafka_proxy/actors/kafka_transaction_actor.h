@@ -43,16 +43,21 @@ namespace NKafka {
             enum EKafkaTxnKqpRequests : ui8 {
                 NO_REQUEST = 0,
                 
-                SELECT, // request to select producer and consumers in txn state. After this request a check will happen, that no participant has expired
-                COMMIT // request commit txn to kqp
+                // This request selects up-to-date producer and consumers states from relevant tables
+                // After this request a check will happen, that no transaction details has expired.
+                SELECT,
+                // This request sends to KQP a command to commit transaction
+                // Both these requests happen in same transaction
+                COMMIT 
             };
 
-            // we need kqpActorId for unit tests
-            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId) : 
+            // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
+            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
                 TransactionalId(transactionalId),
                 ProducerId(producerId),
                 ProducerEpoch(producerEpoch),
                 DatabasePath(DatabasePath),
+                TxnCoordinatorActorId(txnCoordinatorActorId),
                 KqpActorId(kqpActorId) {};
 
             void Bootstrap(const NActors::TActorContext&) {
@@ -131,6 +136,7 @@ namespace NKafka {
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
             bool CommitStarted = false;
+            const TActorId TxnCoordinatorActorId;
 
             // communication with KQP
             TActorId KqpActorId;

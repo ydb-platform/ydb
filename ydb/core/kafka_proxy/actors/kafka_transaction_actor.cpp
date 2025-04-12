@@ -64,7 +64,7 @@ namespace NKafka {
     4. Handle(NKqp::TEvKqp::TEvQueryResponse): Validate returned producer and consumers state. Return PRODUCER_FENCED if check failed
     5. Send Commit request with properly created KafkaApiOperations
     6. Handle(NKqp::TEvKqp::TEvQueryResponse): If everything committed successfully, return OK to the client
-    7. Die, close KQP session,
+    7. Close KQP session, send to coordinator TEvTransactionActorDied, die.
     */
     void TKafkaTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Receieved END_TXN request");
@@ -190,7 +190,7 @@ namespace NKafka {
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
-        Send(MakeKafkaTransactionsServiceID(), new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerId, ProducerEpoch));
+        Send(TxnCoordinatorActorId, new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerId, ProducerEpoch));
         TBase::Die(ctx);
     }
 
@@ -375,6 +375,12 @@ namespace NKafka {
         }
     }
 
+        /**
+        * Parses the response to extract consumer group generations.
+        *
+        * @param response The response object containing the result set from the YDB query.
+        * @return A map where keys are consumer group names and values are their corresponding generations.
+        */
     std::unordered_map<TString, i32> TKafkaTransactionActor::ParseConsumersGenerations(const NKikimrKqp::TEvQueryResponse& response) {
         std::unordered_map<TString, i32> generationByConsumerName;
     

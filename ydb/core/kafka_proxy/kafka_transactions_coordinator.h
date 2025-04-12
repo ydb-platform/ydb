@@ -21,6 +21,9 @@ namespace NKafka {
         struct TProducerState {
             i64 Id;
             i32 Epoch;
+
+            bool operator==(TProducerState const&) const = default;
+            bool operator!=(TProducerState const&) const = default;
         };
 
         struct TTransactionalRequest {
@@ -48,6 +51,7 @@ namespace NKafka {
                     HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);
                     HFunc(TEvKafka::TEvTxnOffsetCommitRequest, Handle);
                     HFunc(TEvKafka::TEvEndTxnRequest, Handle);
+                    HFunc(TEvKafka::TEvTransactionActorDied, Handle);
                     HFunc(TEvents::TEvPoison, Handle);
                 }
             }
@@ -60,6 +64,9 @@ namespace NKafka {
             void Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx);
+            
+            // remove transaction actor id from TxnActorByTransactionalId
+            void Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext& ctx);
             // Will kill all txn actors
             void Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx);
 

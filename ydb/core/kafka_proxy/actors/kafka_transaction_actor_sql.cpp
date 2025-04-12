@@ -16,10 +16,10 @@ namespace NKafka {
             DECLARE $ConsumerGroups AS List<Utf8>;
 
             SELECT * FROM `<producer_state_table_name>`
-            WHERE database = $Database AND transactional_id = $TransactionalId;
+            WHERE database = $Database 
+            AND transactional_id = $TransactionalId;
 
-            SELECT state, generation, master, last_heartbeat_time, consumer_group, database, protocol, protocol_type, last_success_generation
-            FROM `<consumer_state_table_name>`
+            SELECT consumer_group, generation FROM `<consumer_state_table_name>`
             VIEW PRIMARY KEY
             WHERE database = $Database
             AND consumer_group IN COMPACT ($ConsumerGroups);

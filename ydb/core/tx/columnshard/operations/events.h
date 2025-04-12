@@ -117,14 +117,14 @@ namespace NKikimr::NColumnShard::NPrivateEvents::NWrite {
 class TEvWritePortionResult: public TEventLocal<TEvWritePortionResult, TEvPrivate::EvWritePortionResult> {
 private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
-    std::shared_ptr<NOlap::IBlobsWritingAction> WriteAction;
+    std::optional<std::shared_ptr<NOlap::IBlobsWritingAction>> WriteAction;
     bool Detached = false;
     TInsertedPortions InsertedData;
 
 public:
     const std::shared_ptr<NOlap::IBlobsWritingAction>& GetWriteAction() const {
         AFL_VERIFY(!!WriteAction);
-        return WriteAction;
+        return *WriteAction;
     }
 
     const TInsertedPortions& DetachInsertedData() {

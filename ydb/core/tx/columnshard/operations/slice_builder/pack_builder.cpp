@@ -103,6 +103,7 @@ public:
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
                 Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             if (portionConclusion.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
                 return portionConclusion;
             }
             result.emplace_back(portionConclusion.DetachResult());
@@ -128,6 +129,8 @@ public:
                         if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
                             if (defaultColumn.IsFail()) {
+                                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build default column")(
+                                    "reason", defaultColumn.GetErrorMessage());
                                 return defaultColumn;
                             }
                             gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult())
@@ -164,6 +167,7 @@ public:
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
                 ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             if (portionConclusion.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot prepare for write")("reason", portionConclusion.GetErrorMessage());
                 return portionConclusion;
             }
             result.emplace_back(portionConclusion.DetachResult());
@@ -172,7 +176,7 @@ public:
     }
 };
 
-TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
         "parent_id", Context.GetTabletActorId())("path_id", PathId);
     NArrow::NMerger::TIntervalPositions splitPositions;
@@ -209,9 +213,11 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     } else {
         for (auto&& i : slicesToMerge) {
             auto conclusion = i.Finalize(Context, portionsToWrite);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build slice")("reason", conclusion.GetErrorMessage());
-            cancelWritingReason = conclusion.GetErrorMessage();
-            break;
+            if (conclusion.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build slice")("reason", conclusion.GetErrorMessage());
+                cancelWritingReason = conclusion.GetErrorMessage();
+                break;
+            }
         }
     }
     if (!cancelWritingReason) {
@@ -234,6 +240,5 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
         TActorContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
     
     }
-    return TConclusionStatus::Success();
 }
 }   // namespace NKikimr::NOlap::NWritingPortions

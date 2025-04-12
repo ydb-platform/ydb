@@ -44,6 +44,7 @@ public:
     }
 
     [[nodiscard]] TString GetErrorMessage() const {
+        Y_ABORT_UNLESS(IsFail());
         return TBase::GetErrorDescription();
     }
 };

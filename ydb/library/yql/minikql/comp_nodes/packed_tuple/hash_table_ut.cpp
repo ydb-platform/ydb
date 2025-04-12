@@ -22,7 +22,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = true;
+static volatile bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {

@@ -44,6 +44,11 @@ private:
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
+        if (putResult->GetPutStatus() != NKikimrProto::OK) {
+            for (auto&& i : WriteResults) {
+                i.SetErrorMessage("cannot put blobs: " + ::ToString(putResult->GetPutStatus()));
+            }
+        }
         NColumnShard::TInsertedPortions pack(std::move(WriteResults), std::move(portions));
         auto result =
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
@@ -97,6 +102,9 @@ public:
         if (Batches.size() == 1) {
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
                 Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+            if (portionConclusion.IsFail()) {
+                return portionConclusion;
+            }
             result.emplace_back(portionConclusion.DetachResult());
         } else {
             ui32 idx = 0;
@@ -155,6 +163,9 @@ public:
             stream.DrainAll(rbBuilder);
             auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, rbBuilder.Finalize(),
                 ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+            if (portionConclusion.IsFail()) {
+                return portionConclusion;
+            }
             result.emplace_back(portionConclusion.DetachResult());
         }
         return TConclusionStatus::Success();
@@ -164,10 +175,6 @@ public:
 TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
         "parent_id", Context.GetTabletActorId())("path_id", PathId);
-    if (!Context.IsActive()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
-        return TConclusionStatus::Fail("execution aborted");
-    }
     NArrow::NMerger::TIntervalPositions splitPositions;
     for (auto&& unit : WriteUnits) {
         splitPositions.Merge(unit.GetData()->GetData()->GetSeparationPoints());
@@ -195,20 +202,37 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
         }
     }
     std::vector<TPortionWriteController::TInsertPortion> portionsToWrite;
-    for (auto&& i : slicesToMerge) {
-        auto conclusion = i.Finalize(Context, portionsToWrite);
-        if (conclusion.IsFail()) {
-            return conclusion;
+    TString cancelWritingReason;
+    if (!Context.IsActive()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
+        cancelWritingReason = "execution aborted";
+    } else {
+        for (auto&& i : slicesToMerge) {
+            auto conclusion = i.Finalize(Context, portionsToWrite);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build slice")("reason", conclusion.GetErrorMessage());
+            cancelWritingReason = conclusion.GetErrorMessage();
+            break;
         }
     }
-    auto actions = WriteUnits.front().GetData()->GetBlobsAction();
-    auto writeController =
-        std::make_shared<TPortionWriteController>(Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
-    if (actions->NeedDraftTransaction()) {
-        TActorContext::AsActorContext().Send(
-            Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
+    if (!cancelWritingReason) {
+        auto actions = WriteUnits.front().GetData()->GetBlobsAction();
+        auto writeController =
+            std::make_shared<TPortionWriteController>(Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
+        if (actions->NeedDraftTransaction()) {
+            TActorContext::AsActorContext().Send(
+                Context.GetTabletActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
+        } else {
+            TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
+        }
     } else {
-        TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
+        for (auto&& i : writeResults) {
+            i.SetErrorMessage(cancelWritingReason);
+        }
+        NColumnShard::TInsertedPortions pack(std::move(writeResults), std::vector<TPortionWriteController::TInsertPortion>());
+        auto result =
+            std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(NKikimrProto::EReplyStatus::ERROR, nullptr, std::move(pack));
+        ctx.Send(Context.GetTabletActorId(), result.release());
+    
     }
     return TConclusionStatus::Success();
 }

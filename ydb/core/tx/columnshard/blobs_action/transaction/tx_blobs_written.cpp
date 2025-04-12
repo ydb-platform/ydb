@@ -1,7 +1,7 @@
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "tx_blobs_written.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
@@ -153,8 +153,8 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorCont
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
         Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
 
-        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
-            NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "cannot write blob: " + ::ToString(PutBlobResult));
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(
+            Self->TabletID(), op->GetLockId(), NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

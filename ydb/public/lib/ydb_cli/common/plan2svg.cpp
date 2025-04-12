@@ -2215,7 +2215,6 @@ TString TPlanVisualizer::PrintSvg() {
 
     ui32 offsetY = 0;
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
-    // ui32 timelineDelta = 64;
 
     ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
     for (auto& p : Plans) {

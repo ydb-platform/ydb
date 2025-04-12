@@ -65,7 +65,7 @@ private:
     YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
     bool ExecutedFlag = false;
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) = 0;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) = 0;
     virtual void DoOnCannotExecute(const TString& reason);
 public:
     using TPtr = std::shared_ptr<ITask>;
@@ -76,7 +76,7 @@ public:
     void OnCannotExecute(const TString& reason) {
         return DoOnCannotExecute(reason);
     }
-    TConclusionStatus Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
+    void Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
 };
 
 }

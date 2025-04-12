@@ -87,7 +87,7 @@ private:
             if (iterTableRequestPathes == TableRequestPathes.end()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                        << "Incorrect tableId in reply " << CanonizePath(entry.Path) << '.'));
+                        << "Incorrect table path in reply `" << CanonizePath(entry.Path) << "`."));
                 return;
             }
 
@@ -114,7 +114,6 @@ private:
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
                     AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
-                    AFL_ENSURE(CanonizePath(entry.Path) == settings.GetTable().GetPath());
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
                     settings.MutableTable()->SetSysView(entry.TableId.SysViewInfo);
@@ -386,15 +385,19 @@ private:
                         // CTAS 
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
-                        if (TableRequestPathes.find(stageInfo.Meta.TablePath) == TableRequestPathes.end()) {
+                        const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);
+                        const auto canonizedPath = CanonizePath(splittedPath);
+                        if (TableRequestPathes.find(canonizedPath) == TableRequestPathes.end()) {
                             auto& entry = requestNavigate->ResultSet.emplace_back();
-
-                            entry.Path = SplitPath(stageInfo.Meta.TablePath);
+                            entry.Path = std::move(splittedPath);
                             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
                             entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
                         }
 
-                        TableRequestPathes[stageInfo.Meta.TablePath].emplace_back(pair.first);
+                        TableRequestPathes[canonizedPath].emplace_back(pair.first);
+                        if (requestNavigate->DatabaseName.empty()) {
+                            requestNavigate->DatabaseName = TasksGraph.GetMeta().Database;
+                        }
                     } else {
                         // CTAS
                         AFL_ENSURE(stageInfo.Meta.TableId);

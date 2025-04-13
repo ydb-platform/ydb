@@ -69,7 +69,7 @@ class YdbCliHelper:
 
     class WorkloadRunResult:
         def __init__(self):
-            self.stats: dict[str, dict[str, Any]] = {}
+            self._stats: dict[str, dict[str, Any]] = {}
             self.query_out: Optional[str] = None
             self.stdout: str = ''
             self.stderr: str = ''
@@ -84,6 +84,19 @@ class YdbCliHelper:
         @property
         def success(self) -> bool:
             return len(self.error_message) == 0
+
+        def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
+            result = self._stats.get(test, {})
+            result.update({
+                'with_warrnings': bool(self.warning_message),
+                'with_errors': bool(self.error_message),
+                'errors': self.get_error_stats()
+            })
+            return result
+
+        def add_stat(self, test: str, signal: str, value: Any) -> None:
+            self._stats.setdefault(test, {})
+            self._stats[test][signal] = value
 
         def get_error_stats(self):
             result = {}
@@ -206,11 +219,8 @@ class YdbCliHelper:
             with open(self._json_path, 'r') as r:
                 json_data = r.read()
             for signal in json.loads(json_data):
-                q = signal['labels']['query']
-                if q not in self.result.stats:
-                    self.result.stats[q] = {}
-                self.result.stats[q][signal['sensor']] = signal['value']
-            if self.result.stats.get(f'Query{self.query_num:02d}', {}).get("DiffsCount", 0) > 0:
+                self.result.add_stat(signal['labels']['query'], signal['sensor'], signal['value'])
+            if self.result.get_stats(f'Query{self.query_num:02d}').get("DiffsCount", 0) > 0:
                 if self.check_canonical == CheckCanonicalPolicy.WARNING:
                     self._add_warning('There is diff in query results')
                 else:

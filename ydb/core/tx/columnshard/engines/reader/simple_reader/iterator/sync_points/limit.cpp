@@ -47,7 +47,8 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const std::share
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
     AFL_VERIFY(Iterators.size());
-    AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId());
+    AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("front", Iterators.front().DebugString())(
+                                                    "source", source->GetStart().DebugString())("source_id", source->GetSourceId());
     std::pop_heap(Iterators.begin(), Iterators.end());
     if (!g || !g->GetRecordsCount()) {
         Iterators.pop_back();
@@ -80,6 +81,16 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const std::share
     } else {
         return ESourceAction::ProvideNext;
     }
+}
+
+TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "id=" << Source->GetSourceId() << ";";
+    sb << "f=" << IsFilled() << ";";
+    sb << "record=" << SortableRecord->DebugJson() << ";";
+    sb << "start=" << Source->GetStart().DebugString() << ";";
+    return sb;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

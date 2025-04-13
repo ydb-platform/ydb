@@ -2,7 +2,7 @@
 #include "initialization.h"
 #include "tx_progress.h"
 
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 #include <ydb/core/tx/data_events/common/signals_flow.h>

@@ -7,13 +7,14 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 

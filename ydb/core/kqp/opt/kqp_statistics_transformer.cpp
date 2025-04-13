@@ -192,7 +192,7 @@ void InferStatisticsForKqpTable(
     }
 
     stats->SortColumns = sortedPrefixPtr;
-    stats->SourceTableName = path.StringValue();
+    stats->SourceTableName = MakeSimpleShared<TString>(path.StringValue());
 
     if (!tableData.Metadata->PartitionedByColumns.empty()) {
         TVector<TJoinColumn> shuffledByColumns;
@@ -900,6 +900,8 @@ private:
                 CollectKqpTable(kqpTable.Cast());
             } else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(node)) {
                 CollectAggregateBase(aggregateBase.Cast());
+            } else if (auto flatMapBase = TMaybeNode<TCoFlatMapBase>(node)) {
+                CollectFlatMapBase(flatMapBase.Cast());
             }
 
             return true;
@@ -922,6 +924,10 @@ private:
             }
 
             FDStorage.TableAliases.AddMapping(table.Path().StringValue(), table.Path().StringValue());
+
+            for (auto& column: stats->ShuffledByColumns->Data) {
+                column.RelName = *stats->SourceTableName;
+            }
             FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle);
         }
 
@@ -967,6 +973,31 @@ private:
             }
 
             return "";
+        }
+
+    private:
+        void CollectFlatMapBase(const TCoFlatMapBase& flatMapBase) {
+            auto stats = TypeCtx.GetStats(flatMapBase.Input().Raw());
+            if (auto just =  TMaybeNode<TCoJust>(flatMapBase.Lambda().Body().Ptr())) {
+                if (auto asStruct = TMaybeNode<TCoAsStruct>(just.Cast().Input().Ptr())) {
+                    for (const auto& field: asStruct.Cast()) {
+                        if (field.Size() == 2) {
+                            if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
+                                TString renameTo = field.Item(0).Cast<TCoAtom>().StringValue();
+                                TString renameFrom;
+                                TString columnName = member.Cast().Name().StringValue();
+                                if (stats && stats->SourceTableName) {
+                                    renameFrom = *stats->SourceTableName + "." + columnName;
+                                } else {
+                                    renameFrom = columnName;
+                                }
+
+                                FDStorage.TableAliases.AddRename(renameFrom, renameTo);
+                            }
+                        }
+                    }
+                }
+            }
         }
     };
 

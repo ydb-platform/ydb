@@ -121,7 +121,7 @@ struct TFunctionalDependency {
 };
 
 // Map of table aliases to their original table names
-struct TTableAliasMap {
+struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
 public:
     struct TBaseColumn {
         TBaseColumn() = default;
@@ -154,18 +154,30 @@ public:
     }
 
     void AddRename(const TString& from, const TString& to) {
+        Cout << "FROM: " << from << " TO: " << to << Endl;
+        Cout << ToString() << Endl;
+
         if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
             TString alias = from.substr(0, pointIdx);
+            TString baseTable = GetBaseTableByAlias(alias);
             TString columnName = from.substr(pointIdx + 1);
 
+            if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
+                auto baseColumn = it->second;
+                BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
+                return;
+            }
+
             auto fromColumn = TBaseColumn(alias, columnName);
-            auto baseColumn = TBaseColumn(GetBaseTableByAlias(alias), columnName);
+            auto baseColumn = TBaseColumn(baseTable, columnName);
 
             BaseColumnByRename[to] = BaseColumnByRename[from] = baseColumn;
             return;
         }
 
-        BaseColumnByRename[to] = BaseColumnByRename[from];
+        if (BaseColumnByRename.contains(from)) {
+            BaseColumnByRename[to] = BaseColumnByRename[from];
+        }
     }
 
     TBaseColumn GetBaseColumnByRename(const TString& renamedColumn) {

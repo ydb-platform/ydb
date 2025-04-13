@@ -4,6 +4,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -500,7 +501,7 @@ IOptimizerNew* MakeNativeOptimizerNew(
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
     TFDStorage& fdStorage,
-    TTypeAnnotationContext& typeCtx
+    TTypeAnnotationContext&
 ) {
     Y_ENSURE(equiJoinNode.Maybe<TCoEquiJoin>());
 
@@ -509,7 +510,6 @@ void CollectInterestingOrderingsFromJoinTree(
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
         auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
-        auto joinArg = input.List();
 
         auto scope = input.Scope();
         if (!scope.Maybe<TCoAtom>()){
@@ -517,8 +517,34 @@ void CollectInterestingOrderingsFromJoinTree(
         }
 
         TString label = scope.Cast<TCoAtom>().StringValue();
-        if (auto stats = typeCtx.GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
-            fdStorage.TableAliases.AddMapping(stats->SourceTableName, label);
+        auto joinArg = input.List();
+        // if (auto stats = typeCtx.GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
+        fdStorage.TableAliases.AddMapping(label, label);
+        // }
+
+        if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(joinArg.Ptr())) {
+            auto flatMapBase = maybeFlatMapBase.Cast();
+            VisitExpr(
+                flatMapBase.Lambda().Body().Ptr(),
+                {},
+                [&fdStorage, &flatMapBase, &label](const TExprNode::TPtr& node){
+                    if (auto asStruct = TMaybeNode<TCoAsStruct>(node)) {
+                        for (const auto& field: asStruct.Cast()) {
+                            if (field.Size() == 2) {
+                                if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
+                                    if (member.Cast().Struct().Ptr() == flatMapBase.Lambda().Args().Arg(0).Ptr()) {
+                                        TString renameTo = label + "." + field.Item(0).Cast<TCoAtom>().StringValue();
+                                        TString renameFrom = member.Cast().Name().StringValue();
+
+                                        fdStorage.TableAliases.AddRename(renameFrom, renameTo);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
+            );
         }
 
         TOptimizerStatistics dummy;

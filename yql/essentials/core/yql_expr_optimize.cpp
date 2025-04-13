@@ -352,7 +352,9 @@ namespace {
         if (!visitedNodes.emplace(node.Get()).second) {
             return;
         }
+struct TFuckBAPBAPA {
 
+};
         for (auto child : node->Children()) {
             if (!child->IsLambda()) {
                 VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);

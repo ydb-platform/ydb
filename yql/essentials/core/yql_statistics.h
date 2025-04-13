@@ -90,7 +90,7 @@ struct TOptimizerStatistics {
         }
     };
 
-    TString SourceTableName;
+    TSimpleSharedPtr<TString> SourceTableName;
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;

@@ -46,8 +46,8 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
 
-    if (!s.SourceTableName.empty()) {
-        os << ", SourceTable: " << s.SourceTableName;
+    if (s.SourceTableName && !s.SourceTableName->empty()) {
+        os << ", SourceTable(" << s.SourceTableName.Get() << "): " << *s.SourceTableName;
     }
 
     if (s.KeyColumns) {

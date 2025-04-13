@@ -12,6 +12,7 @@ class TpchSuiteBase(LoadSuiteBase):
     iterations: int = 3
     tables_size: dict[str, int] = {}
     skip_tests: list = []
+    check_canonical: bool = CheckCanonicalPolicy.ERROR
 
     @classmethod
     def _get_tables_size(cls) -> dict[str, int]:
@@ -53,7 +54,6 @@ class TestTpch1(TpchSuiteBase):
         'lineitem': 6001215,
     }
     scale: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.ERROR
 
 
 class TestTpch10(TpchSuiteBase):
@@ -61,7 +61,6 @@ class TestTpch10(TpchSuiteBase):
         'lineitem': 59986052,
     }
     scale: int = 10
-    check_canonical: bool = CheckCanonicalPolicy.ERROR
 
 
 class TestTpch100(TpchSuiteBase):
@@ -69,7 +68,6 @@ class TestTpch100(TpchSuiteBase):
         'lineitem': 600037902,
     }
     scale: int = 100
-    check_canonical: bool = CheckCanonicalPolicy.ERROR
     timeout = max(TpchSuiteBase.timeout, 300.)
 
 
@@ -78,7 +76,6 @@ class TestTpch1000(TpchSuiteBase):
         'lineitem': 5999989709,
     }
     scale: int = 1000
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpchSuiteBase.timeout, 3600.)
 
 
@@ -89,19 +86,16 @@ class TestTpch10000(TpchSuiteBase):
 
     scale: int = 10000
     iterations: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpchSuiteBase.timeout, 14400.)
 
 
 class TestTpch30000(TpchSuiteBase):
     scale: int = 30000
     iterations: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpchSuiteBase.timeout, 14400.)
 
 
 class TestTpch100000(TpchSuiteBase):
     scale: int = 100000
     iterations: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpchSuiteBase.timeout, 14400.)

@@ -359,7 +359,7 @@ protected:
                 MemoryQuota->TryShrinkMemory(alloc);
             }
 
-            ReportStats(TInstant::Now(), ESendStats::IfPossible);
+            ReportStats();
         }
         if (Terminated) {
             DoTerminateImpl();
@@ -1134,9 +1134,15 @@ protected:
             }
             case EEvWakeupTag::PeriodicStatsTag: {
                 const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
-                this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
-
-                ReportStats(NActors::TActivationContext::Now(), ESendStats::IfRequired);
+                if (Running && State == NDqProto::COMPUTE_STATE_EXECUTING) {
+                    if (ProcessOutputsState.LastRunStatus == ERunStatus::Finished) {
+                        // wait until all outputs are drained
+                        ReportStats();
+                    } else {
+                        DoExecute();
+                    }
+                    this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                }
                 break;
             }
             default:
@@ -1701,7 +1707,7 @@ private:
         }
     }
 
-    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() = 0;
+    virtual const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() = 0;
     virtual const NYql::NDq::TDqMeteringStats* GetMeteringStats() = 0;
 
     virtual const IDqAsyncOutputBuffer* GetSink(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const = 0;
@@ -1779,7 +1785,15 @@ public:
                     source->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
+
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
+            // when TR finished, use channels to detect output back pressure
+            if (taskStats->FinishTs && State != NDqProto::COMPUTE_STATE_FINISHED) {
+                auto lastOutputTime = Channels->GetLastOutputMessageTime();
+                if (lastOutputTime) {
+                    protoTask->SetCurrentWaitOutputTimeUs((TInstant::Now() - lastOutputTime).MicroSeconds());
+                }
+            }
 
             auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
@@ -1988,25 +2002,10 @@ public:
     }
 
 protected:
-    enum class ESendStats {
-        IfPossible,
-        IfRequired
-    };
-    void ReportStats(TInstant now, ESendStats condition) {
-        if (!RuntimeSettings.ReportStatsSettings) {
+    void ReportStats() {
+        auto now = TInstant::Now();
+        if (State != NDqProto::COMPUTE_STATE_EXECUTING || !RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;
-        }
-        auto dT = now - LastSendStatsTime;
-        switch(condition) {
-            case ESendStats::IfPossible:
-                if (dT < RuntimeSettings.ReportStatsSettings->MinInterval) {
-                    return;
-                }
-                break;
-            case ESendStats::IfRequired:
-                if (dT < RuntimeSettings.ReportStatsSettings->MaxInterval) {
-                    return;
-                }
         }
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);

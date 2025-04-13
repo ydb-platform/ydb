@@ -272,6 +272,7 @@ public:
         TString TypeMod;
         TString Name;
         bool NotNull;
+        bool IsPrimary = false;
     };
 
     struct TColumnWrite {
@@ -351,6 +352,11 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
 
+    THashSet<TString> keyColumns;
+    for (auto column : tableInfo->KeyColumns) {
+        keyColumns.insert(std::move(column));
+    }
+
     for (const auto& column : op.GetColumns()) {
         TTaskMeta::TColumn c;
 
@@ -360,6 +366,7 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
         c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
         c.NotNull = tableColumn.NotNull;
+        c.IsPrimary = keyColumns.contains(c.Name);
 
         columns.emplace_back(std::move(c));
     }

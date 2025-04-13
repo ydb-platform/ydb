@@ -277,7 +277,7 @@ message TGroupInfo {
     // desired disk categories ?
     // down/persisted down ?
     // metrics ?
-    optional bool LayoutCorrect = 16; // is the group layout correct?
+    optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
 }
 
 message TGroupEntry {

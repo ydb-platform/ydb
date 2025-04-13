@@ -7,7 +7,7 @@ namespace NSQLComplete {
     class TSqlGrammar: public ISqlGrammar {
     public:
         TSqlGrammar(const NSQLReflect::TLexerGrammar& grammar)
-            : Vocabulary(GetVocabularyP())
+            : Parser(MakeDummyParser())
             , AllTokens(ComputeAllTokens())
             , KeywordTokens(ComputeKeywordTokens(grammar))
             , PunctuationTokens(ComputePunctuationTokens(grammar))
@@ -15,7 +15,7 @@ namespace NSQLComplete {
         }
 
         const antlr4::dfa::Vocabulary& GetVocabulary() const override {
-            return *Vocabulary;
+            return Parser->getVocabulary();
         }
 
         const std::unordered_set<TTokenId>& GetAllTokens() const override {
@@ -30,9 +30,13 @@ namespace NSQLComplete {
             return PunctuationTokens;
         }
 
+        const std::string& SymbolizedRule(TRuleId rule) const override {
+            return Parser->getRuleNames().at(rule);
+        }
+
     private:
-        static const antlr4::dfa::Vocabulary* GetVocabularyP() {
-            return &NALADefaultAntlr4::SQLv1Antlr4Parser(nullptr).getVocabulary();
+        static THolder<antlr4::Parser> MakeDummyParser() {
+            return MakeHolder<NALADefaultAntlr4::SQLv1Antlr4Parser>(nullptr);
         }
 
         std::unordered_set<TTokenId> ComputeAllTokens() {
@@ -72,7 +76,7 @@ namespace NSQLComplete {
             return punctuationTokens;
         }
 
-        const antlr4::dfa::Vocabulary* Vocabulary;
+        const THolder<antlr4::Parser> Parser;
         const std::unordered_set<TTokenId> AllTokens;
         const std::unordered_set<TTokenId> KeywordTokens;
         const std::unordered_set<TTokenId> PunctuationTokens;

@@ -139,7 +139,8 @@ public:
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
-        bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
+        bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
+        TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -159,6 +160,7 @@ public:
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
+        , BatchOperationSettings(std::move(batchOperationSettings))
     {
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -430,6 +432,14 @@ protected:
             ui64 cycleCount = GetCycleCountFast();
 
             Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
+
+            if (Stats->DeadlockedStageId) {
+                NYql::TIssues issues;
+                issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
+                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
+                this->Send(this->SelfId(), abortEv.Release());
+            }
+
             if (Request.ProgressStatsPeriod) {
                 auto now = TInstant::Now();
                 if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -1171,6 +1181,7 @@ protected:
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
                 protoColumn->SetType(columnType.TypeId);
                 protoColumn->SetNotNull(column.NotNull);
+                protoColumn->SetIsPrimary(column.IsPrimary);
                 if (columnType.TypeInfo) {
                     *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
                 }
@@ -1218,9 +1229,14 @@ protected:
                 settings->SetShardIdHint(*shardId);
             }
 
-            ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
+            if (!BatchOperationSettings.Empty()) {
+                settings->SetItemsLimit(BatchOperationSettings->MaxBatchSize);
+                settings->SetIsBatch(true);
+            } else {
+                ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
                 Request.TxAlloc->TypeEnv);
-            settings->SetItemsLimit(itemsLimit);
+                settings->SetItemsLimit(itemsLimit);
+            }
 
             auto self = static_cast<TDerived*>(this)->SelfId();
             auto& lockTxId = TasksGraph.GetMeta().LockTxId;
@@ -2079,6 +2095,15 @@ protected:
                 }
             }
 
+            if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {
+                auto [_, tableStats] = *Stats->TableStats.begin();
+                Counters->Counters->BatchOperationUpdateRows->Add(tableStats->GetWriteRows());
+                Counters->Counters->BatchOperationUpdateBytes->Add(tableStats->GetWriteBytes());
+
+                Counters->Counters->BatchOperationDeleteRows->Add(tableStats->GetEraseRows());
+                Counters->Counters->BatchOperationDeleteBytes->Add(tableStats->GetEraseBytes());
+            }
+
             auto finishSize = Stats->EstimateFinishMem();
             Counters->Counters->QueryStatMemFinishBytes->Add(finishSize);
             response.MutableResult()->MutableStats()->SetStatFinishBytes(finishSize);
@@ -2237,6 +2262,8 @@ protected:
 
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;
+
+    TMaybe<TBatchOperationSettings> BatchOperationSettings;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -2249,7 +2276,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing());
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

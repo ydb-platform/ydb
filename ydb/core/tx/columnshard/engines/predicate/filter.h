@@ -64,7 +64,7 @@ public:
     TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
-    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;
@@ -168,7 +168,6 @@ private:
     }
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
-        AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
 
@@ -242,7 +241,7 @@ private:
         if (SourceId != entity.GetEntityId()) {
             return false;
         }
-        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
+        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
         usage = RecordIndex < entity.GetEntityRecordsCount();
         return true;
     }

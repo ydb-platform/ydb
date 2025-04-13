@@ -21,10 +21,10 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
         "intervalId", itInterval->second->GetIntervalId());
     if (newBatch && newBatch->GetRecordsCount()) {
-        std::optional<ui32> callbackIdxSubscriver;
+        std::optional<TPartialSourceAddress> callbackIdxSubscriver;
         std::shared_ptr<NGroupedMemoryManager::TGroupGuard> gGuard;
         if (itInterval->second->HasMerger()) {
-            callbackIdxSubscriver = intervalIdx;
+            callbackIdxSubscriver = TPartialSourceAddress(itInterval->second->GetIntervalId(), intervalIdx, 0);
         } else {
             gGuard = itInterval->second->GetGroupGuard();
         }
@@ -201,6 +201,15 @@ void TScanHead::Abort() {
     FetchingIntervals.clear();
     BorderPoints.clear();
     Y_ABORT_UNLESS(IsFinished());
+}
+
+void TScanHead::OnSentDataFromInterval(const TPartialSourceAddress& address) const {
+    if (Context->IsAborted()) {
+        return;
+    }
+    auto it = FetchingIntervals.find(address.GetSourceIdx());
+    AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", address.GetSourceIdx())("count", FetchingIntervals.size());
+    it->second->OnPartSendingComplete();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

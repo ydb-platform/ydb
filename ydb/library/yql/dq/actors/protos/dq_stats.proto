@@ -291,6 +291,8 @@ message TDqTaskStats {
     reserved 104;
     uint64 WaitInputTimeUs = 111;  // wait input wall time  (any input: channels, source, ...)
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
+    uint64 CurrentWaitInputTimeUs = 167;  // last periof iff is waiting now (mutually exclusive with CurrentWaitOutputTimeUs)
+    uint64 CurrentWaitOutputTimeUs = 168; // last periof iff is waiting now (mutually exclusive with CurrentWaitInputTimeUs)
     reserved 107;
     reserved 108;
     reserved 109;

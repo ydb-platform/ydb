@@ -72,8 +72,9 @@ TEST_SRCS(
     conftest.py
     test_clickhouse.py
     test_greenplum.py
-    test_postgresql.py
     test_join.py
+    test_mysql.py
+    test_postgresql.py
     test_ydb.py
 )
 

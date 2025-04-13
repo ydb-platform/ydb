@@ -719,25 +719,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    Y_UNIT_TEST(YellowGroupIssueOnYellowSpace) {
+    Y_UNIT_TEST(OnlyDiskIssueOnSpaceIssues) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
     }
 
-    Y_UNIT_TEST(RedGroupIssueOnRedSpace) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.95);
-        Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(YellowIssueReadyVDisksOnFaultyPDisks) {
+    Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2219,7 +2215,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TestConfigUpdateNodeRestartsPerPeriod(runtime, sender, nodeRestarts / 5, nodeRestarts / 2, nodeId, Ydb::Monitoring::StatusFlag::ORANGE);
     }
 
-    Y_UNIT_TEST(LayoutIncorrect) {
+    void LayoutCorrectTest(bool layoutCorrect) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -2241,13 +2237,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     for (auto& entry : *record.mutable_entries()) {
-                        entry.mutable_info()->set_layoutcorrect(false);
+                        entry.mutable_info()->set_layoutcorrect(layoutCorrect);
                     }
-
                     break;
                 }
             }
-
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
@@ -2258,32 +2252,51 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
-        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
-        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
-        const auto &database_status = result.database_status(0);
+        if (layoutCorrect) {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+            UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+            const auto &database_status = result.database_status(0);
 
-        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::GREEN);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::GREEN);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
+            UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+            const auto &database_status = result.database_status(0);
 
-        for (const auto &issue_log : result.issue_log()) {
-            if (issue_log.level() == 1 && issue_log.type() == "DATABASE") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Database has storage issues");
-            } else if (issue_log.level() == 2 && issue_log.type() == "STORAGE") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Storage has no redundancy");
-            } else if (issue_log.level() == 3 && issue_log.type() == "STORAGE_POOL") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Pool has no redundancy");
-            } else if (issue_log.level() == 4 && issue_log.type() == "STORAGE_GROUP") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Group layout is incorrect");
+            UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+
+            for (const auto &issue_log : result.issue_log()) {
+                if (issue_log.level() == 1 && issue_log.type() == "DATABASE") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
+                } else if (issue_log.level() == 2 && issue_log.type() == "STORAGE") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Storage has no redundancy");
+                } else if (issue_log.level() == 3 && issue_log.type() == "STORAGE_POOL") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Pool has no redundancy");
+                } else if (issue_log.level() == 4 && issue_log.type() == "STORAGE_GROUP") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Group layout is incorrect");
+                }
             }
         }
+    }
+
+    Y_UNIT_TEST(LayoutIncorrect) {
+        LayoutCorrectTest(false);
+    }
+
+    Y_UNIT_TEST(LayoutCorrect) {
+        LayoutCorrectTest(true);
     }
 }
 }

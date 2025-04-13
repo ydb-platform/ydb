@@ -22,6 +22,8 @@ private:
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IChunkedArray>>, Chunks);
 
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(const TColumnConstructionContext& context) const override;
+
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         for (auto&& i : Chunks) {
             i->VisitValues(visitor);

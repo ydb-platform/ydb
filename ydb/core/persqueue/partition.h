@@ -158,7 +158,7 @@ private:
                       NKikimrPQ::TError::EKind kind, const TString& reason);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
-    void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
+    void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
     void ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span);
     void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo, NWilson::TSpan& span);
@@ -345,7 +345,9 @@ private:
     void ScheduleReplyOk(const ui64 dst);
     void ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                         const i64 offset,
-                                        const TInstant writeTimestamp, const TInstant createTimestamp);
+                                        const TInstant writeTimestamp,
+                                        const TInstant createTimestamp,
+                                        bool consumerHasAnyCommits);
     void ScheduleReplyError(const ui64 dst,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
@@ -361,7 +363,8 @@ private:
                      const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
                      ui64 offset, ui32 gen, ui32 step, const TString& session,
                      ui64 readOffsetRewindSum,
-                     ui64 readRuleGeneration);
+                     ui64 readRuleGeneration,
+                     bool anyCommits);
     void AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request);
@@ -374,7 +377,9 @@ private:
     THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst);
     THolder<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
                                                                 const i64 offset,
-                                                                const TInstant writeTimestamp, const TInstant createTimestamp);
+                                                                const TInstant writeTimestamp,
+                                                                const TInstant createTimestamp,
+                                                                bool consumerHasAnyCommits);
     THolder<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
@@ -450,6 +455,8 @@ private:
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
 
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
+
+    TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

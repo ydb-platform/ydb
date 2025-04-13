@@ -35,7 +35,7 @@ private:
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

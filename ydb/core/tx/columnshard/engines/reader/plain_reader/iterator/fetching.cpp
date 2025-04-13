@@ -14,9 +14,10 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                                                       source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            source->GetContext()->GetCommonContext()->GetResolver(), true));
+        source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+            source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
+            true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -86,7 +87,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
     source->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
-    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
+    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     return false;
 }

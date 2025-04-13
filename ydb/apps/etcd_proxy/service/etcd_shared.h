@@ -17,6 +17,7 @@ struct TSharedStuff {
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
     std::atomic<i64> Revision = 0LL, Lease = 0LL;
     NActors::TActorId Watchtower;
+    std::string TablePrefix;
 };
 
 std::string IncrementKey(std::string key);

@@ -175,10 +175,19 @@ protected:
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& type) {
-        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-            std::make_shared<arrow::Field>("value", type) };
-        return std::make_shared<arrow::Schema>(fields);
+    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& typePtr) {
+        std::shared_ptr<arrow::Schema> result;
+        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
+            static const std::shared_ptr<arrow::Schema> schemaResult = [&]() {
+                std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+                    std::make_shared<arrow::Field>("value", typePtr) };
+                return std::make_shared<arrow::Schema>(fields);
+            }();
+            result = schemaResult;
+            return true;
+        });
+        AFL_VERIFY(result);
+        return result;
     }
 
     static TSparsedArrayChunk MakeDefaultChunk(

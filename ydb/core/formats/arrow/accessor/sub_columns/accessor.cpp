@@ -1,5 +1,6 @@
 #include "accessor.h"
 #include "direct_builder.h"
+#include "signals.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
@@ -72,6 +73,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
+        NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size());
         ++columnIdx;
     }
 
@@ -79,6 +81,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
             blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size());
             auto* cInfo = proto.AddOtherColumns();
             cInfo->SetSize(blobRanges.back().size());
         }

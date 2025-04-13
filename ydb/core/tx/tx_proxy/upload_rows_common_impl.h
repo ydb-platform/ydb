@@ -21,7 +21,7 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>

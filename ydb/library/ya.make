@@ -29,6 +29,7 @@ RECURSE(
     schlab
     security
     signal_backtrace
+    signals
     table_creator
     testlib
     time_series_vec

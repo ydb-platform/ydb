@@ -210,7 +210,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnS
         }
     }
 
-    std::vector<TCell> pk{TCell::Make<ui64>(pathId.GetInternalPathId().GetRawValue())};
+    std::vector<TCell> pk{TCell::Make<ui64>(pathId.GetLocalPathId().GetRawValue())};
     TSerializedTableRange range(TConstArrayRef<TCell>(pk), true, TConstArrayRef<TCell>(pk), true);
     auto newRange = record.MutableRanges()->Add();
     range.Serialize(*newRange);

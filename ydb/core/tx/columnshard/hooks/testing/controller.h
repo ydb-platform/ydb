@@ -337,13 +337,20 @@ public:
         return PathMapping;
     }
 
-    const NKikimr::NColumnShard::TInternalPathId GetInternalPathIdVerified(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
+    std::optional<NKikimr::NColumnShard::TInternalPathId> GetInternalPathIdOptional(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
         TGuard<TMutex> g(ActiveTabletsMutex);
         const auto* tabletMapping = PathMapping.FindPtr(tabletId);
-        AFL_VERIFY(tabletMapping);;
+        if (!tabletMapping) {
+            return std::nullopt;
+        }
         const auto* p = tabletMapping->FindPtr(localPathId);
-        AFL_VERIFY(p);
-        return *p;
+        return p ? std::optional{*p} : std::nullopt;
+    }
+
+    std::optional<NKikimr::NColumnShard::TInternalPathId> GetInternalPathIdVerified(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
+        const auto result = GetInternalPathIdOptional(tabletId, localPathId);
+        AFL_VERIFY(result);
+        return result;
     }
 
     virtual void OnAfterLocalTxCommitted(

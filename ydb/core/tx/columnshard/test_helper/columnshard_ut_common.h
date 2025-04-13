@@ -418,7 +418,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 
-void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnShard::TUnifiedPathId& pathId, NOlap::TSnapshot snap, ui64 scanId = 0);
+void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnShard::TLocalPathId& localPathId, NOlap::TSnapshot snap, ui64 scanId = 0);
 
 void ProposeCommitFail(
      TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);

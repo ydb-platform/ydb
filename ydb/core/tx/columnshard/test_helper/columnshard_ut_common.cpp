@@ -187,13 +187,13 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
     return {};
 }
 
-void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnShard::TUnifiedPathId& pathId, NOlap::TSnapshot snap, ui64 scanId) {
+void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnShard::TLocalPathId& localPathId, NOlap::TSnapshot snap, ui64 scanId) {
     auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     auto& record = scan->Record;
 
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
-    record.SetLocalPathId(pathId.GetLocalPathId().GetRawValue()); //TODO fixme
+    record.SetLocalPathId(localPathId.GetRawValue()); //TODO fixme
     record.SetTablePath(TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexPortionStatsName);
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
@@ -210,7 +210,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnS
         }
     }
 
-    std::vector<TCell> pk{TCell::Make<ui64>(pathId.GetLocalPathId().GetRawValue())};
+    std::vector<TCell> pk{TCell::Make<ui64>(localPathId.GetRawValue())};
     TSerializedTableRange range(TConstArrayRef<TCell>(pk), true, TConstArrayRef<TCell>(pk), true);
     auto newRange = record.MutableRanges()->Add();
     range.Serialize(*newRange);

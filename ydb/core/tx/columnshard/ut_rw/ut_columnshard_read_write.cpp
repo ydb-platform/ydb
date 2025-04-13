@@ -2197,7 +2197,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 txId = 100;
 
         auto planStep = SetupSchema(runtime, sender, tableId, table, "lz4");
-        const auto internalPathId = csDefaultControllerGuard->GetInternalPathIdVerified(TTestTxConfig::TxTablet0, NColumnShard::TLocalPathId::FromRawValue(tableId));
         TAutoPtr<IEventHandle> handle;
 
         bool isStrPk0 = table.Pk[0].GetType() == TTypeInfo(NTypeIds::String) || table.Pk[0].GetType() == TTypeInfo(NTypeIds::Utf8);
@@ -2307,7 +2306,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         const TInstant start = TInstant::Now();
         bool success = false;
         while (!success && TInstant::Now() - start < TDuration::Seconds(30)) {   // Get index stats
-            ScanIndexStats(runtime, sender, {internalPathId, NColumnShard::TLocalPathId::FromRawValue(tableId)}, NOlap::TSnapshot(planStep, txId), 0);
+            ScanIndexStats(runtime, sender, NColumnShard::TLocalPathId::FromRawValue(tableId), NOlap::TSnapshot(planStep, txId), 0);
             Cerr << __LINE__ << " QQQ\n";
             auto ev = runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
             UNIT_ASSERT(std::get<NKqp::TEvKqpCompute::TEvScanInitActor*>(ev) != nullptr);

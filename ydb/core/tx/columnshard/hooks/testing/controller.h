@@ -49,10 +49,9 @@ private:
 
     TMutex ActiveTabletsMutex;
     std::set<ui64> ActiveTablets;
-    THashMap<
-        ui64, //tabletId
-        THashMap<NKikimr::NColumnShard::TLocalPathId, NKikimr::NColumnShard::TInternalPathId>
-    > PathMapping;
+    using TLocalToInternalPathId = THashMap<NKikimr::NColumnShard::TLocalPathId, NKikimr::NColumnShard::TInternalPathId>;
+    using TInternalToLocalPathId = THashMap<NKikimr::NColumnShard::TInternalPathId, NKikimr::NColumnShard::TLocalPathId>;
+    THashMap<ui64, std::pair<TLocalToInternalPathId, TInternalToLocalPathId>> PathMapping;
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
@@ -333,22 +332,34 @@ public:
         RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
-    const auto& GetPathMapping() const {
-        return PathMapping;
-    }
-
     std::optional<NKikimr::NColumnShard::TInternalPathId> GetInternalPathIdOptional(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        const auto* tabletMapping = PathMapping.FindPtr(tabletId);
-        if (!tabletMapping) {
+        const auto* tabletPaths = PathMapping.FindPtr(tabletId);
+        if (!tabletPaths) {
             return std::nullopt;
         }
-        const auto* p = tabletMapping->FindPtr(localPathId);
+        const auto* p = tabletPaths->first.FindPtr(localPathId);;
         return p ? std::optional{*p} : std::nullopt;
     }
 
     std::optional<NKikimr::NColumnShard::TInternalPathId> GetInternalPathIdVerified(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
         const auto result = GetInternalPathIdOptional(tabletId, localPathId);
+        AFL_VERIFY(result);
+        return result;
+    }
+
+    std::optional<NKikimr::NColumnShard::TLocalPathId> GetLocalPathIdOptional(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId) {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        const auto* tabletPaths = PathMapping.FindPtr(tabletId);
+        if (!tabletPaths) {
+            return std::nullopt;
+        }
+        const auto* p = tabletPaths->second.FindPtr(internalPathId);
+        return p ? std::optional{*p} : std::nullopt;
+    }
+
+    std::optional<NKikimr::NColumnShard::TLocalPathId> GetLocalPathIdVerified(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId) {
+        const auto result = GetLocalPathIdOptional(tabletId, internalPathId);
         AFL_VERIFY(result);
         return result;
     }
@@ -359,18 +370,18 @@ public:
 
     virtual void OnAddPathIdMapping(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId, const NKikimr::NColumnShard::TLocalPathId localPathId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
-        if (auto tabletMapping = PathMapping.FindPtr(tabletId)) {
-            tabletMapping->emplace(localPathId, internalPathId);
-        } else {
-            PathMapping.emplace(tabletId, THashMap<NKikimr::NColumnShard::TLocalPathId, NKikimr::NColumnShard::TInternalPathId>{{localPathId, internalPathId}});
-        }
+        auto& tabletMapping = PathMapping[tabletId];
+        tabletMapping.first.emplace(localPathId, internalPathId);
+        tabletMapping.second.emplace(internalPathId, localPathId);
     }
     virtual void OnDeletePathIdMapping(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId, const NKikimr::NColumnShard::TLocalPathId localPathId) override {
         Y_UNUSED(internalPathId);
         auto* tabletMapping = PathMapping.FindPtr(tabletId);
         AFL_VERIFY(tabletMapping);
-        tabletMapping->erase(localPathId);
-        if (tabletMapping->empty()) {
+        tabletMapping->first.erase(localPathId);
+        tabletMapping->second.erase(internalPathId);
+        AFL_VERIFY(tabletMapping->first.size() == tabletMapping->second.size());
+        if (tabletMapping->first.empty()) {
             PathMapping.erase(tabletId);
         }
     }

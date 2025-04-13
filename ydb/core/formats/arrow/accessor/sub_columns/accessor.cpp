@@ -78,11 +78,10 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     }
 
     if (OthersData.GetRecords()->GetRecordsCount()) {
-        ui32 idxColumn = 0;
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
             blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
-            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(OthersData.GetStats().GetColumnSize(idxColumn++), blobRanges.back().size());
+            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size());
             auto* cInfo = proto.AddOtherColumns();
             cInfo->SetSize(blobRanges.back().size());
         }

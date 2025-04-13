@@ -332,6 +332,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(EmptyColumnsRead) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetQueryClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                --!syntax_v1
+
+                SELECT 1
+                FROM `/Root/olapStore/olapTable`
+            )",NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SimpleQueryOlapStats) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -812,54 +837,81 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
 
         auto tableClient = kikimr.GetTableClient();
-        auto selectQueryWithSort = TString(R"(
+        auto selectQuerySortDesc = TString(R"(
             --!syntax_v1
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4;
         )");
-        auto selectQuery = TString(R"(
+        auto selectQuerySortAsc = TString(R"(
             --!syntax_v1
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` LIMIT 4;
         )");
-
-        auto it = tableClient.StreamExecuteScanQuery(selectQuery, scanSettings).GetValueSync();
-        auto result = CollectStreamResult(it);
+        auto selectQueryNoSort = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` LIMIT 4;
+        )");
 
         NJson::TJsonValue plan, node, reverse, limit, pushedLimit;
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
-        Cerr << *result.PlanJson << Endl;
-        Cerr << result.QueryStats->query_plan() << Endl;
-        Cerr << result.QueryStats->query_ast() << Endl;
+        {
+            auto it = tableClient.StreamExecuteScanQuery(selectQuerySortAsc, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
 
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
-        UNIT_ASSERT(node.IsDefined());
-        reverse = FindPlanNodeByKv(node, "Reverse", "false");
-        UNIT_ASSERT(!reverse.IsDefined());
-        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
-        UNIT_ASSERT(pushedLimit.IsDefined());
-        limit = FindPlanNodeByKv(node, "Limit", "4");
-        UNIT_ASSERT(limit.IsDefined());
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
 
-        // Check that Reverse flag is set in query plan
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
-        result = CollectStreamResult(it);
+            node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            reverse = FindPlanNodeByKv(node, "Reverse", "false");
+            UNIT_ASSERT(reverse.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+        }
 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
-        Cerr << "==============================" << Endl;
-        Cerr << *result.PlanJson << Endl;
-        Cerr << result.QueryStats->query_plan() << Endl;
-        Cerr << result.QueryStats->query_ast() << Endl;
+        {
+            // Check that Reverse flag is set in query plan
+            auto it = tableClient.StreamExecuteScanQuery(selectQuerySortDesc, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
 
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
-        UNIT_ASSERT(node.IsDefined());
-        reverse = FindPlanNodeByKv(node, "Reverse", "true");
-        UNIT_ASSERT(reverse.IsDefined());
-        limit = FindPlanNodeByKv(node, "Limit", "4");
-        UNIT_ASSERT(limit.IsDefined());
-        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
-        UNIT_ASSERT(pushedLimit.IsDefined());
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << "==============================" << Endl;
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
+
+            node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            reverse = FindPlanNodeByKv(node, "Reverse", "true");
+            UNIT_ASSERT(reverse.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+        }
+
+        {
+            // Check that Reverse flag is set in query plan
+            auto it = tableClient.StreamExecuteScanQuery(selectQueryNoSort, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
+
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << "==============================" << Endl;
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
+
+            node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+        }
 
         // Run actual request in case explain did not execute anything
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort).GetValueSync();
+        auto it = tableClient.StreamExecuteScanQuery(selectQuerySortDesc).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
 
@@ -1019,7 +1071,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (const auto& r : rows) {
             TInstant ts = GetTimestamp(r.at("timestamp"));
             UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
-            UNIT_ASSERT(results.erase(ts.GetValue()));
+            UNIT_ASSERT_C(results.erase(ts.GetValue()), Sprintf("%d", ts.GetValue()));
             tsPrev = ts;
         }
         UNIT_ASSERT(rows.size() == 6);
@@ -3434,6 +3486,37 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values are not supported in column tables", result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(PredicateWithLimit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto runnerSettings = TKikimrSettings()
+                                  .SetAppConfig(appConfig)
+                                  .SetWithSampleTables(true)
+                                  .SetColumnShardAlterObjectEnabled(true)
+                                  .SetColumnShardReaderClassName("SIMPLE");
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("a").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "a", "b" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(1);
+            tableInserter.AddRow().Add(2).Add(2);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT a, b FROM `/Root/ColumnTableTest` WHERE b = 2 LIMIT 2", "[[2u;2u]]");
     }
 }
 }

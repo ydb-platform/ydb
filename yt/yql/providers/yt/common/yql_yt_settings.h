@@ -183,6 +183,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> DockerImage;
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
+    NCommon::TConfSetting<NYT::TNode, true> FmrOperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
     NCommon::TConfSetting<NYT::TNode, true> StartedBy;
     NCommon::TConfSetting<NYT::TNode, true> Description;

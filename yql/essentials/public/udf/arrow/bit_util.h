@@ -143,6 +143,18 @@ Y_FORCE_INLINE ui32 ReplicateEachBitFourTimes(ui8 b) {
     return x;
 }
 
+// Repeat 8 times every bit in an 8-bit value.
+// Example: 0b01010101 -> 0b0000000011111111000000001111111100000000111111110000000011111111.
+Y_FORCE_INLINE ui64 ReplicateEachBitEightTimes(ui8 x) {
+    ui64 expanded = x;
+    expanded = (expanded * 0x8040201008040201ULL);
+    expanded &= 0x8080808080808080ULL;
+    expanded >>= 7;
+    expanded *= 0xFF;
+    expanded = NYql::SwapBytes(expanded);
+    return expanded;
+}
+
 // BitToByteExpand - Expands the individual bits of an 8-bit input x into an array of 8 elements of type TType.
 // Each output element corresponds to one bit from the original value, expanded (via specialized routines) to fill the entire TType
 // Example: BitToByteExpand<ui8>(0b10101010) yields REVERSE({0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00}).
@@ -153,12 +165,7 @@ Y_FORCE_INLINE std::array<TType, 8> BitToByteExpand(ui8 x);
 template <>
 Y_FORCE_INLINE std::array<ui8, 8> BitToByteExpand(ui8 x) {
     std::array<ui8, 8> result;
-    ui64 expanded = x;
-    expanded = (expanded * 0x8040201008040201ULL);
-    expanded &= 0x8080808080808080ULL;
-    expanded >>= 7;
-    expanded *= 0xFF;
-    expanded = NYql::SwapBytes(expanded);
+    ui64 expanded = ReplicateEachBitEightTimes(x);
     memcpy(&result[0], &expanded, sizeof(expanded));
     return result;
 }
@@ -186,5 +193,18 @@ Y_FORCE_INLINE std::array<ui32, 8> BitToByteExpand(ui8 x) {
 
     return output;
 }
+
+template <>
+Y_FORCE_INLINE std::array<ui64, 8> BitToByteExpand(ui8 x) {
+    std::array<ui8, 8> input = BitToByteExpand<ui8>(x);
+    std::array<ui64, 8> output{};
+
+    for (size_t i = 0; i < 8; ++i) {
+        output[i] = ReplicateEachBitEightTimes(input[i]);
+    }
+
+    return output;
 }
+
+} // namespace NUdf
 }

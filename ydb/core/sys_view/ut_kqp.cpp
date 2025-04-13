@@ -149,7 +149,7 @@ void BreakLock(TSession& session, const TString& tableName) {
         if (yson == "[]") {
             continue;
         }
-            
+
         NKqp::CompareYson(R"([
             [[55u];["Fifty five"]];
         ])", yson);
@@ -167,7 +167,7 @@ void BreakLock(TSession& session, const TString& tableName) {
     {  // tx1: try to commit
         auto result = tx1->Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }   
+    }
 }
 
 void SetupAuthEnvironment(TTestEnv& env) {
@@ -256,17 +256,42 @@ void WaitForStats(TTableClient& client, const TString& tableName, const TString&
             break;
         Sleep(TDuration::Seconds(5));
     }
-    UNIT_ASSERT_GE(rowCount, 0);   
+    UNIT_ASSERT_GE(rowCount, 0);
 }
 
-class TShowCreateTableChecker {
+NQuery::TExecuteQueryResult ExecuteQuery(NQuery::TSession& session, const std::string& query) {
+    auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return result;
+}
+
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path) {
+    if (!IsStartWithSlash(path)) {
+        path = CanonizePath(JoinPath({"/Root", path}));
+    }
+    auto sender = runtime.AllocateEdgeActor();
+    TAutoPtr<IEventHandle> handle;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    return runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle)->GetRecord().GetPathDescription();
+}
+
+class TShowCreateChecker {
 public:
 
-    explicit TShowCreateTableChecker(TTestEnv& env)
+    explicit TShowCreateChecker(TTestEnv& env)
         : Env(env)
+        , Runtime(*Env.GetServer().GetRuntime())
         , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
-        , TableClient(TTableClient(Env.GetDriver()))
-    {}
+        , Session(QueryClient.GetSession().GetValueSync().GetSession())
+    {
+        CreateTier("tier1");
+        CreateTier("tier2");
+    }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
@@ -276,51 +301,61 @@ public:
             sessionId = session.GetId();
         }
 
-        CreateTable(session, query);
+        ExecuteQuery(session, query);
         auto showCreateTableQuery = ShowCreateTable(session, tableName);
 
         if (formatQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
         }
 
-        auto tableDescOrig = DescribeTable(tableName, sessionId);
+        auto describeResultOrig = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
-        CreateTable(session, showCreateTableQuery);
-        auto tableDescNew = DescribeTable(tableName, sessionId);
+        ExecuteQuery(session, showCreateTableQuery);
+        auto describeResultNew = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
-        CompareDescriptions(std::move(tableDescOrig), std::move(tableDescNew), showCreateTableQuery);
+        CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 
 private:
 
-    void CreateTable(NYdb::NQuery::TSession& session, const std::string& query) {
-        auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    void CreateTier(const std::string& tierName) {
+        ExecuteQuery(Session, std::format(R"(
+            UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+            UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+            CREATE EXTERNAL DATA SOURCE `{}` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://fake.fake/olap-{}",
+                AUTH_METHOD = "AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME = "accessKey",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME = "secretKey",
+                AWS_REGION = "ru-central1"
+            );
+        )", tierName, tierName));
     }
 
-    NKikimrSchemeOp::TTableDescription DescribeTable(const std::string& tableName,
-            std::optional<TString> sessionId = std::nullopt) {
+    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
 
-        auto describeTable = [this](const TString& path) {
-            auto& runtime = *(this->Env.GetServer().GetRuntime());
-            auto sender = runtime.AllocateEdgeActor();
-            TAutoPtr<IEventHandle> handle;
+        auto describeTable = [this](TString&& path) {
+            auto pathDescription = DescribePath(Runtime, std::move(path));
 
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            request->Record.MutableDescribePath()->SetPath(path);
-            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-            request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
-            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+            if (pathDescription.HasColumnTableDescription()) {
+                const auto& tableDescription = pathDescription.GetColumnTableDescription();
+                return *GetCreateTableRequest(tableDescription);
+            }
 
-            return reply->GetRecord().GetPathDescription().GetTable();
+            if (!pathDescription.HasTable()) {
+                UNIT_FAIL("Invalid path type: " << pathDescription.GetSelf().GetPathType());
+            }
+
+            const auto& tableDescription = pathDescription.GetTable();
+            return *GetCreateTableRequest(tableDescription);
         };
 
-        TString tablePath = TString(tableName);
+        auto tablePath = TString(tableName);
         if (!IsStartWithSlash(tablePath)) {
             tablePath = CanonizePath(JoinPath({"/Root", tablePath}));
         }
@@ -328,47 +363,38 @@ private:
             auto pos = sessionId.value().find("&id=");
             tablePath = NKqp::GetTempTablePath("Root", sessionId.value().substr(pos + 4), tablePath);
         }
-        auto tableDesc = describeTable(tablePath);
+        auto tableDesc = describeTable(std::move(tablePath));
 
         return tableDesc;
     }
 
-    std::string ShowCreateTable(NYdb::NQuery::TSession& session, const std::string& tableName) {
-        auto result = session.ExecuteQuery(TStringBuilder() << R"(
-            SHOW CREATE TABLE `)" << tableName << R"(`;
-        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    std::string ShowCreate(NQuery::TSession& session, std::string_view type, const std::string& path) {
+        const auto result = ExecuteQuery(session, std::format("SHOW CREATE {} `{}`;", type, path));
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
         auto resultSet = result.GetResultSet(0);
         auto columnsMeta = resultSet.GetColumnsMeta();
-        UNIT_ASSERT(columnsMeta.size() == 3);
+        UNIT_ASSERT_VALUES_EQUAL(columnsMeta.size(), 3);
 
-        NYdb::TResultSetParser parser(resultSet);
+        TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
-
-        TString tablePath = TString(tableName);
 
         TString statement = "";
 
-        for (size_t i = 0; i < columnsMeta.size(); i++) {
-            const auto& column = columnsMeta[i];
+        for (const auto& column : columnsMeta) {
+            TValueParser parserValue(parser.GetValue(column.Name));
+            parserValue.OpenOptional();
+            const auto& value = parserValue.GetUtf8();
+
             if (column.Name == "Path") {
-                TValueParser parserValue(parser.GetValue(i));
-                parserValue.OpenOptional();
-                UNIT_ASSERT_VALUES_EQUAL(parserValue.GetUtf8(), std::string(tablePath));
-                continue;
+                UNIT_ASSERT_VALUES_EQUAL(value, path);
             } else if (column.Name == "PathType") {
-                TValueParser parserValue(parser.GetValue(i));
-                parserValue.OpenOptional();
-                UNIT_ASSERT_VALUES_EQUAL(parserValue.GetUtf8(), "Table");
-                continue;
+                auto actualType = to_upper(TString(value));
+                UNIT_ASSERT_VALUES_EQUAL(actualType, type);
             } else if (column.Name == "Statement") {
-                TValueParser parserValue(parser.GetValue(i));
-                parserValue.OpenOptional();
-                statement = parserValue.GetUtf8();
+                statement = value;
             } else {
-                UNIT_ASSERT_C(false, "Invalid column name");
+                UNIT_FAIL("Invalid column name: " << column.Name);
             }
         }
         UNIT_ASSERT(statement);
@@ -376,21 +402,20 @@ private:
         return statement;
     }
 
-    void DropTable(NYdb::NQuery::TSession& session, const std::string& tableName) {
-        auto result = session.ExecuteQuery(TStringBuilder() << R"(
-            DROP TABLE `)" << tableName << R"(`;
-        )",  NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
+        return ShowCreate(session, "TABLE", tableName);
     }
 
-    void CompareDescriptions(NKikimrSchemeOp::TTableDescription origDesc, NKikimrSchemeOp::TTableDescription newDesc, const std::string& showCreateTableQuery) {
-        Ydb::Table::CreateTableRequest requestFirst = *GetCreateTableRequest(origDesc);
-        Ydb::Table::CreateTableRequest requestSecond = *GetCreateTableRequest(newDesc);
+    void DropTable(NQuery::TSession& session, const std::string& tableName) {
+        ExecuteQuery(session, std::format("DROP TABLE `{}`;", tableName));
+    }
 
+    template <typename TProtobufDescription>
+    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
         TString first;
-        ::google::protobuf::TextFormat::PrintToString(requestFirst, &first);
+        ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
-        ::google::protobuf::TextFormat::PrintToString(requestSecond, &second);
+        ::google::protobuf::TextFormat::PrintToString(describeResultNew, &second);
 
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
@@ -430,10 +455,20 @@ private:
         return scheme;
     }
 
+    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::CreateTableRequest scheme;
+
+        FillColumnDescription(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
+
+        return scheme;
+    }
+
 private:
     TTestEnv& Env;
+    TTestActorRuntime& Runtime;
     NQuery::TQueryClient QueryClient;
-    TTableClient TableClient;
+    NQuery::TSession Session;
 };
 
 class TYsonFieldChecker {
@@ -667,7 +702,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(
             R"(CREATE TABLE test_show_create (
@@ -861,7 +896,7 @@ R"(CREATE TABLE `test_show_create` (
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
@@ -942,8 +977,109 @@ R"(CREATE TABLE `test_show_create` (
     PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
 )
 WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
-)",
-        true);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionByHash) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 String NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1, Key2)
+            WITH (
+                STORE = COLUMN
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint64 NOT NULL,
+    `Key2` String NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumn) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 Int32 NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Int16 FAMILY Family2,
+                Value3 String FAMILY Family2,
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY default (
+                    COMPRESSION = "zstd"
+                ),
+                FAMILY Family1 (
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    COMPRESSION = "lz4"
+                )
+            )
+            PARTITION BY HASH(`Key1`, `Key2`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1H") DELETE
+                    ON Key1 AS SECONDS
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Int32 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Int16,
+    `Value3` String,
+    FAMILY `default` (COMPRESSION = 'zstd'),
+    FAMILY `Family1` (COMPRESSION = 'off'),
+    FAMILY `Family2` (COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1H') DELETE
+    ON Key1 AS SECONDS
+);
+)"
+        );
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionSettings) {
@@ -954,7 +1090,7 @@ WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (T
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
@@ -978,7 +1114,7 @@ WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (T
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
@@ -1019,7 +1155,7 @@ WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
@@ -1060,7 +1196,7 @@ WITH (KEY_BLOOM_FILTER = DISABLED);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
@@ -1090,6 +1226,82 @@ R"(CREATE TABLE `test_show_create` (
 WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
 )"
         );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') DELETE ON Key AS MILLISECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    INTERVAL('PT3H') DELETE
+                ON Key AS NANOSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2` ON Key AS MICROSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Timestamp NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1M") TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    Interval("PT1H") DELETE
+                    ON Key
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Timestamp NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+)
+PARTITION BY HASH (`Key`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1M') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+        INTERVAL('PT1H') DELETE
+    ON Key
+);
+)"
+        );
     }
 
     Y_UNIT_TEST(ShowCreateTableTemporary) {
@@ -1100,7 +1312,7 @@ WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(R"(
             CREATE TEMPORARY TABLE test_show_create (
@@ -1126,7 +1338,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
 
-        TShowCreateTableChecker checker(env);
+        TShowCreateChecker checker(env);
 
         checker.CheckShowCreateTable(
             R"(CREATE TABLE `/Root/test_show_create` (
@@ -1653,7 +1865,7 @@ WITH (
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
-     
+
         BreakLock(session, "/Root/Table0");
 
         WaitForStats(client, "/Root/.sys/partition_stats", "LocksBroken != 0");
@@ -1673,7 +1885,7 @@ WITH (
         check.Uint64(1); // LocksAcquired
         check.Uint64(0); // LocksWholeShard
         check.Uint64(1); // LocksBroken
-    }    
+    }
 
     Y_UNIT_TEST(PartitionStatsFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
@@ -2502,7 +2714,7 @@ WITH (
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
-     
+
         const TString tableName = "/Root/Tenant1/Table1";
         const TString viewName = "/Root/Tenant1/.sys/top_partitions_by_tli_one_minute";
 
@@ -3255,7 +3467,7 @@ WITH (
         // Check that user is locked out and cannot login
         {
             auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
-            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 is not permitted to log in");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 login denied: too many failed password attempts");
         }
 
         Sleep(TDuration::Seconds(5));

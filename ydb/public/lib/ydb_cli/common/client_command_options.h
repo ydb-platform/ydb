@@ -351,6 +351,25 @@ private:
     std::vector<TString> OptValues;
 };
 
+class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
+public:
+    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[], bool throwOnParseError = false)
+        : ThrowOnParseError(throwOnParseError) {
+        Init(options, argc, argv);
+    }
+
+    virtual ~TCommandOptsParseResult() = default;
+
+    void HandleError() const override {
+        if (ThrowOnParseError) {
+            throw;
+        }
+        NLastGetopt::TOptsParseResult::HandleError();
+    }
+private:
+    bool ThrowOnParseError;
+};
+
 class TOptionsParseResult {
     friend class TClientCommandOptions;
 
@@ -358,7 +377,7 @@ public:
     using TConnectionParamsLogger = std::function<void(const TString& /*paramName*/, const TString& /*value*/, const TString& /*sourceText*/)>;
 
 public:
-    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv);
+    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError = false);
 
     // Parses from profile and env. Returns erros if they occur during parsing
     std::vector<TString> ParseFromProfilesAndEnv(std::shared_ptr<IProfile> explicitProfile, std::shared_ptr<IProfile> activeProfile);
@@ -392,7 +411,7 @@ public:
 
 private:
     const TClientCommandOptions* ClientOptions = nullptr;
-    NLastGetopt::TOptsParseResult ParseFromCommandLineResult; // First parsing stage
+    TCommandOptsParseResult ParseFromCommandLineResult; // First parsing stage
     std::vector<TOptionParseResult> Opts;
     std::vector<size_t> AuthMethodOpts; // indexes
     TString ChosenAuthMethod;

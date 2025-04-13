@@ -52,7 +52,7 @@ class ParseBaseException(Exception):
         loc: int = 0,
         msg: typing.Optional[str] = None,
         elem=None,
-    ):
+    ) -> None:
         if msg is None:
             msg, pstr = pstr, ""
 
@@ -87,7 +87,7 @@ class ParseBaseException(Exception):
         ret: list[str] = []
         if isinstance(exc, ParseBaseException):
             ret.append(exc.line)
-            ret.append(f"{' ' * (exc.column - 1)}^")
+            ret.append(f"{'^':>{exc.column}}")
         ret.append(f"{type(exc).__name__}: {exc}")
 
         if depth <= 0 or exc.__traceback__ is None:
@@ -272,12 +272,11 @@ class ParseException(ParseBaseException):
         try:
             integer.parse_string("ABC")
         except ParseException as pe:
-            print(pe)
-            print(f"column: {pe.column}")
+            print(pe, f"column: {pe.column}")
 
     prints::
 
-       Expected integer (at char 0), (line:1, col:1) column: 1
+       Expected integer, found 'ABC'  (at char 0), (line:1, col:1) column: 1
 
     """
 
@@ -307,7 +306,7 @@ class RecursiveGrammarException(Exception):
     Deprecated: only used by deprecated method ParserElement.validate.
     """
 
-    def __init__(self, parseElementList):
+    def __init__(self, parseElementList) -> None:
         self.parseElementTrace = parseElementList
 
     def __str__(self) -> str:

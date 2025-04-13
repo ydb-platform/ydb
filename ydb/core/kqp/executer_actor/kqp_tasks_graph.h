@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -271,6 +272,7 @@ public:
         TString TypeMod;
         TString Name;
         bool NotNull;
+        bool IsPrimary = false;
     };
 
     struct TColumnWrite {
@@ -289,14 +291,13 @@ public:
         std::set<TString> ParameterNames;
     };
 
-    struct TReadInfo {
+    struct TReadInfo: public NYql::TSortingOperator<NYql::ERequestSorting::NONE> {
+    public:
         enum class EReadType {
             Rows,
             Blocks
         };
         ui64 ItemsLimit = 0;
-        bool Reverse = false;
-        bool Sorted = false;
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
@@ -351,6 +352,11 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
 
+    THashSet<TString> keyColumns;
+    for (auto column : tableInfo->KeyColumns) {
+        keyColumns.insert(std::move(column));
+    }
+
     for (const auto& column : op.GetColumns()) {
         TTaskMeta::TColumn c;
 
@@ -360,6 +366,7 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
         c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
         c.NotNull = tableColumn.NotNull;
+        c.IsPrimary = keyColumns.contains(c.Name);
 
         columns.emplace_back(std::move(c));
     }

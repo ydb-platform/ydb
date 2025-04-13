@@ -80,4 +80,6 @@ enum ETxTypes {
     TXTYPE_PREPARE_WRITE_S3 = 17 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepareWriteS3"}];
     TXTYPE_DELETE_TRASH_S3 = 18 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTrashS3"}];
     TXTYPE_PROCESS_SCANNED_KEYS = 19 [(NKikimr.TxTypeOpts) = {Name: "TTxProcessScannedKeys"}];
+    TXTYPE_DECOMMIT_BLOBS = 20 [(NKikimr.TxTypeOpts) = {Name: "TTxDecommitBlobs"}];
+    TXTYPE_PREPARE = 21 [(NKikimr.TxTypeOpts) = {Name: "TTxPrepare"}];
 }

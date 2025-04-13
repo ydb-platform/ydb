@@ -28,7 +28,7 @@ Consider the following limitations of using the Kafka API for reading:
 
 Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
 
-- `check.crc=false`
+- `check.crcs=false`
 - `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.

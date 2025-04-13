@@ -38,7 +38,7 @@ class TllTieringTestBase(object):
                 "compaction_actualization_lag_ms": 0,
                 "optimizer_freshness_check_duration_ms": 0,
                 "small_portion_detect_size_limit": 0,
-                "max_read_staleness_ms": 5000,
+                "max_read_staleness_ms": 60000,
                 "alter_object_enabled": True,
             },
             additional_log_configs={
@@ -46,6 +46,9 @@ class TllTieringTestBase(object):
                 "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
                 "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
             },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            )
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

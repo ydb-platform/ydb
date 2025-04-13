@@ -331,10 +331,11 @@ public:
     }
 
     template <class T>
-    TStepAction(const std::shared_ptr<T>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId) {
+    TStepAction(const std::shared_ptr<T>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
+        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection) {
     }
-    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
+    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
+        const bool changeSyncSection);
 };
 
 class TProgramStep: public IFetchingStep {

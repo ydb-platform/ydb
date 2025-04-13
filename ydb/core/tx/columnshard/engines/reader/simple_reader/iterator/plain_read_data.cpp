@@ -21,7 +21,6 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
         sources.emplace_back(TSourceConstructor(sourceIdx++, i, context));
     }
-    std::make_heap(sources.begin(), sources.end());
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;
@@ -56,6 +55,13 @@ void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>&
     //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
     PartialResults.emplace_back(result);
+}
+
+void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) {
+    if (!SpecialReadContext->IsActive()) {
+        return;
+    }
+    Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

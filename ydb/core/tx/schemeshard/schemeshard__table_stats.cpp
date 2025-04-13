@@ -279,19 +279,15 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                                                                shardInfo->BindedChannels);
 
     const auto pathElement = Self->PathsById[pathId];
+    const TPartitionStats newStats = PrepareStats(ctx, rec, channelsMapping);
+
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxStoreTableStats.PersistSingleStats: main stats from"
                     << " datashardId(TabletID)=" << datashardId << " maps to shardIdx: " << shardIdx
                     << " followerId=" << followerId
                     << ", pathId: " << pathId << ", pathId map=" << pathElement->Name
-                    << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
-
-    const TPartitionStats newStats = PrepareStats(ctx, rec, channelsMapping);
-
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Add stats from shard with datashardId(TabletID)=" << datashardId << " followerId=" << followerId
-                    << ", pathId " << pathId.LocalPathId
-                    << ": RowCount " << newStats.RowCount
+                    << ", is column=" << isColumnTable << ", is olap=" << isOlapStore
+                    << ", RowCount " << newStats.RowCount
                     << ", DataSize " << newStats.DataSize
                     << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));
 
@@ -543,7 +539,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
             ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
             : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Got periodic table stats at tablet " << TabletID()
                                                      << " from shard " << datashardId
                                                      << " followerId " << followerId
@@ -577,7 +573,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
            "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TableStatsQueue.Size());
 
     TableStatsBatchScheduled = false;

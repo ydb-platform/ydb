@@ -412,6 +412,8 @@ namespace NKikimr {
         static_assert((SuffixSize >> 2 << 2) == SuffixSize, "expect (SuffixSize >> 2 << 2) == SuffixSize");
         static_assert(sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder), "expect sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder)");
 
+        typedef TRecIndex<TKey, TMemRec>::TRec TRec;
+
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,

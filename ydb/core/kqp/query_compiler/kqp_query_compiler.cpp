@@ -360,7 +360,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
         }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TReader, typename TProto>
@@ -396,13 +396,13 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
     }
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
-        readProto.SetSorted(settings.Sorted);
+        readProto.SetSorted(settings.IsSorted());
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TEffectCallable, typename TEffectProto>
@@ -919,7 +919,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(false));
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1045,8 +1045,8 @@ private:
             }
             auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
 
-            readProto.SetReverse(readSettings.Reverse);
-            readProto.SetSorted(readSettings.Sorted);
+            readProto.SetReverse(readSettings.IsReverse());
+            readProto.SetSorted(readSettings.IsSorted());
             YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
             if (readSettings.SequentialInFlight) {
@@ -1336,13 +1336,16 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            if (Config->OptShuffleElimination.Get().GetOrElse(false)) {
+            if (Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination)) {
                 auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
 
                 const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
                 auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
                 for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
                     auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                    if (ty->GetKind() == ETypeAnnotationKind::List) {
+                        ty = ty->Cast<TListExprType>()->GetItemType();
+                    }
                     NYql::NUdf::EDataSlot slot;
                     switch (ty->GetKind()) {
                         case ETypeAnnotationKind::Data: {
@@ -1351,6 +1354,9 @@ private:
                         }
                         case ETypeAnnotationKind::Optional: {
                             auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                            if (optionalType->GetKind() == ETypeAnnotationKind::List) {
+                                optionalType = optionalType->Cast<TListExprType>()->GetItemType();
+                            }
                             Y_ENSURE(
                                 optionalType->GetKind() == ETypeAnnotationKind::Data,
                                 TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"

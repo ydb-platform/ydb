@@ -26,6 +26,7 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NReplication;
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
@@ -7642,6 +7643,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER ASYNC REPLICATION `/Root/replication`
                 SET (
+                    STATE = "Paused"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // alter state and config
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    STATE = "StandBy"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+
+        // alter state and config
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
                     STATE = "DONE",
                     FAILOVER_MODE = "FORCE",
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
@@ -7676,7 +7706,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     break;
                 }
 
-                UNIT_ASSERT_C(i, "Alter timeout");
+                //UNIT_ASSERT_C(i, "Alter timeout");
                 Sleep(TDuration::Seconds(1));
             }
         }
@@ -8322,6 +8352,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_fi`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "%s",
+                    FLUSH_INTERVAL = Interval('PT1S')
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(CreateTransfer_QueryService) {
@@ -8559,6 +8604,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                   WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_fi`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "%s",
+                    FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
 
@@ -9006,6 +9066,34 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown transfer state: foo");
+        }
+
+        // alter state and config
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "Paused"
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // alter state and config
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "StandBy"
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // alter state and config

@@ -48,17 +48,26 @@ public:
 class TReplaceKeyAdapter {
 private:
     bool Reverse = false;
-    NArrow::TReplaceKey Value;
+    NArrow::TComparablePosition Value;
 
 public:
+    const NArrow::TComparablePosition& GetValue() const {
+        return Value;
+    }
+
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
         : Reverse(reverse)
         , Value(rk) {
     }
 
+    TReplaceKeyAdapter(const NArrow::TComparablePosition& pos, const bool reverse)
+        : Reverse(reverse)
+        , Value(pos) {
+    }
+
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
         AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.CompareNotNull(item.Value);
+        const std::partial_ordering result = Value.Compare(item.Value);
         if (result == std::partial_ordering::equivalent) {
             return std::partial_ordering::equivalent;
         } else if (result == std::partial_ordering::less) {
@@ -78,6 +87,38 @@ public:
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
+};
+
+class TCompareKeyForScanSequence {
+private:
+    TReplaceKeyAdapter Key;
+    YDB_READONLY(ui32, SourceId, 0);
+
+public:
+    const TReplaceKeyAdapter GetKey() const {
+        return Key;
+    }
+
+    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+        : Key(key)
+        , SourceId(sourceId) {
+    }
+
+    static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src);
+    static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src);
+
+    static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
+        return TCompareKeyForScanSequence(key, 0);
+    }
+
+    bool operator<(const TCompareKeyForScanSequence& item) const {
+        const std::partial_ordering compareResult = Key.Compare(item.Key);
+        if (compareResult == std::partial_ordering::equivalent) {
+            return SourceId < item.SourceId;
+        } else {
+            return compareResult == std::partial_ordering::less;
+        }
+    };
 };
 
 class IDataSource: public NCommon::IDataSource {
@@ -101,6 +142,8 @@ private:
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
+    bool NeedFullAnswerFlag = true;
+    std::optional<ui32> PurposeSyncPointIndex;
 
 protected:
     std::optional<ui64> UsedRawBytes;
@@ -112,6 +155,33 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    bool NeedFullAnswer() const {
+        return NeedFullAnswerFlag;
+    }
+
+    void SetNeedFullAnswer(const bool value) {
+        NeedFullAnswerFlag = value;
+    }
+
+    ui32 GetPurposeSyncPointIndex() const {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        return *PurposeSyncPointIndex;
+    }
+
+    void ResetPurposeSyncPointIndex() {
+        AFL_VERIFY(PurposeSyncPointIndex);
+        PurposeSyncPointIndex.reset();
+    }
+
+    void SetPurposeSyncPointIndex(const ui32 value) {
+        if (!PurposeSyncPointIndex) {
+            AFL_VERIFY(value == 0);
+        } else {
+            AFL_VERIFY(*PurposeSyncPointIndex < value);
+        }
+        PurposeSyncPointIndex = value;
+    }
+
     virtual void InitUsedRawBytes() = 0;
 
     ui64 GetUsedRawBytes() const {
@@ -176,39 +246,6 @@ public:
         };
     };
 
-    class TCompareKeyForScanSequence {
-    private:
-        const TReplaceKeyAdapter Key;
-        const ui32 SourceId;
-
-    public:
-        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
-            : Key(key)
-            , SourceId(sourceId) {
-        }
-
-        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
-            return TCompareKeyForScanSequence(key, 0);
-        }
-
-        bool operator<(const TCompareKeyForScanSequence& item) const {
-            const std::partial_ordering compareResult = Key.Compare(item.Key);
-            if (compareResult == std::partial_ordering::equivalent) {
-                return SourceId < item.SourceId;
-            } else {
-                return compareResult == std::partial_ordering::less;
-            }
-        };
-    };
-
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
@@ -222,6 +259,9 @@ public:
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
+    bool HasFetchingPlan() const {
+        return !!FetchingPlan;
+    }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
@@ -283,7 +323,7 @@ private:
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
-        const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation op) const;
+        const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& op) const;
 
     virtual TConclusion<bool> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
@@ -428,7 +468,7 @@ public:
 
 class TSourceConstructor: public ICursorEntity {
 private:
-    TReplaceKeyAdapter Start;
+    TCompareKeyForScanSequence Start;
     YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, PortionIdx, 0);
     ui32 RecordsCount = 0;
@@ -449,13 +489,14 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    const TReplaceKeyAdapter& GetStart() const {
+    const TCompareKeyForScanSequence& GetStart() const {
         return Start;
     }
 
     TSourceConstructor(const ui32 portionIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TReadContext>& context)
-        : Start(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-              context->GetReadMetadata()->IsDescSorted())
+        : Start(TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                    context->GetReadMetadata()->IsDescSorted()),
+              portion->GetPortionId())
         , SourceId(portion->GetPortionId())
         , PortionIdx(portionIdx)
         , RecordsCount(portion->GetRecordsCount()) {
@@ -465,10 +506,15 @@ public:
         return item.Start < Start;
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const {
+    std::shared_ptr<TPortionDataSource> Construct(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context) const {
         const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
-        AFL_VERIFY(PortionIdx < portions.size());
-        return std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        AFL_VERIFY(sourceIdx < portions.size());
+        auto result = std::make_shared<TPortionDataSource>(sourceIdx, portions[PortionIdx], context);
+        if (IsStartedByCursorFlag) {
+            result->SetIsStartedByCursor();
+        }
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
+        return result;
     }
 };
 

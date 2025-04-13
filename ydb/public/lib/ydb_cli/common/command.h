@@ -125,6 +125,7 @@ public:
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
+        bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
@@ -168,6 +169,8 @@ public:
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
+
+        bool ThrowOnOptsParseError = false;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)

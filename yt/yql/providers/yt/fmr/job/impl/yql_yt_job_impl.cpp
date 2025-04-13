@@ -16,15 +16,12 @@ namespace NYql::NFmr {
 class TFmrJob: public IFmrJob {
 public:
 
-    TFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TFmrJobSettings& settings)
+    TFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TMaybe<TFmrJobSettings>& settings)
         : TableDataService_(tableDataService), YtService_(ytService), CancelFlag_(cancelFlag), Settings_(settings)
     {
     }
 
-    virtual std::variant<TError, TStatistics> Download(
-        const TDownloadTaskParams& params,
-        const TClusterConnection& clusterConnection
-    ) override {
+    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const TClusterConnection& clusterConnection) override {
         try {
             const auto ytTable = params.Input;
             const auto cluster = params.Input.Cluster;
@@ -36,9 +33,9 @@ public:
             YQL_CLOG(DEBUG, FastMapReduce) << "Downloading " << cluster << '.' << path;
 
             auto ytTableReader = YtService_->MakeReader(ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
-            auto tableDataServiceWriter = TFmrTableDataServiceWriter(tableId, partId, TableDataService_, Settings_.FmrTableDataServiceWriterSettings);
+            auto tableDataServiceWriter = TFmrTableDataServiceWriter(tableId, partId, TableDataService_, GetFmrTableDataServiceWriterSettings());
 
-            ParseRecords(*ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
+            ParseRecords(*ytTableReader, tableDataServiceWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
             tableDataServiceWriter.Flush();
 
             TTableStats stats = tableDataServiceWriter.GetStats();
@@ -59,9 +56,9 @@ public:
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
 
-            auto tableDataServiceReader = TFmrTableDataServiceReader(tableId, tableRanges, TableDataService_, Settings_.FmrTableDataServiceReaderSettings);
-            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
-            ParseRecords(tableDataServiceReader, *ytTableWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
+            auto tableDataServiceReader = TFmrTableDataServiceReader(tableId, tableRanges, TableDataService_, GetFmrTableDataServiceReaderSettings());
+            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnection);
+            ParseRecords(tableDataServiceReader, *ytTableWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
             ytTableWriter->Flush();
 
             return TStatistics();
@@ -71,6 +68,7 @@ public:
     }
 
     virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const TClusterConnection& clusterConnection) override {
+        // TODO - unordered_map<ClusterConnection>
         // расширить таск парамс. добавить туда мету
         try {
             const auto inputs = params.Input;
@@ -78,13 +76,13 @@ public:
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Merging " << inputs.size() << " inputs";
 
-            auto tableDataServiceWriter = TFmrTableDataServiceWriter(output.TableId, output.PartId, TableDataService_, Settings_.FmrTableDataServiceWriterSettings);
+            auto tableDataServiceWriter = TFmrTableDataServiceWriter(output.TableId, output.PartId, TableDataService_, GetFmrTableDataServiceWriterSettings());
             for (const auto& inputTableRef : inputs) {
                 if (CancelFlag_->load()) {
                     return TError("Canceled");
                 }
                 auto inputTableReader = GetTableInputStream(inputTableRef, clusterConnection);
-                ParseRecords(*inputTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
+                ParseRecords(*inputTableReader, tableDataServiceWriter, GetParseRecordSettings().BlockCount, GetParseRecordSettings().BlockSize);
             }
             tableDataServiceWriter.Flush();
             return TStatistics({{output, tableDataServiceWriter.GetStats()}});
@@ -101,17 +99,29 @@ private:
         if (ytTable) {
             return YtService_->MakeReader(*ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
         } else if (fmrTable) {
-            return MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, Settings_.FmrTableDataServiceReaderSettings);
+            return MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, GetFmrTableDataServiceReaderSettings());
         } else {
             ythrow yexception() << "Unsupported table type";
         }
+    }
+
+    TParseRecordSettings GetParseRecordSettings() {
+        return Settings_ ? Settings_->ParseRecordSettings : TParseRecordSettings();
+    }
+
+    TFmrTableDataServiceReaderSettings GetFmrTableDataServiceReaderSettings() {
+        return Settings_ ? Settings_->FmrTableDataServiceReaderSettings : TFmrTableDataServiceReaderSettings();
+    }
+
+    TFmrTableDataServiceWriterSettings GetFmrTableDataServiceWriterSettings() {
+        return Settings_ ? Settings_->FmrTableDataServiceWriterSettings : TFmrTableDataServiceWriterSettings();
     }
 
 private:
     ITableDataService::TPtr TableDataService_;
     IYtService::TPtr YtService_;
     std::shared_ptr<std::atomic<bool>> CancelFlag_;
-    const TFmrJobSettings Settings_;
+    TMaybe<TFmrJobSettings> Settings_;
 };
 
 IFmrJob::TPtr MakeFmrJob(
@@ -128,9 +138,10 @@ TJobResult RunJob(
     ITableDataService::TPtr tableDataService,
     IYtService::TPtr ytService,
     std::shared_ptr<std::atomic<bool>> cancelFlag,
-    const TFmrJobSettings& settings
+    const TMaybe<TFmrJobSettings>& settings
 ) {
-    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytService, cancelFlag, settings);
+    TFmrJobSettings jobSettings = settings ? *settings : GetJobSettingsFromTask(task);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytService, cancelFlag, jobSettings);
 
     auto processTask = [job, task] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -159,5 +170,37 @@ TJobResult RunJob(
 
     return {ETaskStatus::Completed, *statistics};
 };
+
+TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
+    if (!task->JobSettings) {
+        return TFmrJobSettings();
+    }
+    auto jobSettings = *task->JobSettings;
+    YQL_ENSURE(jobSettings.IsMap());
+    TFmrJobSettings resultSettings{};
+    if (jobSettings.HasKey("parse_record_settings")) {
+        auto& parseRecordSettings = jobSettings["parse_record_settings"];
+        if (parseRecordSettings.HasKey("block_count")) {
+            resultSettings.ParseRecordSettings.BlockCount = parseRecordSettings["block_count"].AsInt64();
+        }
+        if (parseRecordSettings.HasKey("block_size")) {
+            resultSettings.ParseRecordSettings.BlockSize = parseRecordSettings["block_size"].AsInt64();
+            // TODO - support different formats (B, MB, ...)
+        }
+    }
+    if (jobSettings.HasKey("fmr_reader_settings")) {
+        auto& fmrReaderSettings = jobSettings["fmr_reader_settings"];
+        if (fmrReaderSettings.HasKey("read_ahead_chunks")) {
+            resultSettings.FmrTableDataServiceReaderSettings.ReadAheadChunks = fmrReaderSettings["read_ahead_chunks"].AsInt64();
+        }
+    }
+    if (jobSettings.HasKey("fmr_writer_settings")) {
+        auto& fmrWriterSettings = jobSettings["fmr_writer_settings"];
+        if (fmrWriterSettings.HasKey("chunk_size")) {
+            resultSettings.FmrTableDataServiceWriterSettings.ChunkSize = fmrWriterSettings["chunk_size"].AsInt64();
+        }
+    }
+    return resultSettings;
+}
 
 } // namespace NYql

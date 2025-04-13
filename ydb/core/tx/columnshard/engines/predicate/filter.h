@@ -1,8 +1,8 @@
 #pragma once
 #include "range.h"
 
-#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <deque>
 
@@ -12,10 +12,9 @@ class TPKRangesFilter {
 private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
-    bool ReverseFlag = false;
 
 public:
-    TPKRangesFilter(const bool reverse);
+    TPKRangesFilter();
 
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
         ui32 result = 0;
@@ -36,10 +35,6 @@ public:
 
     bool IsEmpty() const {
         return SortedRanges.empty() || FakeRanges;
-    }
-
-    bool IsReverse() const {
-        return ReverseFlag;
     }
 
     const TPKRangeFilter& Front() const {
@@ -69,7 +64,7 @@ public:
     TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
-    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;
@@ -85,20 +80,19 @@ public:
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
-    static std::shared_ptr<TPKRangesFilter> BuildFromString(
-        const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     template <class TProto>
-    static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
-        TPKRangesFilter result(reverse);
+    static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const std::vector<TNameTypeInfo>& ydbPk) {
+        TPKRangesFilter result;
         for (auto& protoRange : proto.GetRanges()) {
             auto fromPredicate = std::make_shared<TPredicate>();
             auto toPredicate = std::make_shared<TPredicate>();
-            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{protoRange}, ydbPk);
+            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk);
             auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
             if (status.IsFail()) {
                 return status;
@@ -174,7 +168,6 @@ private:
     }
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
-        AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
 
@@ -193,7 +186,7 @@ private:
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
         if (!proto.HasColumnShardSimple()) {
-            return TConclusionStatus::Success();
+            return TConclusionStatus::Fail("absent sorted cursor data");
         }
         if (!proto.GetColumnShardSimple().HasSourceId()) {
             return TConclusionStatus::Fail("incorrect source id for cursor initialization");
@@ -221,6 +214,68 @@ public:
     TSimpleScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk, const ui64 portionId, const ui32 recordIndex)
         : PrimaryKey(pk)
         , SourceId(portionId)
+        , RecordIndex(recordIndex) {
+    }
+};
+
+class TNotSortedSimpleScanCursor: public TSimpleScanCursor {
+private:
+    YDB_READONLY(ui64, SourceId, 0);
+    YDB_READONLY(ui32, RecordIndex, 0);
+
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
+        auto& data = *proto.MutableColumnShardNotSortedSimple();
+        data.SetSourceId(SourceId);
+        data.SetStartRecordIndex(RecordIndex);
+    }
+
+    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+        return Default<std::shared_ptr<arrow::RecordBatch>>();
+    }
+
+    virtual bool IsInitialized() const override {
+        return !!SourceId;
+    }
+
+    virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
+        if (SourceId != entity.GetEntityId()) {
+            return false;
+        }
+        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
+        usage = RecordIndex < entity.GetEntityRecordsCount();
+        return true;
+    }
+
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
+        if (!proto.HasColumnShardNotSortedSimple()) {
+            return TConclusionStatus::Fail("absent unsorted cursor data");
+        }
+        auto& data = proto.GetColumnShardNotSortedSimple();
+        if (!data.HasSourceId()) {
+            return TConclusionStatus::Fail("incorrect source id for cursor initialization");
+        }
+        SourceId = data.GetSourceId();
+        if (!data.HasStartRecordIndex()) {
+            return TConclusionStatus::Fail("incorrect record index for cursor initialization");
+        }
+        RecordIndex = data.GetStartRecordIndex();
+        return TConclusionStatus::Success();
+    }
+
+    virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const override {
+        AFL_VERIFY(sourceId == SourceId);
+        if (indexStart >= RecordIndex) {
+            return true;
+        }
+        AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+        return false;
+    }
+
+public:
+    TNotSortedSimpleScanCursor() = default;
+
+    TNotSortedSimpleScanCursor(const ui64 portionId, const ui32 recordIndex)
+        : SourceId(portionId)
         , RecordIndex(recordIndex) {
     }
 };

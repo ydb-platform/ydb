@@ -1324,6 +1324,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
@@ -2802,7 +2803,7 @@ public:
     void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
         BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
             name, NWilson::EFlags::AUTO_END);
-        if (traceId != BufferWriteActorSpan.GetTraceId()) {
+        if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
         }
         for (auto& [_, info] : WriteInfos) {
@@ -2921,7 +2922,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
+        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
 
@@ -2931,6 +2932,7 @@ public:
         std::vector<ui32> writeIndex(
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {

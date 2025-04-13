@@ -1,47 +1,56 @@
+import enum
 import sys
-import types
 from array import array
-from collections import abc
+from collections.abc import (
+    Callable,
+    ItemsView,
+    Iterable,
+    Iterator,
+    KeysView,
+    Mapping,
+    ValuesView,
+)
+from typing import (
+    TYPE_CHECKING,
+    Generic,
+    NoReturn,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
-from ._abc import MultiMapping, MutableMultiMapping
+from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
 
-_marker = object()
-
-if sys.version_info >= (3, 9):
-    GenericAlias = types.GenericAlias
+if sys.version_info >= (3, 11):
+    from typing import Self
 else:
-
-    def GenericAlias(cls):
-        return cls
+    from typing_extensions import Self
 
 
 class istr(str):
-
     """Case insensitive str."""
 
     __is_istr__ = True
 
 
-upstr = istr  # for relaxing backward compatibility problems
+_V = TypeVar("_V")
+_T = TypeVar("_T")
 
-
-def getversion(md):
-    if not isinstance(md, _Base):
-        raise TypeError("Parameter should be multidict or proxy")
-    return md._impl._version
-
+_SENTINEL = enum.Enum("_SENTINEL", "sentinel")
+sentinel = _SENTINEL.sentinel
 
 _version = array("Q", [0])
 
 
-class _Impl:
+class _Impl(Generic[_V]):
     __slots__ = ("_items", "_version")
 
-    def __init__(self):
-        self._items = []
+    def __init__(self) -> None:
+        self._items: list[tuple[str, str, _V]] = []
         self.incr_version()
 
-    def incr_version(self):
+    def incr_version(self) -> None:
         global _version
         v = _version
         v[0] += 1
@@ -49,25 +58,138 @@ class _Impl:
 
     if sys.implementation.name != "pypy":
 
-        def __sizeof__(self):
+        def __sizeof__(self) -> int:
             return object.__sizeof__(self) + sys.getsizeof(self._items)
 
 
-class _Base:
-    def _title(self, key):
+class _Iter(Generic[_T]):
+    __slots__ = ("_size", "_iter")
+
+    def __init__(self, size: int, iterator: Iterator[_T]):
+        self._size = size
+        self._iter = iterator
+
+    def __iter__(self) -> Self:
+        return self
+
+    def __next__(self) -> _T:
+        return next(self._iter)
+
+    def __length_hint__(self) -> int:
+        return self._size
+
+
+class _ViewBase(Generic[_V]):
+    def __init__(self, impl: _Impl[_V]):
+        self._impl = impl
+
+    def __len__(self) -> int:
+        return len(self._impl._items)
+
+
+class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
+    def __contains__(self, item: object) -> bool:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            return False
+        for i, k, v in self._impl._items:
+            if item[0] == k and item[1] == v:
+                return True
+        return False
+
+    def __iter__(self) -> _Iter[tuple[str, _V]]:
+        return _Iter(len(self), self._iter(self._impl._version))
+
+    def _iter(self, version: int) -> Iterator[tuple[str, _V]]:
+        for i, k, v in self._impl._items:
+            if version != self._impl._version:
+                raise RuntimeError("Dictionary changed during iteration")
+            yield k, v
+
+    def __repr__(self) -> str:
+        lst = []
+        for item in self._impl._items:
+            lst.append("{!r}: {!r}".format(item[1], item[2]))
+        body = ", ".join(lst)
+        return "{}({})".format(self.__class__.__name__, body)
+
+
+class _ValuesView(_ViewBase[_V], ValuesView[_V]):
+    def __contains__(self, value: object) -> bool:
+        for item in self._impl._items:
+            if item[2] == value:
+                return True
+        return False
+
+    def __iter__(self) -> _Iter[_V]:
+        return _Iter(len(self), self._iter(self._impl._version))
+
+    def _iter(self, version: int) -> Iterator[_V]:
+        for item in self._impl._items:
+            if version != self._impl._version:
+                raise RuntimeError("Dictionary changed during iteration")
+            yield item[2]
+
+    def __repr__(self) -> str:
+        lst = []
+        for item in self._impl._items:
+            lst.append("{!r}".format(item[2]))
+        body = ", ".join(lst)
+        return "{}({})".format(self.__class__.__name__, body)
+
+
+class _KeysView(_ViewBase[_V], KeysView[str]):
+    def __contains__(self, key: object) -> bool:
+        for item in self._impl._items:
+            if item[1] == key:
+                return True
+        return False
+
+    def __iter__(self) -> _Iter[str]:
+        return _Iter(len(self), self._iter(self._impl._version))
+
+    def _iter(self, version: int) -> Iterator[str]:
+        for item in self._impl._items:
+            if version != self._impl._version:
+                raise RuntimeError("Dictionary changed during iteration")
+            yield item[1]
+
+    def __repr__(self) -> str:
+        lst = []
+        for item in self._impl._items:
+            lst.append("{!r}".format(item[1]))
+        body = ", ".join(lst)
+        return "{}({})".format(self.__class__.__name__, body)
+
+
+class _Base(MultiMapping[_V]):
+    _impl: _Impl[_V]
+
+    def _title(self, key: str) -> str:
         return key
 
-    def getall(self, key, default=_marker):
+    @overload
+    def getall(self, key: str) -> list[_V]: ...
+    @overload
+    def getall(self, key: str, default: _T) -> Union[list[_V], _T]: ...
+    def getall(
+        self, key: str, default: Union[_T, _SENTINEL] = sentinel
+    ) -> Union[list[_V], _T]:
         """Return a list of all values matching the key."""
         identity = self._title(key)
         res = [v for i, k, v in self._impl._items if i == identity]
         if res:
             return res
-        if not res and default is not _marker:
+        if not res and default is not sentinel:
             return default
         raise KeyError("Key not found: %r" % key)
 
-    def getone(self, key, default=_marker):
+    @overload
+    def getone(self, key: str) -> _V: ...
+    @overload
+    def getone(self, key: str, default: _T) -> Union[_V, _T]: ...
+    def getone(
+        self, key: str, default: Union[_T, _SENTINEL] = sentinel
+    ) -> Union[_V, _T]:
         """Get first value matching the key.
 
         Raises KeyError if the key is not found and no default is provided.
@@ -76,42 +198,46 @@ class _Base:
         for i, k, v in self._impl._items:
             if i == identity:
                 return v
-        if default is not _marker:
+        if default is not sentinel:
             return default
         raise KeyError("Key not found: %r" % key)
 
     # Mapping interface #
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> _V:
         return self.getone(key)
 
-    def get(self, key, default=None):
+    @overload
+    def get(self, key: str, /) -> Union[_V, None]: ...
+    @overload
+    def get(self, key: str, /, default: _T) -> Union[_V, _T]: ...
+    def get(self, key: str, default: Union[_T, None] = None) -> Union[_V, _T, None]:
         """Get first value matching the key.
 
         If the key is not found, returns the default (or None if no default is provided)
         """
         return self.getone(key, default)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.keys())
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._impl._items)
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         """Return a new view of the dictionary's keys."""
         return _KeysView(self._impl)
 
-    def items(self):
+    def items(self) -> ItemsView[str, _V]:
         """Return a new view of the dictionary's items *(key, value) pairs)."""
         return _ItemsView(self._impl)
 
-    def values(self):
+    def values(self) -> _ValuesView[_V]:
         """Return a new view of the dictionary's values."""
         return _ValuesView(self._impl)
 
-    def __eq__(self, other):
-        if not isinstance(other, abc.Mapping):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Mapping):
             return NotImplemented
         if isinstance(other, _Base):
             lft = self._impl._items
@@ -125,124 +251,83 @@ class _Base:
         if len(self._impl._items) != len(other):
             return False
         for k, v in self.items():
-            nv = other.get(k, _marker)
+            nv = other.get(k, sentinel)
             if v != nv:
                 return False
         return True
 
-    def __contains__(self, key):
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
         identity = self._title(key)
         for i, k, v in self._impl._items:
             if i == identity:
                 return True
         return False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         body = ", ".join("'{}': {!r}".format(k, v) for k, v in self.items())
         return "<{}({})>".format(self.__class__.__name__, body)
 
-    __class_getitem__ = classmethod(GenericAlias)
 
-
-class MultiDictProxy(_Base, MultiMapping):
-    """Read-only proxy for MultiDict instance."""
-
-    def __init__(self, arg):
-        if not isinstance(arg, (MultiDict, MultiDictProxy)):
-            raise TypeError(
-                "ctor requires MultiDict or MultiDictProxy instance"
-                ", not {}".format(type(arg))
-            )
-
-        self._impl = arg._impl
-
-    def __reduce__(self):
-        raise TypeError("can't pickle {} objects".format(self.__class__.__name__))
-
-    def copy(self):
-        """Return a copy of itself."""
-        return MultiDict(self.items())
-
-
-class CIMultiDictProxy(MultiDictProxy):
-    """Read-only proxy for CIMultiDict instance."""
-
-    def __init__(self, arg):
-        if not isinstance(arg, (CIMultiDict, CIMultiDictProxy)):
-            raise TypeError(
-                "ctor requires CIMultiDict or CIMultiDictProxy instance"
-                ", not {}".format(type(arg))
-            )
-
-        self._impl = arg._impl
-
-    def _title(self, key):
-        return key.title()
-
-    def copy(self):
-        """Return a copy of itself."""
-        return CIMultiDict(self.items())
-
-
-class MultiDict(_Base, MutableMultiMapping):
+class MultiDict(_Base[_V], MutableMultiMapping[_V]):
     """Dictionary with the support for duplicate keys."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, arg: MDArg[_V] = None, /, **kwargs: _V):
         self._impl = _Impl()
 
-        self._extend(args, kwargs, self.__class__.__name__, self._extend_items)
+        self._extend(arg, kwargs, self.__class__.__name__, self._extend_items)
 
     if sys.implementation.name != "pypy":
 
-        def __sizeof__(self):
+        def __sizeof__(self) -> int:
             return object.__sizeof__(self) + sys.getsizeof(self._impl)
 
-    def __reduce__(self):
+    def __reduce__(self) -> tuple[type[Self], tuple[list[tuple[str, _V]]]]:
         return (self.__class__, (list(self.items()),))
 
-    def _title(self, key):
+    def _title(self, key: str) -> str:
         return key
 
-    def _key(self, key):
+    def _key(self, key: str) -> str:
         if isinstance(key, str):
             return key
         else:
-            raise TypeError(
-                "MultiDict keys should be either str " "or subclasses of str"
-            )
+            raise TypeError("MultiDict keys should be either str or subclasses of str")
 
-    def add(self, key, value):
+    def add(self, key: str, value: _V) -> None:
         identity = self._title(key)
         self._impl._items.append((identity, self._key(key), value))
         self._impl.incr_version()
 
-    def copy(self):
+    def copy(self) -> Self:
         """Return a copy of itself."""
         cls = self.__class__
         return cls(self.items())
 
     __copy__ = copy
 
-    def extend(self, *args, **kwargs):
+    def extend(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Extend current MultiDict with more values.
 
         This method must be used instead of update.
         """
-        self._extend(args, kwargs, "extend", self._extend_items)
+        self._extend(arg, kwargs, "extend", self._extend_items)
 
-    def _extend(self, args, kwargs, name, method):
-        if len(args) > 1:
-            raise TypeError(
-                "{} takes at most 1 positional argument"
-                " ({} given)".format(name, len(args))
-            )
-        if args:
-            arg = args[0]
-            if isinstance(args[0], (MultiDict, MultiDictProxy)) and not kwargs:
+    def _extend(
+        self,
+        arg: MDArg[_V],
+        kwargs: Mapping[str, _V],
+        name: str,
+        method: Callable[[list[tuple[str, str, _V]]], None],
+    ) -> None:
+        if arg:
+            if isinstance(arg, (MultiDict, MultiDictProxy)) and not kwargs:
                 items = arg._impl._items
             else:
-                if hasattr(arg, "items"):
-                    arg = arg.items()
+                if hasattr(arg, "keys"):
+                    arg = cast(SupportsKeys[_V], arg)
+                    arg = [(k, arg[k]) for k in arg.keys()]
                 if kwargs:
                     arg = list(arg)
                     arg.extend(list(kwargs.items()))
@@ -264,21 +349,21 @@ class MultiDict(_Base, MutableMultiMapping):
                 ]
             )
 
-    def _extend_items(self, items):
+    def _extend_items(self, items: Iterable[tuple[str, str, _V]]) -> None:
         for identity, key, value in items:
             self.add(key, value)
 
-    def clear(self):
+    def clear(self) -> None:
         """Remove all items from MultiDict."""
         self._impl._items.clear()
         self._impl.incr_version()
 
     # Mapping interface #
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: _V) -> None:
         self._replace(key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         identity = self._title(key)
         items = self._impl._items
         found = False
@@ -291,16 +376,28 @@ class MultiDict(_Base, MutableMultiMapping):
         else:
             self._impl.incr_version()
 
-    def setdefault(self, key, default=None):
+    @overload
+    def setdefault(
+        self: "MultiDict[Union[_T, None]]", key: str, default: None = None
+    ) -> Union[_T, None]: ...
+    @overload
+    def setdefault(self, key: str, default: _V) -> _V: ...
+    def setdefault(self, key: str, default: Union[_V, None] = None) -> Union[_V, None]:  # type: ignore[misc]
         """Return value for key, set value to default if key is not present."""
         identity = self._title(key)
         for i, k, v in self._impl._items:
             if i == identity:
                 return v
-        self.add(key, default)
+        self.add(key, default)  # type: ignore[arg-type]
         return default
 
-    def popone(self, key, default=_marker):
+    @overload
+    def popone(self, key: str) -> _V: ...
+    @overload
+    def popone(self, key: str, default: _T) -> Union[_V, _T]: ...
+    def popone(
+        self, key: str, default: Union[_T, _SENTINEL] = sentinel
+    ) -> Union[_V, _T]:
         """Remove specified key and return the corresponding value.
 
         If key is not found, d is returned if given, otherwise
@@ -314,14 +411,22 @@ class MultiDict(_Base, MutableMultiMapping):
                 del self._impl._items[i]
                 self._impl.incr_version()
                 return value
-        if default is _marker:
+        if default is sentinel:
             raise KeyError(key)
         else:
             return default
 
-    pop = popone  # type: ignore
+    # Type checking will inherit signature for pop() if we don't confuse it here.
+    if not TYPE_CHECKING:
+        pop = popone
 
-    def popall(self, key, default=_marker):
+    @overload
+    def popall(self, key: str) -> list[_V]: ...
+    @overload
+    def popall(self, key: str, default: _T) -> Union[list[_V], _T]: ...
+    def popall(
+        self, key: str, default: Union[_T, _SENTINEL] = sentinel
+    ) -> Union[list[_V], _T]:
         """Remove all occurrences of key and return the list of corresponding
         values.
 
@@ -340,7 +445,7 @@ class MultiDict(_Base, MutableMultiMapping):
                 self._impl.incr_version()
                 found = True
         if not found:
-            if default is _marker:
+            if default is sentinel:
                 raise KeyError(key)
             else:
                 return default
@@ -348,7 +453,7 @@ class MultiDict(_Base, MutableMultiMapping):
             ret.reverse()
             return ret
 
-    def popitem(self):
+    def popitem(self) -> tuple[str, _V]:
         """Remove and return an arbitrary (key, value) pair."""
         if self._impl._items:
             i = self._impl._items.pop(0)
@@ -357,14 +462,14 @@ class MultiDict(_Base, MutableMultiMapping):
         else:
             raise KeyError("empty multidict")
 
-    def update(self, *args, **kwargs):
+    def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Update the dictionary from *other*, overwriting existing keys."""
-        self._extend(args, kwargs, "update", self._update_items)
+        self._extend(arg, kwargs, "update", self._update_items)
 
-    def _update_items(self, items):
+    def _update_items(self, items: list[tuple[str, str, _V]]) -> None:
         if not items:
             return
-        used_keys = {}
+        used_keys: dict[str, int] = {}
         for identity, key, value in items:
             start = used_keys.get(identity, 0)
             for i in range(start, len(self._impl._items)):
@@ -393,7 +498,7 @@ class MultiDict(_Base, MutableMultiMapping):
 
         self._impl.incr_version()
 
-    def _replace(self, key, value):
+    def _replace(self, key: str, value: _V) -> None:
         key = self._key(key)
         identity = self._title(key)
         items = self._impl._items
@@ -412,7 +517,8 @@ class MultiDict(_Base, MutableMultiMapping):
             return
 
         # remove all tail items
-        i = rgt + 1
+        # Mypy bug: https://github.com/python/mypy/issues/14209
+        i = rgt + 1  # type: ignore[possibly-undefined]
         while i < len(items):
             item = items[i]
             if item[0] == identity:
@@ -421,107 +527,54 @@ class MultiDict(_Base, MutableMultiMapping):
                 i += 1
 
 
-class CIMultiDict(MultiDict):
+class CIMultiDict(MultiDict[_V]):
     """Dictionary with the support for duplicate case-insensitive keys."""
 
-    def _title(self, key):
+    def _title(self, key: str) -> str:
         return key.title()
 
 
-class _Iter:
-    __slots__ = ("_size", "_iter")
+class MultiDictProxy(_Base[_V]):
+    """Read-only proxy for MultiDict instance."""
 
-    def __init__(self, size, iterator):
-        self._size = size
-        self._iter = iterator
+    def __init__(self, arg: Union[MultiDict[_V], "MultiDictProxy[_V]"]):
+        if not isinstance(arg, (MultiDict, MultiDictProxy)):
+            raise TypeError(
+                "ctor requires MultiDict or MultiDictProxy instance"
+                ", not {}".format(type(arg))
+            )
 
-    def __iter__(self):
-        return self
+        self._impl = arg._impl
 
-    def __next__(self):
-        return next(self._iter)
+    def __reduce__(self) -> NoReturn:
+        raise TypeError("can't pickle {} objects".format(self.__class__.__name__))
 
-    def __length_hint__(self):
-        return self._size
-
-
-class _ViewBase:
-    def __init__(self, impl):
-        self._impl = impl
-
-    def __len__(self):
-        return len(self._impl._items)
+    def copy(self) -> MultiDict[_V]:
+        """Return a copy of itself."""
+        return MultiDict(self.items())
 
 
-class _ItemsView(_ViewBase, abc.ItemsView):
-    def __contains__(self, item):
-        assert isinstance(item, tuple) or isinstance(item, list)
-        assert len(item) == 2
-        for i, k, v in self._impl._items:
-            if item[0] == k and item[1] == v:
-                return True
-        return False
+class CIMultiDictProxy(MultiDictProxy[_V]):
+    """Read-only proxy for CIMultiDict instance."""
 
-    def __iter__(self):
-        return _Iter(len(self), self._iter(self._impl._version))
+    def __init__(self, arg: Union[MultiDict[_V], MultiDictProxy[_V]]):
+        if not isinstance(arg, (CIMultiDict, CIMultiDictProxy)):
+            raise TypeError(
+                "ctor requires CIMultiDict or CIMultiDictProxy instance"
+                ", not {}".format(type(arg))
+            )
 
-    def _iter(self, version):
-        for i, k, v in self._impl._items:
-            if version != self._impl._version:
-                raise RuntimeError("Dictionary changed during iteration")
-            yield k, v
+        self._impl = arg._impl
 
-    def __repr__(self):
-        lst = []
-        for item in self._impl._items:
-            lst.append("{!r}: {!r}".format(item[1], item[2]))
-        body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
+    def _title(self, key: str) -> str:
+        return key.title()
+
+    def copy(self) -> CIMultiDict[_V]:
+        """Return a copy of itself."""
+        return CIMultiDict(self.items())
 
 
-class _ValuesView(_ViewBase, abc.ValuesView):
-    def __contains__(self, value):
-        for item in self._impl._items:
-            if item[2] == value:
-                return True
-        return False
-
-    def __iter__(self):
-        return _Iter(len(self), self._iter(self._impl._version))
-
-    def _iter(self, version):
-        for item in self._impl._items:
-            if version != self._impl._version:
-                raise RuntimeError("Dictionary changed during iteration")
-            yield item[2]
-
-    def __repr__(self):
-        lst = []
-        for item in self._impl._items:
-            lst.append("{!r}".format(item[2]))
-        body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
-
-
-class _KeysView(_ViewBase, abc.KeysView):
-    def __contains__(self, key):
-        for item in self._impl._items:
-            if item[1] == key:
-                return True
-        return False
-
-    def __iter__(self):
-        return _Iter(len(self), self._iter(self._impl._version))
-
-    def _iter(self, version):
-        for item in self._impl._items:
-            if version != self._impl._version:
-                raise RuntimeError("Dictionary changed during iteration")
-            yield item[1]
-
-    def __repr__(self):
-        lst = []
-        for item in self._impl._items:
-            lst.append("{!r}".format(item[1]))
-        body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
+def getversion(md: Union[MultiDict[object], MultiDictProxy[object]]) -> int:
+    if not isinstance(md, _Base):
+        raise TypeError("Parameter should be multidict or proxy")
+    return md._impl._version

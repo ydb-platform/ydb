@@ -57,7 +57,8 @@ bool TFileInputState::NextValue() {
 
         MkqlReader_.Next();
         if (Spec_->UseBlockInput_) {
-            auto blockCountValue = CurrentValue_.GetElement(Spec_->Inputs[CurrentInput_]->StructSize);
+            auto blockSizeStructIndex = GetBlockSizeStructIndex(*Spec_, CurrentInput_);
+            auto blockCountValue = CurrentValue_.GetElement(blockSizeStructIndex);
             CurrentRecord_ += GetBlockCount(blockCountValue);
         } else {
             ++CurrentRecord_;

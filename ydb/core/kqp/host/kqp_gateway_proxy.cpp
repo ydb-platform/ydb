@@ -2513,6 +2513,12 @@ public:
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            } else if (const auto& paused = settings.Settings.StatePaused) {
+                auto& state = *op.MutableState();
+                state.MutablePaused();
+            } else if (const auto& standBy = settings.Settings.StateStandBy) {
+                auto& state = *op.MutableState();
+                state.MutableStandBy();
             }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
@@ -2652,7 +2658,7 @@ public:
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);
                 if (settings.Settings.Batching && settings.Settings.Batching->BatchSizeBytes) {
-                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes);
+                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes.value());
                 }
                 if (settings.Settings.Batching && settings.Settings.Batching->FlushInterval) {
                     config.MutableTransferSpecific()->MutableBatching()->SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
@@ -2710,7 +2716,7 @@ public:
                     op.MutableAlterTransfer()->SetFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
                 }
                 if (batching->BatchSizeBytes) {
-                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes);
+                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes.value());
                 }
             }
 

@@ -275,6 +275,7 @@ TError::TErrorOr(const std::exception& ex)
         *this = errorEx->Error();
     } else {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
+        *this <<= TErrorAttribute("exception_type", TypeName(ex));
     }
     YT_VERIFY(!IsOK());
     Enrich();

@@ -2820,7 +2820,6 @@ TType* TTypeBuilder::ValidateBlockStructType(const TStructType* structType) cons
             MKQL_ENSURE(isScalar, "Block length column should be scalar");
             MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
 
-            MKQL_ENSURE(!hasBlockLengthColumn, "Block struct must contain only one block length column");
             hasBlockLengthColumn = true;
         } else {
             outStructItems.emplace_back(structType->GetMemberName(i), itemType);

@@ -47,14 +47,15 @@ public:
         , CoutColors(NColorizer::AutoColors(Cout))
     {}
 
-    bool ExecuteStreamQuery(const TRequestOptions& query) {
+    bool ExecuteQuery(const TRequestOptions& query) {
         StartTraceOpt(query.QueryId);
 
         if (VerboseLevel >= EVerbose::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting stream request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
-        const TRequestResult status = FqSetup.StreamRequest(query, StreamQueryId);
+        CurrentOptions = query.FqOptions;
+        const TRequestResult status = FqSetup.QueryRequest(query, StreamQueryId);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors.Red() << "Failed to start stream request execution, reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
@@ -73,7 +74,7 @@ public:
                 Cerr << CerrColors.Red() << "Result set with id " << resultSetId << " have " << rowsCount << " rows, it is larger than allowed limit " << MAX_RESULT_SET_ROWS << ", results will be truncated" << CerrColors.Default() << Endl;
             }
 
-            const TRequestResult status = FqSetup.FetchQueryResults(StreamQueryId, resultSetId, ResultSets[resultSetId]);
+            const TRequestResult status = FqSetup.FetchQueryResults(StreamQueryId, resultSetId, CurrentOptions, ResultSets[resultSetId]);
             if (!status.IsSuccess()) {
                 Cerr << CerrColors.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
                 return false;
@@ -95,14 +96,14 @@ public:
         }
     }
 
-    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) {
+    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) {
         for (const auto& connection : connections) {
             if (VerboseLevel >= EVerbose::QueriesText) {
                 Cout << CoutColors.Cyan() << "Creating connection:\n" << CoutColors.Default() << Endl << connection.DebugString() << Endl;
             }
 
             TString connectionId;
-            const TRequestResult status = FqSetup.CreateConnection(connection, connectionId);
+            const TRequestResult status = FqSetup.CreateConnection(connection, options, connectionId);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors.Red() << "Failed to create connection '" << connection.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
@@ -118,7 +119,7 @@ public:
         return true;
     }
 
-    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
+    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const {
         for (auto binding : bindings) {
             if (VerboseLevel >= EVerbose::QueriesText) {
                 Cout << CoutColors.Cyan() << "Creating binding:\n" << CoutColors.Default() << Endl << binding.DebugString() << Endl;
@@ -131,7 +132,7 @@ public:
             }
 
             binding.set_connection_id(it->second);
-            const TRequestResult status = FqSetup.CreateBinding(binding);
+            const TRequestResult status = FqSetup.CreateBinding(binding, options);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
@@ -146,7 +147,7 @@ public:
         StartTraceOpt(query.QueryId);
 
         if (VerboseLevel >= EVerbose::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting async stream request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting async " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
         FqSetup.QueryRequestAsync(query, Options.PingPeriod);
@@ -165,7 +166,7 @@ private:
 
         while (true) {
             TExecutionMeta meta;
-            const TRequestResult status = FqSetup.DescribeQuery(StreamQueryId, meta);
+            const TRequestResult status = FqSetup.DescribeQuery(StreamQueryId, CurrentOptions, meta);
 
             if (meta.TransientIssues.Size() != ExecutionMeta.TransientIssues.Size() && VerboseLevel >= EVerbose::Info) {
                 Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << meta.TransientIssues.ToString() << Endl;
@@ -216,10 +217,11 @@ private:
             Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
         }
         if (Options.CanonicalOutput) {
-            ast = CanonizeEndpoints(ast, Options.FqSettings.FqConfig.GetGateways());
+            ast = CanonizeEndpoints(ast, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
             ast = CanonizeAstLogicalId(ast);
         }
         Options.AstOutput->Write(ast);
+        Options.AstOutput->Flush();
     }
 
     void PrintQueryPlan(TString plan) const {
@@ -238,10 +240,11 @@ private:
         plan = NJson::PrettifyJson(plan, false);
 
         if (Options.CanonicalOutput) {
-            plan = CanonizeEndpoints(plan, Options.FqSettings.FqConfig.GetGateways());
+            plan = CanonizeEndpoints(plan, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
         }
 
         Options.PlanOutput->Write(plan);
+        Options.PlanOutput->Flush();
     }
 
 private:
@@ -253,6 +256,7 @@ private:
 
     TString StreamQueryId;
     TInstant StartTime;
+    TFqOptions CurrentOptions;
     TExecutionMeta ExecutionMeta;
     std::vector<Ydb::ResultSet> ResultSets;
     std::unordered_map<TString, TString> ConnectionNameToId;
@@ -262,8 +266,8 @@ TFqRunner::TFqRunner(const TRunnerOptions& options)
     : Impl(new TImpl(options))
 {}
 
-bool TFqRunner::ExecuteStreamQuery(const TRequestOptions& query) const {
-    return Impl->ExecuteStreamQuery(query);
+bool TFqRunner::ExecuteQuery(const TRequestOptions& query) const {
+    return Impl->ExecuteQuery(query);
 }
 
 bool TFqRunner::FetchQueryResults() const {
@@ -274,12 +278,12 @@ void TFqRunner::PrintQueryResults() const {
     Impl->PrintQueryResults();
 }
 
-bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) const {
-    return Impl->CreateConnections(connections);
+bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) const {
+    return Impl->CreateConnections(connections, options);
 }
 
-bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
-    return Impl->CreateBindings(bindings);
+bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const {
+    return Impl->CreateBindings(bindings, options);
 }
 
 void TFqRunner::ExecuteQueryAsync(const TRequestOptions& query) const {

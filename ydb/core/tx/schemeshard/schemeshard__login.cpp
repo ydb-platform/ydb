@@ -1,6 +1,7 @@
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
 
 #include "schemeshard_impl.h"
 
@@ -89,10 +90,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 private:
     bool IsAdmin() const {
         const auto& user = Request->Get()->Record.GetUser();
-        const auto providerGroups = Self->LoginProvider.GetGroupsMembership(user);
-        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-        const auto userToken = NACLib::TUserToken(user, groups);
-
+        const auto userToken = NKikimr::BuildLocalUserToken(Self->LoginProvider, user);
         return IsAdministrator(AppData(), &userToken);
     }
 

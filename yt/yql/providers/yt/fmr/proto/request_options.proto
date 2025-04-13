@@ -156,6 +156,7 @@ message TTask {
     string SessionId = 4;
     optional uint32 NumRetries = 5;
     TClusterConnection ClusterConnection = 6;
+    optional string JobSettings = 7;
 }
 
 message TTaskState {

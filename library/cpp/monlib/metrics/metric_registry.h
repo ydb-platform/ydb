@@ -274,12 +274,44 @@ namespace NMonitoring {
             TMetricOpts Opts;
         };
 
+    protected:
+        template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
+        TMetric* Metric(TLabelsType&& labels, TMetricOpts&& opts, Args&&... args) {
+            {
+                TReadGuard g{*Lock_};
+
+                auto it = Metrics_.find(labels);
+                if (it != Metrics_.end()) {
+                    Y_ENSURE(it->second.Metric->Type() == type, "cannot create metric " << labels
+                            << " with type " << MetricTypeToStr(type)
+                            << ", because registry already has same metric with type " << MetricTypeToStr(it->second.Metric->Type()));
+                    Y_ENSURE(it->second.Opts.MemOnly == opts.MemOnly,"cannot create metric " << labels
+                            << " with memOnly=" << opts.MemOnly
+                            << ", because registry already has same metric with memOnly=" << it->second.Opts.MemOnly);
+                    return static_cast<TMetric*>(it->second.Metric.Get());
+                }
+            }
+
+            {
+                IMetricPtr metric = MakeIntrusive<TMetric>(std::forward<Args>(args)...);
+
+                TWriteGuard g{*Lock_};
+                // decltype(Metrics_)::iterator breaks build on windows
+                THashMap<ILabelsPtr, TMetricValue>::iterator it;
+                TMetricValue metricValue = {metric, opts};
+                if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) {
+                    it = Metrics_.emplace(new TLabels{std::forward<TLabelsType>(labels)}, std::move(metricValue)).first;
+                } else {
+                    it = Metrics_.emplace(std::forward<TLabelsType>(labels), std::move(metricValue)).first;
+                }
+
+                return static_cast<TMetric*>(it->second.Metric.Get());
+            }
+        }
+
     private:
         THolder<TRWMutex> Lock_ = MakeHolder<TRWMutex>();
         THashMap<ILabelsPtr, TMetricValue> Metrics_;
-
-        template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
-        TMetric* Metric(TLabelsType&& labels, TMetricOpts&& opts, Args&&... args);
 
         TLabels CommonLabels_;
     };

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -11,7 +13,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template<bool Embedded>
-void NativeToUnboxed(const uint64_t value, NUdf::TUnboxedValue& result)
+void NativeToUnboxed(const ui64 value, NUdf::TUnboxedValue& result)
 {
     result = NUdf::TUnboxedValuePod(value);
 }

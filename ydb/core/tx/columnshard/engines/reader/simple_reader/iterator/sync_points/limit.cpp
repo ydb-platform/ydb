@@ -89,7 +89,7 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "id=" << Source->GetSourceId() << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetStart().DebugJson() << ";";
+    sb << "start=" << Source->GetStart().DebugString() << ";";
     return sb;
 }
 

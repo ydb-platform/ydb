@@ -62,7 +62,7 @@ class LoadSuiteBase:
 
     @classmethod
     def _test_name(cls, query_num: int) -> str:
-        return f'Query{query_num:02d}' if query_num >= 0  else '_Verification'
+        return f'Query{query_num:02d}' if query_num >= 0 else '_Verification'
 
     @classmethod
     @allure.step('check tables size')

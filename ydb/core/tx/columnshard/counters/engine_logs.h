@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common_data.h"
-#include "common/owner.h"
-#include "common/histogram.h"
+#include <ydb/library/signals/owner.h>
+#include <ydb/library/signals/histogram.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>

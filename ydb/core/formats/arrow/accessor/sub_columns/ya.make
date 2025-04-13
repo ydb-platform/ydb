@@ -26,6 +26,7 @@ SRCS(
     others_storage.cpp
     columns_storage.cpp
     iterators.cpp
+    signals.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -30,7 +30,7 @@ target_link_libraries(engines-changes-counters PUBLIC
   library-actors-core
   ydb-core-tablet_flat
   columnshard-blobs_action-counters
-  columnshard-counters-common
+  ydb-library-signals
   tools-enum_parser-enum_serialization_runtime
 )
 

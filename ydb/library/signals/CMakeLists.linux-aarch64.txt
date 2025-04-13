@@ -12,35 +12,24 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_library(engines-changes-counters)
+add_library(ydb-library-signals)
 
 
-target_link_libraries(engines-changes-counters PUBLIC
+target_link_libraries(ydb-library-signals PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-monlib-dynamic_counters
   ydb-core-protos
-  library-actors-core
-  ydb-core-tablet_flat
-  columnshard-blobs_action-counters
-  ydb-library-signals
-  tools-enum_parser-enum_serialization_runtime
+  ydb-core-base
 )
 
-target_sources(engines-changes-counters PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/general.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/changes.cpp
+target_sources(ydb-library-signals PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/agent.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/owner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/private.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/object_counter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/histogram.cpp
 )
 
-
-generate_enum_serilization(engines-changes-counters
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/counters/changes.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/engines/changes/counters/changes.h
-)

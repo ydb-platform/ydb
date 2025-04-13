@@ -19,7 +19,7 @@ target_link_libraries(optimizer-sbuckets-counters PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  columnshard-counters-common
+  ydb-library-signals
   columnshard-engines-portions
 )
 

@@ -20,7 +20,7 @@ target_link_libraries(storage-actualizer-counters PUBLIC
   yutil
   library-actors-core
   columnshard-engines-portions
-  columnshard-counters-common
+  ydb-library-signals
 )
 
 target_sources(storage-actualizer-counters PRIVATE

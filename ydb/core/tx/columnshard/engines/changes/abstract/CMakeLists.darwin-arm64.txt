@@ -25,7 +25,7 @@ add_library(engines-changes-abstract)
 target_link_libraries(engines-changes-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
-  columnshard-counters-common
+  ydb-library-signals
   engines-changes-counters
   ydb-core-tablet_flat
   essentials-core-expr_nodes

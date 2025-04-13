@@ -29,6 +29,7 @@ target_link_libraries(arrow-accessor-sub_columns PUBLIC
   arrow-accessor-composite_serial
   formats-arrow-save_load
   formats-arrow-common
+  ydb-library-signals
   library-formats-arrow
   library-formats-arrow-protos
   essentials-types-binary_json
@@ -46,6 +47,7 @@ target_sources(arrow-accessor-sub_columns PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/others_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/columns_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/iterators.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/signals.cpp
 )
 
 
@@ -67,6 +69,7 @@ target_link_libraries(arrow-accessor-sub_columns.global PUBLIC
   arrow-accessor-composite_serial
   formats-arrow-save_load
   formats-arrow-common
+  ydb-library-signals
   library-formats-arrow
   library-formats-arrow-protos
   essentials-types-binary_json

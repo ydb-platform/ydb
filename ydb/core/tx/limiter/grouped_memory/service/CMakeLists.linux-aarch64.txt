@@ -27,7 +27,7 @@ target_link_libraries(limiter-grouped_memory-service PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  columnshard-counters-common
+  ydb-library-signals
   tools-enum_parser-enum_serialization_runtime
 )
 

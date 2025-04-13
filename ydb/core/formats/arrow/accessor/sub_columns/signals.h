@@ -1,6 +1,8 @@
 #pragma once
 #include <ydb/library/signals/owner.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 class TCategorySignals: public NColumnShard::TCommonCountersOwner {
@@ -21,7 +23,7 @@ public:
         , HistogramBlobDataSizeCount(TBase::GetHistogram("BlobData/BySize/Count", NMonitoring::ExponentialHistogram(15, 2, 100))) {
     }
 
-    void OnBlobSize(const ui32 rawDataSize, const ui32 blobDataSize) const {
+    void OnBlobSize(const i64 rawDataSize, const i64 blobDataSize) const {
         HistogramBlobDataSizeBytes->Collect(blobDataSize, blobDataSize);
         HistogramRawDataSizeBytes->Collect(rawDataSize, rawDataSize);
 
@@ -38,7 +40,7 @@ private:
     TCategorySignals OtherSignals;
 
 public:
-    TCategorySignals()
+    TSignalsImpl()
         : TBase("sub_columns")
         , ColumnSignals(*this, "columns")
         , OtherSignals(*this, "other") {

@@ -238,13 +238,13 @@ class LoadSuiteBase:
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
-        result._add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
+        result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
         result.traceback = None
         if not result.error_message and hasattr(cls, 'do_setup_class'):
             try:
                 cls.do_setup_class()
             except BaseException as e:
-                result._add_error(str(e))
+                result.add_error(str(e))
                 result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time
         result.add_stat('_Verification', 'Mean', 1000 * result.iterations[0].time)

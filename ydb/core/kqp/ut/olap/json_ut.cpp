@@ -15,7 +15,6 @@
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/signals/object_counter.h>
-
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
@@ -277,14 +276,14 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 if (!Ydb::StatusIds_StatusCode_Parse(Strip(lines[2]), &ExpectedCode)) {
                     return false;
                 }
-//                if (lines[2] == "SUCCESS") {
-//                } else if (lines[2] = "INTERNAL_ERROR") {
-//                    ExpectedCode = Ydb::StatusIds::INTERNAL_ERROR;
-//                } else if (lines[2] == "BAD_REQUEST") {
-//                    ExpectedCode = Ydb::StatusIds::BAD_REQUEST;
-//                } else {
-//                    return false;
-//                }
+                //                if (lines[2] == "SUCCESS") {
+                //                } else if (lines[2] = "INTERNAL_ERROR") {
+                //                    ExpectedCode = Ydb::StatusIds::INTERNAL_ERROR;
+                //                } else if (lines[2] == "BAD_REQUEST") {
+                //                    ExpectedCode = Ydb::StatusIds::BAD_REQUEST;
+                //                } else {
+                //                    return false;
+                //                }
             }
             return true;
         }

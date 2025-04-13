@@ -238,7 +238,7 @@ class LoadSuiteBase:
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
-        result.error_message = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
+        result._add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
         result.traceback = None
         if not result.error_message and hasattr(cls, 'do_setup_class'):
             try:

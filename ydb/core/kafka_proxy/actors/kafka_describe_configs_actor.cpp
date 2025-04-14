@@ -106,15 +106,13 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
     KAFKA_LOG_D(InputLogMessage());
 
 
-    DuplicateTopicNames = ExtractDuplicates<TDescribeConfigsRequestData::TDescribeConfigsResource>(
-        Message->Resources,
-        [](TDescribeConfigsRequestData::TDescribeConfigsResource resource) -> TString { return resource.ResourceName.value(); });
-
+    THashSet<TString> requestedTopics{};
     for (auto& resource : Message->Resources) {
         auto& topicName = resource.ResourceName.value();
-        if (DuplicateTopicNames.contains(topicName)) {
+        if (requestedTopics.contains(topicName)) {
             continue;
         }
+        requestedTopics.insert(topicName);
         if (resource.ResourceType != TOPIC_RESOURCE_TYPE) {
             auto result = MakeHolder<TEvKafka::TEvTopicDescribeResponse>();
             result->TopicPath = topicName;
@@ -130,7 +128,6 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
             resource.ResourceName.value(),
             Context->DatabasePath
         ));
-
         InflyTopics++;
     }
 
@@ -186,7 +183,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "remote.storage.enable", "false", EKafkaConfigType::BOOLEAN);
     AddConfigEntry(singleConfig, "segment.jitter.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "local.retention.ms", "-2", EKafkaConfigType::LONG);
-    AddConfigEntry(singleConfig, "cleanup.policy", "[delete]", EKafkaConfigType::LIST);
+    AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "flush.ms", "9223372036854775807", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "follower.replication.throttled.replicas", "", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "compression.lz4.level", "9", EKafkaConfigType::INT);
@@ -236,19 +233,16 @@ void TKafkaDescribeConfigsActor::Reply() {
     for (auto& requestResource : Message->Resources) {
         auto resourceName = requestResource.ResourceName.value();
 
-        if (!TopicNamesToResponses.contains(resourceName)) {
+        auto topicRespIter = TopicNamesToResponses.find(resourceName);
+        if (topicRespIter == TopicNamesToResponses.end()) {
             continue;
         }
-        auto& topicResult = TopicNamesToResponses[resourceName];
+
+        auto& topicResult = topicRespIter->second;
         EKafkaErrors status = topicResult->Status;
         AddDescribeResponse(response, topicResult.Get(), resourceName, status, topicResult->Message);
         responseStatus = status;
-
-    }
-
-    for (auto& topicName : DuplicateTopicNames) {
-        AddDescribeResponse(response, nullptr, topicName, INVALID_REQUEST, "Duplicate resource in request.");
-        responseStatus = INVALID_REQUEST;
+        TopicNamesToResponses.erase(topicRespIter);
     }
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));

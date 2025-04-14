@@ -46,7 +46,6 @@ private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TDescribeConfigsRequestData> Message;
-    std::unordered_set<TString> DuplicateTopicNames;
     ui32 InflyTopics = 0;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvTopicDescribeResponse>> TopicNamesToResponses;
 };

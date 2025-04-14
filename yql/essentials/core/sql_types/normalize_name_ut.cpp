@@ -1,9 +1,8 @@
-#include "yql_expr_type_annotation.h"
+#include "normalize_name.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
-namespace NYql {
+using namespace NYql;
 
 Y_UNIT_TEST_SUITE(Misc) {
     Y_UNIT_TEST(NormalizeName) {
@@ -48,6 +47,4 @@ Y_UNIT_TEST_SUITE(Misc) {
         CheckIssues("a_B_c_d_e_f", "a_B_c_d_e_f");
         CheckIssues("_a_B_c_d_e_f", "_a_B_c_d_e_f");
     }
-}
-
-} // namespace NYql
+} // Y_UNIT_TEST_SUITE(Misc)

@@ -345,6 +345,14 @@ TString TViewerPipeClient::GetError(const NSchemeShard::TEvSchemeShard::TEvDescr
     return NKikimrScheme::EStatus_Name(ev.GetRecord().GetStatus());
 }
 
+bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return ev.Status == Ydb::StatusIds::SUCCESS;
+}
+
+TString TViewerPipeClient::GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return Ydb::StatusIds_StatusCode_Name(ev.Status);
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();

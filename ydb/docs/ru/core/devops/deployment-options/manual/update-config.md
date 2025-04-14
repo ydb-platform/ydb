@@ -9,7 +9,7 @@
 Для получения текущей конфигурации кластера используется команда:
 
 ```bash
-ydb -e grpcs://<endpoint>:2135 admin storage fetch > config.yaml
+ydb -e grpcs://<endpoint>:2135 admin cluster config fetch > config.yaml
 ```
 
 В качестве `<endpoint>` указывается адрес любого из узлов кластера.
@@ -19,7 +19,7 @@ ydb -e grpcs://<endpoint>:2135 admin storage fetch > config.yaml
 Для загрузки обновленной конфигурации на кластер используется следующая команда:
 
 ```bash
-ydb -e grpcs://<endpoint>:2135 admin storage replace -f config.yaml
+ydb -e grpcs://<endpoint>:2135 admin cluster config replace -f config.yaml
 ```
 
 Некоторые параметры конфигурации применяются на ходу после выполнения команды, однако для некоторых требуется выполнение процедуры [перезапуска кластера](../../../maintenance/manual/node_restarting.md).

@@ -1843,9 +1843,13 @@ private:
                         TString path = normalizedPath.Path_;
 
                         // Convert back from absolute path to relative
-                        // All futhrer YT operations will use the path with YT_PREFIX
+                        // All further YT operations will use the path with YT_PREFIX
                         if (path.StartsWith("//")) {
                             path = path.substr(2);
+                        }
+                        // Ignore & at the and
+                        while (path.EndsWith('&')) {
+                            path = path.pop_back();
                         }
                         res.Data[idx].Path = path;
                         if (normalizedPath.Columns_) {

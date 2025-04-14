@@ -71,7 +71,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
 
-    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request, leaseLeftMs = Counters.LeaseLeftMs](const std::vector<TResultSet>& resultSets) mutable {
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -120,7 +120,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
-            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
+            leaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
             retryLimiter.Assign(
                 parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
                 parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
@@ -258,7 +258,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [=, leaseLeftMs = Counters.LeaseLeftMs](const std::vector<TResultSet>& resultSets) {
         TString owner;
         FederatedQuery::Internal::QueryInternal internal;
 
@@ -288,7 +288,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
             auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
-            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
+            leaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
         }
 
         TInstant ttl = TInstant::Now() + Config->TaskLeaseTtl;

@@ -189,6 +189,7 @@ TString THelper::GetTestTableSchema() const {
     sb << "Columns{ Name: \"uid\" Type : \"Utf8\" NotNull : true StorageId : \"" + OptionalStorageId + "\" }";
     sb << R"(Columns{ Name: "level" Type : "Int32" })";
     sb << "Columns{ Name: \"message\" Type : \"Utf8\" StorageId : \"" + OptionalStorageId + "\" }";
+    sb << R"(Columns{ Name: "dt" Type : "Date32" })";
     if (GetWithJsonDocument()) {
         sb << R"(Columns{ Name: "json_payload" Type : "JsonDocument" })";
     }

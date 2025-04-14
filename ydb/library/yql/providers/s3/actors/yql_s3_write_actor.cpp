@@ -967,7 +967,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         .StatsLevel = statsLevel,
         .MemoryLimit = params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
         .Compression = params.GetCompression(),
-        .Multipart = params.HasMultipart(),
+        .Multipart = params.GetMultipart(),
         .DirtyWrite = !params.GetAtomicUploadCommit(),
     };
 

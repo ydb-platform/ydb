@@ -50,17 +50,17 @@ InsertBraces: true
 
 # NB: BraceWrapping has no effect unless BreakBeforeBraces is set to Custom
 BraceWrapping:
- AfterClass: false
- AfterControlStatement: false
- AfterEnum: false
- AfterFunction: false
- AfterNamespace: false
- AfterObjCDeclaration: false
- AfterStruct: false
- AfterUnion: false
- BeforeCatch: false
- BeforeElse: false
- IndentBraces: true
+    AfterClass: false
+    AfterControlStatement: false
+    AfterEnum: false
+    AfterFunction: false
+    AfterNamespace: false
+    AfterObjCDeclaration: false
+    AfterStruct: false
+    AfterUnion: false
+    BeforeCatch: false
+    BeforeElse: false
+    IndentBraces: true
 
 SpacesInParentheses: false
 SpacesInAngles:  false
@@ -92,5 +92,5 @@ IndentExternBlock: Indent
 TypenameMacros: [Y_THREAD, Y_STATIC_THREAD, Y_POD_THREAD, Y_POD_STATIC_THREAD]
 StatementAttributeLikeMacros: [ythrow]
 SpacesInLineCommentPrefix:
- Minimum: 1
- Maximum: 1
+    Minimum: 1
+    Maximum: 1

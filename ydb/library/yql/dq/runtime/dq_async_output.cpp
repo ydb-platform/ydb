@@ -23,7 +23,8 @@ class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
         TValueDesc(NUdf::TUnboxedValue* values, ui32 count, ui64 size)
             : Value(NKikimr::NMiniKQL::TUnboxedValueVector(values, values + count))
             , EstimatedSize(size)
-        {}
+        {
+        }
 
         TValueDesc(NDqProto::TWatermark&& watermark, ui64 size)
             : Value(std::move(watermark))

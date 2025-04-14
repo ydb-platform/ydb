@@ -100,11 +100,13 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterSchemaVersion")("version", schema.GetVersion())("has_diff", true);
         AFL_VERIFY(!VersionedIndex.IsEmpty());
 
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
             *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterSchemaVersion")("version", schema.GetVersion())("has_diff", false);
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
     AFL_VERIFY(indexInfoOptional);

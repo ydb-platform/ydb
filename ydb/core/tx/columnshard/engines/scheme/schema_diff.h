@@ -4,6 +4,8 @@
 
 namespace NKikimr::NOlap {
 
+void ApplyToScheme(NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
+
 class TSchemaDiffView {
 private:
     ui64 Version = 0;

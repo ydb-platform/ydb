@@ -96,6 +96,7 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         std::vector<NKikimrSchemeOp::TColumnTableSchemaDiff> diffProtos;
         std::optional<NKikimrSchemeOp::TColumnTableSchema> firstSchema;
         std::optional<NKikimrSchemeOp::TColumnTableSchema> lastSchema;
+        std::optional<NKikimrSchemeOp::TColumnTableSchema> recalcSchema;
         std::optional<ui64> lastSchemaVersion;
         if (!rowset.EndOfSet()) {
             TSchemaPreset::TSchemaPresetVersionInfo info;
@@ -106,6 +107,7 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
                 firstSchema = info.GetSchema();
             }
         }
+
         while (!rowset.EndOfSet()) {
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
@@ -117,8 +119,16 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
                     lastSchema = info.GetSchema();
                     diffProtos.clear();
                 } else {
-                    AFL_VERIFY(info.HasDiff());
-                    diffProtos.push_back(info.GetDiff());
+                    if (info.HasDiff()) {
+                        if (recalcSchema.has_value()) {
+                            NOlap::ApplyToScheme(*recalcSchema, info.GetDiff());
+                        } else {
+                            diffProtos.push_back(info.GetDiff());
+                        }
+                    } else {
+                        AFL_VERIFY(info.HasSchema());
+                        recalcSchema = info.GetSchema();
+                    }
                 }
             }
             if (schemaVersion >= nextSchemaVersion) {
@@ -128,7 +138,7 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
                 return false;
             }
         }
-        AFL_VERIFY((firstSchema.has_value() && lastSchema.has_value()) || (diffProtos.size() > 0));
+        AFL_VERIFY((firstSchema.has_value() && lastSchema.has_value()) || (diffProtos.size() > 0) || recalcSchema.has_value());
         NOlap::TSchemaDiffView newDiff;
         if (firstSchema.has_value() && lastSchema.has_value()) {
             AFL_VERIFY(newDiff.DeserializeFromProto(NOlap::TSchemaDiffView::MakeSchemasDiff(*firstSchema, *lastSchema)).IsSuccess());
@@ -138,13 +148,19 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             AFL_VERIFY(diff.DeserializeFromProto(diffProto).IsSuccess());
             newDiff.AddNext(diff);
         }
-        NKikimrSchemeOp::TColumnTableSchemaDiff newDiffProto;
-        newDiff.SerializeToProto(newDiffProto);
         auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(nextSchemaVersion);
         AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
         updateDiff(*foundNextKeys->second.cbegin(), [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", nextSchemaVersion)("base version", prevSchemaVersion)("tablet_id", Self->TabletID());
-            *info.MutableDiff() = newDiffProto;
+            if (recalcSchema.has_value()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating schema in version from db")("version", nextSchemaVersion)("base version", prevSchemaVersion)("tablet_id", Self->TabletID());
+                *info.MutableSchema() = *recalcSchema;
+                info.ClearDiff();
+            } else {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("version", nextSchemaVersion)("base version", prevSchemaVersion)("tablet_id", Self->TabletID());
+                NKikimrSchemeOp::TColumnTableSchemaDiff newDiffProto;
+                newDiff.SerializeToProto(newDiffProto);
+                *info.MutableDiff() = newDiffProto;
+            }
         });
         return true;
     };
@@ -178,9 +194,11 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             if (!getSchemaPresetInfo(*foundNextKeys->second.cbegin(), info)) {
                 return false;
             }
-            if (info.has_schema()) {
+            if (!info.has_diff()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::clear_diff")("version", prevNext.second)("tablet_id", Self->TabletID());
                 clearDiffAndWrite(*foundNextKeys->second.cbegin(), info);
             } else {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::recalc_diff")("version", prevNext.second)("tablet_id", Self->TabletID());
                 if (!recalcDiffNoPrev(prevNext.second)) {
                     return false;
                 }

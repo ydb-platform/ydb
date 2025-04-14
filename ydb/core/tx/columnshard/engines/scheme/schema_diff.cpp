@@ -2,6 +2,73 @@
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
+
+void ApplyToScheme(NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchemaDiff& proto) {
+    current.SetVersion(proto.GetVersion());
+    *current.MutableDefaultCompression() = proto.GetDefaultCompression();
+    *current.MutableOptions() = proto.GetOptions();
+
+    THashMap<ui32, NKikimrSchemeOp::TOlapColumnDescription*> curIds;
+    for (auto& i : *current.MutableColumns()) {
+        AFL_VERIFY(curIds.emplace(i.GetId(), &i).second);
+    }
+
+    for (auto&& i : proto.GetUpsertColumns()) {
+        auto it = curIds.find(i.GetId());
+        if (it == curIds.end()) {
+            *current.AddColumns() = i;
+        } else {
+            *it->second = i;
+        }
+    }
+
+    THashSet<ui32> deleted;
+    for (auto&& i : proto.GetDropColumns()) {
+        deleted.insert(i);
+    }
+    if (deleted.size() > 0) {
+        ui32 cur = 0;
+        ui32 size = current.GetColumns().size();
+        for (ui32 i = 0; i < size; i++) {
+            ui32 id = current.GetColumns(i).GetId();
+            if (deleted.find(id) == deleted.end()) {
+                (*current.MutableColumns())[cur++] = current.GetColumns(i);
+            }
+        }
+        current.MutableColumns()->Truncate(cur);
+    }
+
+    THashMap<ui32, NKikimrSchemeOp::TOlapIndexDescription*> curInds;
+    for (auto& i : *current.MutableIndexes()) {
+        AFL_VERIFY(curInds.emplace(i.GetId(), &i).second);
+    }
+
+    for (auto&& i : proto.GetUpsertIndexes()) {
+        auto it = curInds.find(i.GetId());
+        if (it == curInds.end()) {
+            *current.AddIndexes() = i;
+        } else {
+            *it->second = i;
+        }
+    }
+
+    deleted.clear();
+    for (auto&& i : proto.GetDropIndexes()) {
+        deleted.insert(i);
+    }
+    if (deleted.size() > 0) {
+        ui32 cur = 0;
+        ui32 size = current.GetIndexes().size();
+        for (ui32 i = 0; i < size; i++) {
+            ui32 id = current.GetIndexes(i).GetId();
+            if (deleted.find(id) == deleted.end()) {
+                (*current.MutableIndexes())[cur++] = current.GetIndexes(i);
+            }
+        }
+        current.MutableIndexes()->Truncate(cur);
+    }
+}
+
 NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MakeSchemasDiff(
     const NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchema& next) {
     NKikimrSchemeOp::TColumnTableSchemaDiff result;

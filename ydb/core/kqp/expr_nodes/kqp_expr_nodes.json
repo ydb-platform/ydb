@@ -240,6 +240,17 @@
             ]
         },
         {
+            "Name": "TKqlFillTable",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqlFillTable"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "OriginalPath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlUpsertRowsBase",
             "Base": "TKqlTableEffect",
             "Match": {"Type": "CallableBase"},
@@ -553,10 +564,9 @@
                 {"Index": 1, "Name": "InconsistentWrite", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Mode", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Priority", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "StreamWrite", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "IsBatch", "Type": "TCoAtom"},
-                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "StreamWrite", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

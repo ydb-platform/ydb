@@ -17,9 +17,6 @@ primitive_type = {
     "Int8": ydb.PrimitiveType.Int8,
     "Uint8": ydb.PrimitiveType.Uint8,
     "Bool": ydb.PrimitiveType.Bool,
-    "Decimal(15,0)": ydb.DecimalType(15, 0),
-    "Decimal(22,9)": ydb.DecimalType(22, 9),
-    "Decimal(35,10)": ydb.DecimalType(35, 10),
     "DyNumber": ydb.PrimitiveType.DyNumber,
 
     "String": ydb.PrimitiveType.String,
@@ -30,11 +27,7 @@ primitive_type = {
     "Datetime": ydb.PrimitiveType.Datetime,
     "Timestamp": ydb.PrimitiveType.Timestamp,
     "Interval": ydb.PrimitiveType.Interval,
-    "Date32": ydb.PrimitiveType.Date,
-    "Datetime64": ydb.PrimitiveType.Datetime,
-    "Timestamp64": ydb.PrimitiveType.Timestamp,
-    "Interval64": ydb.PrimitiveType.Interval,
-
+    
     "Float": ydb.PrimitiveType.Float,
     "Double": ydb.PrimitiveType.Double,
     "Json": ydb.PrimitiveType.Json,

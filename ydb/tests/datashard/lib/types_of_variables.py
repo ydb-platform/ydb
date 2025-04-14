@@ -56,12 +56,29 @@ index_three_sync = {
     "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
 }
 
+index_three_sync_parametrized_queries = {
+    "Bool": lambda i: bool(i),
+    # "Decimal(15,0)": lambda i: "{}".format(i),
+    # "Decimal(22,9)": lambda i: "{}.123".format(i),
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+}
+
 index_three_sync_not_Bool = {
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
     "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
     "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+}
+
+index_three_sync_not_Bool_parametrized_queries = {
+    # "Decimal(15,0)": lambda i: "{}".format(i),
+    # "Decimal(22,9)": lambda i: "{}.123".format(i),
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
 }
 
 index_four_sync = {
@@ -72,6 +89,7 @@ index_four_sync = {
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
 }
+
 
 index_first_not_Bool = {
     "Int64": lambda i: i,
@@ -102,6 +120,22 @@ index_first = {
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
 }
 
+index_first_parametrized_queries = {
+    "Int64": lambda i: i,
+    "Uint64": lambda i: i,
+    "Int32": lambda i: i,
+    "Uint32": lambda i: i,
+    # "Int16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    # "Uint16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    "Int8": lambda i: i,
+    "Uint8": lambda i: i,
+    "Bool": lambda i: bool(i),
+    # "Decimal(15,0)": lambda i: "{}".format(i),
+    # "Decimal(22,9)": lambda i: "{}.123".format(i),
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+}
+
+
 index_second = {
     "DyNumber": lambda i: float(f"{i}e1"),
     "String": lambda i: f"String {i}",
@@ -117,12 +151,28 @@ index_second = {
     "Interval64": lambda i: i,
 }
 
+index_second_parametrized_queries = {
+    "DyNumber": lambda i: float(f"{i}e1"),
+    "String": lambda i: f"String {i}",
+    "Utf8": lambda i: f"Utf8 {i}",
+    "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
+    "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    "Timestamp": lambda i: 1696200000000000 + i * 100000000,
+    "Interval": lambda i: i,
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
+    # "Interval64": lambda i: i,
+}
+
 null_types = {
     "Int64": lambda i: i,
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
     "String": lambda i: f"String {i}",
 }
+
 
 pk_types = {
     "Int64": lambda i: i,
@@ -151,6 +201,35 @@ pk_types = {
     "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
     "Interval64": lambda i: i,
+}
+
+pk_types_parametrized_queries = {
+    "Int64": lambda i: i,
+    "Uint64": lambda i: i,
+    "Int32": lambda i: i,
+    "Uint32": lambda i: i,
+    "Int16": lambda i: i,
+    "Uint16": lambda i: i,
+    "Int8": lambda i: i,
+    "Uint8": lambda i: i,
+    "Bool": lambda i: bool(i),
+    # "Decimal(15,0)": lambda i: "{}".format(i),
+    # "Decimal(22,9)": lambda i: "{}.123".format(i),
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+    "DyNumber": lambda i: float(f"{i}e1"),
+
+    "String": lambda i: f"String {i}",
+    "Utf8": lambda i: f"Utf8 {i}",
+    "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
+
+    "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    "Timestamp": lambda i: 1696200000000000 + i * 100000000,
+    "Interval": lambda i: i,
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
+    # "Interval64": lambda i: i,
 }
 
 non_pk_types = {

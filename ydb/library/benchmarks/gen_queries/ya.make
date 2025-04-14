@@ -20,6 +20,7 @@ RESOURCE(
     bindings_tpch_pg.json bindings_h_pg.json
     consts.yql consts.yql
     consts_decimal.yql consts_decimal.yql
+    consts.jinja consts.jinja
 )
 
 RESOURCE(

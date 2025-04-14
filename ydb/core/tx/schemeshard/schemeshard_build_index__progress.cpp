@@ -1157,6 +1157,31 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::LockBuild:
+            Y_ASSERT(buildInfo.IsBuildVectorIndex());
+            if (buildInfo.ApplyTxId == InvalidTxId) {
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
+            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.ApplyTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+            } else {
+                buildInfo.SnapshotTxId = {};
+                buildInfo.SnapshotStep = {};
+
+                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexApplyTxId(db, buildInfo);
+                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+
+                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                Progress(BuildId);
+            }
+            break;
         case TIndexBuildInfo::EState::Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
@@ -1267,7 +1292,13 @@ public:
         Y_ASSERT(buildInfo.InProgressShards.empty());
         Y_ASSERT(buildInfo.DoneShards.empty());
 
-        TTableInfo::TPtr table = GetScanningTable(buildInfo);
+        TTableInfo::TPtr table;
+        if (buildInfo.KMeans.Level == 1) {
+            table = Self->Tables.at(buildInfo.TablePathId);
+        } else {
+            auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+            table = Self->Tables.at(path.Dive(buildInfo.KMeans.ReadFrom())->PathId);
+        }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
@@ -1285,15 +1316,6 @@ public:
             shardRange.From = std::move(bound);
 
             Self->PersistBuildIndexUploadInitiate(db, BuildId, x.ShardIdx, it->second);
-        }
-    }
-
-    TTableInfo::TPtr GetScanningTable(TIndexBuildInfo& buildInfo) {
-        if (buildInfo.KMeans.Level == 1) {
-            return Self->Tables.at(buildInfo.TablePathId);
-        } else {
-            auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-            return Self->Tables.at(path.Dive(buildInfo.KMeans.ReadFrom())->PathId);
         }
     }
 
@@ -1412,6 +1434,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1566,6 +1589,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1691,6 +1715,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1815,6 +1840,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -1940,6 +1966,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -2022,6 +2049,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -2175,6 +2203,7 @@ public:
         case TIndexBuildInfo::EState::Initiating:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
@@ -2254,6 +2283,7 @@ public:
         }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -2421,6 +2451,7 @@ public:
         }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -2535,6 +2566,7 @@ public:
             break;
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:

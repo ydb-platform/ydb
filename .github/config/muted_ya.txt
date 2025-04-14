@@ -17,6 +17,8 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
+ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.ExecuteScriptWithLargeFile
+ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
@@ -50,6 +52,7 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario2
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_DistributedTxCommit_CheckOffsetCommitForDifferentCases_SplitedTopic
+ydb/core/quoter/ut QuoterWithKesusTest.KesusRecreation
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut DataCleanup.CleanupDataWithFollowers
@@ -111,11 +114,7 @@ ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
-ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test[1051200]

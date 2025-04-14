@@ -235,7 +235,7 @@ TProxy::TProxy(int argc, char** argv)
 
     opts.AddLongOption("database", "YDB etcd databse").Required().RequiredArgument("DATABASE").StoreResult(&Database);
     opts.AddLongOption("endpoint", "YDB endpoint to connect").Required().RequiredArgument("ENDPOINT").StoreResult(&Endpoint);
-    opts.AddLongOption("folder", "YDB etcd root folder").Required().RequiredArgument("FOLDER").StoreResult(&Folder);
+    opts.AddLongOption("folder", "YDB etcd root folder").Optional().RequiredArgument("FOLDER").StoreResult(&Folder);
     opts.AddLongOption("token", "YDB token for connection").Optional().RequiredArgument("TOKEN").StoreResult(&Token);
     opts.AddLongOption("ydbca", "YDB CA for connection").Optional().RequiredArgument("CA").StoreResult(&CA);
 

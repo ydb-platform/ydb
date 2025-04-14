@@ -21,6 +21,7 @@ PEERDIR(
 )
 
 PEERDIR(
+    yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/re2

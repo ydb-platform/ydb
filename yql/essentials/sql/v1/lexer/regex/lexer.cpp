@@ -21,6 +21,8 @@ namespace NSQLTranslationV1 {
         static constexpr const char* CommentTokenName = "COMMENT";
         static constexpr const char* StringValueName = "STRING_VALUE";
 
+        static constexpr const TStringBuf Utf8BOM = "\xEF\xBB\xBF";
+
     public:
         TRegexLexer(
             bool ansi,
@@ -51,7 +53,13 @@ namespace NSQLTranslationV1 {
             NYql::TIssues& issues,
             size_t maxErrors) override {
             size_t errors = 0;
-            for (size_t pos = 0; pos < query.size();) {
+
+            size_t pos = 0;
+            if (query.StartsWith(Utf8BOM)) {
+                pos += Utf8BOM.size();
+            }
+
+            while (pos < query.size()) {
                 TParsedToken matched = Match(TStringBuf(query, pos));
 
                 if (matched.Name.empty() && maxErrors == errors) {

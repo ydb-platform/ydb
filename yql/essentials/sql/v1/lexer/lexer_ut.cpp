@@ -484,4 +484,43 @@ SELECT
             "SEMICOLON(;) EOF");
     }
 
+    Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscape) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        UNIT_ASSERT_TOKENIZED(lexer, "\0", "EOF");           // Null character
+        UNIT_ASSERT_TOKENIZED(lexer, "\t", "WS(\t) EOF");    // Horizontal Tab
+        UNIT_ASSERT_TOKENIZED(lexer, "\n", "WS(\n) EOF");    // Line Feed
+        UNIT_ASSERT_TOKENIZED(lexer, "\v", "[INVALID] EOF"); // Vertical Tabulation
+        UNIT_ASSERT_TOKENIZED(lexer, "\f", "WS(\x0C) EOF");  // Form Feed
+        UNIT_ASSERT_TOKENIZED(lexer, "\r", "WS(\r) EOF");    // Carriage Return
+        UNIT_ASSERT_TOKENIZED(lexer, "\r\n", "WS(\r) WS(\n) EOF");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
+        static THashMap<char, TString> canon;
+
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+
+        for (char c = 0; c < std::numeric_limits<char>::max(); ++c) {
+            TString input;
+            input += c;
+
+            TString& expected = canon[c];
+            if (expected.empty()) {
+                expected = Tokenized(lexer, input);
+            }
+
+            UNIT_ASSERT_TOKENIZED(lexer, input, expected);
+        }
+    }
+
+    Y_UNIT_TEST_ON_EACH_LEXER(Utf8BOM) {
+        auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+        if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "WS( ) DIGITS(1) EOF");
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF \xEF\xBB\xBF", "[INVALID] WS( ) EOF");
+        } else {
+            UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "[INVALID] WS( ) DIGITS(1) EOF");
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(SQLv1Lexer)

@@ -286,6 +286,7 @@ message TDqTaskStats {
     uint64 CreateTimeMs = 166;
     uint64 StartTimeMs = 158;
     uint64 FinishTimeMs = 5;
+    uint64 UpdateTimeMs = 169;
 
     reserved 4;   // was FirstRowTimeMs
     reserved 104;
@@ -439,6 +440,7 @@ message TDqStageStats {
     TDqStatsAggr FinishTimeMs = 32;
     TDqStatsAggr StartTimeMs = 33;
     TDqStatsAggr DurationUs = 34;    // just aggregate over task.DurationUs
+    uint64 UpdateTimeMs = 51;
 
     TDqStatsAggr WaitInputTimeUs = 35;
     TDqStatsAggr WaitOutputTimeUs = 36;

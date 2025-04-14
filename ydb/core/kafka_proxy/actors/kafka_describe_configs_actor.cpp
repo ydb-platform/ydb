@@ -186,7 +186,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "remote.storage.enable", "false", EKafkaConfigType::BOOLEAN);
     AddConfigEntry(singleConfig, "segment.jitter.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "local.retention.ms", "-2", EKafkaConfigType::LONG);
-    AddConfigEntry(singleConfig, "cleanup.policy", "[delete]", EKafkaConfigType::LIST); //ToDo: !! check
+    AddConfigEntry(singleConfig, "cleanup.policy", "[delete]", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "flush.ms", "9223372036854775807", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "follower.replication.throttled.replicas", "", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "compression.lz4.level", "9", EKafkaConfigType::INT);
@@ -208,7 +208,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "min.insync.replicas", "3", EKafkaConfigType::INT);
     AddConfigEntry(singleConfig, "segment.bytes", "8388608" /*8_MB*/, EKafkaConfigType::INT);
     AddConfigEntry(singleConfig, "flush.messages", "1", EKafkaConfigType::LONG);
-    AddConfigEntry(singleConfig, "message.format.version", "9", EKafkaConfigType::STRING); //ToDo: What is correct...?
+    AddConfigEntry(singleConfig, "message.format.version", "9", EKafkaConfigType::STRING);
     AddConfigEntry(singleConfig, "file.delete.delay.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "max.message.bytes", ToString(Context->Config.GetMaxMessageSize()), EKafkaConfigType::INT);
     AddConfigEntry(singleConfig, "message.timestamp.type", "CreateTime", EKafkaConfigType::STRING);

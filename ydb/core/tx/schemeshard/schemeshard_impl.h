@@ -212,6 +212,7 @@ public:
         };
     };
     TTenantInitState::EInitState InitState = TTenantInitState::InvalidState;
+    bool IsWaitingConsoleConfigs = false;
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
@@ -897,7 +898,11 @@ public:
         TVector<TPathId> RestoreTablesToUnmark;
     };
 
+    std::optional<TActivationOpts> DelayedActivationOpts;
+
     void SubscribeToTempTableOwners();
+
+    void ActivateAfterConsoleConfigs(const TActorContext& ctx);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

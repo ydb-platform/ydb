@@ -84,7 +84,22 @@ void TSchemeShard::SubscribeToTempTableOwners() {
     }
 }
 
+void TSchemeShard::ActivateAfterConsoleConfigs(const TActorContext& ctx) {
+    IsWaitingConsoleConfigs = false;
+    if (!DelayedActivationOpts) {
+        return;
+    }
+
+    ActivateAfterInitialization(ctx, std::move(*DelayedActivationOpts));
+    DelayedActivationOpts = std::nullopt;
+}
+
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
+    if (IsWaitingConsoleConfigs) {
+        DelayedActivationOpts = std::move(opts);
+        return;
+    }
+
     TPathId subDomainPathId = GetCurrentSubDomainPathId();
     TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId);
     LoginProvider.Audience = TPath::Init(subDomainPathId, this).PathString();
@@ -7244,11 +7259,13 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
         IEventHandle::FlagTrackDelivery
     );
     ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvConsoleConfigsTimeout);
+    IsWaitingConsoleConfigs = true;
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr&, const TActorContext& ctx) {
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot get console configs");
     LoadTableProfiles(nullptr, ctx);
+    ActivateAfterConsoleConfigs(ctx);
 }
 
 void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -7587,6 +7604,7 @@ void TSchemeShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TP
                "Got new config: " << rec.GetConfig().ShortDebugString());
 
     ApplyConsoleConfigs(rec.GetConfig(), ctx);
+    ActivateAfterConsoleConfigs(ctx);
 
     auto resp = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(rec);
 

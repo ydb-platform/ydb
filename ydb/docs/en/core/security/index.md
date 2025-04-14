@@ -18,7 +18,7 @@ This section of {{ ydb-short-name }} documentation covers security-related aspec
 
 - **Encryption**. As {{ ydb-short-name }} is a distributed system typically running on a cluster, often spanning multiple datacenters or availability zones, user data is routinely transferred over the network. Various protocols can be involved, and each can be configured to use [encryption in transit](./encryption/data-in-transit.md). {{ ydb-short-name }} also supports transparent [data encryption at rest](./encryption/data-at-rest.md) at the [DS proxy](../concepts/glossary.md#ds-proxy) level.
 
-- **Audit logs**. {{ ydb-short-name }} provides [audit logs](./audit-log.md) that include data about all operations that attempted to change the {{ ydb-short-name }} objects, whether successful or not.
+- **Audit logs**. {{ ydb-short-name }} provides [audit logs](./audit-log.md) that include data about all operations that attempted to change the {{ ydb-short-name }} objects, such as changing access rights, creating or deleting scheme objects, whether successful or not. Audit logs do not include DML operations.
 
 Main resources:
 

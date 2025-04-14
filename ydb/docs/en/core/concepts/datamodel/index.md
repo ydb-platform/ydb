@@ -1,6 +1,6 @@
 # Cluster structure
 
-This section describes the {{ ydb-short-name }} entities.
+This section describes the {{ ydb-short-name }} cluster scheme entities.
 
 ## {{ ydb-short-name }} cluster scheme {#cluster-scheme}
 

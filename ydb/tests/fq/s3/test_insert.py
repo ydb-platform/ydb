@@ -26,7 +26,12 @@ class TestS3(object):
     @pytest.mark.parametrize("dataset_name", ["dataset", "dataにちは% set"])
     @pytest.mark.parametrize("format", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_insert(self, kikimr, s3, client, format, dataset_name, unique_prefix):
+    @pytest.mark.parametrize("block_sink", ["false", "true"])
+    def test_insert(self, kikimr, s3, client, format, dataset_name, unique_prefix, block_sink):
+        if block_sink == "true" and format != "parquet":
+            pytest.skip(f"block sink is not supported for format {format}")
+            return
+
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -39,6 +44,7 @@ class TestS3(object):
         client.create_storage_connection(storage_connection_name, "insert_bucket")
 
         sql = f'''
+            pragma s3.UseBlocksSink = "{block_sink}";
             insert into `{storage_connection_name}`.`{dataset_name}/` with (format={format})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
@@ -581,3 +587,80 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
         assert "Expected data or optional of data" in issues, "Incorrect Issues: " + issues
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_block_insert(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            PRAGMA s3.UseBlocksSink = "true";
+
+            INSERT INTO `{storage_connection_name}`.`/test/`
+            WITH (FORMAT = "parquet")
+            (Key, Value) VALUES ('key1', 'value1'), ('key2', 'value2');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        ast = str(client.describe_query(query_id).result.query.ast)
+        assert "S3SinkOutput" not in ast, "Incorrect ast: " + ast
+
+        sql = f'''
+            SELECT
+                COUNT(*)
+            FROM `{storage_connection_name}`.`/test/` WITH (
+                FORMAT = "parquet",
+                SCHEMA (
+                    Key Utf8,
+                    Value Utf8
+                )
+            )
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        result_set = client.get_result_data(query_id).result.result_set
+        assert len(result_set.columns) == 1
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 2
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("block_sink", ["false", "true"])
+    def test_insert_deadlock(self, kikimr, s3, client, unique_prefix, block_sink):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            pragma s3.UseBlocksSink = "{block_sink}";
+            pragma s3.AtomicUploadCommit = "true";
+            pragma s3.InFlightMemoryLimit = "1";
+
+            insert into `{storage_connection_name}`.`/test/`
+            with (format = "parquet")
+            select Random(data) from AS_TABLE(ListReplicate(<|data:"x"u|>, 1000000));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Writing deadlock occurred, please increase write actor memory limit" in issues, "Incorrect Issues: " + issues

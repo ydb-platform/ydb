@@ -481,6 +481,22 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestAggregations({ testCase });
     }
 
+    Y_UNIT_TEST(Aggregation_ResultTL_FilterL_Limit2_Simple) {
+        TAggregationTestCase testCase;
+        testCase
+            .SetQuery(R"(
+                SELECT
+                    timestamp, level
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = 2
+                LIMIT 2
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .MutableLimitChecker()
+            .SetExpectedLimit(2);
+        TestAggregations({ testCase }, TKikimrSettings().SetColumnShardReaderClassName("SIMPLE"));
+    }
+
     Y_UNIT_TEST(Aggregation_ResultTL_FilterL_OrderT_Limit2) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

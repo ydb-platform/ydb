@@ -6,9 +6,8 @@
 
 namespace NKikimr::NKqp {
 
-void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
-    auto settings = TKikimrSettings()
-        .SetWithSampleTables(false);
+void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases, const TKikimrSettings& settingsExt) {
+    auto settings = TKikimrSettings(settingsExt).SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
 
     TLocalHelper(kikimr).CreateTestOlapTable();
@@ -132,8 +131,8 @@ void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bo
     }
 }
 
-void TestAggregations(const std::vector<TAggregationTestCase>& cases) {
-    TestAggregationsBase(cases);
+void TestAggregations(const std::vector<TAggregationTestCase>& cases, const TKikimrSettings& settings) {
+    TestAggregationsBase(cases, settings);
     TestAggregationsInternal(cases);
 }
 

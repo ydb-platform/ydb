@@ -207,11 +207,11 @@ void CheckPlanForAggregatePushdown(
     }
 }
 
-void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases);
+void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases, const TKikimrSettings& settings = Default<TKikimrSettings>());
 
 void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases);
 
-void TestAggregations(const std::vector<TAggregationTestCase>& cases);
+void TestAggregations(const std::vector<TAggregationTestCase>& cases, const TKikimrSettings& settings = Default<TKikimrSettings>());
 
 template <typename TClient>
 auto StreamExecuteQuery(const TAggregationTestCase& testCase, TClient& client) {

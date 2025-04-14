@@ -327,8 +327,8 @@ public:
 
     template <bool NotNull = false>
     std::partial_ordering Compare(const TComparablePosition& pos) const {
-        AFL_VERIFY(pos.Positions.size() == Positions.size());
-        for (ui32 i = 0; i < Positions.size(); ++i) {
+        const ui64 numPositions = Min(pos.Positions.size(), Positions.size());
+        for (ui32 i = 0; i < numPositions; ++i) {
             AFL_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
             const std::partial_ordering cmpResult =
                 TComparator::TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i]);
@@ -336,7 +336,11 @@ public:
                 return cmpResult;
             }
         }
-        return std::partial_ordering::equivalent;
+        if (pos.Positions.size() == Positions.size()) {
+            return std::partial_ordering::equivalent;
+        } else {
+            return std::partial_ordering::unordered;
+        }
     }
 
     template <bool NotNull = false>

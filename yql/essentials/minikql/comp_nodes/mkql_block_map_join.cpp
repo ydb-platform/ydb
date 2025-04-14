@@ -26,11 +26,11 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
         }));
 }
 
-ui64 CalculateTupleHash(const std::vector<ui64>& hashes) {
+TMaybe<ui64> CalculateTupleHash(const std::vector<NYql::NUdf::TBlockItem>& items, const std::vector<ui64>& hashes) {
     ui64 hash = 0;
     for (size_t i = 0; i < hashes.size(); i++) {
-        if (!hashes[i]) {
-            return 0;
+        if (!items[i]) {
+            return {};
         }
 
         hash = CombineHashes(hash, hashes[i]);
@@ -773,13 +773,13 @@ public:
             Y_ENSURE(blockOffset <= std::numeric_limits<ui32>::max());
             Y_ENSURE(blockSize <= std::numeric_limits<ui32>::max());
             for (size_t itemOffset = 0; itemOffset < blockSize; itemOffset++) {
-                ui64 keyHash = GetKey(block, itemOffset, insertBatchKeys[insertBatchLen]);
+                auto keyHash = GetKey(block, itemOffset, insertBatchKeys[insertBatchLen]);
                 if (!keyHash) {
                     continue;
                 }
 
                 insertBatchEntries[insertBatchLen] = TBlockStorage::TRowEntry(blockOffset, itemOffset);
-                insertBatch[insertBatchLen].ConstructKey(keyHash);
+                insertBatch[insertBatchLen].ConstructKey(*keyHash);
                 insertBatchLen++;
 
                 if (insertBatchLen == PrefetchBatchSize) {
@@ -800,15 +800,22 @@ public:
 
         std::array<TRobinHoodBatchRequestItem<ui64>, PrefetchBatchSize> lookupBatch;
         std::array<std::vector<NYql::NUdf::TBlockItem>, PrefetchBatchSize> itemsBatch;
+        std::array<bool, PrefetchBatchSize> notNullBatch = {};
 
         for (size_t i = 0; i < batchSize; i++) {
             const auto& [items, keyHash] = getKey(i);
-            lookupBatch[i].ConstructKey(keyHash);
+            if (!keyHash) {
+                lookupBatch[i].ConstructKey(0);
+                continue;
+            }
+
+            notNullBatch[i] = true;
+            lookupBatch[i].ConstructKey(*keyHash);
             itemsBatch[i] = items;
         }
 
         Index_->BatchLookup({lookupBatch.data(), batchSize}, [&](size_t i, TIndexMap::iterator iter) {
-            if (!iter) {
+            if (!notNullBatch[i] || !iter) {
                 // Empty iterator
                 iterators[i] = TIterator(this);
                 return;
@@ -842,7 +849,7 @@ public:
     }
 
 private:
-    ui64 GetKey(const TBlockStorage::TBlock& block, size_t offset, std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+    TMaybe<ui64> GetKey(const TBlockStorage::TBlock& block, size_t offset, std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
         auto& blockStorage = *static_cast<TBlockStorage*>(BlockStorage_.GetResource());
 
         ui64 keyHash = 0;
@@ -851,7 +858,7 @@ private:
             auto item = blockStorage.GetItemFromBlock(block, keyColumn, offset);
             if (!item) {
                 keyItems.clear();
-                return 0;
+                return {};
             }
 
             keyHash = CombineHashes(keyHash, blockStorage.GetItemHashers()[keyColumn]->Hash(item));
@@ -1071,7 +1078,7 @@ private:
                     LookupBatchSize_ = std::min(PrefetchBatchSize, static_cast<ui32>(joinState.RemainingRowsCount()));
                     indexState.BatchLookup(LookupBatchSize_, LookupBatchIterators_, [&](size_t i) {
                         MakeLeftKeys(leftKeyColumns, leftKeyColumnHashes, i);
-                        ui64 keyHash = CalculateTupleHash(leftKeyColumnHashes);
+                        auto keyHash = CalculateTupleHash(leftKeyColumns, leftKeyColumnHashes);
                         return std::make_pair(std::ref(leftKeyColumns), keyHash);
                     });
 

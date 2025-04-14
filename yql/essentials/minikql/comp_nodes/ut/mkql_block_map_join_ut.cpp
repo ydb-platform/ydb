@@ -821,6 +821,62 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
         );
     }
 
+    Y_UNIT_TEST(TestKeyCollisionBug) {
+        TSetup<false> setup(GetNodeFactory());
+        const size_t testSize = 8;
+
+        // 1. Make input for the "left" stream.
+        // Presence of zero key is important in order to make collision
+        // with NULL sentinel value in previous implementation
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 0);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(testSize);
+        std::iota(rightKeyInit.begin(), rightKeyInit.end(), 0);
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
+        }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& found = rightMap.find(leftKeyInit[i]);
+            if (found != rightMap.cend()) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {

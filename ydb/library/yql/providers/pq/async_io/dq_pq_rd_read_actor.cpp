@@ -380,12 +380,12 @@ public:
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
     })
 
-    STRICT_STFUNC(IgnoreFunc, {
+    STRICT_STFUNC(IgnoreState, {
         // ignore all events except for retry queue
-        cFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Ignore);
+        sFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Ignore);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, ReplyNoSession);
-        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, ReplyNoSessionn);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
@@ -400,19 +400,19 @@ public:
 
         // ignore all row dispatcher events
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, ReplyNoSession);
-        cFunc(TEvPrivate::TEvPrintState, Ignore);
-        cFunc(TEvPrivate::TEvProcessState, Ignore);
-        cFunc(TEvPrivate::TEvNotifyCA, Ignore);
-        cFunc(TEvPrivate::TEvRefreshClusters, Ignore);
-        cFunc(TEvPrivate::TEvReceivedClusters, Ignore);
-        cFunc(TEvPrivate::TEvDescribeTopicResult, Ignore);
+        sFunc(TEvPrivate::TEvPrintState, Ignore);
+        sFunc(TEvPrivate::TEvProcessState, Ignore);
+        sFunc(TEvPrivate::TEvNotifyCA, Ignore);
+        sFunc(TEvPrivate::TEvRefreshClusters, Ignore);
+        sFunc(TEvPrivate::TEvReceivedClusters, Ignore);
+        sFunc(TEvPrivate::TEvDescribeTopicResult, Ignore);
     })
 
     void Ignore() {
     }
 
-    template <class TEvent>
-    void ReplyNoSession(TEvent::TPtr& ev) {
+    template <class TEventPtr>
+    void ReplyNoSession(TEventPtr& ev) {
         SendNoSession(ev->Sender, ev->Cookie);
     }
 
@@ -700,7 +700,7 @@ void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     SRC_LOG_I("PassAway");
-    Become(&TDqPqRdReadActor::IgnoreFunc);
+    Become(&TDqPqRdReadActor::IgnoreState);
     PrintInternalState();
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         StopSession(sessionInfo);

@@ -14,7 +14,7 @@ defaults:
 jobs:
   main:
     name: Checkout and setup
-    runs-on: [ self-hosted ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
       uses: actions/checkout@v4

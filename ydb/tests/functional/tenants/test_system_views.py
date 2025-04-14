@@ -58,13 +58,10 @@ class BaseSystemViews(object):
         self.database = None
 
     def create_table(self, driver, table):
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table
-                    )
-                )
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                f"create table `{table}` (key Int32, value String, primary key(key));"
+            )
 
     def read_partition_stats(self, driver, database):
         table = os.path.join(database, '.sys/partition_stats')
@@ -115,11 +112,11 @@ class BaseSystemViews(object):
 
             self.create_table(driver, table)
 
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    for i in range(query_count):
-                        query = "select * from `{}` -- {}".format(table, i)
-                        session.transaction().execute(query, commit_tx=True)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                for i in range(query_count):
+                    pool.execute_with_retries(
+                        f"select * from `{table}` -- {i}"
+                    )
 
             time.sleep(70)
 

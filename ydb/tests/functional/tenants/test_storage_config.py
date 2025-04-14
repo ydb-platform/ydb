@@ -43,7 +43,7 @@ class TBaseTenant(object):
             )
         )
         cls.driver.wait()
-        cls.pool = ydb.SessionPool(cls.driver, size=5)
+        cls.pool = ydb.QuerySessionPool(cls.driver, size=5)
 
     @classmethod
     def teardown_class(cls):
@@ -72,20 +72,20 @@ class TBaseTenant(object):
 
 
 def write_huge_blobs(pool, table_path, count=1, size=2*1024*1024):
-    with pool.checkout() as session:
-        prepared = session.prepare("""
+    for _ in range(count):
+        key = random.randint(1, 2 ** 48)
+        value = ''.join(random.choice(string.ascii_lowercase) for _ in range(size))
+        pool.execute_with_retries(
+            f"""
             declare $key as Uint64;
             declare $value as Utf8;
-            upsert into `%s` (key, value) VALUES ($key, $value);
-            """ % table_path)
-
-        for _ in range(count):
-            key = random.randint(1, 2 ** 48)
-            value = ''.join(random.choice(string.ascii_lowercase) for _ in range(size))
-            session.transaction().execute(
-                prepared, {'$key': key, '$value': value},
-                commit_tx=True,
-            )
+            upsert into `{table_path}` (key, value) VALUES ($key, $value);
+            """,
+            parameters={
+                "$key": (key, ydb.PrimitiveType.Uint64),
+                "$value": (value, ydb.PrimitiveType.Utf8),
+            },
+        )
 
 
 def list_tablets_in_table(client, table_path):
@@ -617,25 +617,21 @@ class TestStorageConfig(TBaseTenant):
     def test_create_tablet(self):
         table_path = '%s/table-1' % (self.tenant_path)
 
-        with self.pool.checkout() as session:
-            session.execute_scheme(
-                "create table `{}` (key Int32, value String, primary key(key));".format(
-                    table_path
-                )
-            )
+        self.pool.execute_with_retries(
+            f"create table `{table_path}` (key Int32, value String, primary key(key));"
+        )
 
-            session.transaction().execute(
-                "upsert into `{}` (key) values (101);".format(table_path),
-                commit_tx=True,
-            )
+        self.pool.execute_with_retries(
+            f"upsert into `{table_path}` (key) values (101);"
+        )
 
-            session.transaction().execute(
-                "select key from `{}`;".format(table_path),
-            )
+        self.pool.execute_with_retries(
+            f"select key from `{table_path}`;"
+        )
 
-            session.execute_scheme(
-                "drop table `{}`;".format(table_path),
-            )
+        self.pool.execute_with_retries(
+            f"drop table `{table_path}`;"
+        )
 
     @pytest.mark.parametrize(
         "creation_options, has_external, matcher", [x() for x in TESTS],

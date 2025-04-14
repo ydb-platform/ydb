@@ -212,10 +212,10 @@ namespace NKikimr {
                 TLogoBlobIdHigh high(blobId);
                 TLogoBlobIdLow low(blobId);
 
-                if (IndexHigh.empty()) {
+                if (Y_UNLIKELY(IndexHigh.empty())) {
                     IndexHigh.emplace_back(high);
                     highPrev = high;
-                } else if (high != highPrev) {
+                } else if (Y_UNLIKELY(high != highPrev)) {
                     IndexHigh.back().LowRangeEndIndex = IndexLow.size();
                     IndexHigh.emplace_back(high);
                     highPrev = high;

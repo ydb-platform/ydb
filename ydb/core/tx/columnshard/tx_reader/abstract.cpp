@@ -3,12 +3,10 @@
 namespace NKikimr {
 
 bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
-    if (IsReady) {
-        if (!NextReaderAfterLoad) {
-            return true;
-        } else {
-            return NextReaderAfterLoad->Execute(txc, ctx);
-        }
+    AFL_VERIFY(!GetIsFinished());
+    if (IsFinishedItself) {
+        AFL_VERIFY(NextReader);
+        return NextReader->Execute(txc, ctx);
     }
     IsStarted = true;
     {
@@ -30,9 +28,13 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
             return false;
         }
     }
-    IsReady = true;
-    NextReaderAfterLoad = BuildNextReaderAfterLoad();
-    return NextReaderAfterLoad ? NextReaderAfterLoad->Execute(txc, ctx) : true;
+    IsFinishedItself = true;
+    NextReader = BuildNextReader();
+    //Next reader may be async, but if current reader is sync we get all result synchronously
+    while (!IsAsync && NextReader && !NextReader->GetIsFinished()) {
+        return NextReader->Execute(txc, ctx);
+    }
+    return true;
 }
 
 }

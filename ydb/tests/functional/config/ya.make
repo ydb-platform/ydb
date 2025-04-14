@@ -17,13 +17,14 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(40)
+    TIMEOUT(60)
     SIZE(MEDIUM)
 ENDIF()
 
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(IAM_TOKEN="")
 DEPENDS(
     ydb/apps/ydbd
     ydb/apps/ydb

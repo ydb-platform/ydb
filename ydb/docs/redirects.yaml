@@ -419,9 +419,9 @@ ru:
 
   # Redirect for deprecated instructions
   - from: /devops/manual/state-storage-move.md
-    to: /devops/deployment-options/manual/before-v25.1/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
   - from: /devops/manual/static-group-move.md
-    to: /devops/deployment-options/manual/before-v25.1/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
 
   # Redirect for system-requirements
   - from: /devops/system-requirements.md

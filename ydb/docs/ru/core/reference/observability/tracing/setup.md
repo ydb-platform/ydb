@@ -14,7 +14,7 @@
 
 ## Минимальная конфигурация
 
-Для включения трассировки в {{ ydb-short-name }} добавьте в [конфигурацию](../../../reference/configuration/index.md) следующую секцию:
+Для включения трассировки в {{ ydb-short-name }} добавьте в [конфигурацию](../../configuration/index.md) следующую секцию:
 
 ```yaml
 tracing_config:
@@ -123,7 +123,7 @@ tracing_config:
 
 Секция `external_throttling` не является обязательной, в случае ее отсутствия все trace-id в запросах **игнорируются** (никакие внешние трассы не продолжаются).
 
-Данную секцию можно изменять без перезагрузки узла с помощью механизма [конфигурации](../../../devops/configuration-management/index.md).
+Данную секцию можно изменять без перезагрузки узла с помощью механизма [конфигурации](../../../devops/configuration-management/configuration-v2/config-overview.md).
 
 ### Sampling
 
@@ -158,7 +158,7 @@ tracing_config:
 
 Секция `sampling` не является обязательной, в случае ее отсутствия никакие запросы не будут сэмплироваться.
 
-Данную секцию можно изменять без перезагрузки узла с помощью механизма [динамической конфигурации](../../../devops/deployment-options/manual/before-v25.1/configuration-management/dynamic-config.md).
+Данную секцию можно изменять без перезагрузки узла с помощью механизма [динамической конфигурации](../../../devops/configuration-management/configuration-v1/dynamic-config.md).
 
 ## Семантика правил {#semantics}
 

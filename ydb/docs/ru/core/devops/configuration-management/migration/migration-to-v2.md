@@ -1,33 +1,33 @@
 # Миграция на конфигурацию v2
 
-Данный документ содержит инструкцию по миграции с [конфигурации v1](../before-v25.1/configuration-management/config-overview.md) на [конфигурацию v2](../../../configuration-management/index.md).
+Данный документ содержит инструкцию по миграции с [конфигурации v1](../../configuration-management/configuration-v2/config-overview.md) на [конфигурацию v2](../../configuration-management/configuration-v2/config-overview.md).
 
 В конфигурации v1 существовало два различных механизма применения конфигурационных файлов:
 
-- [статическая конфигурация](../before-v25.1/configuration-management/config-overview.md#static-config) управляла [узлами хранения](../../../../concepts/glossary.md#storage-node) кластера {{ ydb-short-name }} и требовала ручного размещения файлов на каждом узле кластера;
-- [динамическая конфигурация](../before-v25.1/configuration-management/config-overview.md#dynamic-config) управляла [узлами базы данных](../../../../concepts/glossary.md#database-node) кластера {{ ydb-short-name }} и загружалась на кластер централизованно, с помощью команд {{ ydb-short-name }} CLI.
+- [статическая конфигурация](../../configuration-management/configuration-v2/config-overview.md#static-config) управляла [узлами хранения](../../../concepts/glossary.md#storage-node) кластера {{ ydb-short-name }} и требовала ручного размещения файлов на каждом узле кластера;
+- [динамическая конфигурация](../../configuration-management/configuration-v2/config-overview.md#dynamic-config) управляла [узлами базы данных](../../../concepts/glossary.md#database-node) кластера {{ ydb-short-name }} и загружалась на кластер централизованно, с помощью команд {{ ydb-short-name }} CLI.
 
 Конфигурация v2 унифицирует этот процесс: единый конфигурационный файл загружается в систему через команды {{ ydb-short-name }} CLI, автоматически доставляясь на все узлы кластера.
 
-Компоненты [State Storage](../../../../concepts/glossary.md#state-storage) и [статической группы](../../../../concepts/glossary.md#static-group) кластера {{ ydb-short-name }} являются ключевыми для корректной работы кластера. При работе с конфигурацией v1 данные компоненты настраиваились вручную, через задание секций `domains_config` и `blob_storage_config` в конфигурационном файле.
-В конфигурации v2 появляется возможность [автоматической конфигурации](../../../configuration-management/index.md) этих компонентов, без указания объемных секций в конфигурационном файле, снижая риск ошибок при настройке кластера.
+Компоненты [State Storage](../../../concepts/glossary.md#state-storage) и [статической группы](../../../concepts/glossary.md#static-group) кластера {{ ydb-short-name }} являются ключевыми для корректной работы кластера. При работе с конфигурацией v1 данные компоненты настраиваились вручную, через задание секций `domains_config` и `blob_storage_config` в конфигурационном файле.
+В конфигурации v2 появляется возможность [автоматической конфигурации](../../configuration-management/configuration-v2/config-overview.md) этих компонентов, без указания объемных секций в конфигурационном файле, снижая риск ошибок при настройке кластера.
 
 
-Миграция на конфигурацию v2 происходит в 2 этапа: переход на единый конфигурационный файл, а затем включение автоматического управления конфигурацией [статической группы](../../../../concepts/glossary.md#state-storage) и [State Storage](../../../../concepts/glossary.md#static-group).
+Миграция на конфигурацию v2 происходит в 2 этапа: переход на единый конфигурационный файл, а затем включение автоматического управления конфигурацией [статической группы](../../../concepts/glossary.md#state-storage) и [State Storage](../../../concepts/glossary.md#static-group).
 
 ## Исходное состояние
 
 Миграция на конфигурацию v2 может быть осуществлена в случае выполнения следующих условий:
 
-1. Кластер {{ydb-short-name}} [обновлен](../update-executable.md) до версии 25.1 и выше.
-1. Кластер {{ydb-short-name}} сконфигурирован с файлом [конфигурации v1](../before-v25.1/configuration-management/config-overview.md#static-config) `config.yaml`, расположенным на файловой системе узлов и подключенным через аргумент `ydbd --yaml-config`.
+1. Кластер {{ydb-short-name}} [обновлен](../../deployment-options/manual/update-executable.md) до версии 25.1 и выше.
+1. Кластер {{ydb-short-name}} сконфигурирован с файлом [конфигурации v1](../../configuration-management/configuration-v2/config-overview.md#static-config) `config.yaml`, расположенным на файловой системе узлов и подключенным через аргумент `ydbd --yaml-config`.
 1. В конфигурационном файле кластера заданы разделы `domains_config` и `blob_storage_config` для настройки State Storage и статической группы соответственно. Эти компоненты тесно связаны, поэтому не поддерживается смешанный режим, когда один из них управляется вручную, а другой - через автоматическую конфигурацию v2.
 
 ## Переход на единый конфигурационный файл {#migration-to-cli}
 
 ### Проверка отсутствия единого конфигурационного файла
 
-Для того, чтобы убедиться в отсутствии единого конфигурационного файла на кластере {{ ydb-short-name }}, можно воспользоваться [мониторингом](../../../observability/monitoring.md). Выбрав подгруппу сенсоров `config` и подсистему `configs_dispatcher`, необходимо взглянуть на сенсоры `ConfigurationV1` и `ConfigurationV2`. На графике отобразится число узлов, работающих в режиме конфигурации v1 и v2 соответственно.
+Для того, чтобы убедиться в отсутствии единого конфигурационного файла на кластере {{ ydb-short-name }}, можно воспользоваться [мониторингом](../../observability/monitoring.md). Выбрав подгруппу сенсоров `config` и подсистему `configs_dispatcher`, необходимо взглянуть на сенсоры `ConfigurationV1` и `ConfigurationV2`. На графике отобразится число узлов, работающих в режиме конфигурации v1 и v2 соответственно.
 
 Продолжать выполнение данной инструкции следует только в том случае, если какой-либо из узлов работает на версии конфигурации v1. Если на всех узлах включена версия v2, миграция не требуется.
 
@@ -47,7 +47,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
 Для того чтобы перевести кластер {{ ydb-short-name }} на управление конфигурацией через CLI, необходимо проделать следующие шаги:
 
-1. Проверить наличие файла [динамической конфигурации](../before-v25.1/configuration-management/config-overview.md#dynamic-config) на кластере. Для этого необходимо выполнить команду:
+1. Проверить наличие файла [динамической конфигурации](../../configuration-management/configuration-v2/config-overview.md#dynamic-config) на кластере. Для этого необходимо выполнить команду:
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
@@ -77,7 +77,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
     В дальнейшнем система самостоятельно будет сохранять обновления конфигурации в указанную директорию.
 
-1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории, а также убрав опцию `ydbd --yaml-config`.
+1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории, а также убрав опцию `ydbd --yaml-config`.
 
 {% list tabs group=manual-systemd %}
 
@@ -123,7 +123,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
 На каждом из узлов кластера `Configuration version` должен равняться v2.
 
-В результате проделанных действий конфигурация кластера будет переведена на управление через {{ ydb-short-name }} CLI. Любое изменение конфигурации на существующих узлах выполняется с помощью специальных [команд](../update-config.md). При запуске узла актульная конфигурация будет загружена из директории, указанной в опции `ydbd --config-dir`.
+В результате проделанных действий конфигурация кластера будет переведена на управление через {{ ydb-short-name }} CLI. Любое изменение конфигурации на существующих узлах выполняется с помощью специальных [команд](../configuration-v2/update-config.md). При запуске узла актульная конфигурация будет загружена из директории, указанной в опции `ydbd --config-dir`.
 
 ## Переход на автоматическую конфигурацию State Storage и статической группы {migration-to-autoconfiguration}
 
@@ -158,7 +158,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
     ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
     ```
 
-1. Перезапустить все [узлы хранения](../../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../../reference/ydbops/rolling-restart-scenario.md).
+1. Перезапустить все [узлы хранения](../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md).
 1. При наличии секции `config.domains_config.security_config` в файле `config.yaml`, вынести её на уровень выше, в секцию `config`.
 1. Удалить из файла `config.yaml` секции `config.blob_storage_config` и `config.domains_config`.
 1. Загрузить обновленный конфигурационный файл на кластер:
@@ -167,4 +167,4 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
     ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
     ```
 
-В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группой](../../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../../concepts/glossary.md#distributed-configuration).
+В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группой](../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../concepts/glossary.md#distributed-configuration).

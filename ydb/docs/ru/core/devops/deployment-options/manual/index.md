@@ -7,4 +7,3 @@
 - [{#T}](initial-deployment.md)
 - [{#T}](../../../maintenance/manual/index.md)
 - [{#T}](../../../reference/embedded-ui/index.md)
-- [{#T}](before-v25.1/index.md)

@@ -1,8 +1,8 @@
 # Миграция на ручную конфигурацию State Storage и статической группы
 
-Данный документ содержит инструкцию по миграции с [конфигурации v2](../before-v25.1/configuration-management/config-overview.md) на [конфигурацию v1](../../../configuration-management/index.md).
+Данный документ содержит инструкцию по миграции с [конфигурации v2](../../configuration-management/configuration-v2/config-overview.md) на [конфигурацию v1](../../configuration-management/configuration-v1/index.md).
 
-Миграция на конфигурацию v1 происходит в 2 этапа: переход на ручное управление управление [статической группой](../../../../concepts/glossary.md#state-storage) и [State Storage](../../../../concepts/glossary.md#static-group), а затем переход на работу со [статической и динамической](../before-v25.1/index.md) конфигурациями.
+Миграция на конфигурацию v1 происходит в 2 этапа: переход на ручное управление управление [статической группой](../../../concepts/glossary.md#state-storage) и [State Storage](../../../concepts/glossary.md#static-group), а затем переход на работу со [статической и динамической](../../configuration-management/configuration-v1/index.md) конфигурациями.
 
 {% note info %}
 
@@ -14,12 +14,12 @@
 
 ## Исходное состояние
 
-Миграция на конфигурацию v1 может быть осуществлена в том случае, если в кластере используется [конфигурация v2](../../../configuration-management/index.md). Это может быть достигнуто:
+Миграция на конфигурацию v1 может быть осуществлена в том случае, если в кластере используется [конфигурация v2](../../../). Это может быть достигнуто:
 
 - либо в результате [миграции на конфигурацию v2](migration-to-v2.md)
-- либо при [первоначальном развёртывании](../initial-deployment.md) кластера
+- либо при [первоначальном развёртывании](../../deployment-options/manual/initial-deployment.md) кластера
 
-Для того, чтобы убедиться в отсутствии единого конфигурационного файла на кластере {{ ydb-short-name }}, можно воспользоваться [мониторингом](../../../observability/monitoring.md). Выбрав подгруппу сенсоров `config` и подсистему `configs_dispatcher`, необходимо взглянуть на сенсоры `ConfigurationV1` и `ConfigurationV2`. На графике отобразится число узлов, работающих в режиме конфигурации v1 и v2 соответственно.
+Для того, чтобы убедиться в отсутствии единого конфигурационного файла на кластере {{ ydb-short-name }}, можно воспользоваться [мониторингом](../../observability/monitoring.md). Выбрав подгруппу сенсоров `config` и подсистему `configs_dispatcher`, необходимо взглянуть на сенсоры `ConfigurationV1` и `ConfigurationV2`. На графике отобразится число узлов, работающих в режиме конфигурации v1 и v2 соответственно.
 
 Также посмотреть версию конфигурации на отдельных узлах кластера можно с помощью веб-интерфейса актора `configs_dispatcher`, перейдя по ссылке подобного вида:
 
@@ -45,7 +45,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 ydb -e grpc://<node.ydb.tech>:2135 admin storage fetch --full > config.yaml
 ```
 
-Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группы](../../../../reference/configuration/index.md#blob_storage_config).
+Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
 
 2. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `self_management_config.enabled` с `true` на `false`:
 
@@ -60,7 +60,7 @@ self_management_config:
 ydb -e grpc://<node.ydb.tech>:2135 admin storage replace -f config.yaml
 ```
 
-4. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md).
+4. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md).
 
 В результате проделанных действий кластер будет переведён в режим ручного управления State Storage и статической группой.
 
@@ -76,7 +76,7 @@ ydb -e grpc://<node.ydb.tech>:2135 admin storage replace -f config.yaml
 
 1. Разместить полученный файл на все узлы кластера, например, по пути `/opt/ydb/config/config.yaml`.
 
-1. Перезапустить узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --yaml-config` при запуске узла с указанием пути до конфигурационного файла, а также убрав опцию `ydbd --config-dir`.
+1. Перезапустить узлы кластера с помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --yaml-config` при запуске узла с указанием пути до конфигурационного файла, а также убрав опцию `ydbd --config-dir`.
 
 {% list tabs group=manual-systemd %}
 

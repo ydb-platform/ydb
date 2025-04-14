@@ -1,7 +1,17 @@
 items:
-- name: Обзор конфигурации
-  href: index.md
-- name: DSL конфигурации кластера
-  href: dynamic-config-selectors.md
-- name: Временная конфигурация
-  href: dynamic-config-volatile-config.md
+- name: Конфигурация v1
+  href: configuration-v1/index.md
+  include:
+    mode: link
+    path: configuration-v1/toc_p.yaml
+- name: Конфигурация v2
+  href: configuration-v2/index.md
+  include:
+    mode: link
+    path: configuration-v2/toc_p.yaml
+- name: Миграции
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc_p.yaml
+  hidden: true

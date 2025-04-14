@@ -245,7 +245,7 @@ grpc_config:
 
 Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/tmp/config.yaml` на каждом сервере кластера.
 
-Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../reference/configuration/index.md).
+Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../devops/configuration-management/configuration-v2/config-settings.md).
 
 ## Скопируйте ключи и сертификаты TLS на каждый сервер {#tls-copy-cert}
 

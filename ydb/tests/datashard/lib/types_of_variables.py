@@ -58,11 +58,11 @@ index_three_sync = {
 
 index_three_sync_parametrized_queries = {
     "Bool": lambda i: bool(i),
-    # "Decimal(15,0)": lambda i: "{}".format(i),
-    # "Decimal(22,9)": lambda i: "{}.123".format(i),
-    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
-    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    # "Decimal(15,0)": lambda i: "{}".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(22,9)": lambda i: "{}.123".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(), https://github.com/ydb-platform/ydb/issues/17178
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"), https://github.com/ydb-platform/ydb/issues/17178
 }
 
 index_three_sync_not_Bool = {
@@ -74,11 +74,11 @@ index_three_sync_not_Bool = {
 }
 
 index_three_sync_not_Bool_parametrized_queries = {
-    # "Decimal(15,0)": lambda i: "{}".format(i),
-    # "Decimal(22,9)": lambda i: "{}.123".format(i),
-    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
-    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
+    # "Decimal(15,0)": lambda i: "{}".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(22,9)": lambda i: "{}.123".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(), https://github.com/ydb-platform/ydb/issues/17178
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"), https://github.com/ydb-platform/ydb/issues/17178
 }
 
 index_four_sync = {
@@ -130,9 +130,9 @@ index_first_parametrized_queries = {
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Bool": lambda i: bool(i),
-    # "Decimal(15,0)": lambda i: "{}".format(i),
-    # "Decimal(22,9)": lambda i: "{}.123".format(i),
-    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+    # "Decimal(15,0)": lambda i: "{}".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(22,9)": lambda i: "{}.123".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i), https://github.com/ydb-platform/ydb/issues/17178
 }
 
 
@@ -160,10 +160,10 @@ index_second_parametrized_queries = {
     "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp": lambda i: 1696200000000000 + i * 100000000,
     "Interval": lambda i: i,
-    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
-    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
-    # "Interval64": lambda i: i,
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(), https://github.com/ydb-platform/ydb/issues/17178
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"), https://github.com/ydb-platform/ydb/issues/17178
+    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000, https://github.com/ydb-platform/ydb/issues/17178
+    # "Interval64": lambda i: i, https://github.com/ydb-platform/ydb/issues/17178
 }
 
 null_types = {
@@ -213,9 +213,9 @@ pk_types_parametrized_queries = {
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
     "Bool": lambda i: bool(i),
-    # "Decimal(15,0)": lambda i: "{}".format(i),
-    # "Decimal(22,9)": lambda i: "{}.123".format(i),
-    # "Decimal(35,10)": lambda i: "{}.123456".format(i),
+    # "Decimal(15,0)": lambda i: "{}".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(22,9)": lambda i: "{}.123".format(i), https://github.com/ydb-platform/ydb/issues/17178
+    # "Decimal(35,10)": lambda i: "{}.123456".format(i), https://github.com/ydb-platform/ydb/issues/17178
     "DyNumber": lambda i: float(f"{i}e1"),
 
     "String": lambda i: f"String {i}",
@@ -226,10 +226,10 @@ pk_types_parametrized_queries = {
     "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp": lambda i: 1696200000000000 + i * 100000000,
     "Interval": lambda i: i,
-    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
-    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
-    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
-    # "Interval64": lambda i: i,
+    # "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(), https://github.com/ydb-platform/ydb/issues/17178
+    # "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"), https://github.com/ydb-platform/ydb/issues/17178
+    # "Timestamp64": lambda i: 1696200000000000 + i * 100000000, https://github.com/ydb-platform/ydb/issues/17178
+    # "Interval64": lambda i: i, https://github.com/ydb-platform/ydb/issues/17178
 }
 
 non_pk_types = {

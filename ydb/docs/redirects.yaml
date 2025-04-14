@@ -33,6 +33,8 @@ common:
     to: /public-materials/videos.md
   - from: /concepts/databases.md
     to: /concepts/glossary.md
+    from: /concepts/vector_index.md
+    to: concepts/vector_search.md
   - from: /postgresql/pg-dump.md
     to: /postgresql/import.md
   - from: /concepts/column-table.md

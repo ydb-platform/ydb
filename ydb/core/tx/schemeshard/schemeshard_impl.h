@@ -345,6 +345,7 @@ public:
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableParameterizedDecimal = false;
     bool EnableDataErasure = false;
+    bool EnableExternalSourceSchemaInference = false;
 
     TShardDeleter ShardDeleter;
 

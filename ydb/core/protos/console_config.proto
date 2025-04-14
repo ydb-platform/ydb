@@ -145,6 +145,7 @@ message TConfigItem {
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
         HealthCheckConfigItem = 89;
+        WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
         BlockstoreConfigItem = 93;
 

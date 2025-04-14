@@ -84,6 +84,7 @@ def onjava_module(unit, *args):
         data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim)
 
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
+        data['KOTLIN_VERSION'] = unit.get('_KOTLIN_VERSION')
         if unit.get('KOTLINC_OPTS_VALUE'):
             data['KOTLINC_OPTS'] = extract_macro_calls(unit, 'KOTLINC_OPTS_VALUE', args_delim)
 

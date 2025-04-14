@@ -69,7 +69,7 @@ items:
       href: topic-write.md
     - name: Message pipeline processing
       href: topic-pipeline.md
-  - name: YQL execution
+  - name: SQL query execution
     items:
     - name: Overview
       href: yql-query-overview.md

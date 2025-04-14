@@ -6,9 +6,9 @@
 
 The preferred way to run parameterized queries in {{ ydb-short-name }} CLI is to use the [`ydb sql`](sql.md) command.
 
-Parameter values can be set via the command line arguments, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or JSON format. Binary data can be encoded as base64 or UTF-8. While reading from `stdin` or a file, you can stream multiple parameter values, triggering multiple query executions with batching options.
+Parameter values can be set via the command-line arguments, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or JSON format. Binary data can be encoded as base64 or UTF-8. While reading from `stdin` or a file, you can stream multiple parameter values, triggering multiple query executions with batching options.
 
-## Why Use Parameterized Queries?
+## Why use parameterized queries?
 
 Using parameterized queries offers several key advantages:
 
@@ -18,16 +18,16 @@ Using parameterized queries offers several key advantages:
 
 ## Executing a single query {#one-request}
 
-To provide parameters for a single query execution, you can use the command line arguments, JSON files, or `stdin`, using the following {{ ydb-short-name }} CLI options:
+To provide parameters for a single query execution, you can use the command-line arguments, JSON files, or `stdin`, using the following {{ ydb-short-name }} CLI options:
 
 | Name | Description |
 | --- | --- |
-| `-p, --param` | The value of a single query parameter, in the format: `name=value` or `$name=value`, where `name` is the parameter name and `value` is its value (a valid [JSON value](https://www.json.org/json-en.html)). This option can be specified multiple times.<br/><br/>All specified parameters must be declared in the query using the [DECLARE operator](../../yql/reference/syntax/declare.md); otherwise, you will receive the error "Query does not contain parameter". If you specify the same parameter multiple times, you will receive the error "Parameter value found in more than one source." <br/><br/>Depending on your operating system, you might need to escape the `$` character or enclose your expression in single quotes (`'`). |
-| `--input-file` | The name of a file in [JSON](https://en.wikipedia.org/wiki/JSON) format and [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding that contains parameter values matched against the query parameters by key names. Only one input file can be used.<br/><br/>If values for the same parameter are found in multiple files or set by the `--param` command-line option, you will receive the error "Parameter value found in more than one source." <br/><br/>Keys that are present in the file but not declared in the query will be ignored without an error message. |
-| `--input-format` | The format of parameter values, applied to all sources of parameters (command line, file, or `stdin`).<br/>Available options:<ul><li>`json` (default): JSON format.</li><li>`csv`: [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format.</li><li>`tsv`: [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) format.</li><li>`raw`: Input is read as parameter values with no transformation or parsing. The parameter name should be set with the `--input-param-name` option.</li></ul> |
+| `-p, --param` | The value of a single query parameter in the `name=value` or `$name=value` format, where `name` is the parameter name and `value` is its value (a valid [JSON value](https://www.json.org/json-en.html)). This option can be specified multiple times.<br/><br/>All specified parameters must be declared in the query using the [DECLARE operator](../../yql/reference/syntax/declare.md). Otherwise, you will receive the "Query does not contain parameter" error. If you specify the same parameter multiple times, you will receive the "Parameter value found in more than one source" error.<br/><br/>Depending on your operating system, you might need to escape the `$` character or enclose your expression in single quotes (`'`). |
+| `--input-file` | The name of a file in [JSON](https://en.wikipedia.org/wiki/JSON) format and [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding that contains parameter values matched against the query parameters by key names. Only one input file can be used.<br/><br/>If values for the same parameter are found in multiple files or set by the `--param` command-line option, you will receive the "Parameter value found in more than one source" error.<br/><br/>Keys that are present in the file but not declared in the query will be ignored without an error message. |
+| `--input-format` | The format of parameter values applied to all sources of parameters (command line, file, or `stdin`).<br/>Available options:<ul><li>`json` (default): JSON format.</li><li>`csv`: [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format.</li><li>`tsv`: [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) format.</li><li>`raw`: Input is read as parameter values with no transformation or parsing. The parameter name should be set with the `--input-param-name` option.</li></ul> |
 | `--input-binary-strings` | The input binary string encoding format. Defines how binary strings in the input should be interpreted.<br/>Available options:<ul><li>`unicode`: Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as UTF-8.</li><li>`base64`: Binary strings should be fully encoded with base64.</li></ul> |
 
-If the values are specified for all non-optional parameters [in the `DECLARE` clause](../../yql/reference/syntax/declare.md), the query will be executed on the server. If a value is absent for at least non-optional parameter, the command fails with the error message "Missing value for parameter".
+If values are specified for all non-optional (i.e., NOT NULL) parameters [in the `DECLARE` clause](../../yql/reference/syntax/declare.md), the query will be executed on the server. If a value is absent for even one such parameter, the command fails with the error message "Missing value for parameter".
 
 ### More specific options for input parameters {#specific-param-options}
 
@@ -55,20 +55,20 @@ From the command line using `--param` option:
 {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --param '$a=10'
 ```
 
-Using a file in json format (which is used by default):
+Using a file in JSON format (which is used by default):
 
 ```bash
 echo '{"a":10}' > p1.json
 {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --input-file p1.json
 ```
 
-Via `stdin` passing json string as a set of one parameter:
+Via `stdin` passing a JSON string as a set of one parameter:
 
 ```bash
 echo '{"a":10}' | {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a'
 ```
 
-Via `stdin` passing only parameter value and setting parameter name via `--input-param-name` option:
+Via `stdin` passing only a parameter value and setting a parameter name via the `--input-param-name` option:
 
 ```bash
 echo '10' | {{ ydb-cli }} -p quickstart sql -s 'DECLARE $a AS Int64; SELECT $a' --input-param-name a
@@ -179,7 +179,7 @@ A rule for separating parameter sets (framing) complements the `--input-format` 
 
 {% note warning %}
 
-When using a newline character as a separator between parameter sets, ensure that it isn't used inside the parameter sets. Quoting a text value does not allow newlines within the text. Multiline JSON documents are also not allowed.
+When using a newline character as a separator between parameter sets, ensure that newline characters are not used inside the parameter sets. Quoting a text value does not allow newlines within the text. Multiline JSON documents are also not allowed.
 
 {% endnote %}
 
@@ -318,7 +318,7 @@ When using a newline character as a separator between parameter sets, ensure tha
   83
   ```
 
-  This output can be passed as input to another command running a different parametrized query.
+  This output can be passed as input to another command running a different parameterized query.
 
 - TSV
 
@@ -520,7 +520,7 @@ Command output (the actual values may differ):
 
 The first batch includes all the rows accumulated at the input while the database connection was being established, which is why it is larger than the subsequent ones.
 
-You can terminate the command using Ctrl+C or wait 200 seconds until the input generation is finished.
+You can terminate the command by pressing Ctrl+C or wait 200 seconds until the input generation is finished.
 
 #### Limit on the number of records {#example-adaptive-limit}
 

@@ -71,7 +71,7 @@ items:
       href: topic-write.md
     - name: Конвейерная обработка сообщений
       href: topic-pipeline.md
-  - name: Выполнение YQL
+  - name: Выполнение SQL-запросов
     items:
     - name: Обзор
       href: yql-query-overview.md

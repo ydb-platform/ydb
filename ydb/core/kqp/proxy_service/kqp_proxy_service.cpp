@@ -651,6 +651,15 @@ public:
         Send(ev->Sender, new TEvKqp::TEvProxyPingResponse());
     }
 
+    bool ValidateDatabaseIsSpecified(const TString& database, ui64 requestId) {
+        if (database.empty()) {
+            ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, "Database must be specified to execute query request. ", requestId);
+            return false;
+        }
+
+        return true;
+    }
+
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
@@ -662,6 +671,11 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+
+        if (!ValidateDatabaseIsSpecified(database, requestId)) {
+            return;
+        }
+
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;

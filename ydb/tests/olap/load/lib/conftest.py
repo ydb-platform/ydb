@@ -36,6 +36,7 @@ class LoadSuiteBase:
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
+    verify_data: bool = True
 
     @classmethod
     def suite(cls) -> str:

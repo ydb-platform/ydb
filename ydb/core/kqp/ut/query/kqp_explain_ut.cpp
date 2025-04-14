@@ -931,6 +931,143 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         UNIT_ASSERT(cteLink1.IsDefined());
     }
+
+    Y_UNIT_TEST_TWIN(CreateTableAs, Stats) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        auto kikimrSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+        TKikimrRunner kikimr(kikimrSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE TABLE `/Root/Source` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32,
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .ExecMode(NYdb::NQuery::EExecMode::Explain);
+        if (Stats) {
+            settings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+        }
+
+        {    
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+        }
+
+        {    
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `test/Destination2` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/Destination2");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/Destination2");
+        }
+
+        {    
+            auto result = client.ExecuteQuery(R"(
+                PRAGMA TablePathPrefix("/Root/test");
+
+                CREATE TABLE `test2/Destination3` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/test2/Destination3");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/test2/Destination3");
+        }
+    }
 }
 
 } // namespace NKqp

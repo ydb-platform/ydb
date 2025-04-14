@@ -2027,18 +2027,12 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT Col2 AS Col1, Col1 As Col2 FROM `/Root/ColSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Can't set NULL or optional value to not null column: Col1.", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Can't create column table with nullable primary key column `Col1`.", result.GetIssues().ToString());
 
             result = client.ExecuteQuery(R"(
                 SELECT * FROM `/Root/ColDst`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            // TODO: Wait for RENAME from columnshards
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            result = client.ExecuteQuery(R"(
-                DROP TABLE `/Root/ColDst`;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {

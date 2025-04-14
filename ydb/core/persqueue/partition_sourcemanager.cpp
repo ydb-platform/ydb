@@ -50,7 +50,7 @@ TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
 
 bool TPartitionSourceManager::HasParents() const {
     auto node = GetPartitionNode();
-    return node && !node->Parents.empty();
+    return node && !node->DirectParents.empty();
 }
 
 

@@ -86,6 +86,7 @@ public:
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
     bool TestSqlFormat = false;
+    bool TestLexers = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;

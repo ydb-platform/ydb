@@ -41,15 +41,19 @@ public:
 
 class TModuleResolver : public IModuleResolver {
 public:
+    using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
+
     TModuleResolver(const NSQLTranslation::TTranslators& translators, TModulesTable&& modules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
+        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
+        THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
         : Translators(translators)
         , OwnedCtx(std::move(ownedCtx))
         , LibsContext(nextUniqueId)
         , Modules(std::move(modules))
         , ClusterMapping(clusterMapping)
         , SqlFlags(sqlFlags)
+        , ModuleChecker(moduleChecker)
         , OptimizeLibraries(optimizeLibraries)
     {
         if (OwnedCtx) {
@@ -60,7 +64,7 @@ public:
     TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
+        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix, TModuleChecker moduleChecker)
         : Translators(translators)
         , ParentModules(parentModules)
         , LibsContext(nextUniqueId)
@@ -68,6 +72,7 @@ public:
         , Libs(libs)
         , ClusterMapping(clusterMapping)
         , SqlFlags(sqlFlags)
+        , ModuleChecker(moduleChecker)
         , OptimizeLibraries(optimizeLibraries)
         , FileAliasPrefix(fileAliasPrefix)
     {
@@ -100,6 +105,10 @@ public:
     }
     void SetSqlFlags(const THashSet<TString>& flags) {
         SqlFlags = flags;
+    }
+
+    void SetModuleChecker(TModuleChecker moduleChecker) {
+        ModuleChecker = moduleChecker;
     }
 
     void RegisterPackage(const TString& package) override;
@@ -139,6 +148,7 @@ private:
     TModulesTable Modules;
     THashMap<TString, TString> ClusterMapping;
     THashSet<TString> SqlFlags;
+    TModuleChecker ModuleChecker;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;

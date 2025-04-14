@@ -537,6 +537,12 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         ctx.IssueManager.RaiseIssue(addSubIssues(std::move(issue), astRes.Issues));
     }
 
+    if (!sExpr && ModuleChecker) {
+        if (!ModuleChecker(query, fullName, ctx)) {
+            return false;
+        }
+    }
+
     TLibraryCohesion cohesion;
     if (!CompileExpr(*astRes.Root, cohesion, LibsContext)) {
         ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to compile: " << fullName), LibsContext.IssueManager.GetIssues()));
@@ -647,7 +653,7 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(Translators, &Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
+    return std::make_shared<TModuleResolver>(Translators, &Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix, ModuleChecker);
 }
 
 void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {

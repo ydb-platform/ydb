@@ -11,15 +11,6 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-class TCommonCodecsProvider {
-public:
-    TCommonCodecsProvider() {
-        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
-        TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
-    }
-};
-TCommonCodecsProvider COMMON_CODECS_PROVIDER;
-
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))

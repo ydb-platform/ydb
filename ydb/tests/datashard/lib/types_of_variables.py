@@ -233,3 +233,4 @@ non_pk_types = {
     "JsonDocument": lambda i: "{{\"another_doc_key\": {}}}".format(i),
     "Yson": lambda i: "[{}]".format(i)
 }
+

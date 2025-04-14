@@ -1301,14 +1301,30 @@
             "Match": {"Type": "Callable", "Name": "StartsWith"}
         },
         {
+            "Name": "TCoCmpStartsWithIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "StartsWithIgnoreCase"}
+        },
+        {
             "Name": "TCoCmpEndsWith",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "EndsWith"}
         },
         {
+            "Name": "TCoCmpEndsWithIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "EndsWithIgnoreCase"}
+        },
+
+        {
             "Name": "TCoCmpStringContains",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "StringContains"}
+        },
+        {
+            "Name": "TCoCmpStringContainsIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "StringContainsIgnoreCase"}
         },
         {
             "Name": "TCoInc",

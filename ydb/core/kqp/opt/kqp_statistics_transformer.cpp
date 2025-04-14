@@ -539,10 +539,10 @@ private:
         {"gte"}
     };
 
-    THashSet<TString> RegexpSigns = {
+    THashSet<TString> RegexpSigns = { //TODO
         "string_contains",
         "starts_with",
-        "ends_with"
+        "ends_with",
     };
 };
 

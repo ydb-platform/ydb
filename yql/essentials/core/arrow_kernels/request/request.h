@@ -39,7 +39,11 @@ public:
         Greater,
         GreaterOrEqual,
 
-        Coalesce
+        Coalesce,
+        //case insensitive simple pattern match ops;
+        StartsWithIgnoreCase, 
+        EndsWithIgnoreCase,
+        StringContainsIgnoreCase
     };
 
     TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);

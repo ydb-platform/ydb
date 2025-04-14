@@ -1,5 +1,6 @@
 #include "mkql_builtins_string_kernels.h"
 #include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_with_impl.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -362,9 +363,10 @@ struct TStrGreaterOrEqualOp {
     }
 };
 
+template<bool IgnoreCase>
 struct TStrStartsWithOp {
     static inline bool Do(std::string_view left, std::string_view right) {
-        return left.starts_with(right);
+        return StringStartsWith<IgnoreCase>(left, right);
     }
 
     static inline bool DoWithEmptyLeft(size_t rightLen) {
@@ -376,9 +378,10 @@ struct TStrStartsWithOp {
     }
 };
 
+template<bool IgnoreCase>
 struct TStrEndsWithOp {
     static inline bool Do(std::string_view left, std::string_view right) {
-        return left.ends_with(right);
+        return StringEndsWith<IgnoreCase>(left, right);
     }
 
     static inline bool DoWithEmptyLeft(size_t rightLen) {
@@ -390,9 +393,10 @@ struct TStrEndsWithOp {
     }
 };
 
+template<bool IgnoreCase>
 struct TStrContainsOp {
     static inline bool Do(std::string_view left, std::string_view right) {
-        return left.contains(right);
+        return StringContainsSubstring<IgnoreCase>(left, right);
     }
 
     static inline bool DoWithEmptyLeft(size_t rightLen) {
@@ -498,16 +502,29 @@ void RegisterStringKernelSize(TKernelFamilyBase& kernelFamily) {
     AddSizeStringKernel<NUdf::TUtf8>(kernelFamily);
 }
 
+
 void RegisterStringKernelStartsWith(TKernelFamilyBase& kernelFamily) {
-    AddCompareStringKernels<TStrStartsWithOp>(kernelFamily);
+    AddCompareStringKernels<TStrStartsWithOp<false>>(kernelFamily);
+}
+
+void RegisterStringKernelStartsWithIgnoreCase(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrStartsWithOp<true>>(kernelFamily);
 }
 
 void RegisterStringKernelEndsWith(TKernelFamilyBase& kernelFamily) {
-    AddCompareStringKernels<TStrEndsWithOp>(kernelFamily);
+    AddCompareStringKernels<TStrEndsWithOp<false>>(kernelFamily);
+}
+
+void RegisterStringKernelEndsWithIgnoreCase(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrEndsWithOp<true>>(kernelFamily);
 }
 
 void RegisterStringKernelContains(TKernelFamilyBase& kernelFamily) {
-    AddCompareStringKernels<TStrContainsOp>(kernelFamily);
+    AddCompareStringKernels<TStrContainsOp<false>>(kernelFamily);
+}
+
+void RegisterStringKernelContainsIgnoreCase(TKernelFamilyBase& kernelFamily) {
+    AddCompareStringKernels<TStrContainsOp<true>>(kernelFamily);
 }
 
 void RegisterSizeBuiltin(TKernelFamilyMap& kernelFamilyMap) {
@@ -518,18 +535,31 @@ void RegisterSizeBuiltin(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Size"] = std::move(family);
 }
 
-void RegisterWith(TKernelFamilyMap& kernelFamilyMap) {
+void RegisterWith(TKernelFamilyMap& kernelFamilyMap) { //
     auto family = std::make_unique<TKernelFamilyBase>();
     RegisterStringKernelStartsWith(*family);
     kernelFamilyMap["StartsWith"] = std::move(family);
+
+    family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelStartsWithIgnoreCase(*family);
+    kernelFamilyMap["StartsWithIgnoreCase"] = std::move(family);
+
 
     family = std::make_unique<TKernelFamilyBase>();
     RegisterStringKernelEndsWith(*family);
     kernelFamilyMap["EndsWith"] = std::move(family);
 
     family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelEndsWithIgnoreCase(*family);
+    kernelFamilyMap["EndsWithIgnoreCase"] = std::move(family);
+
+    family = std::make_unique<TKernelFamilyBase>();
     RegisterStringKernelContains(*family);
     kernelFamilyMap["StringContains"] = std::move(family);
+
+    family = std::make_unique<TKernelFamilyBase>();
+    RegisterStringKernelContainsIgnoreCase(*family);
+    kernelFamilyMap["StringContainsIgnoreCase"] = std::move(family);
 }
 
 }

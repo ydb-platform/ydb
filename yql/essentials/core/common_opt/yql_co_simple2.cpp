@@ -927,7 +927,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
 
     map["AggrMin"] = map["AggrMax"] = map["Coalesce"] = std::bind(&DropAggrOverSame, _1);
 
-    map["StartsWith"] = map["EndsWith"] = map["StringContains"] = &CheckCompareSame<true, false>;
+    map["StartsWith"] = map["EndsWith"] = map["StringContains"] = &CheckCompareSame<true, false>; //
 
     map["=="] = map["<="] = map[">="] = &CheckCompareSame<true, false>;
     map["!="] = map["<"] = map[">"] = &CheckCompareSame<false, false>;

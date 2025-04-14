@@ -286,10 +286,10 @@ namespace {
             // Arguments:
             // 1. callback - function, that will be called on recieving the response from KQP om commit request
             // 2. consumerGenerationsToReturnInValidationRequest - map of consumer name to its generation to ensure proper validation of consumer state by actor
-            void AddObserverForCommitRequestToKqp(const std::function<void(const TEvKqp::TEvQueryRequest*)>& callback, std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest = {}) {
+            void AddObserverForCommitRequestToKqp(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest = {}) {
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationsToReturnInValidationRequest);
 
-                auto observer = [callback, this](TAutoPtr<IEventHandle>& input) {
+                auto observer = [callback = std::move(callback), this](TAutoPtr<IEventHandle>& input) {
                     // handle query request
                     if (auto* event = input->CastAsLocal<TEvKqp::TEvQueryRequest>()) {
                         // first request is a validation request with select statements
@@ -461,14 +461,13 @@ namespace {
             std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> partitionOffsetsToCommitByTopic;
             partitionOffsetsToCommitByTopic["topic1"] = {{0, 0}};
             partitionOffsetsToCommitByTopic["topic2"] = {{0, 10}, {1, 5}};
-            bool seenEvent = false;
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
-            auto callback = [&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+            bool seenEvent = false;
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
                 MatchQueryRequest(request, {true, {}, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
                 seenEvent = true;
-            };
-            AddObserverForCommitRequestToKqp(callback, consumerGenerationByNameToReturnFromKqp);
+            }, consumerGenerationByNameToReturnFromKqp);
 
             SendTxnOffsetCommitRequest({consumerName, consumerGeneration, partitionOffsetsToCommitByTopic});
             SendEndTxnRequest(true);
@@ -520,11 +519,10 @@ namespace {
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
             bool seenEvent = false;
-            auto callback = [&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
                 MatchQueryRequest(request, {true, topics, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
                 seenEvent = true;
-            };
-            AddObserverForCommitRequestToKqp(callback, consumerGenerationByNameToReturnFromKqp);
+            }, consumerGenerationByNameToReturnFromKqp);
 
             SendAddPartitionsToTxnRequest(topics);
             SendTxnOffsetCommitRequest({consumerName, consumerGeneration, partitionOffsetsToCommitByTopic});

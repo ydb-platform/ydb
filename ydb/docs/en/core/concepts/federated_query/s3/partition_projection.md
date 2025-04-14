@@ -1,6 +1,6 @@
-# Advanced Partitioning
+# Eхtended Partitioning in S3 ({{ objstorage-full-name }})
 
-[Partitioning](partitioning.md) allows you to specify for {{ ydb-full-name }} rules for data placement in S3 ({{ objstorage-full-name }}).
+[Partitioning](partitioning.md) allows you to specify rules for {{ ydb-full-name }} data placement in S3 ({{ objstorage-full-name }}).
 
 Assume the data in S3 ({{ objstorage-full-name }}) is stored in the following directory structure:
 

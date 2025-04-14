@@ -4292,7 +4292,15 @@ TRuntimeNode TProgramBuilder::StartsWith(TRuntimeNode string, TRuntimeNode prefi
     return DataCompare(__func__, string, prefix);
 }
 
+TRuntimeNode TProgramBuilder::StartsWithIgnoreCase(TRuntimeNode string, TRuntimeNode prefix) {
+    return DataCompare(__func__, string, prefix);
+}
+
 TRuntimeNode TProgramBuilder::EndsWith(TRuntimeNode string, TRuntimeNode suffix) {
+    return DataCompare(__func__, string, suffix);
+}
+
+TRuntimeNode TProgramBuilder::EndsWithIgnoreCase(TRuntimeNode string, TRuntimeNode suffix) {
     return DataCompare(__func__, string, suffix);
 }
 
@@ -4304,6 +4312,10 @@ TRuntimeNode TProgramBuilder::StringContains(TRuntimeNode string, TRuntimeNode p
                 type1->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expecting string as first argument");
     MKQL_ENSURE(type2->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id ||
                 type2->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expecting string as second argument");
+    return DataCompare(__func__, string, pattern);
+}
+
+TRuntimeNode TProgramBuilder::StringContainsIgnoreCase(TRuntimeNode string, TRuntimeNode pattern) {
     return DataCompare(__func__, string, pattern);
 }
 

@@ -166,6 +166,7 @@ private:
     static bool IsSimpleLikeOperator(const TCoCompare& predicate) {
         // Only cases $A LIKE $B, where $B:
         // "%str", "str%", "%str%"
+        // TODO
         return predicate.Maybe<TCoCmpStringContains>()
             || predicate.Maybe<TCoCmpStartsWith>()
             || predicate.Maybe<TCoCmpEndsWith>();

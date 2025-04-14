@@ -271,7 +271,7 @@ std::unordered_set<std::string> SimpleArrowCmpFuncs = {
 };
 
 std::unordered_set<std::string> YqlKernelCmpFuncs = {
-    "string_contains", "starts_with", "ends_with"
+    "string_contains", "starts_with", "ends_with", "string_contains_ignore_case", "starts_with_ignore_case", "ends_with_ignore_case"
 };
 
 ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
@@ -466,6 +466,21 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
 
 ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
 {
+    struct TComparisionInfo {
+        TKernelRequestBuilder::EBinaryOp BinaryOp;
+        ui32 Function = TProgram::TAssignment::FUNC_UNSPECIFIED;
+    };
+
+    THashMap<TString, TComparisionInfo> comparsions {
+        {"string_contains", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::StringContains, TProgram::TAssignment::FUNC_STR_MATCH}},
+        {"starts_with", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::StartsWith, TProgram::TAssignment::FUNC_STR_STARTS_WITH}},
+        {"ends_with", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::EndsWith, TProgram::TAssignment::FUNC_STR_ENDS_WITH}},
+        {"string_contains_ignore_case", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase, TProgram::TAssignment::FUNC_STR_MATCH_IGNORE_CASE}},
+        {"starts_with_ignore_case", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::StartsWithIgnoreCase, TProgram::TAssignment::FUNC_STR_STARTS_WITH_IGNORE_CASE}},
+        {"ends_with_ignore_case", TComparisionInfo{TKernelRequestBuilder::EBinaryOp::EndsWithIgnoreCase, TProgram::TAssignment::FUNC_STR_ENDS_WITH_IGNORE_CASE}},
+    };
+
+
     // Columns should be created before comparison, otherwise comparison fail to find columns
     const auto leftColumnId = GetOrCreateColumnId(comparison.Left(), ctx);
     const auto rightColumnId = GetOrCreateColumnId(comparison.Right(), ctx);
@@ -474,46 +489,21 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
     auto *const cmpFunc = command->MutableFunction();
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
-    bool needCastToBool = false;
 
-    if (comparison.Operator() == "string_contains") {
-        function = TProgram::TAssignment::FUNC_STR_MATCH;
+    if (const auto cmpInfo = comparsions.FindPtr(comparison.Operator())) {
+        function = cmpInfo->Function;
         cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StringContains,
+        const auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), cmpInfo->BinaryOp,
             comparison.Left(),
             comparison.Right(),
             ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
         cmpFunc->SetKernelIdx(idx);
-        needCastToBool = true;
-    } else if (comparison.Operator() == "starts_with") {
-        function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
-        cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StartsWith,
-            comparison.Left(),
-            comparison.Right(),
-            ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-        cmpFunc->SetKernelIdx(idx);
-        needCastToBool = true;
-    } else if (comparison.Operator() == "ends_with") {
-        function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
-        cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-        auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::EndsWith,
-            comparison.Left(),
-            comparison.Right(),
-            ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-        cmpFunc->SetKernelIdx(idx);
-        needCastToBool = true;
     }
-
     cmpFunc->SetId(function);
     cmpFunc->AddArguments()->SetId(leftColumnId);
     cmpFunc->AddArguments()->SetId(rightColumnId);
 
-    if (needCastToBool) {
-        return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Boolean", ctx);
-    }
-
-    return command->GetColumn().GetId();
+    return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Boolean", ctx);
 }
 
 ui64 CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
@@ -659,12 +649,20 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
 
     TKernelRequestBuilder::EBinaryOp op;
     const TTypeAnnotationNode* type = ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool);
-    if (const std::string_view& oper = operation.Operator().Value(); oper == "string_contains"sv) {
+    //TODO make from string
+    const std::string_view& oper = operation.Operator().Value();
+    if (oper == "string_contains"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StringContains;
     } else if (oper == "starts_with"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StartsWith;
     } else if (oper == "ends_with"sv) {
         op = TKernelRequestBuilder::EBinaryOp::EndsWith;
+    } else if (oper == "string_contains_ignore_case"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase;
+    } else if (oper == "starts_with_ignore_case"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::StartsWithIgnoreCase;
+    } else if (oper == "ends_with_ignore_case"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::EndsWithIgnoreCase;
     } else if (oper == "eq"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Equals;
     } else if (oper == "neq"sv) {
@@ -703,6 +701,7 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
     cmpFunc->SetYqlOperationId((ui32)op);
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
     cmpFunc->SetKernelIdx(kernel.first);
+    cmpFunc->SetKernelName(std::string(oper));
     cmpFunc->AddArguments()->SetId(leftColumn.Id);
     cmpFunc->AddArguments()->SetId(rightColumn.Id);
     return {command->GetColumn().GetId(), kernel.second};

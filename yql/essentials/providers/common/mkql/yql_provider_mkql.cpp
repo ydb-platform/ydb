@@ -579,6 +579,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"StartsWith", &TProgramBuilder::StartsWith},
         {"EndsWith", &TProgramBuilder::EndsWith},
         {"StringContains", &TProgramBuilder::StringContains},
+        {"StartsWithIgnoreCase", &TProgramBuilder::StartsWithIgnoreCase},
+        {"EndsWithIgnoreCase", &TProgramBuilder::EndsWithIgnoreCase},
+        {"StringContainsIgnoreCase", &TProgramBuilder::StringContainsIgnoreCase},
 
         {"SqueezeToList", &TProgramBuilder::SqueezeToList},
 

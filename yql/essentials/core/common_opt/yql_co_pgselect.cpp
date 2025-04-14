@@ -4062,7 +4062,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             }
 
             if (!hasUnderscore && countOfPercents == 2 && str.StartsWith('%') && str.EndsWith('%')) {
-                op = "StringContains";
+                op = "StringContains"; //
                 arg = str.SubString(1, str.size() - 2);
             }
 

@@ -71,7 +71,7 @@ message TProgram {
             FUNC_CMP_GREATER_EQUAL = 6;
             FUNC_IS_NULL = 7;
             FUNC_STR_LENGTH = 8;
-            FUNC_STR_MATCH = 9;
+            FUNC_STR_MATCH = 9; //Match substring
             FUNC_BINARY_NOT = 10;
             FUNC_BINARY_AND = 11;
             FUNC_BINARY_OR = 12;
@@ -97,7 +97,7 @@ message TProgram {
             FUNC_STR_MATCH_LIKE = 32;
             FUNC_STR_STARTS_WITH = 33;
             FUNC_STR_ENDS_WITH = 34;
-            FUNC_STR_MATCH_IGNORE_CASE = 35;
+            FUNC_STR_MATCH_IGNORE_CASE = 35; //Match substring
             FUNC_STR_STARTS_WITH_IGNORE_CASE = 36;
             FUNC_STR_ENDS_WITH_IGNORE_CASE = 37;
         }

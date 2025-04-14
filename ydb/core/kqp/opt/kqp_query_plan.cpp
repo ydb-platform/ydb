@@ -1148,7 +1148,10 @@ private:
                 THashMap<TString, TString> strRegexp = {
                     {"string_contains", "%s LIKE \"%%%s%%\""},
                     {"starts_with", "%s LIKE \"%s%%\""},
-                    {"ends_with", "%s LIKE \"%%%s\""}
+                    {"ends_with", "%s LIKE \"%%%s\""},
+                    {"string_contains_ignore_case", "%s ILIKE \"%%%s%%\""},
+                    {"starts_with_ignore_case", "%s ILIKE \"%s%%\""},
+                    {"ends_with_ignore_case", "%s ILIKE \"%%%s\""}
                 };
                 TString compSign = TString(listPtr->Child(0)->Content());
                 if (strComp.contains(compSign)) {

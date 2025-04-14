@@ -67,8 +67,11 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     case EBinaryOp::Div:
     case EBinaryOp::Mod:
     case EBinaryOp::StartsWith:
+    case EBinaryOp::StartsWithIgnoreCase:
     case EBinaryOp::EndsWith:
+    case EBinaryOp::EndsWithIgnoreCase:
     case EBinaryOp::StringContains:
+    case EBinaryOp::StringContainsIgnoreCase:
     case EBinaryOp::Equals:
     case EBinaryOp::NotEquals:
     case EBinaryOp::Less:

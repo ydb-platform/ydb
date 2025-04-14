@@ -210,8 +210,11 @@ public:
     TRuntimeNode Find(TRuntimeNode haystack, TRuntimeNode needle, TRuntimeNode pos);
     TRuntimeNode RFind(TRuntimeNode haystack, TRuntimeNode needle, TRuntimeNode pos);
     TRuntimeNode StartsWith(TRuntimeNode string, TRuntimeNode prefix);
+    TRuntimeNode StartsWithIgnoreCase(TRuntimeNode string, TRuntimeNode prefix);
     TRuntimeNode EndsWith(TRuntimeNode string, TRuntimeNode suffix);
+    TRuntimeNode EndsWithIgnoreCase(TRuntimeNode string, TRuntimeNode suffix);
     TRuntimeNode StringContains(TRuntimeNode string, TRuntimeNode pattern);
+    TRuntimeNode StringContainsIgnoreCase(TRuntimeNode string, TRuntimeNode pattern);
     TRuntimeNode ByteAt(TRuntimeNode data, TRuntimeNode index);
     TRuntimeNode Size(TRuntimeNode data);
     template <bool Utf8 = false>

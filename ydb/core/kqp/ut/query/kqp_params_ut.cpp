@@ -797,8 +797,10 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST_TWIN(Decimal, QueryService) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_QUAD(Decimal, QueryService, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto tableClient = kikimr.GetTableClient();
         auto queryClient = kikimr.GetQueryClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();

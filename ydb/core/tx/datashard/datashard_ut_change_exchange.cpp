@@ -2434,6 +2434,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     }
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
+            
+            case NKikimr::NEvents::TDataEvents::EvWriteResult:
+                if (auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()) {
+                    if (msg->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                        txCompleted = true;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
 
             case TEvChangeExchange::EvSplitAck:
                 splitAcked = true;

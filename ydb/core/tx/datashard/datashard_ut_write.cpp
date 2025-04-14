@@ -40,13 +40,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send immediate write =========\n";
         {
@@ -63,16 +69,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST_QUAD(ExecSQLUpsertPrepared, EvWrite, Volatile) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         runtime.GetAppData().FeatureFlags.SetEnableDataShardVolatileTransactions(Volatile);
 
         TShardedTableOptions opts;
         auto [shards1, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         auto [shards2, tableId2] = CreateShardedTable(server, sender, "/Root", "table-2", opts);
-
-        auto rows = EvWrite ? TEvWriteRows{{tableId1, {0, 1}}, {tableId2, {2, 3}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         Cout << "========= Send distributed write =========\n";
         {

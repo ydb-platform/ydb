@@ -495,8 +495,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST(FewEffects) {
+    Y_UNIT_TEST_TWIN(FewEffects, UseSink) {
         TKikimrSettings settings;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.SetAppConfig(app);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -514,11 +517,17 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
+        auto upsertsConstCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
 
-        auto deletesCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
+        auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
+        UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, UseSink ? 2 : 2);
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? 1 : 1);
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
@@ -540,8 +549,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         countOperationsByType("reads");
         countOperationsByType("writes");
 
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
-        UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], deletesCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseSink ? upsertsCount : upsertsConstCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseSink ? deletesCount : deletesConstCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);
     }

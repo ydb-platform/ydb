@@ -1343,8 +1343,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(stats.query_phases(index).duration_us() > 0);
     }
 
-    Y_UNIT_TEST(PruneWritePartitions) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(PruneWritePartitions, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1364,17 +1366,28 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertSuccessResult(result);
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
-        UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
+            UNIT_ASSERT(stats.query_phases(0).table_access().size() == 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+        }
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/TwoShard` WHERE Value2 <= -10 ORDER BY Key;
@@ -1757,8 +1770,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(Update) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(Update, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1774,17 +1789,28 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+            UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 0);
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0); 
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 2);
-        UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 0);
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 2);
+            UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 0);
+            UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+        }
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/TwoShard` ORDER BY Key;
@@ -1801,8 +1827,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(Delete) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(Delete, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1817,19 +1845,30 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        // Phase reading rows to delete
-        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+            // Phase reading rows to delete
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 2);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        // Phase deleting rows
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
+            // Phase reading rows to delete
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+
+            // Phase deleting rows
+            UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
+        }
 
         result = session.ExecuteDataQuery(R"(
 
@@ -1845,8 +1884,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(DeleteOn) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(DeleteOn, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1861,19 +1902,30 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        // Phase reading rows to delete
-        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+            // Phase reading rows to delete
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 2);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        // Phase deleting rows
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
+            // Phase reading rows to delete
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
+
+            // Phase deleting rows
+            UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
+        }
 
         result = session.ExecuteDataQuery(R"(
 
@@ -1969,8 +2021,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(PruneEffectPartitions) {
+    Y_UNIT_TEST_TWIN(PruneEffectPartitions, UseSink) {
         TKikimrSettings serverSettings;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        serverSettings.SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1996,19 +2051,29 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*it.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+        }
 
         it = session.ExecuteDataQuery(R"(
 
@@ -2606,8 +2671,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
-    Y_UNIT_TEST(DeleteWithBuiltin) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(DeleteWithBuiltin, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2620,7 +2687,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
     }
 
     Y_UNIT_TEST(MultiEffectsOnSameTable) {
@@ -3034,8 +3101,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(DeleteWithInputMultiConsumption) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(DeleteWithInputMultiConsumption, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3055,7 +3124,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/Join1", {
-            .ExpectedReads = 9,
+            .ExpectedReads = UseSink ? 18 : 9, // without sink: precompute
         });
 
         AssertTableStats(result, "/Root/Join2", {
@@ -3078,8 +3147,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(DeleteWithInputMultiConsumptionLimit) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(DeleteWithInputMultiConsumptionLimit, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3106,7 +3177,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/Test", {
-            .ExpectedReads = 1,
+            .ExpectedReads = UseSink ? 2 : 1, // without sink: precompute
             .ExpectedDeletes = 2,
         });
 

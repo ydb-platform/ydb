@@ -160,7 +160,7 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -316,8 +316,8 @@ public:
         return true;
     }
 
-    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
-        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }

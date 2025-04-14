@@ -241,8 +241,9 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
             }), commitResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(MixedTxFail) {
+    Y_UNIT_TEST_TWIN(MixedTxFail, useSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);

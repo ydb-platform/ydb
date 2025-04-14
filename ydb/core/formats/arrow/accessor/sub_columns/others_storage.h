@@ -73,6 +73,22 @@ public:
             CurrentIndex = 0;
         }
 
+        bool SkipRecordTo(const ui32 recordIndex) {
+            AFL_VERIFY(IsValid());
+            if (recordIndex <= RecordIndex->Value(CurrentIndex)) {
+                return true;
+            }
+            auto idx = NArrow::FindUpperOrEqualPosition(*RecordIndex, recordIndex, CurrentIndex);
+            if (!idx) {
+                CurrentIndex = RecordIndex->length();
+                return false;
+            } else {
+                CurrentIndex = *idx;
+                AFL_VERIFY(recordIndex <= RecordIndex->Value(CurrentIndex));
+                return CurrentIndex < RecordsCount;
+            }
+        }
+
         std::optional<ui32> FindPosition(const ui32 findRecordIndex) const {
             return NArrow::FindUpperOrEqualPosition(*RecordIndex, findRecordIndex);
         }

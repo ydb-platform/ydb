@@ -53,4 +53,33 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
     }
 }
 
+void TColumnsData::TIterator::InitArrays() {
+    while (CurrentIndex < GlobalChunkedArray->GetRecordsCount()) {
+        if (!FullArrayAddress || !FullArrayAddress->GetAddress().Contains(CurrentIndex)) {
+            FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
+            ChunkAddress = std::nullopt;
+        }
+        const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
+        ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
+        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
+        CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+            if (CurrentArrayData->IsNull(localIndex)) {
+                Next();
+            }
+            break;
+        } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
+            if (CurrentArrayData->IsNull(localIndex) &&
+                std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
+                CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
+            } else {
+                break;
+            }
+        } else {
+            AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
+        }
+    }
+    AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
+}
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

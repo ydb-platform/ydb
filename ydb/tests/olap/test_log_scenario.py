@@ -1,5 +1,7 @@
 import datetime
 import os
+import pytest
+
 import random
 
 import logging
@@ -9,6 +11,7 @@ import yatest.common
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.olap.common.thread_helper import TestThread
 from ydb.tests.olap.common.ydb_client import YdbClient
 
@@ -19,11 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 class YdbWorkloadLog:
-    def __init__(self, endpoint: str, database: str, table_name: str):
+    def __init__(self, endpoint: str, database: str, table_name: str, timestamp_deviation: int):
         self.path: str = yatest.common.binary_path(os.environ["YDB_CLI_BINARY"])
         self.endpoint: str = endpoint
         self.database: str = database
         self.begin_command: list[str] = [self.path, "-e", self.endpoint, "-d", self.database, "workload", "log", "--path", table_name]
+        self.timestamp_deviation = timestamp_deviation
 
     def _call(self, command: list[str], wait=False):
         logging.info(f'YdbWorkloadLog execute {' '.join(command)} with wait = {wait}')
@@ -46,7 +50,7 @@ class YdbWorkloadLog:
             "--rows",
             str(rows),
             "--timestamp_deviation",
-            "180"
+            str(self.timestamp_deviation)
         ]
         self._call(command=command, wait=wait)
 
@@ -94,6 +98,9 @@ class TestLogScenario(object):
             extra_feature_flags={
                 "enable_immediate_writing_on_bulk_upsert": True
             },
+            additional_log_configs={
+                "TX_COLUMNSHARD_SCAN": LogLevels.TRACE
+            }
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
@@ -122,13 +129,14 @@ class TestLogScenario(object):
         logging.info(f'check insert: {current_count} {prev_count}')
         assert current_count != prev_count
 
-    def test(self):
-        """As per https://github.com/ydb-platform/ydb/issues/13530"""
+    @pytest.mark.parametrize('timestamp_deviation', [3 * 60, 365 * 24 * 60 * 2])  # [3 hours, 2 years]
+    def test(self, timestamp_deviation: int):
+        """As per https://github.com/ydb-platform/ydb/issues/13531"""
 
         wait_time: int = int(get_external_param("wait_seconds", "30"))
         self.table_name: str = "log"
 
-        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
+        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name, timestamp_deviation=timestamp_deviation)
         ydb_workload.create_table(self.table_name)
         ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")

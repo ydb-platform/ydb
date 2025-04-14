@@ -65,6 +65,7 @@ private:
         const auto& leasePraramName = AddParam<i64>("Lease", params, ev->Get()->Record.id());
 
         std::ostringstream sql;
+        sql << Stuff->TablePrefix;
         sql << "update `leases` set `updated` = CurrentUtcDatetime(`id`) where " << leasePraramName << " = `id`;" << std::endl;
         sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
 
@@ -165,6 +166,7 @@ private:
         MakeSimplePredicate(Key, RangeEnd, where, params);
 
         std::ostringstream sql;
+        sql << Stuff->TablePrefix;
         if (WithPrevious) {
             sql << "select * from (select max_by(TableRow(), `modified`) from `content` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
         }
@@ -586,6 +588,7 @@ private:
         Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
 
         std::ostringstream sql;
+        sql << Stuff->TablePrefix;
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
 

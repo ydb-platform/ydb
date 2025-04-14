@@ -1,12 +1,10 @@
 #include "yql_parser.h"
 
-#include <yql/essentials/parser/lexer_common/lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/scope.h>
 #include <util/string/split.h>

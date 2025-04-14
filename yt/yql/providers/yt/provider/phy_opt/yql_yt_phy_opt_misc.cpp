@@ -326,7 +326,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     auto cluster = DeriveClusterFromInput(input, selectionMode);
-    if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false, selectionMode)) {
+    if (!cluster || !IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -937,7 +937,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UpdateDataSinkCluster(T
         return node;
     }
 
-    TString cluster = DeriveClusterFromSectionList(op.Input(), selectionMode);
+    TString cluster = GetClusterFromSectionList(op.Input());
     if (cluster == op.DataSink().Cluster().Value()) {
         return node;
     }
@@ -956,7 +956,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UpdateDataSourceCluster
     }
 
     auto op = node.Cast<TYtReadTable>();
-    TString cluster = DeriveClusterFromSectionList(op.Input(), ERuntimeClusterSelectionMode::Auto);
+    TString cluster = GetClusterFromSectionList(op.Input());
     if (cluster == op.DataSource().Cluster().Value()) {
         return node;
     }

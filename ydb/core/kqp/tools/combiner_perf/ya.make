@@ -41,12 +41,13 @@ CFLAGS(
 ENDIF()
 
 SRCS(
-    factories.cpp
     converters.cpp
+    factories.cpp
     simple.cpp
-    simple_last.cpp
-    tpch_last.cpp
     simple_block.cpp
+    simple_last.cpp
+    streams.cpp
+    tpch_last.cpp
 )
 
 END()

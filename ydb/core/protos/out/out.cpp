@@ -258,6 +258,6 @@ Y_DECLARE_OUT_SPEC(, NKikimrIndexBuilder::EBuildStatus, stream, value) {
     stream << NKikimrIndexBuilder::EBuildStatus_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvLocalKMeansRequest_EState, stream, value) {
-    stream << NKikimrTxDataShard::TEvLocalKMeansRequest_EState_Name(value);
+Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EKMeansState, stream, value) {
+    stream << NKikimrTxDataShard::EKMeansState_Name(value);
 }

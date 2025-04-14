@@ -26,6 +26,7 @@ group by
     o_shippriority
 order by
     revenue desc,
-    o_orderdate
+    o_orderdate,
+    l_orderkey
 limit 10;
 

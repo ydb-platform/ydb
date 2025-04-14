@@ -1,5 +1,6 @@
 #include "accessor.h"
 #include "direct_builder.h"
+#include "signals.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
@@ -72,6 +73,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
+        NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size());
         ++columnIdx;
     }
 
@@ -79,6 +81,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
             blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size());
             auto* cInfo = proto.AddOtherColumns();
             cInfo->SetSize(blobRanges.back().size());
         }
@@ -203,11 +206,20 @@ public:
     }
 };
 
-IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
-    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
-    for (ui32 recordIndex = 0; recordIndex < GetRecordsCount(); ++recordIndex) {
+    const ui32 start = context.GetStartIndex().value_or(0);
+    const ui32 finish = start + context.GetRecordsCount().value_or(GetRecordsCount() - start);
+    std::optional<std::vector<bool>> simpleFilter;
+    if (context.GetFilter()) {
+        simpleFilter = context.GetFilter()->BuildSimpleFilter();
+    }
+    for (ui32 recordIndex = start; recordIndex < finish; ++recordIndex) {
+        if (simpleFilter && !(*simpleFilter)[recordIndex]) {
+            continue;
+        }
+        it.SkipRecordTo(recordIndex);
         TJsonRestorer value;
         auto onStartRecord = [&](const ui32 index) {
             AFL_VERIFY(recordIndex == index)("count", recordIndex)("index", index);
@@ -234,7 +246,21 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
     }
-    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builder)), 0, 0);
+    return NArrow::FinishBuilder(std::move(builder));
+}
+
+std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    auto chunk = BuildBJsonArray(context);
+    if (chunk->length()) {
+        return std::make_shared<arrow::ChunkedArray>(chunk);
+    } else {
+        return std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector(), GetDataType());
+    }
+}
+
+IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    return TLocalDataAddress(BuildBJsonArray(TColumnConstructionContext()), 0, 0);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

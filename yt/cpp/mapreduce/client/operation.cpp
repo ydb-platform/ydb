@@ -854,6 +854,9 @@ void BuildCommonOperationPart(
         MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
+    if (baseSpec.Alias_) {
+        (*specNode)["alias"] = *baseSpec.Alias_;
+    }
     TString pool;
     if (baseSpec.Pool_) {
         pool = *baseSpec.Pool_;

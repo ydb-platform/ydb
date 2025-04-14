@@ -35,9 +35,19 @@ cluster.wait_tenant_up(serverless_db)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
 
 
-def call_viewer_api(url):
+def call_viewer_api_get(url):
     port = cluster.nodes[1].mon_port
     return requests.get("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_post(url):
+    port = cluster.nodes[1].mon_port
+    return requests.post("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_delete(url):
+    port = cluster.nodes[1].mon_port
+    return requests.delete("http://localhost:%s%s" % (port, url))
 
 
 def get_result(result):
@@ -49,7 +59,19 @@ def get_result(result):
 def call_viewer(url, params=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_api(url + '?' + urlencode(params)))
+    return get_result(call_viewer_api_get(url + '?' + urlencode(params)))
+
+
+def call_viewer_post(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_post(url + '?' + urlencode(params)))
+
+
+def call_viewer_delete(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_delete(url + '?' + urlencode(params)))
 
 
 def call_viewer_db(url, params=None):
@@ -62,16 +84,28 @@ def call_viewer_db(url, params=None):
     return result
 
 
+def get_viewer_db(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_db(url, params)
+
+
 def get_viewer(url, params=None):
     if params is None:
         params = {}
     return call_viewer(url, params)
 
 
-def get_viewer_db(url, params=None):
+def post_viewer(url, params=None):
     if params is None:
         params = {}
-    return call_viewer_db(url, params)
+    return call_viewer_post(url, params)
+
+
+def delete_viewer(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_delete(url, params)
 
 
 wait_good = False
@@ -614,6 +648,31 @@ def test_operations_list_page_bad():
     })
 
 
+def test_scheme_directory():
+    result = {}
+    result["1-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["2-post"] = post_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["3-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["4-delete"] = delete_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["5-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    return result
+
+
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 
@@ -711,23 +770,16 @@ def test_topic_data():
 def test_transfer_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
-    lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TABLE `TransferTargetTable` ( `Id` Uint64 NOT NULL PRIMARY KEY (Id)) WITH (STORE = COLUMN)',
-        'schema': 'multi'
-    })
-
-    call_viewer("/viewer/query", {
-        'database': dedicated_db,
-        'query': 'CREATE TRANSFER `TestTransfer` FROM `TopicNotExists` TO `Table` USING {} WITH (CONNECTION_STRING = "{}")'.format(lambd, endpoint),
+        'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
     result = get_viewer_normalized("/viewer/describe_replication", {
         'database': dedicated_db,
-        'path': '{}/TestTransfer'.format(dedicated_db),
+        'path': '{}/TestAsyncReplication'.format(dedicated_db),
         'include_stats': 'true',
         'enums': 'true'
     })

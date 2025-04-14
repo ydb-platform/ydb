@@ -553,7 +553,7 @@ namespace {
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setMaxPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
+                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setRetentionPeriod") {

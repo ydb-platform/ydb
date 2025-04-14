@@ -9,7 +9,7 @@ namespace NYql::NFmr {
 
 struct TParseRecordSettings {
     ui64 BlockCount = 1;
-    ui64 BlockSize = 1024 * 1024; // 1Mb
+    ui64 BlockSize = 1024 * 1024;
 };
 
 struct TFmrJobSettings {
@@ -20,6 +20,8 @@ struct TFmrJobSettings {
 
 IFmrJob::TPtr MakeFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TFmrJobSettings& settings = {});
 
-TJobResult RunJob(TTask::TPtr task, ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TFmrJobSettings& settings = {});
+TJobResult RunJob(TTask::TPtr task, ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TMaybe<TFmrJobSettings>& settings = Nothing());
+
+TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task);
 
 } // namespace NYql

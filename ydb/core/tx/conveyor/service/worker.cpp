@@ -8,7 +8,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
     std::vector<ui64> processes;
     instants.emplace_back(TMonotonic::Now());
     for (auto&& t : workerTasks) {
-        Y_UNUSED(t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask()));
+        t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
         instants.emplace_back(TMonotonic::Now());
         processes.emplace_back(t.GetProcessId());
     }

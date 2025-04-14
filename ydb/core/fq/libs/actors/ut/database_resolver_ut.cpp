@@ -1,7 +1,7 @@
-#include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>

@@ -21,7 +21,7 @@ namespace NKikimr {
     struct TSmallBlobChunkIdxExtractor<TMemRecLogoBlob> {
         template<typename TIterator>
         TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& it) {
-            if (it->MemRec.GetType() == TBlobType::DiskBlob) {
+            if (it.GetMemRec().GetType() == TBlobType::DiskBlob) {
                 TDiskDataExtractor extr;
                 it.GetDiskData(&extr);
                 const TDiskPart& part = extr.SwearOne();

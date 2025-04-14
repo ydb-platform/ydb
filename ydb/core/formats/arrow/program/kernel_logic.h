@@ -13,7 +13,7 @@ enum class ECalculationHardness {
     NotSpecified = 3,
     Equals = 5,
     StringMatching = 10,
-    Unknown = 20
+    Unknown = 8
 };
 
 class IKernelLogic {
@@ -22,10 +22,32 @@ private:
         const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
-
+    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
+    virtual NJson::TJsonValue DoDebugJson() const {
+        return NJson::JSON_NULL;
+    }
 public:
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("class_name", GetClassName());
+        auto details = DoDebugJson();
+        if (details.IsDefined()) {
+            result.InsertValue("details", std::move(details));
+        }
+        return result;
+    }
+
+    IKernelLogic() = default;
+
+    IKernelLogic(const ui32 yqlOperationId)
+        : YqlOperationId(yqlOperationId) {
+    }
+
     virtual ~IKernelLogic() = default;
 
+    virtual TString SignalDescription() const {
+        return GetClassName();
+    }
     virtual ECalculationHardness GetWeight() const = 0;
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
@@ -46,8 +68,47 @@ public:
     }
 };
 
+class TSimpleKernelLogic: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+
+    virtual NJson::TJsonValue DoDebugJson() const override;
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return std::nullopt;
+    }
+
+public:
+    TSimpleKernelLogic() = default;
+    TSimpleKernelLogic(const ui32 yqlOperationId)
+        : TBase(yqlOperationId)
+        , YqlOperationId(yqlOperationId) {
+    }
+
+    virtual TString SignalDescription() const override;
+
+    virtual ECalculationHardness GetWeight() const override {
+        if (!YqlOperationId) {
+            return ECalculationHardness::Unknown;
+        }
+        return ECalculationHardness::NotSpecified;
+    }
+
+    virtual TString GetClassName() const override {
+        return "SIMPLE";
+    }
+
+    virtual bool IsBoolInResult() const override;
+};
+
 class TLogicMatchString: public IKernelLogic {
 private:
+    using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
         const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
         return false;
@@ -63,16 +124,23 @@ private:
     const bool CaseSensitive;
     const bool IsSimpleFunction;
 
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        return ::ToString(Operation) + "::" + ::ToString(CaseSensitive) + "::" + ::ToString(IsSimpleFunction);
+    }
+
 public:
     TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
         : Operation(operation)
         , CaseSensitive(caseSensitive)
-        , IsSimpleFunction(isSimpleFunction)
-    {
+        , IsSimpleFunction(isSimpleFunction) {
+    }
+
+    virtual TString SignalDescription() const override {
+        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
     }
 
     virtual TString GetClassName() const override {
-        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
+        return "MATCH_STRING";
     }
 
     virtual bool IsBoolInResult() const override {
@@ -82,6 +150,7 @@ public:
 
 class TLogicEquals: public IKernelLogic {
 private:
+    using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
         const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
         return false;
@@ -97,8 +166,7 @@ private:
 
 public:
     TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction)
-    {
+        : IsSimpleFunction(isSimpleFunction) {
     }
 
     virtual TString GetClassName() const override {

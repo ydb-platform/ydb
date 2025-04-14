@@ -1476,7 +1476,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         YQL_CLOG(TRACE, CoreDq) << "ShuffleLeftSide isn't defined";
     }
     if (shuffleLeftSide) {
-        if (shuffleElimination) {
+        if (shuffleElimination && join.ShuffleLeftSideBy()) {
             leftConnection = buildShuffle(
                 leftIn,
                 buildShuffleKeys(join.ShuffleLeftSideBy().Cast(), leftJoinKeys)
@@ -1497,7 +1497,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         YQL_CLOG(TRACE, CoreDq) << "ShuffleRightSide isn't defined";
     }
     if (shuffleRightSide) {
-        if (shuffleElimination) {
+        if (shuffleElimination && join.ShuffleRightSideBy()) {
             rightConnection = buildShuffle(
                 rightIn,
                 buildShuffleKeys(join.ShuffleRightSideBy().Cast(),  rightJoinKeys)

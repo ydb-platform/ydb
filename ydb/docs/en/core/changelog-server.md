@@ -37,7 +37,7 @@ Release date: April 14, 2025
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16288) an issue where topic deletion returned "OK" while the topic tablets persisted in a functional state. To remove such tablets, follow the instructions from the [pull request](https://github.com/ydb-platform/ydb/pull/16288).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare issue that prevented the restoration of a backup for a large secondary indexed table.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that caused errors when inserting data using `UPSERT` into row-oriented tables with default values.
-* [Resolved](https://github.com/ydb-platform/ydb/pull/15334) a bug that caused failures when executing queries that return lists with multiple inputs and indexes.
+* [Resolved](https://github.com/ydb-platform/ydb/pull/15334) a bug that caused failures when executing queries returning result lists if a table has indexes.
 
 ## Version 24.3 {#24-3}
 

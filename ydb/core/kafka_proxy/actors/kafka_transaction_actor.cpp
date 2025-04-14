@@ -23,6 +23,9 @@ namespace NKafka {
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
     }
 
+    // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but 
+    // in YDB Topics we store offsets in table and do not need this extra action.
+    // Thus we can just ignore this request.
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Receieved ADD_OFFSETS_TO_TXN request");
         if (!ProducerInRequestIsValid(ev->Get()->Request)) {

@@ -33,6 +33,8 @@ import ydb.apps.dstool.lib.dstool_cmd_box_list as box_list
 
 import ydb.apps.dstool.lib.dstool_cmd_node_list as node_list
 
+import ydb.apps.dstool.lib.dstool_cmd_describe as describe
+
 import ydb.apps.dstool.lib.dstool_cmd_cluster_balance as cluster_balance
 import ydb.apps.dstool.lib.dstool_cmd_cluster_list as cluster_list
 import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
@@ -54,6 +56,7 @@ modules = [
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly,
     vdisk_evict, vdisk_list, vdisk_set_read_only, vdisk_remove_donor, vdisk_wipe,
     device_list,
+    describe,
 ]
 
 default_structure = [
@@ -65,6 +68,7 @@ default_structure = [
     ('box', ['list']),
     ('node', ['list']),
     ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
+    ('describe'),
 ]
 
 

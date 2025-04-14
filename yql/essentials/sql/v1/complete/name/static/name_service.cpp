@@ -2,22 +2,9 @@
 
 #include "ranking.h"
 
+#include <yql/essentials/sql/v1/complete/text/case.h>
+
 namespace NSQLComplete {
-
-    bool NoCaseCompare(const TString& lhs, const TString& rhs) {
-        return std::lexicographical_compare(
-            std::begin(lhs), std::end(lhs),
-            std::begin(rhs), std::end(rhs),
-            [](const char lhs, const char rhs) {
-                return ToLower(lhs) < ToLower(rhs);
-            });
-    }
-
-    auto NoCaseCompareLimit(size_t size) {
-        return [size](const TString& lhs, const TString& rhs) -> bool {
-            return strncasecmp(lhs.data(), rhs.data(), size) < 0;
-        };
-    }
 
     const TVector<TStringBuf> FilteredByPrefix(
         const TString& prefix,
@@ -28,8 +15,8 @@ namespace NSQLComplete {
         return TVector<TStringBuf>(first, last);
     }
 
-    template <class T>
-    void AppendAs(TVector<TGenericName>& target, const TVector<TStringBuf>& source) {
+    template <class T, class S = TStringBuf>
+    void AppendAs(TVector<TGenericName>& target, const TVector<S>& source) {
         for (const auto& element : source) {
             target.emplace_back(T{TString(element)});
         }
@@ -81,6 +68,11 @@ namespace NSQLComplete {
 
         TFuture<TNameResponse> Lookup(TNameRequest request) override {
             TNameResponse response;
+
+            Sort(request.Keywords, NoCaseCompare);
+            AppendAs<TKeyword>(
+                response.RankedNames,
+                FilteredByPrefix(request.Prefix, request.Keywords));
 
             if (request.Constraints.Pragma) {
                 auto prefix = Prefixed(request.Prefix, ".", *request.Constraints.Pragma);

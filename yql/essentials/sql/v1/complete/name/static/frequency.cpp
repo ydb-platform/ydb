@@ -17,6 +17,7 @@ namespace NSQLComplete {
             const char* Pragma = "PRAGMA";
             const char* Type = "TYPE";
             const char* Func = "FUNC";
+            const char* Keyword = "KEYWORD";
             const char* Module = "MODULE";
             const char* ModuleFunc = "MODULE_FUNC";
             const char* ReadHint = "READ_HINT";
@@ -59,6 +60,7 @@ namespace NSQLComplete {
             if (item.Parent == Json.Parent.Pragma ||
                 item.Parent == Json.Parent.Type ||
                 item.Parent == Json.Parent.Func ||
+                item.Parent == Json.Parent.Keyword ||
                 item.Parent == Json.Parent.ModuleFunc ||
                 item.Parent == Json.Parent.Module ||
                 item.Parent == Json.Parent.ReadHint ||
@@ -70,6 +72,8 @@ namespace NSQLComplete {
                 data.Pragmas[item.Rule] += item.Sum;
             } else if (item.Parent == Json.Parent.Type) {
                 data.Types[item.Rule] += item.Sum;
+            } else if (item.Parent == Json.Parent.Keyword) {
+                data.Keywords[item.Rule] += item.Sum;
             } else if (item.Parent == Json.Parent.Module) {
                 // Ignore, unsupported: Modules
             } else if (item.Parent == Json.Parent.Func ||

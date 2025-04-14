@@ -6,6 +6,7 @@
 
 #include <yql/essentials/sql/v1/complete/antlr4/c3i.h>
 #include <yql/essentials/sql/v1/complete/antlr4/c3t.h>
+#include <yql/essentials/sql/v1/complete/antlr4/vocabulary.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -115,32 +116,20 @@ namespace NSQLComplete {
             return true;
         }
 
-        TVector<TString> SiftedKeywords(const TC3Candidates& candidates) {
+        TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) {
             const auto& vocabulary = Grammar->GetVocabulary();
             const auto& keywordTokens = Grammar->GetKeywordTokens();
 
-            TVector<TString> keywords;
+            TLocalSyntaxContext::TKeywords keywords;
             for (const auto& token : candidates.Tokens) {
                 if (keywordTokens.contains(token.Number)) {
-                    keywords.emplace_back(Display(vocabulary, token.Number));
-                    for (auto following : token.Following) {
-                        if (keywordTokens.contains(following)) {
-                            keywords.back() += " ";
-                        }
-                        keywords.back() += Display(vocabulary, following);
+                    auto& following = keywords[Display(vocabulary, token.Number)];
+                    for (auto next : token.Following) {
+                        following.emplace_back(Display(vocabulary, next));
                     }
                 }
             }
             return keywords;
-        }
-
-        std::string Display(const antlr4::dfa::Vocabulary& vocabulary, TTokenId tokenType) {
-            auto name = vocabulary.getDisplayName(tokenType);
-            if (2 <= name.length() && name.starts_with('\'') && name.ends_with('\'')) {
-                name.erase(static_cast<std::string::size_type>(0), 1);
-                name.pop_back();
-            }
-            return name;
         }
 
         std::optional<TLocalSyntaxContext::TPragma> PragmaMatch(

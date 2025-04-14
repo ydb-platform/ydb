@@ -10,6 +10,7 @@ Y_UNIT_TEST_SUITE(FrequencyTests) {
         TFrequencyData actual = ParseJsonFrequencyData(R"([
             {"parent":"FUNC","rule":"ABC","sum":1},
             {"parent":"TYPE","rule":"BIGINT","sum":7101},
+            {"parent":"KEYWORD","rule":"UNION","sum":65064443},
             {"parent":"MODULE_FUNC","rule":"Compress::BZip2","sum":2},
             {"parent":"MODULE","rule":"re2","sum":3094},
             {"parent":"READ_HINT","rule":"COLUMNS","sum":826110},
@@ -18,6 +19,9 @@ Y_UNIT_TEST_SUITE(FrequencyTests) {
         ])");
 
         TFrequencyData expected = {
+            .Keywords = {
+                {"union", 65064443},
+            },
             .Types = {
                 {"bigint", 7101},
             },
@@ -31,8 +35,10 @@ Y_UNIT_TEST_SUITE(FrequencyTests) {
             },
         };
 
+        UNIT_ASSERT_VALUES_EQUAL(actual.Keywords, expected.Keywords);
         UNIT_ASSERT_VALUES_EQUAL(actual.Types, expected.Types);
         UNIT_ASSERT_VALUES_EQUAL(actual.Functions, expected.Functions);
+        UNIT_ASSERT_VALUES_EQUAL(actual.Hints, expected.Hints);
     }
 
     Y_UNIT_TEST(FrequencyDataResouce) {

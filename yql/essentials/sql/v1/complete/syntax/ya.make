@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     ansi.cpp
+    format.cpp
     grammar.cpp
     local.cpp
     parser_call_stack.cpp

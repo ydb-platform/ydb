@@ -5,11 +5,13 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
+#include <util/generic/hash.h>
 
 namespace NSQLComplete {
 
     struct TLocalSyntaxContext {
+        using TKeywords = THashMap<TString, TVector<TString>>;
+
         struct TPragma {
             TString Namespace;
         };
@@ -22,7 +24,7 @@ namespace NSQLComplete {
             EStatementKind StatementKind;
         };
 
-        TVector<TString> Keywords;
+        TKeywords Keywords;
         std::optional<TPragma> Pragma;
         bool IsTypeName;
         std::optional<TFunction> Function;

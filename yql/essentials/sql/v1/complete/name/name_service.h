@@ -19,6 +19,10 @@ namespace NSQLComplete {
         TString Namespace;
     };
 
+    struct TKeyword {
+        TString Content;
+    };
+
     struct TPragmaName: TIndentifier {
         struct TConstraints: TNamespaced {};
     };
@@ -38,12 +42,14 @@ namespace NSQLComplete {
     };
 
     using TGenericName = std::variant<
+        TKeyword,
         TPragmaName,
         TTypeName,
         TFunctionName,
         THintName>;
 
     struct TNameRequest {
+        TVector<TString> Keywords;
         struct {
             std::optional<TPragmaName::TConstraints> Pragma;
             std::optional<TTypeName::TConstraints> Type;
@@ -54,7 +60,8 @@ namespace NSQLComplete {
         size_t Limit = 128;
 
         bool IsEmpty() const {
-            return !Constraints.Pragma &&
+            return Keywords.empty() &&
+                   !Constraints.Pragma &&
                    !Constraints.Type &&
                    !Constraints.Function &&
                    !Constraints.Hint;

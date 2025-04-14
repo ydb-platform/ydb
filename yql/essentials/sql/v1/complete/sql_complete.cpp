@@ -3,6 +3,7 @@
 #include <yql/essentials/sql/v1/complete/text/word.h>
 #include <yql/essentials/sql/v1/complete/name/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
+#include <yql/essentials/sql/v1/complete/syntax/format.h>
 
 // FIXME(YQL-19747): unwanted dependency on a lexer implementation
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -40,13 +41,9 @@ namespace NSQLComplete {
             TStringBuf prefix = input.Text.Head(input.CursorPosition);
             TCompletedToken completedToken = GetCompletedToken(prefix);
 
-            TVector<TCandidate> candidates;
-            EnrichWithKeywords(candidates, std::move(context.Keywords), completedToken);
-            EnrichWithNames(candidates, context, completedToken);
-
             return {
                 .CompletedToken = std::move(completedToken),
-                .Candidates = std::move(candidates),
+                .Candidates = GetCanidates(std::move(context), completedToken),
             };
         }
 
@@ -58,32 +55,15 @@ namespace NSQLComplete {
             };
         }
 
-        void EnrichWithKeywords(
-            TVector<TCandidate>& candidates,
-            TVector<TString> keywords,
-            const TCompletedToken& prefix) {
-            for (auto keyword : keywords) {
-                candidates.push_back({
-                    .Kind = ECandidateKind::Keyword,
-                    .Content = std::move(keyword),
-                });
-            }
-            FilterByContent(candidates, prefix.Content);
-            candidates.crop(Configuration.Limit);
-        }
-
-        void EnrichWithNames(
-            TVector<TCandidate>& candidates,
-            const TLocalSyntaxContext& context,
-            const TCompletedToken& prefix) {
-            if (candidates.size() == Configuration.Limit) {
-                return;
-            }
-
+        TVector<TCandidate> GetCanidates(TLocalSyntaxContext context, const TCompletedToken& prefix) {
             TNameRequest request = {
                 .Prefix = TString(prefix.Content),
-                .Limit = Configuration.Limit - candidates.size(),
+                .Limit = Configuration.Limit,
             };
+
+            for (const auto& [first, _] : context.Keywords) {
+                request.Keywords.emplace_back(first);
+            }
 
             if (context.Pragma) {
                 TPragmaName::TConstraints constraints;
@@ -108,19 +88,25 @@ namespace NSQLComplete {
             }
 
             if (request.IsEmpty()) {
-                return;
+                return {};
             }
 
             // User should prepare a robust INameService
             TNameResponse response = Names->Lookup(std::move(request)).ExtractValueSync();
 
-            EnrichWithNames(candidates, std::move(response.RankedNames));
+            return Convert(std::move(response.RankedNames), std::move(context.Keywords));
         }
 
-        void EnrichWithNames(TVector<TCandidate>& candidates, TVector<TGenericName> names) {
+        TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext::TKeywords keywords) {
+            TVector<TCandidate> candidates;
             for (auto& name : names) {
-                candidates.emplace_back(std::visit([](auto&& name) -> TCandidate {
+                candidates.emplace_back(std::visit([&](auto&& name) -> TCandidate {
                     using T = std::decay_t<decltype(name)>;
+                    if constexpr (std::is_base_of_v<TKeyword, T>) {
+                        TVector<TString>& seq = keywords[name.Content];
+                        seq.insert(std::begin(seq), name.Content);
+                        return {ECandidateKind::Keyword, FormatKeywords(seq)};
+                    }
                     if constexpr (std::is_base_of_v<TPragmaName, T>) {
                         return {ECandidateKind::PragmaName, std::move(name.Indentifier)};
                     }
@@ -136,14 +122,7 @@ namespace NSQLComplete {
                     }
                 }, std::move(name)));
             }
-        }
-
-        void FilterByContent(TVector<TCandidate>& candidates, TStringBuf prefix) {
-            const auto lowerPrefix = ToLowerUTF8(prefix);
-            auto removed = std::ranges::remove_if(candidates, [&](const auto& candidate) {
-                return !ToLowerUTF8(candidate.Content).StartsWith(lowerPrefix);
-            });
-            candidates.erase(std::begin(removed), std::end(removed));
+            return candidates;
         }
 
         TConfiguration Configuration;

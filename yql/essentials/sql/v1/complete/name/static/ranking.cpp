@@ -57,28 +57,34 @@ namespace NSQLComplete {
             return std::visit([this](const auto& name) -> size_t {
                 using T = std::decay_t<decltype(name)>;
 
-                auto identifier = ToLowerUTF8(ContentView(name));
+                auto content = ToLowerUTF8(ContentView(name));
+
+                if constexpr (std::is_same_v<T, TKeyword>) {
+                    if (auto weight = Frequency_.Keywords.FindPtr(content)) {
+                        return *weight;
+                    }
+                }
 
                 if constexpr (std::is_same_v<T, TPragmaName>) {
-                    if (auto weight = Frequency_.Pragmas.FindPtr(identifier)) {
+                    if (auto weight = Frequency_.Pragmas.FindPtr(content)) {
                         return *weight;
                     }
                 }
 
                 if constexpr (std::is_same_v<T, TFunctionName>) {
-                    if (auto weight = Frequency_.Functions.FindPtr(identifier)) {
+                    if (auto weight = Frequency_.Functions.FindPtr(content)) {
                         return *weight;
                     }
                 }
 
                 if constexpr (std::is_same_v<T, TTypeName>) {
-                    if (auto weight = Frequency_.Types.FindPtr(identifier)) {
+                    if (auto weight = Frequency_.Types.FindPtr(content)) {
                         return *weight;
                     }
                 }
 
                 if constexpr (std::is_same_v<T, THintName>) {
-                    if (auto weight = Frequency_.Hints.FindPtr(identifier)) {
+                    if (auto weight = Frequency_.Hints.FindPtr(content)) {
                         return *weight;
                     }
                 }
@@ -94,6 +100,9 @@ namespace NSQLComplete {
         const TStringBuf ContentView(const TGenericName& name Y_LIFETIME_BOUND) const {
             return std::visit([](const auto& name) -> TStringBuf {
                 using T = std::decay_t<decltype(name)>;
+                if constexpr (std::is_base_of_v<TKeyword, T>) {
+                    return name.Content;
+                }
                 if constexpr (std::is_base_of_v<TIndentifier, T>) {
                     return name.Indentifier;
                 }

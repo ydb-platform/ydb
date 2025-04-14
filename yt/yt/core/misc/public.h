@@ -87,6 +87,8 @@ DEFINE_ENUM(ESerializationDumpMode,
     (Checksum)
 );
 
+using TSerializationDumpScopeFilter = std::optional<THashSet<std::string>>;
+
 template <class TKey, class TComparer>
 class TSkipList;
 

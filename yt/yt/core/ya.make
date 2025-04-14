@@ -153,6 +153,7 @@ SRCS(
     misc/ref_counted_tracker_profiler.cpp
     GLOBAL misc/ref_tracked.cpp
     misc/serialize.cpp
+    misc/serialize_dump.cpp
     misc/shutdown.cpp
     misc/slab_allocator.cpp
     misc/statistic_path.cpp

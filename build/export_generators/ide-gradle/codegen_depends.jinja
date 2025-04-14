@@ -1,44 +1,11 @@
-{%- macro TopDepends(taskvar) -%}
-{%-     if proto_template %}
-
-tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
-{%-     endif %}
-
-tasks.compileJava.configure {
-    dependsOn({{ taskvar }})
-}
-tasks.compileTestJava.configure {
-    dependsOn({{ taskvar }})
-}
-{%-    if with_kotlin %}
-tasks.compileKotlin.configure {
-    dependsOn({{ taskvar }})
-}
-tasks.compileTestKotlin.configure {
-    dependsOn({{ taskvar }})
-}
-{%     endif -%}
-{%- endmacro -%}
-
-{%- macro ObjDepends(obj) -%}
-{%-     set taskvar = "codegen" + obj['_object_index'] -%}
-{%-     if obj['_parent_object_index'] -%}
-{%-         set parent_taskvar = "codegen" + obj['_parent_object_index'] %}
-
-tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
-{%-     else -%}
-{{ TopDepends(taskvar) }}
-{%-     endif  -%}
-{%- endmacro -%}
-
-{%- if target.custom_runs|length -%}
-{%-     for custom_run in target.custom_runs -%}
+{%- if current_target.custom_runs|length -%}
+{%-     for custom_run in current_target.custom_runs -%}
 {{ ObjDepends(custom_run) }}
 {%-     endfor -%}
 {%- endif -%}
 
-{%- if target.runs|length -%}
-{%-     for run in target.runs -%}
+{%- if current_target.runs|length -%}
+{%-     for run in current_target.runs -%}
 {{ ObjDepends(run) }}
 {%-     endfor -%}
 {%- endif -%}

@@ -3,7 +3,7 @@
 {%-         set src = move.args[0] -%}
 {%-         set dst = move.args[1] %}
 
-val codegen{{ move['_object_index'] }} = tasks.register("codegen{{ move['_object_index'] }}") {
+val {{ varprefix }}{{ move['_object_index'] }} = tasks.register("{{ varprefix }}{{ move['_object_index'] }}") {
     doLast {
         file({{ PatchRoots(src, move['flags']|select("eq", "src_is_depend")|length) }}).renameTo(file({{ PatchRoots(dst) }}))
     }

@@ -1,9 +1,54 @@
-{%- set copy_files = target.target_commands|selectattr("macro", "eq", "copy_file") -%}
-{%- set move_files = target.target_commands|selectattr("macro", "eq", "move_file") -%}
+{%- macro TopDepends(taskvar) -%}
+{%-     if proto_template %}
 
-{%- include "[generator]/codegen_run_program.jinja" -%}
-{%- include "[generator]/codegen_run_java_program.jinja" -%}
-{%- include "[generator]/codegen_copy_file.jinja" -%}
-{%- include "[generator]/codegen_move_file.jinja" -%}
-{%- include "[generator]/codegen_common.jinja" -%}
-{%- include "[generator]/codegen_depends.jinja" -%}
+tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
+{%-     endif %}
+
+tasks.compileJava.configure {
+    dependsOn({{ taskvar }})
+}
+tasks.compileTestJava.configure {
+    dependsOn({{ taskvar }})
+}
+{%-    if with_kotlin %}
+tasks.compileKotlin.configure {
+    dependsOn({{ taskvar }})
+}
+tasks.compileTestKotlin.configure {
+    dependsOn({{ taskvar }})
+}
+{%     endif -%}
+{%- endmacro -%}
+
+{%- macro ObjDepends(obj) -%}
+{%-     set taskvar = varprefix + obj['_object_index'] -%}
+{%-     if obj['_parent_object_index'] -%}
+{%-         set parent_taskvar = varprefix + obj['_parent_object_index'] %}
+
+tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
+{%-     else -%}
+{{ TopDepends(taskvar) }}
+{%-     endif  -%}
+{%- endmacro -%}
+
+{%- if target is defined -%}
+{%-     set current_target = target -%}
+{%-     set varprefix = "codegen" -%}
+{%-     include "[generator]/codegen_current_target.jinja" -%}
+{%- endif -%}
+{%- if extra_targets|length -%}
+{%-     for current_target in extra_targets -%}
+{%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{%-         include "[generator]/codegen_current_target.jinja" -%}
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if not proto_template %}
+
+tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
+tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)
+{%-     if with_kotlin %}
+tasks.getByName("sourcesJar").dependsOn(tasks.compileKotlin)
+tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestKotlin)
+{%-     endif %}
+{%- endif -%}

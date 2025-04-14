@@ -1,0 +1,13 @@
+--- contrib/tools/python3/Python/_warnings.c	(index)
++++ contrib/tools/python3/Python/_warnings.c	(working tree)
+@@ -791,6 +791,10 @@ is_internal_filename(PyObject *filename)
+         }
+     }
+ 
++    if (_PyUnicode_EqualToASCIIString(filename, "library/python/runtime_py3/__res.py")) {
++        return true;
++    }
++
+     return false;
+ }
+ 

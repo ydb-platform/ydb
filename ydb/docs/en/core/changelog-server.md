@@ -10,10 +10,10 @@ Release date: April 14, 2025
 
 * Enabled by default:
 
-  * support for [views](./concepts/datamodel/view.md);
+  * support for [views](./concepts/datamodel/view.md)
   * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics;
-  * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions);
-  * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions).
+  * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions)
+  * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
  
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#kafka-api-usage-examples) using the Kafka API without authentication.
@@ -36,8 +36,8 @@ Release date: April 14, 2025
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15933) a rare bug where a user could write to a topic without any account quota being applied or consumed.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16288) an issue where topic deletion returned "OK" while the topic tablets persisted in a functional state. To remove such tablets, follow the instructions from the [pull request](https://github.com/ydb-platform/ydb/pull/16288).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare issue that prevented the restoration of a backup for a large secondary indexed table.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16637) an issue that caused errors when inserting data using Upsert into row-oriented tables with default values.
-* [Resolved](https://github.com/ydb-platform/ydb/pull/16637) a bug that caused failures when executing queries returning lists with multiple inputs and indexes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that caused errors when inserting data using `UPSERT` into row-oriented tables with default values.
+* [Resolved](https://github.com/ydb-platform/ydb/pull/15334) a bug that caused failures when executing queries that return lists with multiple inputs and indexes.
 
 ## Version 24.3 {#24-3}
 

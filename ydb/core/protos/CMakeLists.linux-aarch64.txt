@@ -92,8 +92,8 @@ target_link_libraries(ydb-core-protos PUBLIC
 target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/alloc.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/auth.proto
-  ${PROJECT_SOURCE_DIR}/ydb/core/protos/base.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/backup.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/base.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/bind_channel_storage_pool.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/blob_depot.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/blob_depot_config.proto
@@ -146,9 +146,9 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/data_events.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/data_integrity_trails.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_backup.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
-  ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_backup.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/db_metadata_cache.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/drivemodel.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/export.proto
@@ -166,8 +166,8 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/http_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/import.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/index_builder.proto
-  ${PROJECT_SOURCE_DIR}/ydb/core/protos/kesus.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kafka.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/kesus.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/key.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kqp.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
@@ -232,6 +232,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/whiteboard_disk_states.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/whiteboard_flags.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/workload_manager_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/ydb_result_set_old.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/ydb_table_impl.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/yql_translation_settings.proto
@@ -244,12 +245,12 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/auth.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/auth.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/auth.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.deps.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/backup.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/backup.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/backup.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/base.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bind_channel_storage_pool.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bind_channel_storage_pool.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bind_channel_storage_pool.grpc.pb.h
@@ -406,15 +407,15 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/database_basic_sausage_metainfo.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_config.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_config.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_config.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.deps.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.grpc.pb.h
@@ -466,12 +467,12 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/index_builder.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/index_builder.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/index_builder.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.deps.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.grpc.pb.h
@@ -664,6 +665,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/workload_manager_config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/workload_manager_config.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/workload_manager_config.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.grpc.pb.h

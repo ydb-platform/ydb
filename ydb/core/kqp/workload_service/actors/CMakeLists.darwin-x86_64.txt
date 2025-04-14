@@ -29,7 +29,7 @@ target_link_libraries(kqp-workload_service-actors PUBLIC
 
 target_sources(kqp-workload_service-actors PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/cpu_load_actors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/pool_handlers_acors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/pool_handlers_actors.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/scheme_actors.cpp
 )
 

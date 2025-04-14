@@ -310,7 +310,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    YQL_CLOG(DEBUG, Core) << "Setting column order " << FormatColumnOrder(columnOrder, 10) << " for " << node.Content() << "#" << node.UniqueId();
+    YQL_CLOG(TRACE, Core) << "Setting column order " << FormatColumnOrder(columnOrder, 10) << " for " << node.Content() << "#" << node.UniqueId();
 
     ColumnOrderStorage->Set(node.UniqueId(), columnOrder);
     return IGraphTransformer::TStatus::Ok;

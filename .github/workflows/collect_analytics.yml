@@ -12,7 +12,7 @@ defaults:
 jobs:
   main:
     name: Checkout, setup and collect testowners
-    runs-on: [ self-hosted ]
+    runs-on: [ self-hosted, auto-provisioned, analytic-node]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
 
   matrix-job:
     name: Test collection on ${{ matrix.branch }} with ${{ matrix.build_type }}
-    runs-on: [ self-hosted ]
+    runs-on: [ self-hosted, auto-provisioned, analytic-node]
     needs: main
     strategy:
       fail-fast: false

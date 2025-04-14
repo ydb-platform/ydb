@@ -27,7 +27,7 @@ primitive_type = {
     "Datetime": ydb.PrimitiveType.Datetime,
     "Timestamp": ydb.PrimitiveType.Timestamp,
     "Interval": ydb.PrimitiveType.Interval,
-    
+
     "Float": ydb.PrimitiveType.Float,
     "Double": ydb.PrimitiveType.Double,
     "Json": ydb.PrimitiveType.Json,
@@ -60,15 +60,22 @@ class TestParametrizedQueries(TestBase):
              index_first_sync, "", "", "SYNC"),
             ("table_index_0__SYNC", pk_types_parametrized_queries, {},
              index_zero_sync, "", "", "SYNC"),
-            ("table_index_1__ASYNC", pk_types_parametrized_queries, {}, index_second_parametrized_queries, "", "", "ASYNC"),
-            ("table_index_0__ASYNC", pk_types_parametrized_queries, {}, index_first_parametrized_queries, "", "", "ASYNC"),
+            ("table_index_1__ASYNC", pk_types_parametrized_queries,
+             {}, index_second_parametrized_queries, "", "", "ASYNC"),
+            ("table_index_0__ASYNC", pk_types_parametrized_queries,
+             {}, index_first_parametrized_queries, "", "", "ASYNC"),
             ("table_all_types", pk_types_parametrized_queries, {
              **pk_types_parametrized_queries, **non_pk_types}, {}, "", "", ""),
-            ("table_ttl_DyNumber", pk_types_parametrized_queries, {}, {}, "DyNumber", "", ""),
-            ("table_ttl_Uint32", pk_types_parametrized_queries, {}, {}, "Uint32", "", ""),
-            ("table_ttl_Uint64", pk_types_parametrized_queries, {}, {}, "Uint64", "", ""),
-            ("table_ttl_Datetime", pk_types_parametrized_queries, {}, {}, "Datetime", "", ""),
-            ("table_ttl_Timestamp", pk_types_parametrized_queries, {}, {}, "Timestamp", "", ""),
+            ("table_ttl_DyNumber", pk_types_parametrized_queries,
+             {}, {}, "DyNumber", "", ""),
+            ("table_ttl_Uint32", pk_types_parametrized_queries,
+             {}, {}, "Uint32", "", ""),
+            ("table_ttl_Uint64", pk_types_parametrized_queries,
+             {}, {}, "Uint64", "", ""),
+            ("table_ttl_Datetime", pk_types_parametrized_queries,
+             {}, {}, "Datetime", "", ""),
+            ("table_ttl_Timestamp", pk_types_parametrized_queries,
+             {}, {}, "Timestamp", "", ""),
             ("table_ttl_Date", pk_types_parametrized_queries, {}, {}, "Date", "", ""),
         ]
     )

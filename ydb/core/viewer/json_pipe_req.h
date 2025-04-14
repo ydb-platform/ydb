@@ -318,7 +318,7 @@ protected:
         const TString& path, bool showPrivate, ui32 access, ui64 cookie = 0);
 
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
-    void RequestTxProxyDescribe(const TString& path);
+    void RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {});
     void RequestStateStorageEndpointsLookup(const TString& path);
     void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);

@@ -6,6 +6,8 @@
 
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/string/builder.h>
+
 #include "bitset.h"
 
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
@@ -16,6 +18,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include "dq_opt_conflict_rules_collector.h"
+
 
 namespace NYql::NDq {
 
@@ -65,8 +68,8 @@ public:
 
         // for interesting orderings framework
         TOrderingsStateMachine::TFDSet FDs;
-        std::size_t LeftJoinKeysShuffleOrderingIdx;
-        std::size_t RightJoinKeysShuffleOrderingIdx;
+        std::int64_t LeftJoinKeysShuffleOrderingIdx = -1;
+        std::int64_t RightJoinKeysShuffleOrderingIdx = -1;
 
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
@@ -557,7 +560,7 @@ public:
             shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle);
         }
 
-        TOrderingsStateMachine orderingsFSM(fdStorage.FDs, fdStorage.InterestingOrderings);
+        TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
 
         for (std::size_t i = 0; i < edges.size(); ++i) {
             edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);
@@ -573,6 +576,61 @@ public:
         }
 
         return orderingsFSM;
+    }
+
+private:
+    TJoinHypergraph<TNodeSet>& Graph_;
+};
+
+/*
+ * Assigns inner representation of the orderings (orderingIdx) and FD sets to edges of the hypergraph and to their nodes.
+ */
+template <typename TNodeSet>
+class TOrderingStatesAssigner {
+public:
+    TOrderingStatesAssigner(TJoinHypergraph<TNodeSet>& graph)
+        : Graph_(graph)
+    {}
+
+    void Assign(TOrderingsStateMachine& fsm) {
+        auto& edges = Graph_.GetEdges();
+        auto& fdStorage = fsm.FDStorage;
+
+        auto toVectorStr = [](std::vector<TJoinColumn> joinColumns){
+            TVector<TString> strColumns;
+            strColumns.reserve(joinColumns.size());
+            for (const auto& column: joinColumns) {
+                strColumns.push_back(column.RelName + "." + column.AttributeName);
+            }
+            return strColumns;
+        };
+
+        for (auto& e: edges) {
+            if (e.JoinKind == EJoinKind::Cross) {
+                continue;
+            }
+
+            e.LeftJoinKeysShuffleOrderingIdx =
+                fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle);
+            Y_ENSURE(
+                e.LeftJoinKeysShuffleOrderingIdx >= 0,
+                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.LeftJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
+            );
+
+            e.RightJoinKeysShuffleOrderingIdx =
+                fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle);
+            Y_ENSURE(
+                e.RightJoinKeysShuffleOrderingIdx >= 0,
+                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.RightJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
+            );
+
+            for (const auto& [lhs, rhs]: Zip(e.LeftJoinKeys, e.RightJoinKeys)) {
+                auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence);
+                auto fdIdxRev = fdStorage.FindFDIdx(rhs, lhs, TFunctionalDependency::EEquivalence);
+                e.FDs |= fsm.GetFDSet(fdIdx);
+                e.FDs |= fsm.GetFDSet(fdIdxRev);
+            }
+        }
     }
 
 private:

@@ -5,6 +5,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include "util/string/join.h"
 
 namespace NYql::NDq {
 
@@ -378,6 +379,10 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
  * DqJoin is an intermediary join representantation in Dq
  */
 void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
+    if (auto stats = typeCtx->GetStats(TExprBase(input).Raw())) {
+        return;
+    }
+
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TDqJoin>();
 
@@ -491,6 +496,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         outputStats.SortColumns = inputStats->SortColumns;
         outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
+        outputStats.LogicalOrderings = inputStats->LogicalOrderings;
+        outputStats.SourceTableName = inputStats->SourceTableName;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -576,10 +583,10 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
-void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
 
     auto inputNode = TExprBase(input);
-    auto agg = inputNode.Cast<TCoAggregateCombine>();
+    auto agg = inputNode.Cast<TCoAggregateBase>();
     auto aggInput = agg.Input();
 
     auto inputStats = typeCtx->GetStats(aggInput.Raw());
@@ -587,26 +594,26 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    auto aggrStats = std::make_shared<TOptimizerStatistics>(*inputStats);
-    if (aggrStats->ShuffledByColumns) {
-        TString relName{};
-        if (!aggrStats->ShuffledByColumns->Data.empty()) {
-            relName = inputStats->ShuffledByColumns->Data.front().RelName;
-        }
+    auto aggStats = RemoveOrdering(inputStats);
+    aggStats->ShuffledByColumns = nullptr;
+    auto keysStats = typeCtx->GetStats(agg.Keys().Raw());
 
-
-        TVector<NDq::TJoinColumn> shuffledBy;
-        shuffledBy.reserve(agg.Keys().Size());
-        for (const auto& key: agg.Keys()) {
-            shuffledBy.push_back(TJoinColumn(relName, key.StringValue()));
-        }
-        aggrStats->ShuffledByColumns =
-            TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
-                new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledBy))
-            );
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
     }
 
-    typeCtx->SetStats( input.Get(), RemoveOrdering(aggrStats));
+    if (typeCtx->OrderingsFSM.IsBuilt() && keysStats && keysStats->ShuffleOrderingIdx) {
+        Y_ENSURE(
+            keysStats && keysStats->ShuffleOrderingIdx,
+            TStringBuilder{} << "FSM was built, but orderingIdx wasn' set for aggregation with keys: " << JoinSeq(", ", strKeys);
+        );
+        aggStats->LogicalOrderings = typeCtx->OrderingsFSM.CreateState(*keysStats->ShuffleOrderingIdx);
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
+    typeCtx->SetStats(input.Get(), std::move(aggStats));
 }
 
 /**

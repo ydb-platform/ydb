@@ -34,7 +34,7 @@ $p = (select p_partkey,p_mfgr
     and p_type like '%COPPER'
 );
 
-$j4 = (select s_acctbal,
+select s_acctbal,
     s_name,
     n_name,
     p_partkey,
@@ -46,21 +46,3 @@ $j4 = (select s_acctbal,
     join $j3 as j on p.p_partkey = j.ps_partkey
     join $min_ps_supplycost as m on p.p_partkey = m.ps_partkey
     where min_ps_supplycost=ps_supplycost
-);
-
-select
-    s_acctbal,
-    s_name,
-    n_name,
-    p_partkey,
-    p_mfgr,
-    s_address,
-    s_phone,
-    s_comment
-from $j4
-order by
-    s_acctbal desc,
-    n_name,
-    s_name,
-    p_partkey
-limit 100;

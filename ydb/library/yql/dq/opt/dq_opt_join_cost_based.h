@@ -38,6 +38,18 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints = {}
 );
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPHypDPTableSize, TExprContext& ectx, bool enableShuffleElimination);
+void CollectInterestingOrderingsFromJoinTree(
+    const NYql::NNodes::TExprBase& equiJoinNode,
+    TFDStorage& fdStorage,
+    TTypeAnnotationContext& typeCtx
+);
+
+IOptimizerNew* MakeNativeOptimizerNew(
+    IProviderContext& ctx,
+    const ui32 maxDPHypDPTableSize,
+    TExprContext& ectx,
+    bool enableShuffleElimination,
+    TOrderingsStateMachine* orderingsFSM = nullptr
+);
 
 } // namespace NYql::NDq

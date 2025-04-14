@@ -2,6 +2,7 @@
 
 #include "yql_cost_function.h"
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -74,8 +75,22 @@ struct TOptimizerStatistics {
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
         TVector<NDq::TJoinColumn> Data;
         TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        TString ToString() {
+            TString result;
+
+            for (const auto& column: Data) {
+                result.append(column.RelName).append(".").append(column.AttributeName).append(", ");
+            }
+            if (!result.empty()) {
+                result.pop_back();
+                result.pop_back();
+            }
+
+            return result;
+        }
     };
 
+    TSimpleSharedPtr<TString> SourceTableName;
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
@@ -85,10 +100,13 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
-    EStorageType StorageType = EStorageType::NA;
     TIntrusivePtr<TSortColumns> SortColumns;
+    EStorageType StorageType = EStorageType::NA;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
+
+    NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+    std::optional<std::size_t> ShuffleOrderingIdx;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;

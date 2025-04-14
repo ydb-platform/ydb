@@ -24,6 +24,20 @@
 
 namespace NYql::NDq {
 
+template<typename Sep, typename Container>
+TString JoinSubsequence(const Sep& sep, const Container& container) {
+    std::ostringstream ss;
+    auto it = container.begin();
+    if (it != container.end()) {
+        ss << *it;
+        ++it;
+    }
+    for (; it != container.end(); ++it) {
+        ss << sep << *it;
+    }
+    return ss.str();
+}
+
 struct TOrdering {
     enum EType : uint32_t {
         EShuffle
@@ -33,8 +47,24 @@ struct TOrdering {
         return std::tie(this->Type, this->Items) == std::tie(other.Type, other.Items);
     }
 
+    std::string ToString() const {
+        return "{" + JoinSubsequence(", ", Items) + "}";
+    }
+
+    TOrdering(
+        std::vector<std::size_t> items,
+        EType type,
+        bool isNatural = false
+    )
+        : Items(std::move(items))
+        , Type(type)
+        , IsNatural(isNatural)
+    {}
+
     std::vector<std::size_t> Items;
     EType Type;
+    /* Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping. */
+    bool IsNatural = false;
 };
 
 /*
@@ -68,6 +98,21 @@ struct TFunctionalDependency {
         return true;
     }
 
+    std::string ToString() const {
+        std::ostringstream ss;
+        ss << "{" + JoinSubsequence(", ", AntecedentItems) + "}";
+
+        if (Type == EEquivalence) {
+            ss << " = ";
+        } else {
+            ss << " -> ";
+        }
+        ss << ConsequentItem;
+
+        return ss.str();
+    }
+
+
     std::vector<std::size_t> AntecedentItems;
     std::size_t ConsequentItem;
 
@@ -75,11 +120,164 @@ struct TFunctionalDependency {
     bool AlwaysActive;
 };
 
+// Map of table aliases to their original table names
+struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
+public:
+    struct TBaseColumn {
+        TBaseColumn() = default;
+
+        TBaseColumn(
+            TString relation,
+            TString column
+        )
+            : Relation(std::move(relation))
+            , Column(std::move(column))
+        {}
+
+        NDq::TJoinColumn ToJoinColumn() {
+            return NDq::TJoinColumn(Relation, Column);
+        }
+
+        operator bool() {
+            return !(Relation.empty() && Column.empty());
+        }
+
+        TString Relation;
+        TString Column;
+    };
+
+    TTableAliasMap() = default;
+
+    void AddMapping(const TString& table, const TString& alias) {
+        AliasesByTable[table].push_back(alias);
+        TableByAlias[alias] = table;
+    }
+
+    void AddRename(const TString& from, const TString& to) {
+        Cout << "FROM: " << from << " TO: " << to << Endl;
+        Cout << ToString() << Endl;
+
+        if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
+            TString alias = from.substr(0, pointIdx);
+            TString baseTable = GetBaseTableByAlias(alias);
+            TString columnName = from.substr(pointIdx + 1);
+
+            if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
+                auto baseColumn = it->second;
+                BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
+                return;
+            }
+
+            auto fromColumn = TBaseColumn(alias, columnName);
+            auto baseColumn = TBaseColumn(baseTable, columnName);
+
+            BaseColumnByRename[to] = BaseColumnByRename[from] = baseColumn;
+            return;
+        }
+
+        if (BaseColumnByRename.contains(from)) {
+            BaseColumnByRename[to] = BaseColumnByRename[from];
+        }
+    }
+
+    TBaseColumn GetBaseColumnByRename(const TString& renamedColumn) {
+        if (BaseColumnByRename.contains(renamedColumn)) {
+            return BaseColumnByRename[renamedColumn];
+        }
+
+        if (std::count(renamedColumn.begin(), renamedColumn.end(), '.') > 1) {
+            auto lastPointIdx = renamedColumn.find_last_of('.');
+            auto prevPointIdx = renamedColumn.find_last_of('.', lastPointIdx - 1);
+            TString alias = renamedColumn.substr(prevPointIdx + 1, lastPointIdx - prevPointIdx - 1);
+            TString column = renamedColumn.substr(lastPointIdx + 1);
+            if (auto baseTable = GetBaseTableByAlias(alias)) {
+                return TBaseColumn(std::move(baseTable), std::move(column));
+            }
+            return TBaseColumn(std::move(alias), std::move(column));
+        }
+
+        if (auto pointIdx = renamedColumn.find('.'); pointIdx != TString::npos) {
+            TString alias = renamedColumn.substr(0, pointIdx);
+            TString column = renamedColumn.substr(pointIdx + 1);
+            if (auto baseTable = GetBaseTableByAlias(alias)) {
+                return TBaseColumn(std::move(baseTable), std::move(column));
+            }
+            return TBaseColumn(std::move(alias), std::move(column));
+        }
+
+        return TBaseColumn("", renamedColumn);
+    }
+
+    TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn) {
+        return GetBaseColumnByRename(renamedColumn.RelName + "." + renamedColumn.AttributeName);
+    }
+
+    TString ToString() const {
+        TString result;
+        result += "Table Alias Map:\n";
+
+        for (const auto& [table, aliases] : AliasesByTable) {
+            result += "Table: " + table + "\n";
+            result += "  Aliases: ";
+            for (const auto& alias : aliases) {
+                result += alias + ", ";
+            }
+            if (!aliases.empty()) {
+                result.pop_back();
+                result.pop_back();
+            }
+            result += "\n";
+        }
+
+        if (!BaseColumnByRename.empty()) {
+            result += "Column Renames:\n";
+            for (const auto& [from, to] : BaseColumnByRename) {
+                result += "  " + from + " -> " + to.Relation + "." + to.Column + "\n";
+            }
+        }
+
+        return result;
+    }
+
+private:
+    TString GetBaseTableByAlias(const TString& alias) {
+        return TableByAlias[alias];
+    }
+
+private:
+    THashMap<TString, TVector<TString>> AliasesByTable;
+    THashMap<TString, TString> TableByAlias;
+
+    THashMap<TString, TBaseColumn> BaseColumnByRename;
+};
+
 /*
  * This class contains internal representation of the columns (mapping [column -> int]), FDs and interesting orderings
  */
 class TFDStorage {
 public:
+    std::int64_t FindFDIdx(
+        const TJoinColumn& antecedentColumn,
+        const TJoinColumn& consequentColumn,
+        TFunctionalDependency::EType type
+    ) {
+        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, false);
+        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}, false).at(0);
+
+        for (std::size_t i = 0; i < FDs.size(); ++i) {
+            auto& fd = FDs[i];
+            if (
+                fd.AntecedentItems == convertedAntecedent &&
+                fd.ConsequentItem == convertedConsequent &&
+                fd.Type == type
+            ) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
@@ -87,8 +285,8 @@ public:
         bool alwaysActive
     ) {
         auto fd = TFunctionalDependency{
-            .AntecedentItems = {GetIdxByColumn(antecedentColumn)},
-            .ConsequentItem = GetIdxByColumn(consequentColumn),
+            .AntecedentItems = {GetIdxByColumn(antecedentColumn, true)},
+            .ConsequentItem = GetIdxByColumn(consequentColumn, true),
             .Type = type,
             .AlwaysActive = alwaysActive
         };
@@ -97,24 +295,29 @@ public:
         return FDs.size() - 1;
     }
 
+    std::int64_t FindInterestingOrderingIdx(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type
+    ) {
+        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, false);
+        return orderingIdx;
+    }
+
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type
     ) {
-        std::vector<std::size_t> items;
-        items.reserve(interestingOrdering.size());
-
-        for (const auto& column: interestingOrdering) {
-            items.push_back(GetIdxByColumn(column));
+        if (interestingOrdering.empty()) {
+            return std::numeric_limits<std::size_t>::max();
         }
 
-        for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
-            if (items == InterestingOrderings[i].Items) {
-                return i;
-            }
+        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true);
+
+        if (foundIdx >= 0) {
+            return static_cast<std::size_t>(foundIdx);
         }
 
-        InterestingOrderings.push_back(TOrdering{.Items = std::move(items), .Type = type });
+        InterestingOrderings.emplace_back(std::move(items), type);
         return InterestingOrderings.size() - 1;
     }
 
@@ -130,28 +333,87 @@ public:
         return columns;
     }
 
-    std::string ToString() {
+    std::string ToString() const {
+        auto toVectorString = [](auto seq) {
+            TVector<TString> strVector;
+            strVector.reserve(seq.size());
+            for (const auto& item: seq) {
+                strVector.push_back(item.ToString());
+            }
+            return strVector;
+        };
+
         std::stringstream ss;
 
+        ss << "Columns mapping: ";
+        TVector<TString> columnsMapping(IdCounter);
         for (const auto& [column, idx]: IdxByColumn) {
-            ss << idx << " " << column << '\n';
+            std::stringstream columnSs;
+            columnSs << "{" << idx << ": " << column << "}";
+            columnsMapping[idx] = columnSs.str();
         }
+        ss << JoinSubsequence(", ", columnsMapping) << "\n";
+        ss << "FDs: " << JoinSubsequence(", ", toVectorString(FDs)) << "\n";
+        ss << "Interesting Orderings: " << JoinSubsequence(", ", toVectorString(InterestingOrderings)) << "\n";
+        ss << TableAliases.ToString() << "\n";
 
         return ss.str();
     }
 
+
 public:
     std::vector<TFunctionalDependency> FDs;
     std::vector<TOrdering> InterestingOrderings;
+    TTableAliasMap TableAliases;
 
 private:
-    std::size_t GetIdxByColumn(const TJoinColumn& column) {
-        const std::string fullPath = column.RelName + "." + column.AttributeName;
+    /*
+     * Returns converted columns (interestingOrdering -> inner representation),
+     * and index > 0 of the ordering if it has been already added, -1 otherwise
+     */
+    std::pair<std::vector<std::size_t>, std::int64_t> ConvertColumnsAndFindExistingOrdering(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type,
+        bool createIfNotExists
+    ) {
+        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists);
+
+        for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
+            if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
+                return {items, static_cast<std::int64_t>(i)};
+            }
+        }
+
+        return {items, -1};
+    }
+
+    std::vector<std::size_t> ConvertColumnIntoIndexes(
+        const std::vector<TJoinColumn>& ordering,
+        bool createIfNotExists
+    ) {
+        std::vector<std::size_t> items;
+        items.reserve(ordering.size());
+
+        for (const auto& column: ordering) {
+            items.push_back(GetIdxByColumn(column, createIfNotExists));
+        }
+
+        return items;
+    }
+
+    std::size_t GetIdxByColumn(const TJoinColumn& column, bool createIfNotExists) {
+        auto baseColumn = TableAliases.GetBaseColumnByRename(column).ToJoinColumn();
+
+        const std::string fullPath = baseColumn.RelName + "." + baseColumn.AttributeName;
+
         if (IdxByColumn.contains(fullPath)) {
             return IdxByColumn[fullPath];
         }
 
-        ColumnByIdx.push_back(column);
+        Y_ENSURE(!baseColumn.AttributeName.empty());
+        Y_ENSURE(createIfNotExists, "There's no such column: " + fullPath);
+
+        ColumnByIdx.push_back(baseColumn);
         IdxByColumn[fullPath] = IdCounter++;
         return IdxByColumn[fullPath];
     }
@@ -220,8 +482,8 @@ public:
             }
         }
 
-        void SetOrdering(std::size_t orderingIdx) {
-            Y_ASSERT(orderingIdx < DFSM->InitStateByOrderingIdx.size());
+        void SetOrdering(std::int64_t orderingIdx) {
+            Y_ASSERT(0 <= orderingIdx && orderingIdx < static_cast<std::int64_t>(DFSM->InitStateByOrderingIdx.size()));
 
             auto state = DFSM->InitStateByOrderingIdx[orderingIdx];
             State = state.StateIdx;
@@ -253,6 +515,10 @@ public:
             return HasState() && logicalOrderings.HasState() && IsSubset(DFSM->Nodes[State].NFSMNodesBitset, logicalOrderings.DFSM->Nodes[logicalOrderings.State].NFSMNodesBitset);
         }
 
+        std::int64_t GetState() const {
+            return State;
+        }
+
     private:
         inline bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs) {
             return (lhs & rhs) == lhs;
@@ -266,16 +532,35 @@ public:
         TFDSet AppliedFDs{};
     };
 
-    TLogicalOrderings CreateState() { // TODO : THINK ABOUT IT createstate + setordering in one func
+    TLogicalOrderings CreateState() {
         return TLogicalOrderings(&DFSM);
     }
 
+    TLogicalOrderings CreateState(std::int64_t orderingIdx) {
+        auto state = TLogicalOrderings(&DFSM);
+        state.SetOrdering(orderingIdx);
+        return state;
+    }
+
 public:
-    TOrderingsStateMachine(
-        const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
-        Build(fds, interestingOrderings);
+    TOrderingsStateMachine() = default;
+
+    TOrderingsStateMachine(TFDStorage fdStorage)
+        : FDStorage(std::move(fdStorage))
+    {
+        Build(FDStorage.FDs, FDStorage.InterestingOrderings);
+    }
+
+public:
+    TFDStorage FDStorage;
+
+    bool IsBuilt() const {
+        return Built;
+    }
+
+    TFDSet GetFDSet(std::int64_t fdIdx) {
+        if (fdIdx < 0) { return TFDSet(); }
+        return GetFDSet(std::vector<std::size_t> {static_cast<std::size_t>(fdIdx)});
     }
 
     TFDSet GetFDSet(std::size_t fdIdx) {
@@ -294,7 +579,27 @@ public:
         return fdSet;
     }
 
-    std::array<std::size_t, 64> ShuffleCountByColumnIdx;
+    std::string ToString() const {
+        std::ostringstream ss;
+        ss << "TOrderingsStateMachine:\n";
+        ss << "Built: " << (Built ? "true" : "false") << "\n";
+        ss << "FdMapping: [" << JoinSubsequence(", ", FdMapping) << "]\n";
+        ss << "FDStorage:\n" << FDStorage.ToString() << "\n";
+        ss << NFSM.ToString();
+        ss << DFSM.ToString(NFSM);
+        return ss.str();
+    }
+
+private:
+    void Build(
+        const std::vector<TFunctionalDependency>& fds,
+        const std::vector<TOrdering>& interestingOrderings
+    ) {
+        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
+        NFSM.Build(processedFDs, interestingOrderings);
+        DFSM.Build(NFSM, processedFDs, interestingOrderings);
+        Built = true;
+    }
 
 private:
     class TNFSM {
@@ -318,6 +623,15 @@ private:
 
             TOrdering Ordering;
             std::int64_t InterestingOrderingIdx; // -1 if node isn't interesting
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Node{Type=" << (Type == EArtificial ? "Artificial" : "Interesting")
+                   << ", Ordering=" << Ordering.ToString()
+                   << ", InterestingOrderingIdx=" << InterestingOrderingIdx
+                   << ", OutgoingEdges=[" << JoinSubsequence(", ", OutgoingEdges) << "]}";
+                return ss.str();
+            }
         };
 
         struct TEdge {
@@ -328,10 +642,33 @@ private:
             enum _ : std::int64_t {
                 EPSILON = -1 // eps edges with give us nodes without applying any FDs.
             };
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Edge{src=" << srcNodeIdx
+                   << ", dst=" << dstNodeIdx
+                   << ", fdIdx=" << (fdIdx == EPSILON ? "EPSILON" : std::to_string(fdIdx))
+                   << "}";
+                return ss.str();
+            }
         };
 
         std::size_t Size() {
             return Nodes.size();
+        }
+
+        std::string ToString() const {
+            std::ostringstream ss;
+            ss << "NFSM:\n";
+            ss << "Nodes (" << Nodes.size() << "):\n";
+            for (std::size_t i = 0; i < Nodes.size(); ++i) {
+                ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+            }
+            ss << "Edges (" << Edges.size() << "):\n";
+            for (std::size_t i = 0; i < Edges.size(); ++i) {
+                ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+            }
+            return ss.str();
         }
 
     public:
@@ -430,16 +767,63 @@ private:
             std::vector<std::size_t> NFSMNodes;
             std::bitset<EMaxFDCount> OutgoingFDs;
             std::bitset<EMaxNFSMStates> NFSMNodesBitset;
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Node{NFSMNodes=[" << JoinSubsequence(", ", NFSMNodes) << "], "
+                   << "OutgoingFDs=" << OutgoingFDs.to_string() << "}";
+                return ss.str();
+            }
         };
 
         struct TEdge {
             std::size_t srcNodeIdx;
             std::size_t dstNodeIdx;
             std::int64_t fdIdx;
+
+            std::string ToString() const {
+                std::ostringstream ss;
+                ss << "Edge{src=" << srcNodeIdx
+                   << ", dst=" << dstNodeIdx
+                   << ", fdIdx=" << fdIdx
+                   << "}";
+                return ss.str();
+            }
         };
 
         std::size_t Size() {
             return Nodes.size();
+        }
+
+        std::string ToString(const TNFSM& nfsm) const {
+            std::ostringstream ss;
+            ss << "DFSM:\n";
+            ss << "Nodes (" << Nodes.size() << "):\n";
+            for (std::size_t i = 0; i < Nodes.size(); ++i) {
+                ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+                ss << "    NFSMNodes: [";
+                for (std::size_t j = 0; j < Nodes[i].NFSMNodes.size(); ++j) {
+                    std::size_t nfsmNodeIdx = Nodes[i].NFSMNodes[j];
+                    if (j > 0) {
+                        ss << ", ";
+                    }
+                    ss << nfsmNodeIdx;
+                    if (nfsmNodeIdx < nfsm.Nodes.size()) {
+                        ss << "(" << nfsm.Nodes[nfsmNodeIdx].Ordering.ToString() << ")";
+                    }
+                }
+                ss << "]\n";
+            }
+            ss << "Edges (" << Edges.size() << "):\n";
+            for (std::size_t i = 0; i < Edges.size(); ++i) {
+                ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+            }
+            ss << "InitStateByOrderingIdx (" << InitStateByOrderingIdx.size() << "):\n";
+            for (std::size_t i = 0; i < InitStateByOrderingIdx.size(); ++i) {
+                ss << "  " << i << ": StateIdx=" << InitStateByOrderingIdx[i].StateIdx
+                   << ", ShuffleHashFuncArgsCount=" << InitStateByOrderingIdx[i].ShuffleHashFuncArgsCount << "\n";
+            }
+            return ss.str();
         }
 
     public:
@@ -573,15 +957,6 @@ private:
         std::vector<TInitState> InitStateByOrderingIdx;
     };
 
-    void Build(
-        const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
-        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-        NFSM.Build(processedFDs, interestingOrderings);
-        DFSM.Build(NFSM, processedFDs, interestingOrderings);
-    }
-
     /*
      * For equivalences we build equivalence classes and if item belongs to the class, which has no interesting
      * orderings, so we can easily prune it.
@@ -657,6 +1032,7 @@ private:
     TDFSM DFSM;
 
     std::vector<std::int64_t> FdMapping; // We to remap FD idxes after the pruning
+    bool Built = false;
 };
 
 }

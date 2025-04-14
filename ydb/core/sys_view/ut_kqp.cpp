@@ -1,5 +1,6 @@
 #include "ut_common.h"
 
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -9,6 +10,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/sys_view/show_create/create_view_formatter.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -320,6 +322,27 @@ public:
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 
+    // Checks that the view created from the description provided by the `SHOW CREATE VIEW` statement
+    // can be used to create a view with a description equal to the original.
+    void CheckShowCreateView(const std::string& query, const std::string& viewName, const std::string& expectedResult = "") {
+        ExecuteQuery(Session, query);
+        auto showCreateViewResult = ShowCreateView(Session, viewName);
+
+        if (!expectedResult.empty()) {
+            UNIT_ASSERT_STRINGS_EQUAL(UnescapeC(showCreateViewResult), UnescapeC(expectedResult));
+        }
+
+        const auto originalDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        DropView(Session, viewName);
+        ExecuteQuery(Session, showCreateViewResult);
+
+        const auto newDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        CompareDescriptions(originalDescription, newDescription, showCreateViewResult);
+        DropView(Session, viewName);
+    }
+
 private:
 
     void CreateTier(const std::string& tierName) {
@@ -368,6 +391,24 @@ private:
         return tableDesc;
     }
 
+    NKikimrSchemeOp::TViewDescription DescribeView(const std::string& viewName) {
+        auto pathDescription = DescribePath(Runtime, TString(viewName));
+        UNIT_ASSERT_C(pathDescription.HasViewDescription(), pathDescription.DebugString());
+        return pathDescription.GetViewDescription();
+    }
+
+    NKikimrSchemeOp::TViewDescription CanonizeViewDescription(NKikimrSchemeOp::TViewDescription&& description) {
+        description.ClearVersion();
+        description.ClearPathId();
+
+        TString queryText;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NDump::Format(description.GetQueryText(), queryText, issues), issues.ToString());
+        *description.MutableQueryText() = queryText;
+
+        return description;
+    }
+
     std::string ShowCreate(NQuery::TSession& session, std::string_view type, const std::string& path) {
         const auto result = ExecuteQuery(session, std::format("SHOW CREATE {} `{}`;", type, path));
 
@@ -406,8 +447,16 @@ private:
         return ShowCreate(session, "TABLE", tableName);
     }
 
+    std::string ShowCreateView(NQuery::TSession& session, const std::string& viewName) {
+        return ShowCreate(session, "VIEW", viewName);
+    }
+
     void DropTable(NQuery::TSession& session, const std::string& tableName) {
         ExecuteQuery(session, std::format("DROP TABLE `{}`;", tableName));
+    }
+
+    void DropView(NQuery::TSession& session, const std::string& viewName) {
+        ExecuteQuery(session, std::format("DROP VIEW `{}`;", viewName));
     }
 
     template <typename TProtobufDescription>
@@ -5689,6 +5738,257 @@ WITH (
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+}
+
+Y_UNIT_TEST_SUITE(ShowCreateView) {
+
+Y_UNIT_TEST(Basic) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS SELECT 1;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    1
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(FromTable) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE t (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            -- the case of the pragma identifier does not matter, but is preserved
+            pragma tabLEpathPRefix = '/Root/a/b';
+            CREATE VIEW `../../test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM `c/t`;
+        )",
+        "test_view",
+R"(-- the case of the pragma identifier does not matter, but is preserved
+PRAGMA tabLEpathPRefix = '/Root/a/b';
+
+CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    `c/t`
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithPairedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix ("db", "/Root/a/b/c");
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix('db', '/Root/a/b/c');
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTwoTablePathPrefixes) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `some/other/folder/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            PRAGMA TablePathPrefix = "/Root/some/other/folder";
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "some/other/folder/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+PRAGMA TablePathPrefix = '/Root/some/other/folder';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+}
+
+Y_UNIT_TEST_SUITE(ViewQuerySplit) {
+
+Y_UNIT_TEST(Basic) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery("select 1", split, issues), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix = \"/foo/bar\";\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPairedPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithComments) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select * from t",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from t");
+}
+
+Y_UNIT_TEST(Joins) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+        "select * from $x as x join $y as y on x.key == y.key",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from $x as x join $y as y on x.key == y.key");
+}
+
 }
 
 } // NSysView

@@ -1181,6 +1181,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         if (auto* wotNode = stage->StatsNode->GetValueByPath("WaitOutputTimeUs")) {
             stage->WaitOutputTime = std::make_shared<TSingleMetric>(WaitOutputTime, *wotNode, stage->MinTime, stage->MaxTime);
         }
+
+        if (auto* updateTimeNode = stage->StatsNode->GetValueByPath("UpdateTimeMs")) {
+            stage->UpdateTime = updateTimeNode->GetIntegerSafe();
+        }
     }
 
     if (stage->IngressBytes) {
@@ -1214,6 +1218,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     }
 
     Max0(MaxTime, stage->MaxTime);
+    Max0(UpdateTime, stage->UpdateTime);
 }
 
 void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode) {
@@ -1534,7 +1539,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
     }
 }
 
-void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
+void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
     OffsetY = offsetY;
     ui32 planHeight = 0;
 
@@ -1637,8 +1642,8 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
 
         auto tx0 = Config.TimelineLeft;
-        auto px = tx0 + TimeOffset * Config.TimelineWidth / maxTime;
-        auto pw = MaxTime * Config.TimelineWidth / maxTime;
+        auto px = tx0 + TimeOffset * (Config.TimelineWidth - timelineDelta) / maxTime;
+        auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
 
         if (s->External) {
         canvas
@@ -2191,6 +2196,7 @@ void TPlanVisualizer::PostProcessPlans() {
     for (auto& p : Plans) {
         p.TimeOffset = p.BaseTime - BaseTime;
         MaxTime = std::max(MaxTime, p.TimeOffset + p.MaxTime);
+        UpdateTime = std::max(UpdateTime, p.TimeOffset + p.UpdateTime);
     }
 }
 
@@ -2208,6 +2214,7 @@ TString TPlanVisualizer::PrintSvg() {
     TStringBuilder svg;
 
     ui32 offsetY = 0;
+    ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
     ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
     for (auto& p : Plans) {
@@ -2278,7 +2285,7 @@ TString TPlanVisualizer::PrintSvg() {
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p.MaxMemoryUsage->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
-        auto x = Config.TimelineLeft + Config.TimelineWidth * (p.MaxTime + p.TimeOffset) / MaxTime;
+        auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p.MaxTime + p.TimeOffset) / MaxTime;
         canvas
             << "<g><title>" << "Duration: " << FormatTimeMs(p.MaxTime) << ", Total " << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</title>" << Endl
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
@@ -2297,7 +2304,7 @@ TString TPlanVisualizer::PrintSvg() {
             p.PrintDeriv(canvas, p.TotalCpuTime, tx0, offsetY, tw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
         }
         offsetY += INTERNAL_HEIGHT;
-        p.PrintSvg(MaxTime, offsetY, background, canvas);
+        p.PrintSvg(MaxTime, timelineDelta, offsetY, background, canvas);
     }
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
@@ -2354,7 +2361,7 @@ TString TPlanVisualizer::PrintSvg() {
         }
 
         auto x = Config.TimelineLeft + INTERNAL_GAP_X;
-        auto w = Config.TimelineWidth - INTERNAL_GAP_X * 2;
+        auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
         for (ui64 t = 0; t < maxSec; t += deltaSec) {
             ui64 x1 = t * w / maxSec;
@@ -2369,6 +2376,22 @@ TString TPlanVisualizer::PrintSvg() {
                     << timeLabel << "</text>" << Endl;
             }
         }
+    }
+
+    if (timelineDelta) {
+        auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
+        svg
+        << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
+        << "' width='" << timelineDelta << "' height='" << offsetY
+        << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
+        svg
+        << "<g><title>" << "Last Update: " << FormatTimeMs(UpdateTime) << "</title>" << Endl
+        << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << GAP_Y
+        << "' width='" << summary3 << "' height='" << TIME_HEIGHT
+        << "' stroke-width='0' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl
+        << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << Config.TimelineLeft + Config.TimelineWidth - 2
+        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
+        << "</g>" << Endl;
     }
 
     svg << TString(canvas) << Endl;

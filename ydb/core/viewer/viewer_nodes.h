@@ -1892,6 +1892,10 @@ public:
                                 HivesToAsk.push_back(entry.DomainInfo->Params.GetHive());
                             }
                         }
+                    } else {
+                        FilterPathId = TPathId(InvalidOwnerId - 1, InvalidLocalPathId - 1); // invalid path id for sys view tables
+                        AskHiveAboutPaths = true;
+                        HivesToAsk.push_back(AppData()->DomainsInfo->GetHive());
                     }
                 }
             } else {
@@ -1958,6 +1962,8 @@ public:
                 if (AskHiveAboutPaths) {
                     request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
                     request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);
+                } else if (FilterSubDomainKey) {
+                    request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(SubDomainKey);
                 }
                 HiveNodeStats.emplace(hiveId, MakeRequestHiveNodeStats(hiveId, request.release()));
             }
@@ -1980,8 +1986,8 @@ public:
                                         viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
                                         viewerTablet.SetCount(stateStats.GetCount());
                                         viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
-                                        FieldsAvailable.set(+ENodeFields::Tablets);
                                     }
+                                    FieldsAvailable.set(+ENodeFields::Tablets);
                                 }
                                 if (nodeStats.HasLastAliveTimestamp()) {
                                     node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp())); // milliseconds
@@ -2148,6 +2154,9 @@ public:
             request->AddFieldsRequired(-1);
         }
         request->SetGroupBy("Type,State");
+        if (FilterSubDomainKey) {
+            request->MutableFilterTenantId()->CopyFrom(SubDomainKey);
+        }
     }
 
     template<>

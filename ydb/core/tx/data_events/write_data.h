@@ -4,7 +4,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/library/accessor/accessor.h>

@@ -33,6 +33,7 @@ RECURSE(
     security
     shop
     signal_backtrace
+    signals
     table_creator
     testlib
     time_series_vec

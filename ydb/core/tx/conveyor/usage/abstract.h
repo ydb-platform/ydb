@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actorid.h>

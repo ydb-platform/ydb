@@ -128,12 +128,12 @@ namespace NKafka {
 
     void TKafkaTransactionActor::StartKqpSession(const TActorContext& ctx) {
         Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
-        KAFKA_LOG_D("Sending create session request to KQP.");
+        KAFKA_LOG_D(TStringBuilder() << "Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx, KqpActorId);
     }
 
     void TKafkaTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
-        KAFKA_LOG_D("Sending select request to KQP.");
+        KAFKA_LOG_D(TStringBuilder() << "Sending select request to KQP for database " << DatabasePath);
         Kqp->SendYqlRequest(
             GetYqlWithTablesNames(NKafkaTransactionSql::SELECT_FOR_VALIDATION), 
             BuildSelectParams(), 

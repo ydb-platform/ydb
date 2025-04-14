@@ -3,3 +3,5 @@ items:
   href: index.md
 - name: Grafana dashboards
   href: grafana-dashboards.md
+- name: Distributed Storage performance metrics
+  href: distributed-storage-performance.md

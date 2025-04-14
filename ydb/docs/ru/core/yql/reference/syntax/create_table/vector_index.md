@@ -10,7 +10,7 @@
 
 {% endnote %}
 
-Конструкция INDEX используется для определения [векторного индекса](../../../../concepts/vector_indexes.md) в [строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables) таблицах:
+Конструкция INDEX используется для определения [векторного индекса](../../../../concepts/glossary.md#vector-index) в [строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables) таблицах:
 
 ```yql
 CREATE TABLE table_name (
@@ -36,13 +36,11 @@ CREATE TABLE table_name (
     * `clusters` - количество центроидов для алгоритма k-means (значения > 1000 могут ухудшить производительность);
     * `levels` - количество уровней в дереве.
 
-
 {% note warning %}
 
 Параметры `distance` и `similarity` не могут быть указаны одновременно.
 
 {% endnote %}
-
 
 {% note warning %}
 

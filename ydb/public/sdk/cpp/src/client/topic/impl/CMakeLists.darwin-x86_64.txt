@@ -28,6 +28,7 @@ target_link_libraries(client-topic-impl PUBLIC
   impl-ydb_internal-make_request
   client-common_client-impl
   src-client-driver
+  client-topic-codecs
   client-topic-common
   ydb-cpp-sdk-client-topic
   src-client-proto

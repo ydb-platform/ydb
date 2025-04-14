@@ -12,16 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(client-topic-codecs)
+add_library(client-topic-codecs INTERFACE)
 
 
-target_link_libraries(client-topic-codecs PUBLIC
+target_link_libraries(client-topic-codecs INTERFACE
   contrib-libs-cxxsupp
   yutil
   ydb-cpp-sdk-client-topic
 )
 
-target_sources(client-topic-codecs PRIVATE
+
+add_global_library_for(client-topic-codecs.global
+  client-topic-codecs)
+
+
+target_link_libraries(client-topic-codecs.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  ydb-cpp-sdk-client-topic
+)
+
+target_sources(client-topic-codecs.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/codecs/codecs.cpp
 )
 

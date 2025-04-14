@@ -382,7 +382,7 @@ public:
 
     STRICT_STFUNC(IgnoreState, {
         // ignore all events except for retry queue
-        sFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Ignore);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, IgnoreEvent);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, ReplyNoSession);
@@ -400,19 +400,22 @@ public:
 
         // ignore all row dispatcher events
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, ReplyNoSession);
-        sFunc(TEvPrivate::TEvPrintState, Ignore);
-        sFunc(TEvPrivate::TEvProcessState, Ignore);
-        sFunc(TEvPrivate::TEvNotifyCA, Ignore);
-        sFunc(TEvPrivate::TEvRefreshClusters, Ignore);
-        sFunc(TEvPrivate::TEvReceivedClusters, Ignore);
-        sFunc(TEvPrivate::TEvDescribeTopicResult, Ignore);
+        hFunc(TEvPrivate::TEvPrintState, IgnoreEvent);
+        hFunc(TEvPrivate::TEvProcessState, IgnoreEvent);
+        hFunc(TEvPrivate::TEvNotifyCA, IgnoreEvent);
+        hFunc(TEvPrivate::TEvRefreshClusters, IgnoreEvent);
+        hFunc(TEvPrivate::TEvReceivedClusters, IgnoreEvent);
+        hFunc(TEvPrivate::TEvDescribeTopicResult, IgnoreEvent);
     })
 
-    void Ignore() {
+    template <class TEventPtr>
+    void IgnoreEvent(TEventPtr& ev) {
+        SRC_LOG_D("Ignore " << typeid(TEventPtr).name() << " from " << ev->Sender);
     }
 
     template <class TEventPtr>
     void ReplyNoSession(TEventPtr& ev) {
+        SRC_LOG_D("Ignore (no session) " << typeid(TEventPtr).name() << " from " << ev->Sender);
         SendNoSession(ev->Sender, ev->Cookie);
     }
 

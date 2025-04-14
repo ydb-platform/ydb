@@ -22,45 +22,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
-    switch (state) {
-    case TIndexBuildInfo::EState::Invalid:
-        return "Invalid";
-    case TIndexBuildInfo::EState::AlterMainTable:
-        return "AlterMainTable";
-    case TIndexBuildInfo::EState::Locking:
-        return "Locking";
-    case TIndexBuildInfo::EState::GatheringStatistics:
-        return "GatheringStatistics";
-    case TIndexBuildInfo::EState::Initiating:
-        return "Initiating";
-    case TIndexBuildInfo::EState::Filling:
-        return "Filling";
-    case TIndexBuildInfo::EState::DropBuild:
-        return "DropBuild";
-    case TIndexBuildInfo::EState::CreateBuild:
-        return "CreateBuild";
-    case TIndexBuildInfo::EState::Applying:
-        return "Applying";
-    case TIndexBuildInfo::EState::Unlocking:
-        return "Unlocking";
-    case TIndexBuildInfo::EState::Done:
-        return "Done";
-    case TIndexBuildInfo::EState::Cancellation_Applying:
-        return "Cancellation_Applying";
-    case TIndexBuildInfo::EState::Cancellation_Unlocking:
-        return "Cancellation_Unlocking";
-    case TIndexBuildInfo::EState::Cancelled:
-        return "Cancelled";
-    case TIndexBuildInfo::EState::Rejection_Applying:
-        return "Rejection_Applying";
-    case TIndexBuildInfo::EState::Rejection_Unlocking:
-        return "Rejection_Unlocking";
-    case TIndexBuildInfo::EState::Rejected:
-        return "Rejected";
-    }
-}
-
 // return count, parts, step
 static std::tuple<NTableIndex::TClusterId, NTableIndex::TClusterId, NTableIndex::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
     const auto& kmeans = buildInfo.KMeans;
@@ -1111,8 +1072,7 @@ public:
         Y_ABORT_UNLESS(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
-        LOG_I("TTxBuildProgress: Resume: id# " << BuildId);
-        LOG_D("TTxBuildProgress: Resume: " << buildInfo);
+        LOG_I("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
@@ -1340,13 +1300,7 @@ public:
         Y_ASSERT(buildInfo.InProgressShards.empty());
         Y_ASSERT(buildInfo.DoneShards.empty());
 
-        TTableInfo::TPtr table;
-        if (buildInfo.KMeans.Level == 1) {
-            table = Self->Tables.at(buildInfo.TablePathId);
-        } else {
-            auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-            table = Self->Tables.at(path.Dive(buildInfo.KMeans.ReadFrom())->PathId);
-        }
+        TTableInfo::TPtr table = GetScanningTable(buildInfo);
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
@@ -1365,6 +1319,15 @@ public:
             shardRange.From = std::move(bound);
 
             Self->PersistBuildIndexUploadInitiate(db, BuildId, x.ShardIdx, it->second);
+        }
+    }
+
+    TTableInfo::TPtr GetScanningTable(TIndexBuildInfo& buildInfo) {
+        if (buildInfo.KMeans.Level == 1) {
+            return Self->Tables.at(buildInfo.TablePathId);
+        } else {
+            auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+            return Self->Tables.at(path.Dive(buildInfo.KMeans.ReadFrom())->PathId);
         }
     }
 
@@ -1486,7 +1449,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1640,7 +1603,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1765,7 +1728,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -1889,7 +1852,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2014,7 +1977,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2096,7 +2059,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2249,7 +2212,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -2351,7 +2314,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         }
 
         Progress(buildId);
@@ -2432,7 +2395,7 @@ public:
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
                 buildInfo.Issue += TStringBuilder()
-                    << "At " << Name(state) << " state got unsuccess propose result"
+                    << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -2451,7 +2414,7 @@ public:
                 // no op
             } else {
                 buildInfo.Issue += TStringBuilder()
-                    << "At " << Name(state) << " state got unsuccess propose result"
+                    << "At " << state << " state got unsuccess propose result"
                     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                     << ", reason: " << record.GetReason();
                 Self->PersistBuildIndexIssue(db, buildInfo);
@@ -2549,7 +2512,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         }
 
         Progress(buildId);
@@ -2628,7 +2591,7 @@ public:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL_S("Unreachable " << Name(state));
+            Y_FAIL_S("Unreachable " << state);
         }
 
         Progress(buildId);

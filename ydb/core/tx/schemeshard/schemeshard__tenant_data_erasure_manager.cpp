@@ -508,7 +508,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
         , Ev(std::move(ev))
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_RUN_DATA_ERASURE_TENANT ; }
+    TTxType GetTxType() const override { return TXTYPE_COMPLETE_DATA_ERASURE_SHARD; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

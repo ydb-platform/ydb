@@ -301,19 +301,22 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(Large_1) {
-        for (size_t size = 1; size <= 1000; size *= 10) {
+        ui32 sizeLimit = NSan::PlainOrUnderSanitizer(1000, 100);
+        for (size_t size = 1; size <= sizeLimit; size *= 10) {
             TestLarge(size, 100);
         }
     }
 
     Y_UNIT_TEST(Large_2) {
-        for (size_t size = 100; size <= 10000; size *= 10) {
+        ui32 sizeLimit = NSan::PlainOrUnderSanitizer(10000, 1000);
+        for (size_t size = 100; size <= sizeLimit; size *= 10) {
             TestLarge(size, 10000);
         }
     }
 
     Y_UNIT_TEST(Large_3) {
-        for (size_t size = 1000; size <= 100000; size *= 10) {
+        ui32 sizeLimit = NSan::PlainOrUnderSanitizer(100000, 10000);
+        for (size_t size = 1000; size <= sizeLimit; size *= 10) {
             TestLarge(size, 100000);
         }
     }

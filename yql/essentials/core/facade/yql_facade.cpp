@@ -389,7 +389,7 @@ TProgram::TProgram(
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
                 if (GatewaysForMerge_) {
-                    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
+                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
                 }
                 THashMap<TString, TString> clusterMapping;
                 GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);

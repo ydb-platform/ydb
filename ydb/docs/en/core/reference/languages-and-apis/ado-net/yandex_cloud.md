@@ -33,7 +33,7 @@ Supported Yandex.Cloud authentication methods:
 
 ## Certificates
 
-Library includes default Yandex Cloud server certificate, which is required for connectivity with dedicated YDB databases:
+Library includes default Yandex Cloud server certificates, which is required for connectivity with dedicated YDB databases:
 
 ```c#
 var certs = Ydb.Sdk.Yc.YcCerts.GetYcServerCertificates();

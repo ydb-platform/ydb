@@ -2,11 +2,11 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Ydb.Sdk)](https://www.nuget.org/packages/Ydb.Sdk)
 
-The best way to use `Ydb.Sdk` is to install its [nuget package](https://www.nuget.org/packages/Ydb.Sdk).
+Лучший способ использовать `Ydb.Sdk` - это установить его [nuget пакет](https://www.nuget.org/packages/Ydb.Sdk).
 
-`Ydb.Sdk.Ado` aims to be fully ADO.NET-compatible, its API should feel almost identical to other .NET database drivers.
+`Ydb.Sdk.Ado` стремиться быть полностью совместимым с ADO.NET, его API должен быть практически идентичен другим драйверам баз дынных .NET.
 
-Here's a basic code snippet to get you started:
+Вот базовый фрагмент кода, который поможет вам начать:
 
 ```c#
 await using var connection = new YdbConnection("Host=localhost;Port=2136;Database=/local;MaxSessionPool=50");
@@ -36,4 +36,4 @@ while (await ydbDataReader.ReadAsync())
 }
 ```
 
-You can find more info about the ADO.NET API in the [MSDN](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/ado-net-overview?redirectedfrom=MSDN) docs or in many tutorials on the Internet.
+Вы можете найти более подробную информацию о ADO.NET API в документации [MSDN](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/ado-net-overview?redirectedfrom=MSDN) или во многих других руководствах в интернете.

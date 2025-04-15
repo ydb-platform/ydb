@@ -4,4 +4,8 @@ items:
   include:
     mode: link
     path: jdbc-driver/toc_p.yaml
-
+- name: ADO.NET
+  href: ado-net/index.md
+  include:
+    mode: link
+    path: ado-net/toc_p.yaml

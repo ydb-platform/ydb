@@ -1,0 +1,13 @@
+items:
+- name: Hачало работы
+  href: getting_started.md
+- name: Установка
+  href: installation.md
+- name: Основное использование
+  href: basic_usage.md
+- name: Параметры подключения
+  href: connection_parameters.md
+- name: Маппинг типов
+  href: type_mapping.md
+- name: Подключение к Yandex Cloud
+  href: yandex_cloud.md

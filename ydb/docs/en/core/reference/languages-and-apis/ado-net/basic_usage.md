@@ -107,9 +107,16 @@ while (await reader.ReadAsync())
 
 Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync). There are various ways to execute a command, based on what results you expect from it:
 
-1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL which doesn't return any results, typically INSERT, UPDATE or DELETE statements. Returns the number of rows affected.
+1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL which doesn't return any results, typically INSERT, UPDATE or DELETE statements.
+
+   {% note warning %}
+
+   YDB does not return the number of rows affected.
+
+   {% endnote %}
+
 2. [ExecuteScalarAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executescalarasync): executes SQL which returns a single, scalar value.
-3. [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync): execute SQL which returns a full resultset. Returns an `YdbDataReader` which can be used to access the resultset (as in the above example).
+3. [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync): executes SQL which returns a full resultset. Returns an `YdbDataReader` which can be used to access the resultset (as in the above example).
 
 For example, to execute a simple SQL `INSERT` which does not return anything, you can use ExecuteNonQueryAsync as follows:
 
@@ -139,6 +146,7 @@ ydbCommand.CommandText = """
                          """;
 ydbCommand.Parameters.Add(new YdbParameter("$series_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("$season_id", DbType.UInt64, 1U));
+ydbCommand.Parameters.Add(new YdbParameter("$limit_size", DbType.UInt64, 3U));
 
 var ydbDataReader = await ydbCommand.ExecuteReaderAsync();
 ```
@@ -172,16 +180,16 @@ ADO.NET the query will be prepared for you so that the variables match [YQL](../
 
 For more information on supported types and their mappings, see this [page](type_mapping.md).
 
-## Basic transactions
+## Transactions
 
 To create a client transaction, use the standard ADO.NET `ydbConnection.BeginTransaction()` method.
 
 There are two signatures of this method with a single isolation level parameter:
 
-- `BeginTransaction(TxMode txMode)`
+- `BeginTransaction(TxMode txMode)`<br>
   The `Ydb.Sdk.Services.Query.TxMode` is a  {{ ydb-short-name }} specific isolation level, you can read more about it [here](../../../concepts/transactions.md).
 
-- `BeginTransaction(IsolationLevel isolationLevel)`
+- `BeginTransaction(IsolationLevel isolationLevel)`<br>
   The `System.Data.IsolationLevel` parameter from the standard ADO.NET. The following isolation levels are supported: `Serializable` and `Unspecified`. Both are equivalent to the `TxMode.SerializableRW`.
 
 Calling `BeginTransaction()` without parameters opens a transaction with level the `TxMode.SerializableRW`.
@@ -240,3 +248,4 @@ Please note that ADO.NET does not automatically retry failed operations, and you
 
 - [ADO.NET Examples](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet)
 - [Connect to Yandex Cloud](yandex_cloud.md)
+- [Dapper](./../../../integrations/orm/dapper.md)

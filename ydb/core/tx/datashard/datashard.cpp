@@ -2520,10 +2520,11 @@ ui64 TDataShard::GetMaxObservedStep() const {
 }
 
 void TDataShard::SendImmediateWriteResult(
-        const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie,
+        const TRowVersion& version, const TActorId& target, IEventBase* eventRawPtr, ui64 cookie,
         const TActorId& sessionId,
         NWilson::TTraceId traceId)
 {
+    THolder<IEventBase> event(eventRawPtr);
     NWilson::TSpan span(TWilsonTablet::TabletDetailed, std::move(traceId), "Datashard.SendImmediateWriteResult", NWilson::EFlags::AUTO_END);
 
     const ui64 step = version.Step;
@@ -2535,9 +2536,9 @@ void TDataShard::SendImmediateWriteResult(
         if (Y_LIKELY(!InMemoryVarsFrozen) || version <= SnapshotManager.GetImmediateWriteEdgeReplied()) {
             SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
             if (!sessionId) {
-                Send(target, event, 0, cookie, span.GetTraceId());
+                Send(target, event.Release(), 0, cookie, span.GetTraceId());
             } else {
-                SendViaSession(sessionId, target, SelfId(), event, 0, cookie, span.GetTraceId());
+                SendViaSession(sessionId, target, SelfId(), event.Release(), 0, cookie, span.GetTraceId());
             }
         } else {
             span.EndError("Dropped");
@@ -2548,7 +2549,7 @@ void TDataShard::SendImmediateWriteResult(
     MediatorDelayedReplies.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(version),
-        std::forward_as_tuple(target, THolder<IEventBase>(event), cookie, sessionId, std::move(span)));
+        std::forward_as_tuple(target, std::move(event), cookie, sessionId, std::move(span)));
 
     // Try to subscribe to the next step, when needed
     if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {

@@ -713,6 +713,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
         if (child == this) {
             continue;
         }
+        // all actors are on same mailbox, safe to call
         child->PassAway();
     }
     Clusters.clear();
@@ -760,6 +761,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
             continue;
         }
         for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
+            // all actors are on same mailbox, safe to call
             child->TrySendGetNextBatch(sessionInfo);
         }
     }
@@ -812,6 +814,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
     CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     if (Parent != this) {
         Parent->CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
     }
@@ -943,6 +946,7 @@ void TDqPqRdReadActor::ScheduleProcessState() {
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
     SRC_LOG_I("ReInit state, reason " << reason);
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     Parent->Metrics.ReInit->Inc();
 
     State = EState::WAIT_COORDINATOR_ID;
@@ -1034,6 +1038,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "No partition with id " << partitionId)});
         return;
     }
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     Parent->Metrics.InFlyGetNextBatch->Set(0);
     if (ev->Get()->Record.GetMessages().empty()) {
         return;

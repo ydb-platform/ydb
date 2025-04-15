@@ -1,6 +1,7 @@
 # LangChain
 
-Интеграция {{ ydb-short-name }} с [langchain](https://python.langchain.com/docs/introduction/) позволяет использовать {{ ydb-short-name }} в качестве [векторного хранилища](https://python.langchain.com/docs/concepts/vectorstores/).
+Интеграция {{ ydb-short-name }} с [langchain](https://python.langchain.com/docs/introduction/) позволяет использовать {{ ydb-short-name }} в качестве [векторного хранилища](https://python.langchain.com/docs/concepts/vectorstores/) для RAG приложений.
+
 Эта интеграция позволяет разработчикам эффективно управлять, запрашивать и извлекать векторизованные данные, что является основой для современных приложений, связанных с обработкой естественного языка, поиском и анализом данных. Используя модели эмбеддингов, пользователи могут создавать сложные системы, способные понимать и извлекать информацию на основе семантического сходства.
 
 ## Установка {#setup}

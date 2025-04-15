@@ -1,6 +1,7 @@
 # LangChain
 
-Integration of {{ ydb-short-name }} with [langchain](https://python.langchain.com/docs/introduction/) enables the use of {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/).
+Integration of {{ ydb-short-name }} with [langchain](https://python.langchain.com/docs/introduction/) enables the use of {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/) for RAG applications.
+
 This integration allows developers to efficiently manage, query, and retrieve vectorized data, which is fundamental for modern applications involving natural language processing, search, and data analysis. By leveraging embedding models, users can create sophisticated systems that understand and retrieve information based on semantic similarity.
 
 ## Setup {#setup}

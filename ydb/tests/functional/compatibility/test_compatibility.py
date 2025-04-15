@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+import boto3
+
+import os
+
 import yatest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -24,6 +28,8 @@ class TestCompatibility(object):
             )
         )
         cls.driver.wait()
+        output_path = yatest.common.test_output_path()
+        cls.output_f = open(os.path.join(output_path, "out.log"), "w")
 
     @classmethod
     def teardown_class(cls):
@@ -75,3 +81,53 @@ class TestCompatibility(object):
                 result = list(result_sets[0].rows[0].values())
                 assert len(result) == 1
                 assert result[0] == upsert_count * iteration_count
+    
+    def test_export(self):
+        s3_endpoint = os.getenv("S3_ENDPOINT")
+        s3_access_key = "minio"
+        s3_secret_key = "minio123"
+        s3_bucket = "export_test_bucket"
+        print("S3_ENDPOINT ", os.getenv("S3_ENDPOINT"))
+
+        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+
+        bucket = resource.Bucket(s3_bucket)
+        bucket.create()
+        bucket.objects.all().delete()
+
+        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+        session.execute_scheme(
+            "create table `sample_table` (id Uint64, payload Utf8, PRIMARY KEY(id));"
+        )
+        query = """INSERT INTO `sample_table` (id, payload) VALUES
+            (1, 'Payload 1'),
+            (2, 'Payload 2'),
+            (3, 'Payload 3'),
+            (4, 'Payload 4'),
+            (5, 'Payload 5');"""
+        session.transaction().execute(
+            query, commit_tx=True
+        )
+
+        export_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+            "--database=/Root",
+            "export",
+            "s3",
+            "--s3-endpoint",
+            s3_endpoint,
+            "--bucket",
+            s3_bucket,
+            "--access-key",
+            s3_access_key,
+            "--secret-key",
+            s3_secret_key,
+            "--item",
+            "s=/Root",
+            "d=sample_table"
+        ]
+
+        yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)

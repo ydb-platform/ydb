@@ -7,6 +7,7 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/config/validation/validators.h>
 
 namespace NKikimr::NYamlConfig {
 
@@ -97,8 +98,32 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     }
 }
 
+class TLegacyValidators
+    : public IConfigValidator
+{
+public:
+    EValidationResult ValidateConfig(
+        const NKikimrConfig::TAppConfig& config,
+        std::vector<TString>& msg) const override
+    {
+        auto res = NKikimr::NConfig::ValidateConfig(config, msg);
+        switch (res) {
+            case NKikimr::NConfig::EValidationResult::Ok:
+                return EValidationResult::Ok;
+            case NKikimr::NConfig::EValidationResult::Warn:
+                return EValidationResult::Warn;
+            case NKikimr::NConfig::EValidationResult::Error:
+                return EValidationResult::Error;
+        }
+    }
+};
+
 class TDefaultConfigSwissKnife : public IConfigSwissKnife {
 public:
+    TDefaultConfigSwissKnife() {
+        Validators["LegacyValidators"] = MakeSimpleShared<TLegacyValidators>();
+    }
+
     bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest&, Ydb::StatusIds::StatusCode&, NYql::TIssues&) const override {
         return true;
     }
@@ -117,5 +142,22 @@ std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife() {
     return std::make_unique<TDefaultConfigSwissKnife>();
 }
 
+EValidationResult IConfigSwissKnife::ValidateConfig(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg) const
+{
+    for (const auto& [name, validator] : GetValidators()) {
+        EValidationResult result = validator->ValidateConfig(config, msg);
+        if (result == EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+
+    if (msg.size() > 0) {
+        return EValidationResult::Warn;
+    }
+
+    return EValidationResult::Ok;
+}
 
 } // namespace NKikimr::NYamlConfig

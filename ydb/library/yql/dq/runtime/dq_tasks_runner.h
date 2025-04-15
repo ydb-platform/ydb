@@ -46,7 +46,7 @@ struct TMkqlStat {
     i64 Value = 0;
 };
 
-struct TTaskRunnerStatsBase {
+struct TDqTaskRunnerStats {
     // basic stats
     TDuration BuildCpuTime;
     TInstant CreateTs;
@@ -57,6 +57,8 @@ struct TTaskRunnerStatsBase {
     TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
+    TDuration CurrentWaitInputTime;
+    TDuration CurrentWaitOutputTime;
 
     ui64 SpillingComputeWriteBytes;
     ui64 SpillingChannelWriteBytes;
@@ -76,17 +78,14 @@ struct TTaskRunnerStatsBase {
     TVector<TMkqlStat> MkqlStats;
     TVector<TOperatorStat> OperatorStat;
 
-    TTaskRunnerStatsBase() = default;
-    TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;
-    TTaskRunnerStatsBase& operator=(TTaskRunnerStatsBase&&) = default;
+    TDqTaskRunnerStats() = default;
+    TDqTaskRunnerStats(TDqTaskRunnerStats&&) = default;
+    TDqTaskRunnerStats& operator=(TDqTaskRunnerStats&&) = default;
 
-    virtual ~TTaskRunnerStatsBase() = default;
+    virtual ~TDqTaskRunnerStats() = default;
 };
 
-struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
-};
-
-// Provides read access to TTaskRunnerStatsBase
+// Provides read access to TDqTaskRunnerStats
 // May or may not own the underlying object
 class TDqTaskRunnerStatsView {
 public:
@@ -106,7 +105,7 @@ public:
         , ActorElapsedTicks(actorElapsedTicks) {
     }
 
-    const TTaskRunnerStatsBase* Get() {
+    const TDqTaskRunnerStats* Get() {
         if (!IsDefined) {
             return nullptr;
         }
@@ -466,8 +465,8 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
 } // namespace NYql::NDq
 
 template <>
-inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<NYql::NDq::TTaskRunnerStatsBase>::TFuncParam stats) {
-    os << "TTaskRunnerStatsBase:" << Endl
+inline void Out<NYql::NDq::TDqTaskRunnerStats>(IOutputStream& os, TTypeTraits<NYql::NDq::TDqTaskRunnerStats>::TFuncParam stats) {
+    os << "TDqTaskRunnerStats:" << Endl
        << "\tBuildCpuTime: " << stats.BuildCpuTime << Endl
        << "\tStartTs: " << stats.StartTs << Endl
        << "\tFinishTs: " << stats.FinishTs << Endl

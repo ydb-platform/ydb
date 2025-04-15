@@ -121,15 +121,32 @@ def append_to_config_file(path, shellcode):
         fh.write(shellcode)
     print("Added.", file=sys.stderr)
 
-
-def link_user_rcfiles():
-    # TODO: warn if running as superuser
+def link_zsh_user_rcfile(zsh_fpath=None):
     zsh_rcfile = os.path.join(os.path.expanduser(os.environ.get("ZDOTDIR", "~")), ".zshenv")
-    append_to_config_file(zsh_rcfile, zsh_shellcode.format(zsh_fpath=get_activator_dir()))
+    append_to_config_file(zsh_rcfile, zsh_shellcode.format(zsh_fpath=zsh_fpath or get_activator_dir()))
 
+def link_bash_user_rcfile():
     bash_completion_user_file = os.path.expanduser("~/.bash_completion")
     append_to_config_file(bash_completion_user_file, bash_shellcode.format(activator=get_activator_path()))
 
+
+def link_user_rcfiles():
+    # TODO: warn if running as superuser
+    link_zsh_user_rcfile()
+    link_bash_user_rcfile()
+
+def add_zsh_system_dir_to_fpath_for_user():
+    if "zsh" not in os.environ.get("SHELL", ""):
+        return
+    try:
+        zsh_system_dir = get_zsh_system_dir()
+        fpath_output = subprocess.check_output([os.environ["SHELL"], "-c", 'printf "%s\n" "${fpath[@]}"'])
+        for fpath in fpath_output.decode().splitlines():
+            if fpath == zsh_system_dir:
+                return
+        link_zsh_user_rcfile(zsh_fpath=zsh_system_dir)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
 
 def main():
     global args
@@ -159,6 +176,8 @@ def main():
 
     for destination in destinations:
         install_to_destination(destination)
+
+    add_zsh_system_dir_to_fpath_for_user()
 
     if args.dest is None:
         print("Please restart your shell or source the installed file to activate it.", file=sys.stderr)

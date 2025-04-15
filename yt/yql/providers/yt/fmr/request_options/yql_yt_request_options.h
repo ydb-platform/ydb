@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/yson/node/node.h>
 #include <util/digest/numeric.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -167,8 +168,8 @@ struct TClusterConnection {
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), JobSettings(jobSettings), NumRetries(numRetries)
     {
     }
 
@@ -177,6 +178,7 @@ struct TTask: public TThrRefBase {
     TTaskParams TaskParams = {};
     TString SessionId;
     TClusterConnection ClusterConnection = {};
+    TMaybe<NYT::TNode> JobSettings = {};
     ui32 NumRetries; // Not supported yet
 
     using TPtr = TIntrusivePtr<TTask>;
@@ -197,7 +199,7 @@ struct TTaskState: public TThrRefBase {
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{});
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
 

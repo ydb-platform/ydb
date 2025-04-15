@@ -10,7 +10,9 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <util/string/builder.h>
+#include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
@@ -199,9 +201,12 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         if (!i.second->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
+        if (!i.second->AddOptimizerMarker(EOptimizerMarkers::FetchMerged)) {
+            continue;
+        }
+        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
             continue;
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {
@@ -220,8 +225,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : dataAddresses) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : dataAddresses) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses()) {
                 proc->Add(addr.second);
@@ -230,7 +234,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         auto nodeFetch = AddNode(proc);
         FetchersMerged.emplace(nodeFetch->GetIdentifier());
         for (auto&& i : dataAddresses) {
-            for (auto&& to: i->GetOutputEdges()) {
+            for (auto&& to : i->GetOutputEdges()) {
                 AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
             }
             RemoveNode(i->GetIdentifier());
@@ -245,8 +249,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : headers) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : indexes) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext()) {
                 proc->Add(addr.second);
@@ -361,11 +364,11 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
     }
-    if (condNode->GetProcessor()->GetInput().size() != 2) {
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic()) {
         return false;
     }
-    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
-    if (!calc->GetYqlOperationId()) {
+    if (condNode->GetProcessor()->GetInput().size() != 2) {
         return false;
     }
     if (condNode->GetOutputEdges().size() != 1) {
@@ -376,17 +379,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
         return false;
     }
-    if (!!calc->GetKernelLogic()) {
-        if (!calc->GetKernelLogic()->IsBoolInResult()) {
-            return false;
-        }
-    }
-    if (calc->GetYqlOperationId()) {
-        if (!IsBoolResultYqlOperator((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId())) {
-            return false;
-        }
-    }
-    if (!calc->GetYqlOperationId() && !calc->GetKernelLogic()) {
+    if (!calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
@@ -395,91 +388,44 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     }
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
-    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-        if (!IndexesConstructed.emplace(condNode->GetIdentifier()).second) {
-            return false;
-        }
-        RemoveEdge(condNode, dest, destResourceId);
-
-        const EIndexCheckOperation indexOperation = [&]() {
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
-                return EIndexCheckOperation::Equals;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
-                return EIndexCheckOperation::StartsWith;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
-                return EIndexCheckOperation::EndsWith;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-                return EIndexCheckOperation::Contains;
-            }
-            return EIndexCheckOperation::Contains;
-            AFL_VERIFY(false);
-        }();
-
-        const ui32 resourceIdxFetch = BuildNextResourceId();
-        IDataSource::TFetchIndexContext indexContext(dataAddr->GetColumnId(),
-            IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), indexOperation));
-        auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
-        auto indexFetchNode = AddNode(indexFetchProc);
-        RegisterProducer(resourceIdxFetch, indexFetchNode.get());
-
-        const ui32 resourceIdIndexToAnd = BuildNextResourceId();
-        IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), indexOperation);
-        auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
-            resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
-        auto indexProcNode = AddNode(indexCheckProc);
-        RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-        AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
-        AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
-
-        const ui32 resourceIdEqToAnd = BuildNextResourceId();
-        RegisterProducer(resourceIdEqToAnd, condNode);
-        calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
-
-        auto andProcessor = std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }),
-            TColumnChainInfo(destResourceId), NKernels::EOperation::And);
-        auto andNode = AddNode(andProcessor);
-        AddEdge(andNode.get(), dest, destResourceId);
-
-        AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-        AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
-        ResetProducer(destResourceId, andNode.get());
-        return true;
+    auto indexChecker = calc->GetKernelLogic()->GetIndexCheckerOperation();
+    if (!indexChecker) {
+        return false;
     }
-    return false;
-}
-
-bool TGraph::IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const {
-    switch (op) {
-        case NYql::TKernelRequestBuilder::EBinaryOp::And:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Or:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
-            return true;
-        case NYql::TKernelRequestBuilder::EBinaryOp::Add:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Sub:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mul:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Div:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mod:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Coalesce:
-            return false;
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Less:
-        case NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Greater:
-        case NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual:
-            return true;
+    if (!IndexesConstructed.emplace(condNode->GetIdentifier()).second) {
+        return false;
     }
+    RemoveEdge(condNode, dest, destResourceId);
+
+    const ui32 resourceIdxFetch = BuildNextResourceId();
+    IDataSource::TFetchIndexContext indexContext(
+        dataAddr->GetColumnId(), IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), *indexChecker));
+    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
+    auto indexFetchNode = AddNode(indexFetchProc);
+    RegisterProducer(resourceIdxFetch, indexFetchNode.get());
+
+    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker);
+    auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
+        resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
+    auto indexProcNode = AddNode(indexCheckProc);
+    RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
+    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+    AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+
+    const ui32 resourceIdEqToAnd = BuildNextResourceId();
+    RegisterProducer(resourceIdEqToAnd, condNode);
+    calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+
+    auto andProcessor = std::make_shared<TStreamLogicProcessor>(
+        TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+    auto andNode = AddNode(andProcessor);
+    AddEdge(andNode.get(), dest, destResourceId);
+
+    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
+    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    ResetProducer(destResourceId, andNode.get());
+    return true;
 }
 
 TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode) {
@@ -495,17 +441,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     }
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
-    if (!!calc->GetKernelLogic()) {
-        if (!calc->GetKernelLogic()->IsBoolInResult()) {
-            return false;
-        }
-    }
-    if (calc->GetYqlOperationId()) {
-        if (!IsBoolResultYqlOperator((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId())) {
-            return false;
-        }
-    }
-    if (!calc->GetYqlOperationId() && !calc->GetKernelLogic()) {
+    if (!calc->GetKernelLogic() || !calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     auto* node = GetProducerVerified(condNode->GetProcessor()->GetInput()[0].GetColumnId());
@@ -555,10 +491,11 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         return false;
     }
     const auto calc = cNode->GetProcessorAs<TCalculationProcessor>();
-    if (!calc->GetYqlOperationId()) {
+    if (!calc->GetKernelLogic()->GetYqlOperationId()) {
         return false;
     }
-    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() != NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetKernelLogic()->GetYqlOperationId() !=
+        NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
         return false;
     }
     if (cNode->GetOutputEdges().size() != 1) {
@@ -579,30 +516,14 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
 
     auto* nextNode = cNode->GetOutputEdges().begin()->second;
     if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::Filter) {
-        if (nextNode->GetProcessor()->GetProcessorType() == EProcessorType::Calculation) {
-            const auto outputCalc = nextNode->GetProcessorAs<TCalculationProcessor>();
-            if (!outputCalc->GetYqlOperationId()) {
-                return false;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*outputCalc->GetYqlOperationId() != NYql::TKernelRequestBuilder::EBinaryOp::And) {
-                return false;
-            }
-        } else if (nextNode->GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
-            const auto outputCalc = nextNode->GetProcessorAs<TStreamLogicProcessor>();
-            if (outputCalc->GetOperation() != NKernels::EOperation::And) {
-                return false;
-            }
-        }
-        if (nextNode->GetOutputEdges().size() != 1) {
+        if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
             return false;
         }
-        if (nextNode->GetOutputEdges().begin()->second->GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
-            const auto outputCalc = nextNode->GetOutputEdges().begin()->second->GetProcessorAs<TStreamLogicProcessor>();
-            if (outputCalc->GetOperation() != NKernels::EOperation::And) {
-                return false;
-            }
-        } else if (nextNode->GetOutputEdges().begin()->second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
-        } else {
+        const auto outputCalc = nextNode->GetProcessorAs<TStreamLogicProcessor>();
+        if (outputCalc->GetOperation() != NKernels::EOperation::And) {
+            return false;
+        }
+        if (nextNode->GetOutputEdges().size() != 1) {
             return false;
         }
     }
@@ -687,16 +608,16 @@ TConclusionStatus TGraph::Collapse() {
                 }
             }
 
-//            {
-//                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-//                if (conclusion.IsFail()) {
-//                    return conclusion;
-//                }
-//                if (*conclusion) {
-//                    hasChanges = true;
-//                    break;
-//                }
-//            }
+            //            {
+            //                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
+            //                if (conclusion.IsFail()) {
+            //                    return conclusion;
+            //                }
+            //                if (*conclusion) {
+            //                    hasChanges = true;
+            //                    break;
+            //                }
+            //            }
 
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());

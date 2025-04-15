@@ -84,6 +84,12 @@ custom_runs-cmake_packages-components="list"
 javac-flags="list"
 kotlinc-flags="list"
 
+target_commands="list"
+target_commands-ITEM="dict"
+target_commands-macro="str"
+target_commands-args="list"
+target_commands-args_escaped="list"
+
 [attrs.root]
 
 [attrs.dir]

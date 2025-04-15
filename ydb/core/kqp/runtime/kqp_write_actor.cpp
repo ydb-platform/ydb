@@ -44,6 +44,7 @@ namespace {
 
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation(NKikimrKqp::TKqpTableSinkSettings::EType type) {
         switch (type) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_FILL:
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
@@ -1324,6 +1325,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
@@ -2802,7 +2804,7 @@ public:
     void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
         BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
             name, NWilson::EFlags::AUTO_END);
-        if (traceId != BufferWriteActorSpan.GetTraceId()) {
+        if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
         }
         for (auto& [_, info] : WriteInfos) {
@@ -2931,6 +2933,7 @@ public:
         std::vector<ui32> writeIndex(
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {

@@ -73,6 +73,9 @@ namespace NSQLComplete {
             for (auto keywordToken : Grammar->GetKeywordTokens()) {
                 ignoredTokens.erase(keywordToken);
             }
+            for (auto punctuationToken : Grammar->GetPunctuationTokens()) {
+                ignoredTokens.erase(punctuationToken);
+            }
             return ignoredTokens;
         }
 
@@ -107,10 +110,25 @@ namespace NSQLComplete {
             TVector<TString> keywords;
             for (const auto& token : candidates.Tokens) {
                 if (keywordTokens.contains(token.Number)) {
-                    keywords.emplace_back(vocabulary.getDisplayName(token.Number));
+                    keywords.emplace_back(Display(vocabulary, token.Number));
+                    for (auto following : token.Following) {
+                        if (keywordTokens.contains(following)) {
+                            keywords.back() += " ";
+                        }
+                        keywords.back() += Display(vocabulary, following);
+                    }
                 }
             }
             return keywords;
+        }
+
+        std::string Display(const antlr4::dfa::Vocabulary& vocabulary, TTokenId tokenType) {
+            auto name = vocabulary.getDisplayName(tokenType);
+            if (2 <= name.length() && name.starts_with('\'') && name.ends_with('\'')) {
+                name.erase(static_cast<std::string::size_type>(0), 1);
+                name.pop_back();
+            }
+            return name;
         }
 
         bool IsTypeNameMatched(const TC3Candidates& candidates) {

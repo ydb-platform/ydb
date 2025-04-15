@@ -95,6 +95,20 @@ auto TransformRangeTo(TRange&& range, TTransformFunction&& function)
         std::forward<TTransformFunction>(function)));
 }
 
+template <std::ranges::range TRange, class TOperation, class TProjection>
+auto FoldRange(TRange&& range, TOperation operation, TProjection projection)
+{
+    auto iter = range.begin();
+    if (iter == range.end()) {
+        return std::remove_cvref_t<decltype(std::invoke(projection, *iter))>{};
+    }
+    auto accumulator = std::invoke(projection, *iter);
+    for (++iter; iter != range.end(); ++iter) {
+        accumulator = std::invoke(operation, accumulator, std::invoke(projection, *iter));
+    }
+    return accumulator;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

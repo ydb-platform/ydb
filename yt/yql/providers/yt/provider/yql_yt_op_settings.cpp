@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/provider/yql_yt_block_io_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
@@ -1320,6 +1321,64 @@ EYtSettingTypes operator&(EYtSettingTypes left, const EYtSettingTypes& right) {
 
 EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right) {
     return EYtSettingTypes(left) | EYtSettingTypes(right);
+}
+
+void YtWriteHint(std::string_view name, NJsonWriter::TBuf& json) {
+    json.BeginObject();
+    json.WriteKey("name");
+    json.WriteString(name);
+    json.EndObject();
+}
+
+void YtWriteHints(EYtSettingTypes flags, NJsonWriter::TBuf& json) {
+    for (ui32 i = 0; i < (ui32)EYtSettingType::LAST; ++i) {
+        if (flags.HasFlags((EYtSettingType)i)) {
+            YtWriteHint(ToString((EYtSettingType)i), json);
+        }
+    }
+}
+
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json) {
+    if (ctxName == "read") {
+        json.WriteKey(YtProviderName);
+        json.BeginObject();
+        json.WriteKey("hints");
+        json.BeginList();
+        YtWriteHints(
+            EYtSettingType::InferScheme |
+            EYtSettingType::ForceInferScheme |
+            EYtSettingType::Inline |
+            EYtSettingType::XLock |
+            EYtSettingType::Unordered |
+            EYtSettingType::NonUnique |
+            EYtSettingType::IgnoreTypeV3,
+            json
+        );
+        json.EndList();
+        json.EndObject();
+    } else if (ctxName == "insert") {
+        json.WriteKey(YtProviderName);
+        json.BeginObject();
+        json.WriteKey("hints");
+        json.BeginList();
+        YtWriteHint("truncate", json);
+        YtWriteHints(
+            EYtSettingType::CompressionCodec |
+            EYtSettingType::ErasureCodec |
+            EYtSettingType::Expiration |
+            EYtSettingType::ReplicationFactor |
+            EYtSettingType::UserAttrs |
+            EYtSettingType::Media |
+            EYtSettingType::PrimaryMedium |
+            EYtSettingType::KeepMeta |
+            EYtSettingType::MonotonicKeys |
+            EYtSettingType::ColumnGroups |
+            EYtSettingType::SecurityTags,
+            json
+        );
+        json.EndList();
+        json.EndObject();
+    }
 }
 
 } // NYql

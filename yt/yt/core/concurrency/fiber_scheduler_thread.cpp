@@ -8,6 +8,7 @@
 #include <yt/yt/library/profiling/producer.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/shutdown.h>

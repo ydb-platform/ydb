@@ -18,7 +18,10 @@ enum class EDatabaseType {
     MsSQLServer,
     Oracle,
     Logging,
-    Solomon
+    Solomon,
+    Iceberg,
+    Redis,
+    Prometheus
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

@@ -288,4 +288,5 @@ class Driver(pool.ConnectionPool):
 
     def stop(self, timeout=10):
         self.table_client._stop_pool_if_needed(timeout=timeout)
+        self.topic_client.close()
         super().stop(timeout=timeout)

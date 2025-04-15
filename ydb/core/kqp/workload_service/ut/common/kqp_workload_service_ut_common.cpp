@@ -256,6 +256,7 @@ private:
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
+        *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
 
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         return appConfig;

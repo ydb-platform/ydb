@@ -197,7 +197,7 @@ TKqpKeyRange MakeKeyRange(const TKqlReadTableBase& readTable, const TKqlCompileC
     if (settings.ItemsLimit) {
         keyRange.ItemsLimit = MkqlBuildExpr(*settings.ItemsLimit, buildCtx);
     }
-    keyRange.Reverse = settings.Reverse;
+    keyRange.Reverse = settings.IsReverse();
 
     return keyRange;
 }
@@ -210,7 +210,7 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     TKqpKeyRanges ranges = {
         .Ranges = MkqlBuildExpr(readTable.Ranges().Ref(), buildCtx),
         .ItemsLimit = settings.ItemsLimit ? MkqlBuildExpr(*settings.ItemsLimit, buildCtx) : ctx.PgmBuilder().NewNull(),
-        .Reverse = settings.Reverse,
+        .Reverse = settings.IsReverse(),
     };
 
     return ranges;

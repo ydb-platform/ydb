@@ -335,6 +335,10 @@ namespace NKikimr::NBlobDepot {
             ui64 BlobsPutOk = 0;
             ui64 BlobsPutError = 0;
             ui32 CopyIteration = 0;
+            ui32 CollectGarbageInFlight = 0;
+            ui32 CollectGarbageQueue = 0;
+            ui32 CollectGarbageOK = 0;
+            ui32 CollectGarbageError = 0;
 
             void ToJson(NJson::TJsonValue& json, bool pretty) const;
         } AsStats;
@@ -343,6 +347,8 @@ namespace NKikimr::NBlobDepot {
 
         void StartGroupAssimilator();
         void OnUpdateDecommitState();
+
+        ui32 PerGenerationCounter = 1;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange

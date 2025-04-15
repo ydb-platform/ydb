@@ -53,9 +53,9 @@ def do(args):
         if s3_settings is not None:
             pb_json.Parse(s3_settings, cmd.S3BackendSettings)
 
-        cmd.ChannelProfiles.add(StoragePoolName=args.log_channel_sp, ChannelKind=blob_depot_config.TChannelKind.System)
+        cmd.ChannelProfiles.add(StoragePoolName=args.log_channel_sp, ChannelKind=blob_depot_config.TChannelKind.System, Count=1)
         chan1 = args.snapshot_channel_sp if args.snapshot_channel_sp is not None else args.log_channel_sp
-        cmd.ChannelProfiles.add(StoragePoolName=chan1, ChannelKind=blob_depot_config.TChannelKind.System)
+        cmd.ChannelProfiles.add(StoragePoolName=chan1, ChannelKind=blob_depot_config.TChannelKind.System, Count=1)
         for data_sp in args.data_channel_sp:
             pool_name, sep, count = data_sp.rpartition('*')
             if sep == '*':

@@ -68,11 +68,20 @@ public:
 
 class TDSAccessorBase: public NActors::TActorBootstrapped<TDSAccessorBase> {
 private:
+    enum class EState {
+        UNKNOWN,
+        EXISTS,
+        NON_EXISTS
+    };
+    struct TTableInfo {
+        EState State = EState::UNKNOWN;
+        int64_t RetryCount = 0;
+    };
     using TBase = NActors::TActorBootstrapped<TDSAccessorBase>;
     YDB_READONLY(TInstant, RequestedActuality, TInstant::Zero());
     const NRequest::TConfig Config;
-    std::map<TString, i32> ExistenceChecks;
-    std::map<TString, i32> CurrentExistence;
+    std::map<TString, TTableInfo> ExistenceChecks;
+    std::map<TString, TTableInfo> CurrentExistence;
     void StartSnapshotsFetchingImpl();
 protected:
     std::shared_ptr<TRefreshInternalController> InternalController;

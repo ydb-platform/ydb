@@ -668,6 +668,13 @@ TNode SerializeParamsForReadTable(
     return result;
 }
 
+TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePartitionReaderOptions& /*options*/)
+{
+    TNode node;
+    node["cookie"] = cookie;
+    return node;
+}
+
 TNode SerializeParamsForReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -815,6 +822,7 @@ TNode SerializeParamsForGetTablePartitions(
         result["max_partition_count"] = *options.MaxPartitionCount_;
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
+    result["enable_cookies"] = options.EnableCookies_;
     return result;
 }
 

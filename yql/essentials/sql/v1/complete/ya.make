@@ -20,6 +20,13 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    antlr4
+    name
+    syntax
+    text
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

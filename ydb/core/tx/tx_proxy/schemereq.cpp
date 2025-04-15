@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
@@ -9,6 +10,9 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+
+#include <ydb/library/login/login.h>
+#include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -63,6 +67,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     bool IsClusterAdministrator = false;
     bool IsDatabaseAdministrator = false;
     NACLib::TSID DatabaseOwner;
+    NLoginProto::TSecurityState DatabaseSecurityState;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
@@ -1141,7 +1146,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
                 allowACLBypass = (checkAdmin && isAdmin) || isUserChangesOwnPassword;
 
-                // Database admin is not allowed to manage group of database admins (its the privilege of cluster admins).
+                // Database admin is not allowed to manage group of database admins or change other database admins
+                // (its the privilege of cluster admins).
                 if (checkAdmin && IsDatabaseAdministrator) {
                     TString group;
                     switch (alterLogin.GetAlterCase()) {
@@ -1167,6 +1173,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                         return false;
+                    }
+                    // Database admin still can change its own password
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && !isUserChangesOwnPassword) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
+                        const auto targetUserToken = NKikimr::BuildLocalUserToken(DatabaseSecurityState, targetUser.GetUser());
+                        if (NKikimr::IsDatabaseAdministrator(&targetUserToken, DatabaseOwner)) {
+                            const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                                << "attempt to change other database admin by the database admin"
+                            );
+                            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                            return false;
+                        }
                     }
                 }
 
@@ -1357,9 +1376,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return Die(ctx);
         }
 
-        const auto& database = request.ResultSet.front();
-        DatabaseOwner = database.Self->Info.GetOwner();
-        IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), database.Self->Info.GetOwner());
+        const auto& entry = request.ResultSet.front();
+
+        DatabaseOwner = entry.Self->Info.GetOwner();
+        DatabaseSecurityState = entry.DomainDescription->Description.GetSecurityState();
+
+        IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), entry.Self->Info.GetOwner());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HandleResolveDatabase,"

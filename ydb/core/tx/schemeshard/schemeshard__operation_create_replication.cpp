@@ -72,6 +72,11 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
+            return true;
+        }
+
         return false;
     }
 };

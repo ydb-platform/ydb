@@ -2908,15 +2908,61 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 CREATE VIEW test_view WITH security_invoker = TRUE AS
                     SELECT * FROM KeyValue;
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {
             auto result = session.ExecuteQuery(R"(
                 SHOW CREATE TABLE test_view;
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid path type");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path type mismatch, expected: Table");
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateView) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            // note: KeyValue is one of the sample tables created in KikimrRunner
+            auto result = session.ExecuteQuery(R"(
+                CREATE VIEW test_view WITH security_invoker = TRUE AS
+                    SELECT * FROM KeyValue;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE VIEW test_view;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSets().empty());
+
+            CompareYson(R"([
+                [["test_view"];["View"];["CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\nSELECT\n    *\nFROM\n    KeyValue\n;\n"]];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateViewOnTable) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            // note: KeyValue is one of the sample tables created in KikimrRunner
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE VIEW KeyValue;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path type mismatch, expected: View");
         }
     }
 

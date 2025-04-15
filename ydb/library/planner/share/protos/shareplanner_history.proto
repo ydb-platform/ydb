@@ -1,0 +1,22 @@
+package NScheduling;
+
+option java_package = "ru.yandex.scheduling.proto";
+
+message TShareNodeHistory {
+    optional string Name = 1;
+    optional double Proficit = 2;
+}
+
+//
+//message TUtilizationHistory {
+//    repeated int64 DoneInSlot = 1;
+//    optional int64 SlotVolume = 2;
+//    optional uint64 CurrentSlot = 3;
+//}
+//
+
+message TSharePlannerHistory {
+    repeated TShareNodeHistory Nodes = 1;
+//    optional TUtilizationHistory Utilization = 3;
+}
+

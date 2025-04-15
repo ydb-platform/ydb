@@ -86,7 +86,7 @@ public:
         bool Next();
     };
 
-    TColumnFilter Cut(const ui32 filteredRecordsCount, const ui32 limit, const bool reverse) const;
+    TColumnFilter Cut(const ui32 totalRecordsCount, const ui32 limit, const bool reverse) const;
 
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
         return TSlicesIterator(*this, startIndex, count);
@@ -265,9 +265,6 @@ public:
 
     TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
     TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
-
-    // It makes a filter using composite predicate
-    static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 
     class TApplyContext {
     private:

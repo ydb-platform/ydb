@@ -101,4 +101,4 @@ class TestOverlappingPortions(object):
         self.write_and_check(table_path, 1)
 
         with pytest.raises(ydb.issues.GenericError, match=r'.*cannot allocate memory.*'):
-            self.write_and_check(table_path, 100)
+            self.write_and_check(table_path, 300)

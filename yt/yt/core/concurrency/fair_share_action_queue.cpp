@@ -4,6 +4,7 @@
 #include "profiling_helpers.h"
 #include "system_invokers.h"
 
+#include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 

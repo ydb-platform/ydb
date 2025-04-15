@@ -1,7 +1,7 @@
 import os
 import requests
 from github import Github #pip3 install PyGithub
-from urllib.parse import quote, urlencode
+from urllib.parse import quote_plus
 
 
 ORG_NAME = 'ydb-platform'
@@ -337,10 +337,10 @@ def generate_github_issue_title_and_body(test_data):
     # Создаем ссылку на историю тестов, кодируя параметры
 
     test_name_params = "&".join(
-        urlencode({"full_name": f"__in_{test}"})
+        f"full_name={quote_plus(f'__in_{test}')}"
         for test in test_full_names
     )
-    branch_param = urlencode({"&branch": branch})
+    branch_param = f"&branch={branch}"
     test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_name_params}{branch_param}"
 
     # owner

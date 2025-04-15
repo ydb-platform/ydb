@@ -135,6 +135,13 @@ jobs:
               PR_BODY+=$(cat mute_update/deleted_tests_in_mute_debug.txt)
               PR_BODY+=$'\n```\n\n'
           fi
+          if [ -s mute_update/flaky_debug.txt ]; then
+              FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
+              PR_BODY+=$'**Muted flaky: '"${FLAKY_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/flaky_debug.txt)
+              PR_BODY+=$'\n```\n\n'
+          fi
           if [ -s mute_update/flaky.txt ]; then
               BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
               MAX_TESTS=50
@@ -157,8 +164,6 @@ jobs:
               # Добавляем ссылку на дашборд в описание
               PR_BODY+=$"[View history of flaky tests on Dashboard](${FULL_URL})"
               PR_BODY+=$'\n'
-          fi
-
           fi
           if [ -s mute_update/muted_stable_debug.txt ]; then
               MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)

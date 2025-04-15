@@ -167,6 +167,7 @@ public:
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
+        runtimeSettings.WithProgressStats = args.WithProgressStats;
 
         if (runtimeSettings.UseSpilling) {
             args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);

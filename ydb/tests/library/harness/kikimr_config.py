@@ -767,4 +767,5 @@ class KikimrConfigGenerator(object):
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
 
         self._add_state_storage_config()
-        self._initialize_pdisks_info()
+        if not self.use_self_management:
+            self._initialize_pdisks_info()

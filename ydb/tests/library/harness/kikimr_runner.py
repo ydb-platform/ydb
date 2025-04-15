@@ -62,6 +62,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.data_center = data_center
         self.__config_path = config_path
         self.__cluster_name = cluster_name
+        logger.debug("Config: %s", configurator.yaml_config)
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
         self.__binary_path = binary_path
@@ -362,9 +363,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def __call_ydb_cli(self, cmd):
+    def __call_ydb_cli(self, cmd, token=None):
         endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+
         logger.debug("Executing command = {}".format(full_command))
         try:
             return yatest.common.execute(full_command)
@@ -461,10 +469,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             
         return self._nodes[node_id]
 
-    def __register_node(self):
+    def __register_node(self, configurator=None):
+        configurator = configurator or self.__configurator
         node_index = next(self._node_index_allocator)
 
-        if self.__configurator.separate_node_configs:
+        if configurator.separate_node_configs:
             node_config_path = ensure_path_exists(
                 os.path.join(self.__config_base_path, "node_{}".format(node_index))
             )
@@ -472,18 +481,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node_config_path = self.__config_path
 
         data_center = None
-        if isinstance(self.__configurator.dc_mapping, dict):
-            if node_index in self.__configurator.dc_mapping:
-                data_center = self.__configurator.dc_mapping[node_index]
+        if isinstance(configurator.dc_mapping, dict):
+            if node_index in configurator.dc_mapping:
+                data_center = configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
             node_id=node_index,
             config_path=node_config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
             cluster_name=self.__cluster_name,
-            configurator=self.__configurator,
+            configurator=configurator,
             udfs_dir=self.__common_udfs_dir,
-            tenant_affiliation=self.__configurator.yq_tenant,
-            binary_path=self.__configurator.get_binary_path(node_index),
+            tenant_affiliation=configurator.yq_tenant,
+            binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
@@ -571,6 +580,27 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node in self.nodes.values():
             node.stop()
             node.start()
+
+    def register_node(self, configurator=None):
+        try:
+            new_node_object = self._KiKiMR__register_node(configurator)
+            logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
+            return new_node_object
+        except Exception as e:
+            logger.error(f"Failed to register new node: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to register new node: {e}")
+
+    def start_node(self, node_id):
+        if node_id not in self._nodes:
+            logger.error(f"Cannot start node: Node ID {node_id} not found in registered nodes.")
+            raise KeyError(f"Node ID {node_id} not found.")
+
+        logger.info(f"Starting registered node {node_id}.")
+        try:
+            self._KiKiMR__run_node(node_id)
+            logger.info(f"Successfully started node {node_id}.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to start node {node_id}: {e}")
 
     @property
     def config_path(self):

@@ -31,23 +31,45 @@ $launch_times = (
             ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Run_start_timestamp DESC) AS Run_number_in_branch_desc
         FROM (
             SELECT 
-                runs.Db AS Db, 
-                runs.Version AS Version,
-                Min(runs.RunTs) AS Run_start_timestamp,
-                Max(runs.RunTs) AS Next_Run_start_timestamp,
-                ROW_NUMBER() OVER (PARTITION BY runs.Db, runs.Version, runs.LaunchId ORDER BY Min(runs.RunTs) ASC) AS Run_number_in_version,
-                Unicode::SplitToList(runs.Version, '.')[0] AS Branch
+                Db, 
+                Version, 
+                Run_start_timestamp, 
+                Next_Run_start_timestamp,
+                ROW_NUMBER() OVER (PARTITION BY t1.Db, t1.Version ORDER BY t1.Run_start_timestamp ASC) AS Run_number_in_version,
+                Unicode::SplitToList(Version, '.')[0] AS Branch
             FROM (
-                SELECT DISTINCT
-                    Db, 
-                    Timestamp,
-                    JSON_VALUE(Info, "$.cluster.version") AS Version,
-                    JSON_VALUE(Info, "$.ci_launch_id") AS LaunchId,
-                    CAST(RunId / 1000 AS Timestamp) AS RunTs
-                FROM `perfomance/olap/tests_results`
-                WHERE Timestamp >= $start_timestamp
-            ) AS runs
-            GROUP BY Db, Version, LaunchId
+                SELECT 
+                    runs.Db AS Db, 
+                    runs.Version AS Version,
+                    run_start.Run_start_timestamp AS Run_start_timestamp,
+                    run_start.Next_Run_start_timestamp AS Next_Run_start_timestamp
+                FROM (
+                    SELECT DISTINCT
+                        Db, 
+                        Timestamp,
+                        JSON_VALUE(Info, "$.cluster.version") AS Version,
+                        CAST(RunId / 1000 AS Timestamp) AS RunTs
+                    FROM `perfomance/olap/tests_results`
+                    WHERE Timestamp >= $start_timestamp
+                ) AS runs
+                LEFT JOIN (
+                    SELECT 
+                        Db,
+                        JSON_VALUE(Info, "$.cluster.version") AS Version,
+                        Timestamp AS Run_start_timestamp,
+                        LEAD(Timestamp) OVER (PARTITION BY Db, JSON_VALUE(Info, "$.cluster.version") ORDER BY Timestamp) AS Next_Run_start_timestamp
+                    FROM `perfomance/olap/tests_results`
+                    WHERE Suite = 'Clickbench' AND Test = '_Verification'
+                    And Timestamp >= $start_timestamp
+                    ORDER BY Db, Run_start_timestamp DESC, Version
+                ) AS run_start
+                ON runs.Db = run_start.Db AND runs.Version = run_start.Version
+                WHERE (
+                    (runs.Timestamp >= run_start.Run_start_timestamp AND runs.Timestamp < run_start.Next_Run_start_timestamp) OR 
+                    (runs.Timestamp >= run_start.Run_start_timestamp AND run_start.Next_Run_start_timestamp IS NULL)
+                )
+            ) AS t1
+            GROUP BY Db, Version, Run_start_timestamp, Next_Run_start_timestamp
         ) AS run_start
         GROUP BY Db, Branch, Version, Run_start_timestamp, Run_number_in_version, Next_Run_start_timestamp
     ) AS launch_times_raw

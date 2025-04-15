@@ -5,14 +5,19 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <ydb/library/signals/object_counter.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/strip.h>
 
@@ -243,6 +248,47 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     };
 
+    class TBulkUpsertCommand: public ICommand {
+    private:
+        TString TableName;
+        TString ArrowBatch;
+        Ydb::StatusIds_StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS;
+
+    public:
+        TBulkUpsertCommand() = default;
+
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            TLocalHelper lHelper(kikimr);
+            lHelper.SendDataViaActorSystem(TableName,
+                NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(ArrowBatch)), ExpectedCode);
+            return TConclusionStatus::Success();
+        }
+
+        bool DeserializeFromString(const TString& info) {
+            auto lines = StringSplitter(info).SplitBySet("\n").SkipEmpty().ToList<TString>();
+            if (lines.size() < 2 || lines.size() > 3) {
+                return false;
+            }
+            TableName = Strip(lines[0]);
+            ArrowBatch = Base64Decode(Strip(lines[1]));
+            AFL_VERIFY(!!ArrowBatch);
+            if (lines.size() == 3) {
+                if (!Ydb::StatusIds_StatusCode_Parse(Strip(lines[2]), &ExpectedCode)) {
+                    return false;
+                }
+                //                if (lines[2] == "SUCCESS") {
+                //                } else if (lines[2] = "INTERNAL_ERROR") {
+                //                    ExpectedCode = Ydb::StatusIds::INTERNAL_ERROR;
+                //                } else if (lines[2] == "BAD_REQUEST") {
+                //                    ExpectedCode = Ydb::StatusIds::BAD_REQUEST;
+                //                } else {
+                //                    return false;
+                //                }
+            }
+            return true;
+        }
+    };
+
     class TScriptExecutor {
     private:
         std::vector<std::shared_ptr<ICommand>> Commands;
@@ -275,7 +321,12 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     private:
         std::vector<TScriptExecutor> Scripts;
         std::shared_ptr<ICommand> BuildCommand(TString command) {
-            if (command.StartsWith("SCHEMA:")) {
+            if (command.StartsWith("BULK_UPSERT:")) {
+                command = command.substr(12);
+                auto result = std::make_shared<TBulkUpsertCommand>();
+                AFL_VERIFY(result->DeserializeFromString(command));
+                return result;
+            } else if (command.StartsWith("SCHEMA:")) {
                 command = command.substr(7);
                 return std::make_shared<TSchemaCommand>(command);
             } else if (command.StartsWith("DATA:")) {
@@ -556,6 +607,39 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":[\"a\",{\"v\":[\"c\",\"5\"]}]}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
             
         )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(BrokenJsonWriting) {
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c}");
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+
+        TString script = Sprintf(R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                BAD_REQUEST
+        )",
+            arrowString.data());
         TScriptVariator(script).Execute();
     }
 

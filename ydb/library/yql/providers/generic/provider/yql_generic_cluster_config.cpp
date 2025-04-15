@@ -214,7 +214,8 @@ namespace NYql {
                 EGenericDataSourceKind::MYSQL,
                 EGenericDataSourceKind::MS_SQL_SERVER,
                 EGenericDataSourceKind::ORACLE,
-                EGenericDataSourceKind::ICEBERG
+                EGenericDataSourceKind::ICEBERG,
+                EGenericDataSourceKind::REDIS
                 }, 
                clusterConfig.GetKind()
             )) {
@@ -358,7 +359,6 @@ namespace NYql {
         ParseServiceAccountIdSignature(properties, clusterConfig);
         ParseToken(properties, clusterConfig);
         ParseFolderId(properties, clusterConfig);
-
         ParseIcebergFields(properties, clusterConfig);
 
         return clusterConfig;

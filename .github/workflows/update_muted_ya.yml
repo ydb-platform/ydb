@@ -102,7 +102,8 @@ jobs:
         
       - name: Run create_new_muted_ya.py
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --build_type=${{ env.BUILD_TYPE }}
+
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
 
       - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
         run: |
@@ -141,32 +142,28 @@ jobs:
               PR_BODY+=$'```\n'
               PR_BODY+=$(cat mute_update/flaky_debug.txt)
               PR_BODY+=$'\n```\n\n'
+
+              BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
+              MAX_TESTS=50
+              TEST_COUNT=0
               
-              # Создаем ссылку на дашборд с тестами из flaky.txt (а не flaky_debug.txt)
-              if [ -s mute_update/flaky.txt ]; then
-                BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
-                MAX_TESTS=50
-                TEST_COUNT=0
-                
-                # Создаем временный файл для URL
-                echo "${BASE_URL}" > dashboard_url.txt
-                
-                # Для каждого теста из flaky.txt, добавляем его в URL
-                while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                  # Заменяем пробелы на "/"
-                  formatted_name=$(echo "${test_name}" | tr ' ' '/')
-                  # Добавляем параметр в URL
-                  echo -n "&full_name=${formatted_name}" >> dashboard_url.txt
-                  TEST_COUNT=$((TEST_COUNT+1))
-                done < mute_update/flaky.txt
-                
-                # Получаем полную URL
-                DASHBOARD_URL=$(cat dashboard_url.txt)
-                
-                # Добавляем ссылку на дашборд в описание
-                PR_BODY+=$'**Dashboard Link:**\n'
-                PR_BODY+=$"[View history of flaky tests on Dashboard](${DASHBOARD_URL})\n\n"
-              fi
+              # Создаем переменную для хранения полного URL без переносов строк
+              FULL_URL="${BASE_URL}"
+              
+              # Для каждого теста из flaky.txt, добавляем его в URL
+              while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
+                # Заменяем ТОЛЬКО ПЕРВЫЙ пробел на "/"
+                formatted_name=$(echo "${test_name}" | sed 's/ /\//' )
+                # URL-кодируем имя теста и заменяем пробелы на %20
+                encoded_name=$(echo "${formatted_name}" | sed 's/ /%20/g' | sed 's/[\/]/%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g')
+                # Добавляем параметр в URL без переноса строки
+                FULL_URL="${FULL_URL}&full_name=${encoded_name}"
+                TEST_COUNT=$((TEST_COUNT+1))
+              done < mute_update/flaky.txt
+              
+              # Добавляем ссылку на дашборд в описание
+              PR_BODY+=$"[View history of flaky tests on Dashboard](${FULL_URL})"
+              PR_BODY+=$'\n'
           fi
           if [ -s mute_update/muted_stable_debug.txt ]; then
               MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)

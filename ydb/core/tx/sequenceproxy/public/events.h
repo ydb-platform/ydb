@@ -21,6 +21,8 @@ namespace NSequenceProxy {
             EvNextValResult,
             EvSetVal,
             EvSetValResult,
+            EvGetSequence,
+            EvGetSequenceResult,
             EvEnd,
         };
 
@@ -68,6 +70,60 @@ namespace NSequenceProxy {
                 : Status(Ydb::StatusIds::SUCCESS)
                 , PathId(pathId)
                 , Value(value)
+            { }
+        };
+
+        struct TEvGetSequence : public TEventLocal<TEvGetSequence, EvGetSequence> {
+            TString Database;
+            TPathId PathId;
+            TIntrusivePtr<NACLib::TUserToken> UserToken;
+
+            explicit TEvGetSequence(const TPathId& pathId)
+                : PathId(pathId)
+            { }
+
+            TEvGetSequence(const TString& database, const TPathId& pathId)
+                : Database(database)
+                , PathId(pathId)
+            { }
+        };
+
+        struct TEvGetSequenceResult : public TEventLocal<TEvGetSequenceResult, EvGetSequenceResult> {
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+            TPathId PathId;
+
+            i64 MinValue;
+            i64 MaxValue;
+            i64 StartValue;
+            i64 NextValue;
+            bool NextUsed;
+            ui64 Cache;
+            i64 Increment;
+            bool Cycle;
+
+            TEvGetSequenceResult(const TPathId& pathId)
+                : Status(Ydb::StatusIds::SUCCESS)
+                , PathId(pathId)
+            { }
+
+            TEvGetSequenceResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+                : Status(status)
+                , Issues(issues)
+            { }
+
+            explicit TEvGetSequenceResult(const TEvGetSequenceResult& ev)
+                : Status(ev.Status)
+                , Issues(ev.Issues)
+                , PathId(ev.PathId)
+                , MinValue(ev.MinValue)
+                , MaxValue(ev.MaxValue)
+                , StartValue(ev.StartValue)
+                , NextValue(ev.NextValue)
+                , NextUsed(ev.NextUsed)
+                , Cache(ev.Cache)
+                , Increment(ev.Increment)
+                , Cycle(ev.Cycle)
             { }
         };
     };

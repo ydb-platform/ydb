@@ -237,7 +237,7 @@ private:
                         path = pathPair.second;
 
                         TCreateViewFormatter formatter;
-                        auto formatterResult = formatter.Format(*path, description);
+                        auto formatterResult = formatter.Format(*path, Path, description);
                         if (formatterResult.IsSuccess()) {
                             statement = formatterResult.ExtractOut();
                         } else {

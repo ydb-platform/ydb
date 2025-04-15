@@ -28,8 +28,9 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def execute_query(driver, branch='main'):
-    query_string = '''
+
+def execute_query(driver, branch='main', build_type='relwithdebinfo'):
+    query_string = f'''
     SELECT * from (
         SELECT data.*,
         CASE WHEN new_flaky.full_name IS NOT NULL THEN True ELSE False END AS new_flaky_today,
@@ -101,7 +102,8 @@ def execute_query(driver, branch='main'):
             and data.build_type = deleted.build_type
             and data.branch = deleted.branch
         ) 
-        where date_window = CurrentUtcDate() and branch = '{}'
+        where date_window = CurrentUtcDate() and branch = '{branch}' and build_type = '{build_type}'
+
     
     '''.format(branch)
 

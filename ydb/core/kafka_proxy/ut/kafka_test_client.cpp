@@ -509,6 +509,22 @@ TMessagePtr<TAlterConfigsResponseData> TKafkaTestClient::AlterConfigs(std::vecto
     return WriteAndRead<TAlterConfigsResponseData>(header, request);
 }
 
+TMessagePtr<TDescribeConfigsResponseData> TKafkaTestClient::DescribeConfigs(std::vector<TString> topics) {
+    Cerr << ">>>>> TDescribeConfigsRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_CONFIGS, 2);
+    TDescribeConfigsRequestData request;
+
+    for (auto& topic : topics) {
+        NKafka::TDescribeConfigsRequestData::TDescribeConfigsResource resource;
+        resource.ResourceType = TOPIC_RESOURCE_TYPE;
+        resource.ResourceName = topic;
+        request.Resources.push_back(resource);
+    }
+
+    return WriteAndRead<TDescribeConfigsResponseData>(header, request);
+}
+
 void TKafkaTestClient::UnknownApiKey() {
     Cerr << ">>>>> Unknown apiKey\n";
 

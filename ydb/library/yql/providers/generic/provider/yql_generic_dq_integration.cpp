@@ -40,6 +40,10 @@ namespace NYql {
                     return "LoggingGeneric";
                 case NYql::EGenericDataSourceKind::ICEBERG:
                     return "IcebergGeneric";
+                case NYql::EGenericDataSourceKind::REDIS:
+                    return "RedisGeneric";
+                case NYql::EGenericDataSourceKind::PROMETHEUS:
+                    return "PrometheusGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -144,7 +148,7 @@ namespace NYql {
                 if (totalSplits <= partitionSettings.MaxPartitions) {
                     // If there are not too many splits, simply make a single-split partitions.
                     for (size_t i = 0; i < totalSplits; i++) {
-                        NGeneric::TPartition partition;
+                        Generic::TPartition partition;
                         *partition.add_splits() = tableMeta->Splits[i];
                         TString partitionStr;
                         YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
@@ -156,7 +160,7 @@ namespace NYql {
                     size_t splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions - 1) + 1;
 
                     for (size_t i = 0; i < totalSplits; i += splitsPerPartition) {
-                        NGeneric::TPartition partition;
+                        Generic::TPartition partition;
                         for (size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
                             *partition.add_splits() = tableMeta->Splits[j];
                         }
@@ -180,7 +184,7 @@ namespace NYql {
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    NGeneric::TSource source;
+                    Generic::TSource source;
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
@@ -282,6 +286,12 @@ namespace NYql {
                         case NYql::EGenericDataSourceKind::ICEBERG:
                             properties["SourceType"] = "Iceberg";
                             break;
+                        case NYql::EGenericDataSourceKind::REDIS:
+                            properties["SourceType"] = "Redis";
+                            break;
+                        case NYql::EGenericDataSourceKind::PROMETHEUS:
+                            properties["SourceType"] = "Prometheus";
+                            break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
@@ -342,7 +352,7 @@ namespace NYql {
                     throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                NGeneric::TLookupSource source;
+                Generic::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 

@@ -42,4 +42,3 @@ and (CASE
         WHEN is_muted = 1 OR (state = 'Skipped' AND days_in_state > 14) THEN TRUE
         ELSE FALSE
     END ) = TRUE
-

@@ -113,6 +113,7 @@ class StaticConfigGenerator(object):
             "immediate_controls_config.txt": None,
             "cms_config.txt": None,
             "audit_config.txt": None,
+            "kqpconfig.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -312,6 +313,16 @@ class StaticConfigGenerator(object):
         return self.__proto_config("actor_system_config.txt").ByteSize() > 0
 
     @property
+    def kqpconfig_txt(self):
+        return self.__proto_config("kqpconfig.txt",
+                                   config_pb2.TKQPConfig,
+                                   self.__cluster_details.get_service("kqpconfig"))
+
+    @property
+    def kqpconfig_txt_enabled(self):
+        return self.__proto_config("kqpconfig.txt").ByteSize() > 0
+
+    @property
     def mbus_enabled(self):
         mbus_config = self.__cluster_details.get_service("message_bus_config")
         return mbus_config is not None and len(mbus_config) > 0
@@ -394,8 +405,12 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.need_generate_app_config:
             all_configs["app_config.proto"] = utils.message_to_string(self.get_app_config())
-        all_configs["kikimr.cfg"] = self.kikimr_cfg
-        all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
+        # these files are obsolete and not generated with new style config.yaml
+        if not self.__cluster_details.use_new_style_config_yaml:
+            all_configs["kikimr.cfg"] = self.kikimr_cfg
+            all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
+
         normalized_config = self.get_normalized_config()
 
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
@@ -658,7 +673,11 @@ class StaticConfigGenerator(object):
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
             lines.append(key + ':')
 
-            substr = utils.dump_yaml(dynconfig[key])
+            # must keep `selector_config` unsorted to keep `!append` and `!inherit` flags
+            # during serialization
+            should_sort = key != "selector_config"
+
+            substr = utils.dump_yaml(dynconfig[key], should_sort)
 
             for line in substr.split('\n'):
                 lines.append('  ' + line)
@@ -681,7 +700,6 @@ class StaticConfigGenerator(object):
         app_config.LogConfig.CopyFrom(self.log_txt)
         if self.auth_txt.ByteSize() > 0:
             app_config.AuthConfig.CopyFrom(self.auth_txt)
-        app_config.KQPConfig.CopyFrom(self.kqp_txt)
         app_config.NameserviceConfig.CopyFrom(self.names_txt)
         app_config.GRpcConfig.CopyFrom(self.grpc_txt)
         app_config.InterconnectConfig.CopyFrom(self.ic_txt)
@@ -717,6 +735,12 @@ class StaticConfigGenerator(object):
         # New config.yaml style:
         if self.actor_system_config_txt_enabled:
             app_config.ActorSystemConfig.CopyFrom(self.actor_system_config_txt)
+
+        # Old template style:
+        app_config.KQPConfig.CopyFrom(self.kqp_txt)
+        # New config.yaml style:
+        if self.kqpconfig_txt_enabled:
+            app_config.KQPConfig.CopyFrom(self.kqpconfig_txt)
 
         # Old template style:
         if self.cms_txt.ByteSize() > 0:
@@ -1121,6 +1145,7 @@ class StaticConfigGenerator(object):
 
         pool_config.BoxId = 1
         pool_config.Kind = pool_kind
+        pool_config.ErasureSpecies = str(self.__cluster_details.static_erasure)
         pool_config.VDiskKind = "Default"
         pdisk_filter = pool_config.PDiskFilter.add()
         property = pdisk_filter.Property.add()
@@ -1135,6 +1160,15 @@ class StaticConfigGenerator(object):
 
         pool.PoolConfig.CopyFrom(pool_config)
         return pool
+
+    def __generate_explicit_mediators_coordinators_allocators(self, domain, mediators, coordinators, allocators):
+        domain.ExplicitCoordinators.extend(
+            [self.__tablet_types.FLAT_TX_COORDINATOR.tablet_id_for(i) for i in range(int(coordinators))]
+        )
+        domain.ExplicitMediators.extend([self.__tablet_types.TX_MEDIATOR.tablet_id_for(i) for i in range(int(mediators))])
+        domain.ExplicitAllocators.extend(
+            [self.__tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(allocators))]
+        )
 
     def __generate_domains_from_proto(self, domains_config):
         domains = domains_config.Domain
@@ -1165,6 +1199,14 @@ class StaticConfigGenerator(object):
             domain.SchemeRoot = self.__tablet_types.FLAT_SCHEMESHARD.tablet_id_for(0)
         if not domain.SSId:
             domain.SSId.append(domain.DomainId)
+
+        self.__generate_explicit_mediators_coordinators_allocators(domain,
+                                                                   self.__cluster_details.mediators_count_optimal,
+                                                                   self.__cluster_details.coordinators_count_optimal,
+                                                                   self.__cluster_details.allocators_count_optimal)
+
+        domain.HiveUid.append(domain.DomainId)
+        domains_config.HiveConfig.add(HiveUid=domain.DomainId, Hive=self.__tablet_types.FLAT_HIVE.tablet_id_for(0))
 
         if not domains_config.StateStorage:
             self._configure_default_state_storage(domains_config, domain.DomainId)
@@ -1350,28 +1392,44 @@ class StaticConfigGenerator(object):
             state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
             return
 
-        rack_limit = 1
-        dc_limit = None
-        if self.__n_to_select == 9:
-            dc_limit = 3
-
-        occupied_dcs = collections.Counter()
-        occupied_racks = collections.Counter()
         selected_ids = []
-        hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
-        for node_id in self.__cluster_details.state_storage_node_ids:
-            node = hosts_by_node_id.get(node_id)
-            assert node is not None
+        if self.__cluster_details.use_new_style_config_yaml:
+            # By default, we create a set of state storage nodes equal to a set of nodes
+            # in static blobstorage groups.
+            if self.__cluster_details.blob_storage_config:
+                blobstorage_config = self.__cluster_details.blob_storage_config
 
-            if occupied_racks[node.rack] == rack_limit:
-                continue
+                for group in blobstorage_config['service_set']['groups']:
+                    for ring in group['rings']:
+                        for fail_domain in ring['fail_domains']:
+                            for vdisk_location in fail_domain['vdisk_locations']:
+                                selected_ids.append(int(vdisk_location['node_id']))
+            else:
+                blobstorage_config = self.__proto_config("bs.txt")
+                for pdisk in blobstorage_config.ServiceSet.PDisks:
+                    selected_ids.append(pdisk.NodeID)
+        else:
+            rack_limit = 1
+            dc_limit = None
+            if self.__n_to_select == 9:
+                dc_limit = 3
 
-            if occupied_dcs[node.datacenter] == dc_limit:
-                continue
+            occupied_dcs = collections.Counter()
+            occupied_racks = collections.Counter()
+            hosts_by_node_id = {node.node_id: node for node in self.__cluster_details.hosts}
+            for node_id in self.__cluster_details.state_storage_node_ids:
+                node = hosts_by_node_id.get(node_id)
+                assert node is not None
 
-            occupied_racks[node.rack] += 1
-            occupied_dcs[node.datacenter] += 1
-            selected_ids.append(node.node_id)
+                if occupied_racks[node.rack] == rack_limit:
+                    continue
+
+                if occupied_dcs[node.datacenter] == dc_limit:
+                    continue
+
+                occupied_racks[node.rack] += 1
+                occupied_dcs[node.datacenter] += 1
+                selected_ids.append(node.node_id)
 
         if len(selected_ids) < self.__n_to_select:
             raise RuntimeError("Unable to build valid quorum in state storage")

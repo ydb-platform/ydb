@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -35,7 +35,7 @@ private:
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

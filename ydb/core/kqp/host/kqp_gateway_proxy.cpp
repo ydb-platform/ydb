@@ -2658,7 +2658,7 @@ public:
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);
                 if (settings.Settings.Batching && settings.Settings.Batching->BatchSizeBytes) {
-                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes);
+                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes.value());
                 }
                 if (settings.Settings.Batching && settings.Settings.Batching->FlushInterval) {
                     config.MutableTransferSpecific()->MutableBatching()->SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
@@ -2716,7 +2716,7 @@ public:
                     op.MutableAlterTransfer()->SetFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
                 }
                 if (batching->BatchSizeBytes) {
-                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes);
+                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes.value());
                 }
             }
 

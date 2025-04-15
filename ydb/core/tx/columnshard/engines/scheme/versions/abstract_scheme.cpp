@@ -340,6 +340,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
                 loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
             if (arrToWrite.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build accessor")("reason", arrToWrite.GetErrorMessage());
                 return arrToWrite;
             }
 

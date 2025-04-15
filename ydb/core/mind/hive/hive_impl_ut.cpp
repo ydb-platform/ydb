@@ -58,14 +58,29 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         timer.Reset();
 
         double maxP = 100;
+        std::vector<TBootQueue::TBootQueueRecord> records;
+        records.reserve(NUM_TABLETS);
+        unsigned i = 0;
 
-        while (!bootQueue.BootQueue.empty()) {
+        while (!bootQueue.Empty()) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId);
-            if (itTablet != tablets.end()) {
-                bootQueue.AddToWaitQueue(itTablet->second);
+            UNIT_ASSERT(tablets.contains(record.TabletId));
+            records.push_back(record);
+            if (++i == NUM_TABLETS / 2) {
+                // to test both modes 
+                bootQueue.IncludeWaitQueue();
+            }
+        }
+        bootQueue.ExcludeWaitQueue();
+
+        i = 0;
+        for (auto& record : records) {
+            if (++i % 3 == 0) {
+                bootQueue.AddToBootQueue(record);
+            } else {
+                bootQueue.AddToWaitQueue(record);
             }
         }
 
@@ -81,7 +96,11 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         timer.Reset();
 
-        bootQueue.MoveFromWaitQueueToBootQueue();
+        bootQueue.IncludeWaitQueue();
+        while (!bootQueue.Empty()) {
+            bootQueue.PopFromBootQueue();
+        }
+        bootQueue.ExcludeWaitQueue();
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;

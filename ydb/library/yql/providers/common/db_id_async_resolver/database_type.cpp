@@ -18,7 +18,9 @@ std::set<TString> GetAllExternalDataSourceTypes() {
         ToString(NYql::EDatabaseType::Oracle),
         ToString(NYql::EDatabaseType::Logging),
         ToString(NYql::EDatabaseType::Solomon),
-        ToString(NYql::EDatabaseType::Iceberg)
+        ToString(NYql::EDatabaseType::Iceberg),
+        ToString(NYql::EDatabaseType::Redis),
+        ToString(NYql::EDatabaseType::Prometheus)
     };
     return allTypes;
 }
@@ -43,6 +45,10 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
             return EDatabaseType::Logging;
         case NYql::EGenericDataSourceKind::ICEBERG:
             return EDatabaseType::Iceberg;
+        case NYql::EGenericDataSourceKind::REDIS:
+            return EDatabaseType::Redis;
+        case NYql::EGenericDataSourceKind::PROMETHEUS:
+            return EDatabaseType::Prometheus;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -68,6 +74,10 @@ NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType database
             return NYql::EGenericDataSourceKind::LOGGING;
         case EDatabaseType::Iceberg:
             return NYql::EGenericDataSourceKind::ICEBERG;
+        case EDatabaseType::Redis:
+            return NYql::EGenericDataSourceKind::REDIS;
+        case EDatabaseType::Prometheus:
+            return NYql::EGenericDataSourceKind::PROMETHEUS;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

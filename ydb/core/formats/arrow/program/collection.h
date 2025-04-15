@@ -59,12 +59,19 @@ public:
         AFL_VERIFY(Markers.erase(marker));
     }
 
-    bool IsEmptyFiltered() const {
+    bool IsEmptyFilter() const {
         return Filter->IsTotalDenyFilter();
     }
 
-    bool HasAccessors() const {
-        return Accessors.size();
+    bool HasData() const {
+        return Accessors.size() || !!RecordsCountActual;
+    }
+
+    bool HasDataAndResultIsEmpty() const {
+        if (!HasData()) {
+            return false;
+        }
+        return !GetRecordsCountActualVerified() || IsEmptyFilter();
     }
 
     std::optional<ui32> GetRecordsCountActualOptional() const {
@@ -373,15 +380,14 @@ public:
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
-        const ui32 recordsCountImpl = Filter->GetFilteredCount().value_or(recordsCount);
-        if (recordsCountImpl < limit) {
+        if (recordsCount < limit) {
             return;
         }
         if (UseFilter) {
-            auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCountImpl, limit, reverse);
+            auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCount, limit, reverse);
             AddFilter(filter);
         } else {
-            *Filter = Filter->Cut(recordsCountImpl, limit, reverse);
+            *Filter = Filter->Cut(recordsCount, limit, reverse);
         }
     }
 

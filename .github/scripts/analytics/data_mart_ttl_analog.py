@@ -17,9 +17,9 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Delete old records from YDB table")
-    parser.add_argument("--table_path", required=True, help="Table path and name")
-    parser.add_argument("--timestamp_field", required=True, help="Name of the timestamp field")
-    parser.add_argument("--delete_interval", type=int, required=True, help="Interval in minutes to delete records older than")
+    parser.add_argument("--table-path", required=True, help="Table path and name")
+    parser.add_argument("--timestamp-field", required=True, help="Name of the timestamp field")
+    parser.add_argument("--delete-interval", required=True, help="Interval to delete records older than, in ISO 8601 format (https://en.wikipedia.org/wiki/ISO_8601#Durations) without 'P'")
     
     return parser.parse_args()
 
@@ -29,7 +29,8 @@ def delete_old_records(session, full_table_path, timestamp_field, delete_interva
     count_query = f"""
     SELECT COUNT(*) as count
     FROM `{full_table_path}`
-    WHERE `{timestamp_field}` < CurrentUtcDate() - Interval("PT{delete_interval}M")
+    WHERE `{timestamp_field}` < CurrentUtcDate() - Interval("P{delete_interval}")
+
     """
     
     print(f"Counting records to delete...")
@@ -40,12 +41,12 @@ def delete_old_records(session, full_table_path, timestamp_field, delete_interva
         print("No records to delete.")
         return 0
     
-    print(f"Found {row_count} records older than {delete_interval} minutes.")
+    print(f"Found {row_count} records older than {delete_interval}.")
     
     # Now perform the delete operation
     delete_query = f"""
     DELETE FROM `{full_table_path}`
-    WHERE `{timestamp_field}` < CurrentUtcDate() - Interval("PT{delete_interval}M")
+    WHERE `{timestamp_field}` < CurrentUtcDate() - Interval("P{delete_interval}")
     """
     
     print(f"Executing DELETE query: {delete_query}")
@@ -73,7 +74,7 @@ def main():
     delete_interval = args.delete_interval
 
     print(f"Connecting to YDB to delete records from {full_table_path}")
-    print(f"Will delete records where {timestamp_field} < CurrentUtcDate() - Interval(\"PT{delete_interval}M\")")
+    print(f"Will delete records where {timestamp_field} < CurrentUtcDate() - Interval(\"P{delete_interval}\")")
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,

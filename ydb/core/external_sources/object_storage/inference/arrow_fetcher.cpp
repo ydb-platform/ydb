@@ -217,7 +217,7 @@ private:
                 decompressedData << decompressedChunk;
             }
             return std::move(decompressedData);
-        } catch (const yexception& error) {
+        } catch (const std::exception& error) {
             auto errorEv = MakeError(
                 request.Path,
                 NFq::TIssuesIds::INTERNAL_ERROR,

@@ -131,12 +131,12 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColum
         const ui32 start = context.GetStartIndex().value_or(0);
         const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
         auto slice = ISlice(start, count);
-        if (context.GetFilter()) {
-            return ApplyFilter(*context.GetFilter(), nullptr)->GetChunkedArrayTrivial();
+        if (context.GetFilter() && !context.GetFilter()->IsTotalAllowFilter()) {
+            return slice->ApplyFilter(context.GetFilter()->Slice(start, count), slice)->GetChunkedArrayTrivial();
         } else {
             return slice->GetChunkedArrayTrivial();
         }
-    } else if (context.GetFilter()) {
+    } else if (context.GetFilter() && !context.GetFilter()->IsTotalAllowFilter()) {
         return ApplyFilter(*context.GetFilter(), nullptr)->GetChunkedArrayTrivial();
     } else {
         return GetChunkedArrayTrivial();

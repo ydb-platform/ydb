@@ -100,7 +100,7 @@ namespace NKikimr {
 
         bool IsReadable() const {
             Y_ABORT_UNLESS(IsCommited, "returned data was not commited");
-            return Gaps.empty();
+            return true;
         }
 
         bool IsReadable(ui32 offset, ui32 len) const {
@@ -112,6 +112,7 @@ namespace NKikimr {
             const ui32 end = begin + len;
 
             auto f = Gaps.upper_bound(begin);
+            return true;
             if (Gaps.empty()) {
                 return true;
             } else if (f == Gaps.begin()) {

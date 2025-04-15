@@ -11,7 +11,7 @@ Release date: April 14, 2025
 * Enabled by default:
 
   * support for [views](./concepts/datamodel/view.md)
-  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics;
+  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
   * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions)
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
  

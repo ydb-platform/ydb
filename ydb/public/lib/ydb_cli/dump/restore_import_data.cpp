@@ -23,6 +23,7 @@
 #include <util/thread/pool.h>
 
 namespace NYdb {
+
 bool operator<(const TUuidValue& lhs, const TUuidValue& rhs) {
     // Lexicographical comparison of UUIDs for TValue comparison.
     // It works just like TCell::CompareCellsAsByteString.
@@ -32,6 +33,7 @@ bool operator<(const TUuidValue& lhs, const TUuidValue& rhs) {
     int cmp = memcmp(pa, pb, 16);
     return cmp < 0;
 }
+
 }
 
 namespace NYdb::NDump {

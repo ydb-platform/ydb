@@ -39,6 +39,12 @@ public:
     static void Set(INodeBrokerHooks* hooks);
 };
 
+enum class ENodeState : ui8 {
+    Active = 0,
+    Expired = 1,
+    Removed = 2,
+};
+
 class TNodeBroker : public TActor<TNodeBroker>
                   , public TTabletExecutedFlat {
 public:
@@ -76,18 +82,6 @@ private:
 
     static constexpr TDuration MIN_LEASE_DURATION = TDuration::Minutes(5);
 
-    enum EConfigKey {
-        ConfigKeyConfig = 1,
-    };
-
-    enum EParamKey {
-        ParamKeyConfigSubscription = 1,
-        ParamKeyCurrentEpochId,
-        ParamKeyCurrentEpochVersion,
-        ParamKeyCurrentEpochStart,
-        ParamKeyCurrentEpochEnd,
-        ParamKeyNextEpochEnd,
-    };
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
         TNodeInfo() = delete;
@@ -100,11 +94,17 @@ private:
                   const TNodeLocation &location)
             : TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost,
                                          port, location)
-            , Lease(0)
         {
         }
 
+        TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, const NKikimrNodeBroker::TNodeInfoSchema& schema);
+        TNodeInfo(ui32 nodeId, ENodeState state, ui64 version);
+
         TNodeInfo(const TNodeInfo &other) = default;
+
+        NKikimrNodeBroker::TNodeInfoSchema SerializeToSchema() const;
+        bool EqualCachedData(const TNodeInfo &other) const;
+        bool EqualExceptVersion(const TNodeInfo &other) const;
 
         bool IsFixed() const
         {
@@ -118,10 +118,9 @@ private:
             return expire.ToRfc822StringLocal();
         }
 
-        TString IdString() const
-        {
-            return TStringBuilder() << "#" << NodeId << " " << Host << ":" << Port;
-        }
+        TString IdString() const;
+        TString IdShortString() const;
+        TString ToString() const;
 
         TString ExpirationString() const
         {
@@ -129,11 +128,13 @@ private:
         }
 
         // Lease is incremented each time node extends its lifetime.
-        ui32 Lease;
+        ui32 Lease = 0;
         TInstant Expire;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
         TSubDomainKey ServicedSubDomain;
+        ENodeState State = ENodeState::Removed;
+        ui64 Version = 0;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -141,6 +142,7 @@ private:
         TVector<ui32> NodesToExpire;
         TVector<ui32> NodesToRemove;
         TEpochInfo NewEpoch;
+        TApproximateEpochStartInfo NewApproxEpochStart;
     };
 
     class TTxExtendLease;
@@ -275,8 +277,9 @@ private:
     TString EpochCache;
 
     TString EpochDeltasCache;
-    TVector<ui64> EpochDeltasVersions;
-    TVector<ui64> EpochDeltasEndOffsets;
+    using TVersion = ui64;
+    using TCacheEndOffset = ui64;
+    TMap<TVersion, TCacheEndOffset> EpochDeltasByVersion;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
@@ -286,6 +289,7 @@ private:
         virtual ~TState() = default;
 
         // Internal state modifiers. Don't affect DB.
+        void RegisterNewNode(const TNodeInfo &info);
         void AddNode(const TNodeInfo &info);
         void ExtendLease(TNodeInfo &node);
         void FixNodeId(TNodeInfo &node);
@@ -298,10 +302,13 @@ private:
         void LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config);
         void ReleaseSlotIndex(TNodeInfo &node);
         void ClearState();
+        void UpdateLocation(TNodeInfo &node, const TNodeLocation &location);
+        TNodeInfo* FindNode(ui32 nodeId);
 
         // All registered dynamic nodes.
         THashMap<ui32, TNodeInfo> Nodes;
         THashMap<ui32, TNodeInfo> ExpiredNodes;
+        THashMap<ui32, TNodeInfo> RemovedNodes;
         // Maps <Host/Addr:Port> to NodeID.
         THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
         // Bitmap with free Node IDs (with no lower 5 bits).
@@ -310,6 +317,7 @@ private:
         std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
         // Epoch info.
         TEpochInfo Epoch;
+        TApproximateEpochStartInfo ApproxEpochStart;
         // Current config.
         NKikimrNodeBroker::TConfig Config;
         TDuration EpochDuration = TDuration::Hours(1);
@@ -329,20 +337,23 @@ private:
         // Local database manipulations.
         void DbAddNode(const TNodeInfo &node,
                 TTransactionContext &txc);
+        void DbRemoveNode(const TNodeInfo &node, TTransactionContext &txc);
+        void DbUpdateNode(ui32 nodeId, TTransactionContext &txc);
         void DbApplyStateDiff(const TStateDiff &diff,
                     TTransactionContext &txc);
         void DbFixNodeId(const TNodeInfo &node,
                 TTransactionContext &txc);
         bool DbLoadState(TTransactionContext &txc,
                 const TActorContext &ctx);
-        void DbRemoveNodes(const TVector<ui32> &nodes,
-                    TTransactionContext &txc);
+        void DbUpdateNodes(const TVector<ui32> &nodes, TTransactionContext &txc);
         void DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
                     TTransactionContext &txc);
         void DbUpdateConfigSubscription(ui64 subscriptionId,
                                 TTransactionContext &txc);
         void DbUpdateEpoch(const TEpochInfo &epoch,
                     TTransactionContext &txc);
+        void DbUpdateApproxEpochStart(const TApproximateEpochStartInfo &approxEpochStart, TTransactionContext &txc);
+        void DbUpdateMainNodesTable(TTransactionContext &txc);
         void DbUpdateEpochVersion(ui64 version,
                         TTransactionContext &txc);
         void DbUpdateNodeLease(const TNodeInfo &node,
@@ -353,6 +364,22 @@ private:
                         TTransactionContext &txc);
         void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                         TTransactionContext &txc);
+
+        struct TDbChanges {
+            bool Ready = true;
+            bool UpdateEpoch = false;
+            bool UpdateApproxEpochStart = false;
+            bool UpdateMainNodesTable = false;
+            TVector<ui32> NewVersionUpdateNodes;
+            TVector<ui32> UpdateNodes;
+
+            void Merge(const TDbChanges &other);
+        };
+
+        TDbChanges DbLoadNodes(auto &nodesRowset, const TActorContext &ctx);
+        TDbChanges DbLoadNodesV2(auto &nodesV2Rowset, const TActorContext &ctx);
+        TDbChanges DbSyncNodes();
+        TDbChanges DbSyncNodesV2(auto &nodesV2Rowset, const TActorContext &ctx);
 
     protected:
         TStringBuf LogPrefix() const override;

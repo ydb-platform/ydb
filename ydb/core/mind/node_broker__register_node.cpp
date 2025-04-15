@@ -93,23 +93,29 @@ public:
                              << host << ":" << port,
                              ctx);
             } else if (node.Location != loc) {
-                node.Location = loc;
-                Self->Dirty.DbUpdateNodeLocation(node, txc);
+                Self->Dirty.UpdateEpochVersion();
+                Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
+                Self->Dirty.UpdateLocation(node, loc);
+                Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
-                Self->Dirty.DbFixNodeId(node, txc);
+                Self->Dirty.UpdateEpochVersion();
+                Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
                 Self->Dirty.FixNodeId(node);
+                Self->Dirty.DbAddNode(node, txc);
                 FixNodeId = true;
             } else if (!node.IsFixed() && node.Expire < expire) {
-                Self->Dirty.DbUpdateNodeLease(node, txc);
+                Self->Dirty.UpdateEpochVersion();
+                Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
                 Self->Dirty.ExtendLease(node);
+                Self->Dirty.DbAddNode(node, txc);
                 ExtendLease = true;
             }
             if (node.AuthorizedByCertificate != rec.GetAuthorizedByCertificate()) {
                 node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
-                Self->Dirty.DbUpdateNodeAuthorizedByCertificate(node, txc);
+                Self->Dirty.DbAddNode(node, txc);
                 UpdateNodeAuthorizedByCertificate = true;
             }
 
@@ -142,6 +148,8 @@ public:
         Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
         Node->Lease = 1;
         Node->Expire = expire;
+        Node->Version = Self->Dirty.Epoch.Version + 1;
+        Node->State = ENodeState::Active;
 
         if (Self->EnableStableNodeNames) {
             Node->ServicedSubDomain = ServicedSubDomain;
@@ -151,7 +159,7 @@ public:
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
         Self->Dirty.DbAddNode(*Node, txc);
-        Self->Dirty.AddNode(*Node);
+        Self->Dirty.RegisterNewNode(*Node);
         Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version + 1, txc);
         Self->Dirty.UpdateEpochVersion();
 
@@ -163,16 +171,26 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Complete");
 
         if (Node) {
-            Self->Committed.AddNode(*Node);
             Self->Committed.UpdateEpochVersion();
+            Self->Committed.RegisterNewNode(*Node);
             Self->AddNodeToEpochCache(*Node);
-        } else if (ExtendLease)
-            Self->Committed.ExtendLease(Self->Committed.Nodes.at(NodeId));
-        else if (FixNodeId)
-            Self->Committed.FixNodeId(Self->Committed.Nodes.at(NodeId));
+        } else if (ExtendLease) {
+            Self->Committed.UpdateEpochVersion();
+            auto &node = Self->Committed.Nodes.at(NodeId);
+            Self->Committed.ExtendLease(node);
+            Self->AddNodeToEpochCache(node);
+        } else if (FixNodeId) {
+            Self->Committed.UpdateEpochVersion();
+            auto &node = Self->Committed.Nodes.at(NodeId);
+            Self->Committed.FixNodeId(node);
+            Self->AddNodeToEpochCache(node);
+        }
 
         if (SetLocation) {
-            Self->Committed.Nodes.at(NodeId).Location = TNodeLocation(Event->Get()->Record.GetLocation());
+            Self->Committed.UpdateEpochVersion();
+            auto &node = Self->Committed.Nodes.at(NodeId);
+            Self->Committed.UpdateLocation(node, TNodeLocation(Event->Get()->Record.GetLocation()));
+            Self->AddNodeToEpochCache(node);
         }
 
         if (UpdateNodeAuthorizedByCertificate) {

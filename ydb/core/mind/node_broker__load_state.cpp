@@ -28,8 +28,8 @@ public:
         while (now > Self->Dirty.Epoch.End) {
             TStateDiff diff;
             Self->Dirty.ComputeNextEpochDiff(diff);
-            Self->Dirty.DbApplyStateDiff(diff, txc);
             Self->Dirty.ApplyStateDiff(diff);
+            Self->Dirty.DbApplyStateDiff(diff, txc);
         }
 
         return true;

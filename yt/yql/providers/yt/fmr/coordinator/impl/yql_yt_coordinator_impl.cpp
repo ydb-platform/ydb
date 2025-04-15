@@ -1,10 +1,19 @@
 #include <thread>
+#include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_coordinator_impl.h"
 
 namespace NYql::NFmr {
+
+TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
+    DefaultFmrOperationSpec = NYT::NodeFromYsonString(NResource::Find("default_coordinator_settings.yson"));
+    WorkersNum = 1;
+    RandomProvider = CreateDefaultRandomProvider(),
+    IdempotencyKeyStoreTime = TDuration::Seconds(10);
+    TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
+}
 
 namespace {
 
@@ -161,7 +170,6 @@ public:
                     YQL_ENSURE(fmrTableId.PartId == curTableStats.PartId);
                     if (taskStatus == ETaskStatus::Completed) {
                         YQL_CLOG(DEBUG, FastMapReduce) << "Current statistic from table with id" << fmrTableId.TableId << "_" << fmrTableId.PartId << ": " << tableStats;
-                        Cerr << "Current statistic from table with id" << fmrTableId.TableId << "_" << fmrTableId.PartId << ": " << tableStats;
                     }
                 }
                 Operations_[operationId].OutputTableIds.emplace_back(fmrTableId.TableId);
@@ -327,26 +335,14 @@ private:
         }
     }
 
-    TMaybe<NYT::TNode> GetJobSettings(const TMaybe<NYT::TNode>& currentFmrOperationSpec) {
-        // TODO - check this works
-        TMaybe<NYT::TNode> defaultJobSettings = Nothing(), currentJobSettings = Nothing();
-        if (currentFmrOperationSpec && currentFmrOperationSpec->HasKey("job_settings")) {
-            currentJobSettings = (*currentFmrOperationSpec)["job_settings"];
+    NYT::TNode GetJobSettings(const TMaybe<NYT::TNode>& currentFmrOperationSpec) {
+        // For now fmr operation spec only consists of job settings
+        if (!currentFmrOperationSpec) {
+            return DefaultFmrOperationSpec_;
         }
-        if (DefaultFmrOperationSpec_ && DefaultFmrOperationSpec_->HasKey("job_settings")) {
-            defaultJobSettings = (*DefaultFmrOperationSpec_)["job_settings"];
-        }
-        if (defaultJobSettings && !currentJobSettings) {
-            return defaultJobSettings;
-        }
-        if (currentJobSettings && !defaultJobSettings) {
-            return currentJobSettings;
-        }
-        if (!currentJobSettings && !defaultJobSettings) {
-            return Nothing();
-        }
-        NYT::MergeNodes(*currentJobSettings, *defaultJobSettings);
-        return currentJobSettings;
+        auto resultFmrOperationSpec = DefaultFmrOperationSpec_;
+        NYT::MergeNodes(resultFmrOperationSpec, *currentFmrOperationSpec);
+        return resultFmrOperationSpec;
     }
 
     std::unordered_map<TString, TCoordinatorTaskInfo> Tasks_; // TaskId -> current info about it
@@ -363,7 +359,7 @@ private:
     TDuration TimeToSleepBetweenClearKeyRequests_;
     TDuration IdempotencyKeyStoreTime_;
     std::unordered_map<TFmrTableId, TCoordinatorFmrTableStats> FmrTableStatistics_; // TableId -> Statistics
-    TMaybe<NYT::TNode> DefaultFmrOperationSpec_;
+    NYT::TNode DefaultFmrOperationSpec_;
 };
 
 } // namespace

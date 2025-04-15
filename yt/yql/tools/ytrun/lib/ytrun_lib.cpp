@@ -119,6 +119,11 @@ TYtRunTool::TYtRunTool(TString name)
             .Optional()
             .NoArgument()
             .SetFlag(&DisableLocalFmrWorker_);
+
+        opts.AddLongOption( "fmr-operation-spec-path", "Path to file with fmr operation spec settings")
+            .Optional()
+            .StoreResult(&FmrOperationSpecFilePath_);
+
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -186,7 +191,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
         return ytGateway;
     }
 
-    auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, DisableLocalFmrWorker_, FmrCoordinatorServerUrl_);
+    auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, DisableLocalFmrWorker_, FmrCoordinatorServerUrl_, false, FmrOperationSpecFilePath_);
     FmrWorker_ = std::move(worker);
     return fmrGateway;
 }

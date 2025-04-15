@@ -234,8 +234,8 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(RetryRunningOperationAfterIdempotencyKeyClear) {
-        TFmrCoordinatorSettings coordinatorSettings{
-            .WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2), .IdempotencyKeyStoreTime = TDuration::Seconds(1)};
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        coordinatorSettings.IdempotencyKeyStoreTime = TDuration::Seconds(1);
         auto coordinator = MakeFmrCoordinator(coordinatorSettings);
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};

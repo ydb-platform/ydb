@@ -41,13 +41,13 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         std::unordered_map<TYtTableRef, TString> outputTables;
         NYql::NFmr::IYtService::TPtr ytService = MakeMockYtService(inputTables, outputTables);
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
+        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService);
 
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        auto res = job->Download(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto res = job->Download(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
         auto err = std::get_if<TError>(&res);
         auto statistics = std::get_if<TStatistics>(&res);
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         NYql::NFmr::IYtService::TPtr ytService = MakeMockYtService(inputTables, outputTables);
 
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
+        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService);
 
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
         std::vector<TTableRange> ranges = {{"test_part_id"}};
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
 
-        auto res = job->Upload(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto res = job->Upload(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
 
         auto err = std::get_if<TError>(&res);
 
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         std::unordered_map<TYtTableRef, TString> outputTables;
         NYql::NFmr::IYtService::TPtr ytService = MakeMockYtService(inputTables, outputTables);
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
-        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
+        IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService);
 
         TTaskTableRef input_table_ref_1 = {input_1};
         TTaskTableRef input_table_ref_2 = {input_2};
@@ -110,14 +110,20 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
         tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
 
-        auto res = job->Merge(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+        auto res = job->Merge(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}}, cancelFlag);
         auto err = std::get_if<TError>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
         auto resultTableContentMaybe = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
         UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
         TString resultTableContent = GetTextYson(*resultTableContentMaybe);
-        UNIT_ASSERT_NO_DIFF(resultTableContent, TableContent_1 + TableContent_2 + TableContent_3);
+        TString expected = TableContent_1 + TableContent_2 + TableContent_3;
+        UNIT_ASSERT_VALUES_EQUAL(resultTableContent.size(), expected.size());
+        TString line;
+        TStringStream resultStream(resultTableContent);
+        while (resultStream.ReadLine(line)) {
+            UNIT_ASSERT(expected.Contains(line));
+        }
     }
 }
 
@@ -178,11 +184,11 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
         // No tables in tableDataService
-        try {
-            RunJob(task, tableDataServicePtr, ytService, cancelFlag);
-        } catch(...) {
-            UNIT_ASSERT(CurrentExceptionMessage().Contains("No data for chunk:test_table_id:test_part_id"));
-        }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            RunJob(task, tableDataServicePtr, ytService, cancelFlag),
+            yexception,
+            "No data for chunk:test_table_id:test_part_id"
+        );
     }
 
     Y_UNIT_TEST(RunMergeTask) {
@@ -214,9 +220,17 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
-        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
-        UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContent), TableContent_1 + TableContent_2 + TableContent_3);
+        auto resultTableContentMaybe = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
+
+        TString resultTableContent = GetTextYson(*resultTableContentMaybe);
+        TString expected = TableContent_1 + TableContent_2 + TableContent_3;
+        UNIT_ASSERT_VALUES_EQUAL(resultTableContent.size(), expected.size());
+        TString line;
+        TStringStream resultStream(resultTableContent);
+        while (resultStream.ReadLine(line)) {
+            UNIT_ASSERT(expected.Contains(line));
+        }
     }
 }
 

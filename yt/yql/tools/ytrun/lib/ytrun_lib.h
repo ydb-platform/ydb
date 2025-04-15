@@ -34,6 +34,7 @@ protected:
     NFmr::IFmrWorker::TPtr FmrWorker_;
     TString FmrCoordinatorServerUrl_;
     bool DisableLocalFmrWorker_ = false;
+    TString FmrOperationSpecFilePath_;
 };
 
 } // NYql

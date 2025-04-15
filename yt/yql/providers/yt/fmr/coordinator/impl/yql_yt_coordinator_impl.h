@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/random_provider/random_provider.h>
-#include <library/cpp/yson/node/node.h>
+#include <library/cpp/yson/node/node_io.h>
 #include <util/system/mutex.h>
 #include <util/system/guard.h>
 #include <util/generic/queue.h>
@@ -10,13 +10,15 @@
 namespace NYql::NFmr {
 
 struct TFmrCoordinatorSettings {
-    ui32 WorkersNum; // Not supported yet
+    NYT::TNode DefaultFmrOperationSpec;
+    ui32 WorkersNum;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TDuration IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TDuration TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    TMaybe<NYT::TNode> DefaultFmrOperationSpec = Nothing();
+
+    TFmrCoordinatorSettings();
 };
 
-IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings = {.WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2)});
+IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings = TFmrCoordinatorSettings());
 
 } // namespace NYql::NFmr

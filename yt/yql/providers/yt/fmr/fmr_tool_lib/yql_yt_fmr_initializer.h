@@ -14,6 +14,12 @@ namespace NYql::NFmr {
 
 constexpr TStringBuf FastMapReduceGatewayName = "fmr";
 
-std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, bool disableLocalFmrWorker = false, const TString& coordinatorServerUrl = TString(), bool isFileGateway = false);
+std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(
+    IYtGateway::TPtr slave,
+    bool disableLocalFmrWorker = false,
+    const TString& coordinatorServerUrl = TString(),
+    bool isFileGateway = false,
+    const TString& fmrOperationSpecFilePath = TString()
+);
 
 } // namespace NYql::NFmr

@@ -28,13 +28,17 @@ public:
     NYT::TRawTableWriterPtr MakeWriter(
         const TYtTableRef& ytTable,
         const TClusterConnection& clusterConnection,
-        const TYtWriterSettings& /*writerSetttings*/
+        const TYtWriterSettings& writerSetttings
     ) override {
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
         TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
         auto richPath = NYT::TRichYPath(ytPath).Append(true);
-        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary()); // TODO - support writerOptions
+        auto writerOptions = NYT::TTableWriterOptions();
+        if (writerSetttings.MaxRowWeight) {
+            writerOptions.Config(NYT::TNode()("max_row_weight", *writerSetttings.MaxRowWeight));
+        }
+        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary(), writerOptions);
     }
 
 private:

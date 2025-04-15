@@ -1,9 +1,17 @@
 #include "yql_yt_fmr_initializer.h"
+#include <util/stream/file.h>
 
 namespace NYql::NFmr {
 
-std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, bool disableLocalFmrWorker, const TString& coordinatorServerUrl, bool isFileGateway) {
-    auto coordinator = MakeFmrCoordinator();
+std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, bool disableLocalFmrWorker, const TString& coordinatorServerUrl, bool isFileGateway, const TString& fmrOperationSpecFilePath) {
+    TFmrCoordinatorSettings coordinatorSettings{};
+    if (!fmrOperationSpecFilePath.empty()) {
+        TFileInput input(fmrOperationSpecFilePath);
+        auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
+        coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
+    }
+
+    auto coordinator = MakeFmrCoordinator(coordinatorSettings);
     if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;

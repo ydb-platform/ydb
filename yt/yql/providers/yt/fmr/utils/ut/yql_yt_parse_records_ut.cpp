@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(ParseRecordTests) {
 
         auto reader = ytService->MakeReader(testYtTable, TClusterConnection());
         auto writer = ytService->MakeWriter(testYtTable, TClusterConnection());
-        ParseRecords(*reader, *writer, 1, 10);
+        auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();
         UNIT_ASSERT_VALUES_EQUAL(outputTables.size(), 1);
         UNIT_ASSERT(outputTables.contains(testYtTable));

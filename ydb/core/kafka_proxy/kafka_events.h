@@ -36,6 +36,7 @@ struct TEvKafka {
         EvAddOffsetsToTxnRequest,
         EvTxnOffsetCommitRequest,
         EvEndTxnRequest,
+        EvTransactionActorDied,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -254,51 +255,59 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
 };
 
 struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRequest, EvAddPartitionsToTxnRequest> {
-    TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId)
+    TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
+    , DatabasePath(databasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TAddPartitionsToTxnRequestData> Request;
     TActorId ConnectionId;
+    TString DatabasePath;
 };
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
-    TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId)
+    TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
+    , DatabasePath(databasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TAddOffsetsToTxnRequestData> Request;
     TActorId ConnectionId;
+    TString DatabasePath;
 };
 
 struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest, EvTxnOffsetCommitRequest> {
-    TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId)
+    TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId, const TString& databasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
+    , DatabasePath(databasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TTxnOffsetCommitRequestData> Request;
     TActorId ConnectionId;
+    TString DatabasePath;
 };
 
 struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> {
-    TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId)
+    TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId, const TString& databasePath)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
+    , DatabasePath(databasePath)
     {}
 
     ui64 CorrelationId;
     const TMessagePtr<TEndTxnRequestData> Request;
     TActorId ConnectionId;
+    TString DatabasePath;
 };
 
 /* 
@@ -336,6 +345,18 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 
     EStatus Status;
     TString Message;
+};
+
+struct TEvTransactionActorDied : public NActors::TEventLocal<TEvTransactionActorDied, EvTransactionActorDied> {
+    TEvTransactionActorDied(const TString& transactionalId, const i64 producerId, const i16 producerEpoch) :
+        TransactionalId(std::move(transactionalId)),
+        ProducerId(producerId),
+        ProducerEpoch(producerEpoch)
+    {}
+
+    const TString TransactionalId;
+    const i64 ProducerId;
+    const i16 ProducerEpoch;
 };
 }; // struct TEvKafka
 

@@ -296,8 +296,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     const auto& tr = *AppData()->TypeRegistry;
     if (Meta.HasOlapProgram()) {
         bool found = false;
-        for (ui64 idx = 0, i = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
-            const auto& partition = keyDesc->GetPartitions()[idx];
+        for (auto&& partition : keyDesc->GetPartitions()) {
             if (partition.ShardId != state.TabletId) {
                 continue;
             }
@@ -305,6 +304,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
             AFL_ENSURE(!found);
             newShard.LastKey = std::move(state.LastKey);
             newShard.LastCursorProto = std::move(state.LastCursorProto);
+            newShard.Ranges = state.Ranges;
             PendingShards.emplace_front(std::move(newShard));
             found = true;
         }
@@ -632,6 +632,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
     state.State = EShardState::Resolving;
     state.ResolveAttempt++;
     state.SubscribedOnTablet = false;
+    AFL_ENSURE(state.Ranges.size());
 
     auto range = TTableRange(state.Ranges.front().From.GetCells(), state.Ranges.front().FromInclusive, state.Ranges.back().To.GetCells(),
         state.Ranges.back().ToInclusive);

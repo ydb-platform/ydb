@@ -5,6 +5,7 @@ ENV(YDB_ENABLE_COLUMN_TABLES="true")
 TEST_SRCS(
     test_kv.py
     test_crud.py
+    test_filter.py
     test_inserts.py
 )
 

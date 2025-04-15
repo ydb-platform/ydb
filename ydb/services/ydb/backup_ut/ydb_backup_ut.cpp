@@ -1372,6 +1372,71 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
     }
 
+    Y_UNIT_TEST(BackupUuid) {
+        for (auto backupMode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData, NDump::TRestoreSettings::EMode::Yql}) {
+            TKikimrWithGrpcAndRootSchema server;
+            auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+            TTableClient tableClient(driver);
+            auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+            TTempDir tempDir;
+            const auto& pathToBackup = tempDir.Path();
+
+            constexpr const char* dbPath = "/Root";
+            constexpr const char* table = "/Root/table";
+
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uuid,
+                        Value Utf8,
+                        PRIMARY KEY (Key)
+                    );
+                )",
+                table
+            ));
+            ExecuteDataModificationQuery(session, Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value)
+                    VALUES 
+                        (Uuid("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"), "one"),
+                        (Uuid("706cca52-b00a-4cbd-a21e-6538de188271"), "two"),
+                        (Uuid("81b1e345-f2ae-4c9e-8d1a-75447be314f2"), "three"),
+                        (Uuid("be2765f2-9f4c-4a22-8d2c-a1b77d84f4fb"), "four"),
+                        (Uuid("d3f9e0a2-5871-4afe-a23a-8db160b449cd"), "five"),
+                        (Uuid("d3f9e0a2-0000-0000-0000-8db160b449cd"), "six");
+                )",
+                table
+            ));
+
+            const auto originalContent = GetTableContent(session, table);
+
+            NDump::TClient backupClient(driver);
+            {
+                const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            auto opts = NDump::TRestoreSettings().Mode(backupMode);
+
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ));
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uuid,
+                        Value Utf8,
+                        PRIMARY KEY (Key)
+                    );
+                )", table
+            ));
+            auto result = backupClient.Restore(pathToBackup, dbPath, opts);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto newContent = GetTableContent(session, table);
+
+            CompareResults(newContent, originalContent);
+        }
+    }
+
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {

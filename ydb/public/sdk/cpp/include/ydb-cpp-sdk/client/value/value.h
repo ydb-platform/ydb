@@ -539,3 +539,6 @@ public:
 };
 
 } // namespace NYdb
+
+template<>
+void Out<NYdb::Dev::TUuidValue>(IOutputStream& o, const NYdb::Dev::TUuidValue& value);

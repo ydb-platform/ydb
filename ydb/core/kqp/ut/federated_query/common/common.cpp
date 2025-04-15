@@ -80,7 +80,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
-            options.credentialsFactory,
+            options.CredentialsFactory,
             databaseAsyncResolver,
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),

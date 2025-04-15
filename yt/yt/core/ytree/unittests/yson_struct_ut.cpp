@@ -1711,10 +1711,9 @@ TEST(TYsonStructTest, Aliases5)
     EXPECT_FALSE(config->IsSet("key"));
 }
 
-class TTestConfigWithContainers
+struct TTestConfigWithContainers
     : public NYTree::TYsonStructLite
 {
-public:
     std::vector<TString> Vector;
     std::array<TString, 3> Array;
     std::pair<size_t, TString> Pair;

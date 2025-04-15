@@ -35,6 +35,8 @@ private:
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
 
+    std::vector<Ydb::Issue::IssueMessage> Errors;
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -92,6 +94,10 @@ public:
         return IsFinished() && *Finished == -1;
     }
 
+    const std::vector<Ydb::Issue::IssueMessage>& GetErrors() const {
+        return Errors;
+    }
+
     bool InitializeScanner() {
         AFL_VERIFY(!ScanActorId);
         const TActorId sender = Runtime.AllocateEdgeActor();
@@ -104,6 +110,9 @@ public:
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
             return true;
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);
@@ -136,6 +145,9 @@ public:
                 Finished = 1;
             }
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);

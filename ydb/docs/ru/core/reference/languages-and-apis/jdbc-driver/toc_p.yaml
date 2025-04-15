@@ -1,6 +1,6 @@
 items:
 - name: Быстрый старт
-  href: quickstart.md
+  href: getting_started.md
 - name: Использование с Maven
   href: maven.md
 - name: Режимы аутентификации

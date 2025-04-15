@@ -1,6 +1,6 @@
 items:
 - name: Quick start
-  href: quickstart.md
+  href: getting_started.md
 - name: Using with Maven
   href: maven.md
 - name: Authentication modes

@@ -542,6 +542,8 @@ namespace NYql {
                 } break;
                 case NYql::EGenericDataSourceKind::REDIS:
                     break;
+                case NYql::EGenericDataSourceKind::PROMETHEUS:
+                    break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";

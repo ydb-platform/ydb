@@ -1538,7 +1538,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto configs0 = getConfigsMap(res0);
             UNIT_ASSERT_VALUES_EQUAL(configs0.size(), 33);
             UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(configs0.find("retention.ms")->second.Value->data()), TDuration::Hours(10).MilliSeconds());
-            UNIT_ASSERT_VALUES_EQUAL(configs0.find("cleanup.policy")->second.Value->data(), "[delete]");
+            UNIT_ASSERT_VALUES_EQUAL(configs0.find("cleanup.policy")->second.Value->data(), "delete");
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ResourceName.value(), notExistsTopicName);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
@@ -2177,7 +2177,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
     }
 
-    Y_UNIT_TEST(InitProducerId_forNewTransactionalIdShouldReturnRandomInt) {
+    Y_UNIT_TEST(InitProducerId_forNewTransactionalIdShouldReturnIncrementingInt) {
         TInsecureTestServer testServer;
 
         TKafkaTestClient kafkaClient(testServer.Port);

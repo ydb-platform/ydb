@@ -88,7 +88,7 @@ void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySc
         if (!NKikimr::FillTopicDescription(result, pqDescr, response.Self->Info, GetCdcStreamName(), status, error)) {
             this->Request_->RaiseIssue(NKikimr::NGRpcProxy::V1::FillIssue(error, Ydb::PersQueue::ErrorCode::ERROR));
             TBase::Reply(status, ActorContext());
-            //return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
+            return;
         }
 
     } else {

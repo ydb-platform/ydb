@@ -23,6 +23,76 @@
 #include <chrono>
 #include <limits>
 
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <functional>
+
+#include <format>
+
+class MDebug {
+public:
+
+    struct MemNote {
+        ui64 Limit;
+        ui64 Usage;
+        bool LimitReached;
+    };
+
+private:
+    std::vector<MemNote> MemUsage;
+    std::function<MemNote()> MemUsageCallback;
+    static constexpr size_t MaxMemSize = 10;
+    std::string path = "/home/mfilitov/ydbwork/ydb/ydb/tests/functional/tpc/large/";
+    bool firstWrite = true;
+
+    void writeMemInfoInternal() {
+
+        std::ostringstream address;
+        address << (void*)this;
+        std::string name = address.str();
+        std::ofstream inmemfile(path + name + "_memUsage.csv", std::ios::app);
+
+        if (firstWrite) {
+            firstWrite = false;
+            inmemfile << "usage,limit,reached" << std::endl;
+        }
+
+        for (const auto& val : MemUsage) {
+            inmemfile << val.Usage << "," << val.Limit << "," << val.LimitReached <<  std::endl;
+        }
+
+        MemUsage.clear();
+    }
+
+public:
+    MDebug() = default;
+
+    void initialize(std::function<MemNote()> memCallback) {
+        MemUsageCallback = std::move(memCallback);
+    }
+
+    void addOnlyNewValueToMem(MemNote& note) {
+        if (MemUsage.empty() || MemUsage.back().Usage != note.Usage || MemUsage.back().Limit != note.Limit || MemUsage.back().LimitReached != note.LimitReached) {
+            MemUsage.push_back(note);
+            if (MemUsage.size() >= MaxMemSize) {
+                writeMemInfoInternal();
+            }
+        }
+    }
+
+    void saveMemoryDump() {
+        auto note = MemUsageCallback();
+        addOnlyNewValueToMem(note);
+    }
+
+    ~MDebug() {
+        writeMemInfoInternal();
+    }
+};
+
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -562,6 +632,7 @@ class TGraceJoinSpillingSupportState : public TComputationValue<TGraceJoinSpilli
         Spilling,
         ProcessSpilled
     };
+    MDebug Debug;
 public:
 
     TGraceJoinSpillingSupportState(TMemoryUsageInfo* memInfo,
@@ -599,6 +670,9 @@ public:
             TString id = TString(Operator_Join) + "0";
             CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
         }
+
+        Debug.initialize([&]{ return MDebug::MemNote{TlsAllocState->GetUsed(), TlsAllocState->GetLimit(), TlsAllocState->GetMaximumLimitValueReached()}; });
+        std::cerr << "MISHA Join " << (void*)this << " Debug: " << (void*)&Debug << std::endl;
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
@@ -816,6 +890,7 @@ private:
                 // Returns join results (batch or full)
                 while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     UnpackJoinedData(output);
+                    Debug.saveMemoryDump();
                     return EFetchResult::One;
                 }
 
@@ -843,7 +918,9 @@ private:
                 break;
             }
 
+            Debug.saveMemoryDump();
             auto isYield = FetchAndPackData(ctx, output);
+            Debug.saveMemoryDump();
             if (isYield == EFetchResult::One)
                 return isYield;
             if (IsSpillingAllowed && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
@@ -865,15 +942,30 @@ private:
 
                 auto& leftTable = *LeftPacker->TablePtr;
                 auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
+                Debug.saveMemoryDump();
                 if (IsSpillingAllowed && ctx.SpillerFactory && !JoinedTablePtr->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows)) {
+                    Debug.saveMemoryDump();
                     SwitchMode(EOperatingMode::Spilling, ctx);
                     return EFetchResult::Yield;
                 }
+                Debug.saveMemoryDump();
 
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
-                JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                ui64 UsageBeforeJoin = TlsAllocState->GetUsed();
+                ui64 LimitBeforeJoin = TlsAllocState->GetLimit();
+                try {
+                    JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                } catch (...) {
+                    ui64 UsageAfterJoin = TlsAllocState->GetUsed();
+                    ui64 LimitAfterJoin = TlsAllocState->GetLimit();
+                    std::cerr << std::format("MISHA Failed join: {}. BeforeJoin: {}/{}, afterJoin: {}/{}\n", (void*)this, UsageBeforeJoin, LimitBeforeJoin, UsageAfterJoin, LimitAfterJoin);
+                    Debug.saveMemoryDump();
+                    throw;
+                }
+
+                Debug.saveMemoryDump();
                 JoinedTablePtr->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
@@ -1078,6 +1170,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output)  const {
             if (state.IsInvalid()) {
                 MakeSpillingSupportState(ctx, state);
+                std::cerr << "MISHA LOL" << std::endl;
             }
 
             return static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);

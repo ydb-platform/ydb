@@ -3376,6 +3376,6 @@ TValue TValueBuilder::Build() {
 } // namespace NYdb
 
 template<>
-void Out<NYdb::TUuidValue>(IOutputStream& o, const NYdb::Dev::TUuidValue& value) {
+void Out<NYdb::TUuidValue>(IOutputStream& o, const NYdb::TUuidValue& value) {
     o << value.ToString();
 }

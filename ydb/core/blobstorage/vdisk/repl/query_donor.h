@@ -57,7 +57,13 @@ namespace NKikimr {
             const auto flags = record.GetShowInternals()
                 ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals
                 : TEvBlobStorage::TEvVGet::EFlags::None;
-            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, flags, {}, {}, std::nullopt);
+            const auto handleClass = record.GetHandleClass() == NKikimrBlobStorage::EGetHandleClass::FastRead
+                ? NKikimrBlobStorage::EGetHandleClass::FastRead
+                : NKikimrBlobStorage::EGetHandleClass::AsyncRead;
+            const auto queueActorId = record.GetHandleClass() == NKikimrBlobStorage::EGetHandleClass::FastRead
+                ? actors.FastReadQueueActorId
+                : actors.AsyncReadQueueActorId;
+            auto query = fun(vdiskId, TInstant::Max(), handleClass, flags, {}, {}, std::nullopt);
 
             bool action = false;
             Y_FOR_EACH_BIT(i, UnresolvedItems) {
@@ -69,8 +75,8 @@ namespace NKikimr {
 
             if (action) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << actors.FastReadQueueActorId);
-                Send(actors.FastReadQueueActorId, query.release(), IEventHandle::FlagTrackDelivery);
+                    << " to " << queueActorId);
+                Send(queueActorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
             }

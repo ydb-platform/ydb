@@ -101,6 +101,9 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(bool, RestoreACL, true);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
+    FLUENT_SETTING_DEFAULT(bool, Overwrite, false);
+    // only makes sense when used together with the overwrite option
+    FLUENT_SETTING_DEFAULT(bool, VerifyExistence, false);
 
     FLUENT_SETTING_DEFAULT(ui64, MemLimit, 32_MB);
     FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, 0);

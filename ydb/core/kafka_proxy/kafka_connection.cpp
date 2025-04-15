@@ -295,6 +295,10 @@ protected:
         Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, Context->DiscoveryCacheActor));
     }
 
+    void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TDescribeConfigsRequestData>& message) {
+        Register(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
+    }
+
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
         Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
     }
@@ -424,6 +428,10 @@ protected:
 
             case CREATE_TOPICS:
                 HandleMessage(&Request->Header, Cast<TCreateTopicsRequestData>(Request));
+                break;
+
+            case DESCRIBE_CONFIGS:
+                HandleMessage(&Request->Header, Cast<TDescribeConfigsRequestData>(Request));
                 break;
 
             case CREATE_PARTITIONS:

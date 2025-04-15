@@ -9,8 +9,9 @@ SRCS(
     ut_kafka_functions.cpp
     ut_protocol.cpp
     ut_serialization.cpp
+    kafka_test_client.cpp
     metarequest_ut.cpp
-    port_discovery_ut.cpp
+    actors_ut.cpp
 )
 
 PEERDIR(

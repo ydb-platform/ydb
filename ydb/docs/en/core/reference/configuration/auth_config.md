@@ -19,15 +19,15 @@ Default value: `true`
 Default value: `true`
     ||
 || domain_login_only
-| Determines the scope of internal user privileges in a {{ ydb-short-name }} cluster.
+| Determines the scope of internal user access rights in a {{ ydb-short-name }} cluster.
 
 Valid values:
 
-- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted privileges to access multiple tenant databases.
+- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple tenant databases.
 
     In this scenario, users are added only to the [root database](../../concepts/glossary.md#root-database).
 
-- `false` — internal users can exist either in a {{ ydb-short-name }} cluster or in tenant databases. The scope of privileges for internal users in tenant databases is limited to the database, in which they are created.
+- `false` — internal users can exist either in a {{ ydb-short-name }} cluster or in tenant databases. The scope of access rights for internal users in tenant databases is limited to the database, in which they are created.
 
     In this scenario, users are added either to the [root database](../../concepts/glossary.md#root-database) or to tenant databases.
 

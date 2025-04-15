@@ -2,6 +2,10 @@
 
 This section of {{ ydb-short-name }} documentation covers security-related aspects of working with {{ ydb-short-name }}. It'll be useful for compliance purposes too.
 
+## {{ ydb-short-name }} security elements
+
+Security model in {{ ydb-short-name }} introduces the following concepts and elements:
+
 ![Eagle-view diagram](./_assets/security-overview.png)
 
 - **[Authentication](./authentication.md) and [authorization](./authorization.md)**. The access control system in {{ ydb-short-name }} provides data protection in a {{ ydb-short-name }} cluster. Due to the access system, only authorized [access subjects](../concepts/glossary.md#access-subject) (users and groups) can work with data. Access to data can be restricted.

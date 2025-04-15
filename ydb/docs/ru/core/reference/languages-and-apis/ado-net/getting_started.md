@@ -1,4 +1,4 @@
-# Getting Started
+# Начало работы
 
 [![NuGet](https://img.shields.io/nuget/v/Ydb.Sdk)](https://www.nuget.org/packages/Ydb.Sdk)
 

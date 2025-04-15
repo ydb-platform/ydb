@@ -173,9 +173,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         {
             auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 1, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
-        }
 
-        {
             auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
             UNIT_ASSERT_VALUES_EQUAL(0, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
         }
@@ -192,9 +190,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         {
             auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 2);
             UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
-        }
 
-        {
             auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
             UNIT_ASSERT_VALUES_EQUAL(2, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
         }
@@ -202,12 +198,49 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         {
             auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
-        }
 
-        {
             auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
             UNIT_ASSERT_VALUES_EQUAL(2, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
         }
+    }
+
+    Y_UNIT_TEST(CommitToParentPartitionWithWrongSessionId) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        setup.Write("message-1", 0);
+
+        {
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, 0, "a");
+        }
+
+        setup.Write("message-2", 1);
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 1);
+            UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
+
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL(1, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
+        }
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 1, 1);
+            UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
+
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL(1, desc.GetPartitions().at(1).GetPartitionConsumerStats()->GetCommittedOffset());
+        }
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 0, "wrong-read-session-id");
+            UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
+
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL_C(1, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset(), "Offset doesn`t changed");
+        }
+
     }
 }
 

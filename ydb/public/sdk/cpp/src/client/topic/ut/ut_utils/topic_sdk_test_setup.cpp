@@ -80,12 +80,12 @@ TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const TString& path, c
     return status.GetConsumerDescription();
 }
 
-void TTopicSdkTestSetup::Write(const std::string& message) {
+void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId) {
     TTopicClient client(MakeDriver());
 
     TWriteSessionSettings settings;
     settings.Path(TEST_TOPIC);
-    settings.PartitionId(0);
+    settings.PartitionId(partitionId);
     settings.DeduplicationEnabled(false);
     auto session = client.CreateSimpleBlockingWriteSession(settings);
 

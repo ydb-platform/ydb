@@ -32,6 +32,7 @@ struct TPqClusterConfigurationSettings {
     bool SharedReading = false;
     TString ReconnectPeriod;
     TString ReadGroup;
+    bool UseIncompleteMetrics = false;
 };
 
 struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher {

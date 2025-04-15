@@ -627,6 +627,9 @@ void TRowDispatcher::UpdateMetrics() {
 }
 
 void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
+    if (Config.GetUseIncompleteMetrics()) {
+        return;
+    }
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);
     auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(queryKey.ReadGroup));
     topicGroup->GetCounter("MaxQueuedBytes")->Set(queuedBytesMax);

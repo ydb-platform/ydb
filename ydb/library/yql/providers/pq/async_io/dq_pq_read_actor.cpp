@@ -122,11 +122,11 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool useIncompleteMetrics)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             SubGroup = Counters->GetSubgroup("source", "PqRead");
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            auto source = SubGroup->GetSubgroup("tx_id", !useIncompleteMetrics ? TxId : "streaming");
             auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
@@ -187,7 +187,7 @@ public:
         const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters)
+        , Metrics(txId, taskId, counters, SourceParams.GetUseIncompleteMetrics())
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -886,9 +886,9 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool pqUseIncompleteMetrics) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, pqUseIncompleteMetrics](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -896,6 +896,10 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
 
         if (reconnectPeriod) {
             settings.SetReconnectPeriod(reconnectPeriod);
+        }
+
+        if (pqUseIncompleteMetrics) {
+            settings.SetUseIncompleteMetrics(true);
         }
 
         if (!settings.GetSharedReading()) {

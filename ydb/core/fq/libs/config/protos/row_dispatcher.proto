@@ -38,4 +38,5 @@ message TRowDispatcherConfig {
     TJsonParserConfig JsonParser = 7;
     TCompileServiceConfig CompileService = 8;
     TRowDispatcherCoordinatorConfig Coordinator = 6;
+    bool UseIncompleteMetrics = 9;
 }

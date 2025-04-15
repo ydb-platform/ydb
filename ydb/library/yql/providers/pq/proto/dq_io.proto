@@ -50,6 +50,7 @@ message TDqPqTopicSource {
     string Format = 19;
     string RowType = 20; // Final row type with metadata columns
     repeated TDqPqFederatedCluster FederatedClusters = 21;
+    bool UseIncompleteMetrics = 22;
 }
 
 message TDqPqTopicSink {

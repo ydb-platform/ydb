@@ -18,5 +18,6 @@ constexpr TStringBuf WatermarksLateArrivalDelayUsSetting = "WatermarksLateArriva
 constexpr TStringBuf WatermarksIdlePartitionsSetting = "WatermarksIdlePartitions";
 constexpr TStringBuf ReconnectPeriod = "ReconnectPeriod";
 constexpr TStringBuf ReadGroup = "ReadGroup";
+constexpr TStringBuf UseIncompleteMetrics = "UseIncompleteMetrics";
 
 } // namespace NYql

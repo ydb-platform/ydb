@@ -31,6 +31,8 @@ class TestCompatibility(object):
         output_path = yatest.common.test_output_path()
         cls.output_f = open(os.path.join(output_path, "out.log"), "w")
 
+        cls.s3_config = cls.setup_s3()
+
     @classmethod
     def teardown_class(cls):
         if hasattr(cls, 'driver'):
@@ -38,6 +40,21 @@ class TestCompatibility(object):
 
         if hasattr(cls, 'cluster'):
             cls.cluster.stop(kill=True)  # TODO fix
+    
+    @staticmethod
+    def setup_s3():
+        s3_endpoint = os.getenv("S3_ENDPOINT")
+        s3_access_key = "minio"
+        s3_secret_key = "minio123"
+        s3_bucket = "export_test_bucket"
+
+        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+
+        bucket = resource.Bucket(s3_bucket)
+        bucket.create()
+        bucket.objects.all().delete()
+
+        return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
 
     def test_simple(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
@@ -83,17 +100,7 @@ class TestCompatibility(object):
                 assert result[0] == upsert_count * iteration_count
     
     def test_export(self):
-        s3_endpoint = os.getenv("S3_ENDPOINT")
-        s3_access_key = "minio"
-        s3_secret_key = "minio123"
-        s3_bucket = "export_test_bucket"
-        print("S3_ENDPOINT ", os.getenv("S3_ENDPOINT"))
-
-        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
-
-        bucket = resource.Bucket(s3_bucket)
-        bucket.create()
-        bucket.objects.all().delete()
+        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.execute_scheme(

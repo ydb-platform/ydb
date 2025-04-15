@@ -648,8 +648,14 @@ auth_config:
 | `min_upper_case_count` | Minimal cont of letters in upper case | 0 |
 | `min_numbers_count` | Minimal count of number in the password | 0 |
 | `min_special_chars_count` | Minimal count of special chars in the password from list `special_chars`| 0 |
-| `special_chars` | Special characters which can be used in the password. Allow use chars from list `!@#$%^&*()_+{}\|<>?=` only | Empty list. Equivalent to all allowed characters: `!@#$%^&*()_+{}\|<>?=` |
+| `special_chars` | Special characters which can be used in the password. Allow use chars from list `!@#$%^&*()_+{}\|<>?=` only. Value (`""`) is equivalent to list `!@#$%^&*()_+{}\|<>?=` | Empty list. Equivalent to all allowed characters: `!@#$%^&*()_+{}\|<>?=` |
 | `can_contain_username` | Allow use username in the password | `false` |
+
+{% note info %}
+
+Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+
+{% endnote %}
 
 ### Account lockout after unsuccessful password attempts {#account-lockout}
 

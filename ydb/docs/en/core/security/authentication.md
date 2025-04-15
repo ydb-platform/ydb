@@ -50,7 +50,7 @@ To learn how to manage roles and users, see [{#T}](../security/authorization.md)
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }} has the ability to impose various requirements on password complexity. If a password provided through the `CREATE USER` or `ALTER USER` commands does not meet the complexity criteria the execution of the commands will end with an error. By default, there are no restrictions on the password. A password of any length is accepted, including an empty string; the password can contain any number of digits and letters in various cases, as well as special characters from the list `!@#$%^&*()_+{}|<>?=`. To impose restrictions on password complexity, the password_complexity section in the [configuration](../reference/configuration/index.md#password-complexity) should be filled out.
+{{ ydb-short-name }} allows for additional configuration of user password policies. Passwords specified in commands such as CREATE USER and ALTER USER must comply with the current password policy. By default, the following restrictions apply to passwords: passwords of any length are accepted, including empty strings; passwords can contain any number of digits, letters in various cases, and special characters from the list `!@#$%^&*()_+{}|<>?=`. To impose restrictions on password complexity, you need to configure the password_complexity section in the [configuration](../reference/configuration/index.md#password-complexity).
 
 ### Protection against password brute force
 

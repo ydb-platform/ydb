@@ -401,7 +401,7 @@ namespace NYql::NDq {
                 Generic::TPartition partition;
                 YQL_ENSURE(
                     partition.ParseFromString(readRange), 
-                    "Failed to parse partition from read ranges" << partition.InitializationErrorString()
+                    "Failed to parse partition from read ranges: " << partition.InitializationErrorString()
                 );
                 partitions.emplace_back(std::move(partition));
             }
@@ -412,7 +412,7 @@ namespace NYql::NDq {
                 TStringInput input(iter->first);
                 YQL_ENSURE(
                     partition.ParseFromString(iter->second), 
-                    "Failed to parse partition from task params" << partition.InitializationErrorString()
+                    "Failed to parse partition from task params: " << partition.InitializationErrorString()
                 );
                 partitions.emplace_back(std::move(partition));
             }

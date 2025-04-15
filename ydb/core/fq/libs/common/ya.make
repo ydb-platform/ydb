@@ -9,11 +9,11 @@ SRCS(
     debug_info.cpp
     entity_id.cpp
     entity_id.h
-    util.cpp
-    rows_proto_splitter.cpp
-    rows_proto_splitter.h
     iceberg_processor.cpp
     iceberg_processor.h
+    rows_proto_splitter.cpp
+    rows_proto_splitter.h
+    util.cpp
 )
 
 PEERDIR(

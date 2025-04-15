@@ -9,46 +9,61 @@
 
 namespace NFq {
 
+constexpr char VALUE_DEFAULT_REGION[] = "ru-central1";
+
+TString RemoveTrailingSlashes(const TString& str) {
+    if (str.empty()) {
+        return "";
+    }
+
+    const auto first = str.find_first_not_of('/');
+
+    if (TString::npos == first) {
+        return "";
+    }
+
+    const auto last = str.find_last_not_of('/');
+    return str.substr(first, last - first + 1);
+}
+
 TIcebergProcessor::TIcebergProcessor(const FederatedQuery::Iceberg& config, NYql::TIssues& issues)
     : Config_(config)
     , Issues_(&issues)
-{
-}
+{ }
 
-TIcebergProcessor::TIcebergProcessor(const FederatedQuery::Iceberg& config) 
+TIcebergProcessor::TIcebergProcessor(const FederatedQuery::Iceberg& config)
     : Config_(config)
     , Issues_(nullptr)
-{
-}
+{ }
 
 void TIcebergProcessor::TIcebergProcessor::Process() {
     if (!Config_.has_warehouse_auth()
         || Config_.warehouse_auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-        RiseError("warehouse.auth","is not specified");
+        DoOnPropertyRequiredError("warehouse.auth");
     }
 
     ProcessSkipAuth();
 }
 
 void TIcebergProcessor::ProcessSkipAuth() {
-    if (!Config_.database_name()) {
-        RiseError("database","is not specified");
-    }
-
     if (!Config_.has_warehouse()) {
-        RiseError("warehouse","is not specified");
+        DoOnPropertyRequiredError("warehouse");
     } else {
         ProcessWarehouse(Config_.warehouse());
     }
 
     if (!Config_.has_catalog()) {
-        RiseError("catalog","is not specified");
+        DoOnPropertyRequiredError("catalog");
     } else {
         ProcessCatalog(Config_.catalog());
     }
 }
 
-void TIcebergProcessor::RiseError(const TString& property, const TString& msg) {
+void TIcebergProcessor::DoOnPropertyRequiredError(const TString& property) {
+    DoOnError(property, "has to be set");
+}
+
+void TIcebergProcessor::DoOnError(const TString& property, const TString& msg) {
     if (!Issues_) {
         throw yexception() << property << ": " << msg;
     }
@@ -61,43 +76,54 @@ void TIcebergProcessor::RiseError(const TString& property, const TString& msg) {
     Issues_->AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, m));
 }
 
-void TIcebergProcessor::ProcessWarehouse(const FederatedQuery::TIcebergWarehouse& warehouse) {
+void TIcebergProcessor::ProcessWarehouse(const FederatedQuery::IcebergWarehouse& warehouse) {
     if (warehouse.has_s3()) {
-        ProcessWarehouseS3();
+        ProcessWarehouseS3(warehouse.s3());
     } else {
-        RiseError("warehouse.type", "is not specified");
+        DoOnPropertyRequiredError("warehouse.type");
     }
 }
 
-void TIcebergProcessor::ProcessWarehouseS3() {
-    const auto& warehouse = Config_.warehouse();
+void TIcebergProcessor::ProcessWarehouseS3(const FederatedQuery::IcebergWarehouse_S3& s3) {
+    TString bucket;
 
-    if (!warehouse.s3().has_endpoint()) {
-        RiseError("warehouse.s3.endpoint","is required");
-    }
-
-    if (!warehouse.s3().has_uri()) {
-        RiseError("warehouse.s3.uri","is required");
-    }
-
-    if (!warehouse.s3().has_region()) {
-        RiseError("warehouse.s3.region","is required");
+    if (!s3.has_bucket()
+        || (bucket = RemoveTrailingSlashes(s3.bucket())).empty()) {
+        DoOnPropertyRequiredError("warehouse.s3.bucket");
     }
 
     if (OnS3Callback_ && !HasErrors()) {
-        OnS3Callback_(warehouse.s3());
+        auto uri = TStringBuilder() << bucket;
+        auto path = RemoveTrailingSlashes(s3.path());
+
+        if (!path.empty()) {
+            uri << "/" << path;
+        }
+
+        OnS3Callback_(s3, uri);
     }
 }
 
-void TIcebergProcessor::ProcessCatalogHadoop(const FederatedQuery::TIcebergCatalog_THadoop& hadoop) {
+void TIcebergProcessor::ProcessCatalogHadoop(const FederatedQuery::IcebergCatalog_Hadoop& hadoop) {
+    if (!hadoop.has_directory()
+        || hadoop.directory().empty()) {
+        DoOnPropertyRequiredError("hadoop.directory");
+    }
+
     if (OnHadoopCallback_ && !HasErrors()) {
         OnHadoopCallback_(hadoop);
     }
 }
 
-void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::TIcebergCatalog_THive& hive) {
-    if (!hive.has_uri()) {
-        RiseError("hive.uri", "is not specified");
+void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::IcebergCatalog_HiveMetastore& hive) {
+    if (!hive.has_uri()
+        || hive.uri().empty()) {
+        DoOnPropertyRequiredError("hive_metastore.uri");
+    }
+
+    if (!hive.has_database_name()
+        || hive.database_name().empty()) {
+        DoOnPropertyRequiredError("hive_metastore.database");
     }
 
     if (OnHiveCallback_ && !HasErrors()) {
@@ -105,17 +131,17 @@ void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::TIcebergCatalog
     }
 }
 
-void TIcebergProcessor::ProcessCatalog(const FederatedQuery::TIcebergCatalog& catalog) {
+void TIcebergProcessor::ProcessCatalog(const FederatedQuery::IcebergCatalog& catalog) {
     if (catalog.has_hive()) {
         ProcessCatalogHive(catalog.hive());
     } else if (catalog.has_hadoop()) {
         ProcessCatalogHadoop(catalog.hadoop());
     } else {
-        RiseError("catalog.type", "is not specified");
+        DoOnPropertyRequiredError("catalog.type");
     }
 }
 
-TString MakeIcebergCreateExternalDataSourceProperties(const FederatedQuery::Iceberg& config, bool useTls) {
+TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConfig& yqConfig, const FederatedQuery::Iceberg& config) {
     using namespace fmt::literals;
     using namespace NKikimr::NExternalSource::NIceberg;
 
@@ -124,7 +150,7 @@ TString MakeIcebergCreateExternalDataSourceProperties(const FederatedQuery::Iceb
     // warehouse configuration
     TString warehouseSection;
 
-    processor.SetDoOnWarehouseS3([&warehouseSection](const FederatedQuery::TIcebergWarehouse_TS3& s3)-> void {
+    processor.SetDoOnWarehouseS3([&warehouseSection, &yqConfig](const FederatedQuery::IcebergWarehouse_S3&, const TString& uri)-> void {
         warehouseSection = fmt::format(
             R"(
                 {warehouse_type}={warehouse_type_value},
@@ -132,40 +158,44 @@ TString MakeIcebergCreateExternalDataSourceProperties(const FederatedQuery::Iceb
                 {warehouse_s3_endpoint}={warehouse_s3_endpoint_value},
                 {warehouse_s3_uri}={warehouse_s3_uri_value}
             )",
-            "warehouse_type"_a              = to_upper(TString{WAREHOUSE_TYPE}),
+            "warehouse_type"_a              = WAREHOUSE_TYPE,
             "warehouse_type_value"_a        = EncloseAndEscapeString(VALUE_S3, '"'),
-            "warehouse_s3_region"_a         = to_upper(TString{WAREHOUSE_S3_REGION}),
-            "warehouse_s3_region_value"_a   = EncloseAndEscapeString(s3.region(), '"'),
-            "warehouse_s3_endpoint"_a       = to_upper(TString{WAREHOUSE_S3_ENDPOINT}),
-            "warehouse_s3_endpoint_value"_a = EncloseAndEscapeString(s3.endpoint(), '"'),
-            "warehouse_s3_uri"_a            = to_upper(TString{WAREHOUSE_S3_URI}),
-            "warehouse_s3_uri_value"_a      = EncloseAndEscapeString(s3.uri(), '"')
+            "warehouse_s3_region"_a         = WAREHOUSE_S3_REGION,
+            "warehouse_s3_region_value"_a   = EncloseAndEscapeString(VALUE_DEFAULT_REGION, '"'),
+            "warehouse_s3_endpoint"_a       = WAREHOUSE_S3_ENDPOINT,
+            "warehouse_s3_endpoint_value"_a = EncloseAndEscapeString(yqConfig.GetObjectStorageEndpoint(), '"'),
+            "warehouse_s3_uri"_a            = WAREHOUSE_S3_URI,
+            "warehouse_s3_uri_value"_a      = EncloseAndEscapeString(uri, '"')
         );
     });
 
     // catalog configuration
     TString catalogSection;
 
-    processor.SetDoOnCatalogHive([&catalogSection](const FederatedQuery::TIcebergCatalog_THive& hive) -> void {
+    processor.SetDoOnCatalogHive([&catalogSection](const FederatedQuery::IcebergCatalog_HiveMetastore& hive) -> void {
         catalogSection = fmt::format(
             R"(
                 {catalog_type}={catalog_type_value},
-                {catalog_hive_uri}={catalog_hive_uri_value}
+                {catalog_hive_uri}={catalog_hive_uri_value},
+                database_name={database_name}
             )",
-            "catalog_type"_a            = to_upper(TString{CATALOG_TYPE}),
+            "catalog_type"_a            = CATALOG_TYPE,
             "catalog_type_value"_a      = EncloseAndEscapeString(TString{VALUE_HIVE}, '"'),
-            "catalog_hive_uri"_a        = to_upper(TString{CATALOG_HIVE_URI}),
-            "catalog_hive_uri_value"_a  = EncloseAndEscapeString(hive.uri(), '"')
+            "catalog_hive_uri"_a        = CATALOG_HIVE_URI,
+            "catalog_hive_uri_value"_a  = EncloseAndEscapeString(hive.uri(), '"'),
+            "database_name"_a           = EncloseAndEscapeString(hive.database_name(), '"')
         );
     });
 
-    processor.SetDoOnCatalogHadoop([&catalogSection](const FederatedQuery::TIcebergCatalog_THadoop&) -> void {
+    processor.SetDoOnCatalogHadoop([&catalogSection](const FederatedQuery::IcebergCatalog_Hadoop& hadoop) -> void {
         catalogSection = fmt::format(
             R"(
-                {catalog_type}={catalog_type_value}
+                {catalog_type}={catalog_type_value},
+                database_name={database_name}
             )",
-            "catalog_type"_a            = to_upper(TString{CATALOG_TYPE}),
-            "catalog_type_value"_a      = EncloseAndEscapeString(VALUE_HADOOP, '"')
+            "catalog_type"_a            = CATALOG_TYPE,
+            "catalog_type_value"_a      = EncloseAndEscapeString(VALUE_HADOOP, '"'),
+            "database_name"_a           = EncloseAndEscapeString(hadoop.directory(), '"')
         );
     });
 
@@ -174,15 +204,13 @@ TString MakeIcebergCreateExternalDataSourceProperties(const FederatedQuery::Iceb
     // common configuration for all warehouses and catalogs  
     TString commonSection = fmt::format(
         R"(
-            SOURCE_TYPE="Iceberg",
-            DATABASE_NAME={database_name},
-            USE_TLS="{use_tls}"
+            source_type="Iceberg",
+            use_tls="{use_tls}"
         )",
-        "database_name"_a = EncloseAndEscapeString(config.database_name(), '"'),
-        "use_tls"_a = useTls ? "true" : "false"
+        "use_tls"_a = !yqConfig.GetDisableSslForGenericDataSources() ? "true" : "false"
     );
 
-    // merge config 
+    // merge config
     auto r = fmt::format(
         R"(
             {common_section},
@@ -197,7 +225,7 @@ TString MakeIcebergCreateExternalDataSourceProperties(const FederatedQuery::Iceb
     return r;
 }
 
-void FillIcebergGenericClusterConfig(const FederatedQuery::Iceberg& config, ::NYql::TGenericClusterConfig& cluster) {
+void FillIcebergGenericClusterConfig(const NConfig::TCommonConfig& yqConfig, const FederatedQuery::Iceberg& config, ::NYql::TGenericClusterConfig& cluster) {
     using namespace NKikimr::NExternalSource::NIceberg;
 
     TIcebergProcessor processor(config);
@@ -205,24 +233,27 @@ void FillIcebergGenericClusterConfig(const FederatedQuery::Iceberg& config, ::NY
 
     auto& options = *cluster.MutableDataSourceOptions();
 
-    processor.SetDoOnWarehouseS3([&options](const FederatedQuery::TIcebergWarehouse_TS3& s3) -> void{
+    processor.SetDoOnWarehouseS3([&options, &yqConfig](const FederatedQuery::IcebergWarehouse_S3&, const TString& uri) -> void {
         options[WAREHOUSE_TYPE]         = VALUE_S3;
-        options[WAREHOUSE_S3_ENDPOINT]  = s3.endpoint();
-        options[WAREHOUSE_S3_REGION]    = s3.region();
-        options[WAREHOUSE_S3_URI]       = s3.uri();
+        options[WAREHOUSE_S3_ENDPOINT]  = yqConfig.GetObjectStorageEndpoint();
+        options[WAREHOUSE_S3_REGION]    = VALUE_DEFAULT_REGION;
+        options[WAREHOUSE_S3_URI]       = uri;
     });
 
-    processor.SetDoOnCatalogHive([&options](const FederatedQuery::TIcebergCatalog_THive& hive) -> void{
+    processor.SetDoOnCatalogHive([&options, &cluster](const FederatedQuery::IcebergCatalog_HiveMetastore& hive) -> void {
         options[CATALOG_TYPE]           = VALUE_HIVE;
         options[CATALOG_HIVE_URI]       = hive.uri();
+
+        cluster.SetDatabaseName(hive.database_name());
     });
 
-    processor.SetDoOnCatalogHadoop([&options](const FederatedQuery::TIcebergCatalog_THadoop&) -> void{
+    processor.SetDoOnCatalogHadoop([&options, &cluster](const FederatedQuery::IcebergCatalog_Hadoop& hadoop) -> void {
         options[CATALOG_TYPE] = VALUE_HADOOP;
+
+        cluster.SetDatabaseName(hadoop.directory());
     });
 
     processor.ProcessSkipAuth();
-    cluster.SetDatabaseName(config.database_name());
 }
 
 } // NFq

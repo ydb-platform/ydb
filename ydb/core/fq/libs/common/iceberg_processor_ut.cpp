@@ -9,23 +9,16 @@ namespace NFq {
 namespace {
 
 struct TClusterConfigBuilder {
-    TString DatabaseName;
     TString Token;
-    TString S3Endpoint;
-    TString S3Uri;
-    TString S3Region;
+    TString S3Path;
+    TString S3Bucket;
     TString HiveUri;
-    TString Hadoop;
-
-    TClusterConfigBuilder& FillDb() {
-        DatabaseName = "db";
-        return *this;
-    }
+    TString HiveDb;
+    TString HadoopDir;
 
     TClusterConfigBuilder& FillWarehouseWithS3() {
-        S3Endpoint = "endpoint";
-        S3Uri = "uri";
-        S3Region = "region";
+        S3Bucket = "//bucket//";
+        S3Path = "//path//";
         return *this;
     }
 
@@ -35,21 +28,18 @@ struct TClusterConfigBuilder {
     }
 
     TClusterConfigBuilder& FillHadoopCatalog() {
-        Hadoop = "hadoop";
+        HadoopDir = "hadoop_dir";
         return *this;
     }
 
     TClusterConfigBuilder& FillHiveCatalog() {
         HiveUri = "hive_uri";
+        HiveDb = "hive_db";
         return *this;
     }
 
     FederatedQuery::Iceberg Build() {
         FederatedQuery::Iceberg cluster;
-
-        if (!DatabaseName.empty()) {
-            cluster.set_database_name(DatabaseName);
-        }
 
         if (!Token.empty()) {
             cluster.mutable_warehouse_auth()
@@ -57,27 +47,22 @@ struct TClusterConfigBuilder {
                 ->set_token(Token);
         }
 
-        if (!S3Endpoint.empty()) {
+        if (!S3Path.empty()) {
             cluster.mutable_warehouse()
                 ->mutable_s3()
-                ->set_endpoint(S3Endpoint);
+                ->set_path(S3Path);
         }
 
-        if (!S3Uri.empty()) {
+        if (!S3Bucket.empty()) {
             cluster.mutable_warehouse()
                 ->mutable_s3()
-                ->set_uri(S3Uri);
+                ->set_bucket(S3Bucket);
         }
 
-        if (!S3Region.empty()) {
-            cluster.mutable_warehouse()
-                ->mutable_s3()
-                ->set_region(S3Region);
-        }
-
-        if (!Hadoop.empty()) {
+        if (!HadoopDir.empty()) {
             cluster.mutable_catalog()
-                ->mutable_hadoop();
+                ->mutable_hadoop()
+                ->set_directory(HadoopDir);
         }
 
         if (!HiveUri.empty()) {
@@ -86,9 +71,49 @@ struct TClusterConfigBuilder {
                 ->set_uri(HiveUri);
         }
 
+        if (!HiveDb.empty()) {
+            cluster.mutable_catalog()
+                ->mutable_hive()
+                ->set_database_name(HiveDb);
+        }
+
         return cluster;
     }
 
+    TClusterConfigBuilder clone() {
+        TClusterConfigBuilder bld(*this);
+        return bld;
+    }
+
+    TClusterConfigBuilder& SetToken(const TString& token) {
+        Token = token;
+        return *this;
+    }
+
+    TClusterConfigBuilder& SetS3Bucket(const TString& bucket) {
+        S3Bucket = bucket;
+        return *this;
+    }
+
+    TClusterConfigBuilder& SetS3Path(const TString& path) {
+        S3Path = path;
+        return *this;
+    }
+
+    TClusterConfigBuilder& SetHiveUri(const TString& uri) {
+        HiveUri = uri;
+        return *this;
+    }
+
+    TClusterConfigBuilder& SetHiveDb(const TString& db) {
+        HiveDb = db;
+        return *this;
+    }
+
+    TClusterConfigBuilder& SetHadoopDir(const TString& dir) {
+        HadoopDir = dir;
+        return *this;
+    }
 };
 
 std::vector<TString> GetErrorsFromIssues(const NYql::TIssues& issues) {
@@ -111,40 +136,46 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
     // Test ddl creation for a hadoop catalog with s3 warehouse
     Y_UNIT_TEST(ValidateDdlCreationForHadoopWithS3) {
         auto cluster = TClusterConfigBuilder()
-            .FillDb()
             .FillWarehouseWithS3()
             .FillAuthToken()
             .FillHadoopCatalog()
             .Build();
 
-        auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(cluster, false);
+        NConfig::TCommonConfig common;
+        common.SetDisableSslForGenericDataSources(true);
+        common.SetObjectStorageEndpoint("s3endpoint");
+
+        auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(common, cluster);
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
 
-        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "SOURCE_TYPE=\"Iceberg\",DATABASE_NAME=\"db\",USE_TLS=\"false\",WAREHOUSE_TYPE=\"s3\",WAREHOUSE_S3_REGION=\"region\",WAREHOUSE_S3_ENDPOINT=\"endpoint\",WAREHOUSE_S3_URI=\"uri\",CATALOG_TYPE=\"hadoop\"");
+        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"false\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"bucket/path\",catalog_type=\"hadoop\",database_name=\"hadoop_dir\"");
     }
 
     // Test ddl creation for a hive catalog with s3 warehouse
     Y_UNIT_TEST(ValidateDdlCreationForHiveWithS3) {
         auto cluster = TClusterConfigBuilder()
-            .FillDb()
-            .FillWarehouseWithS3()
+            .SetS3Bucket("s3a://iceberg-bucket/")
+            .SetS3Path("/storage/")
             .FillAuthToken()
             .FillHiveCatalog()
             .Build();
 
-        auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(cluster, true);
+        NConfig::TCommonConfig common;
+        common.SetDisableSslForGenericDataSources(false);
+        common.SetObjectStorageEndpoint("s3endpoint");
+
+        auto ddlProperties = MakeIcebergCreateExternalDataSourceProperties(common, cluster);
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
 
-        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "SOURCE_TYPE=\"Iceberg\",DATABASE_NAME=\"db\",USE_TLS=\"true\",WAREHOUSE_TYPE=\"s3\",WAREHOUSE_S3_REGION=\"region\",WAREHOUSE_S3_ENDPOINT=\"endpoint\",WAREHOUSE_S3_URI=\"uri\",CATALOG_TYPE=\"hive\",CATALOG_HIVE_URI=\"hive_uri\"");
+        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"true\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"s3a://iceberg-bucket/storage\",catalog_type=\"hive\",catalog_hive_uri=\"hive_uri\",database_name=\"hive_db\"");
     }
 
     // Test parsing for FederatedQuery::IcebergCluster without warehouse
     Y_UNIT_TEST(ValidateConfigurationWithoutWarehouse) {
         NYql::TIssues issues;
         auto cluster = TClusterConfigBuilder()
-            .FillDb()
             .FillAuthToken()
             .FillHiveCatalog()
             .Build();
@@ -161,7 +192,6 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
     Y_UNIT_TEST(ValidateConfigurationWithoutCatalog) {
         NYql::TIssues issues;
         auto cluster = TClusterConfigBuilder()
-            .FillDb()
             .FillWarehouseWithS3()
             .FillAuthToken()
             .Build();
@@ -181,50 +211,56 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
     // Unittest does not support it yet, switch to gtest ?
     // 
     Y_UNIT_TEST(ValidateRiseErrors) {
-        // initially fill all params in test cases then
-        // remove one by one value for params and expect error 
+        // initially fill all params, in test cases
+        // remove some params and expect error
         NFq::TClusterConfigBuilder params = {
-            .DatabaseName   = "db",
             .Token          = "token",
-            .S3Endpoint     = "endpoint",
-            .S3Uri          = "uri",
-            .S3Region       = "region",
-            .HiveUri        = "hive.uri",
-            .Hadoop         = "hadoop"
+            .S3Path         = "path",
+            .S3Bucket       = "bucket",
+            .HiveUri        = "hive_uri",
+            .HiveDb         = "hive_db",
+            .HadoopDir      = "hadoop_dir"
         };
 
         // Defines which errors to expect if param is not set
-        std::vector<std::pair<TString*, std::vector<TString>>> cases = {
-            {&params.DatabaseName, {"database"}},
-            {&params.Token, {"warehouse.auth"}},
-            {&params.S3Endpoint,{"s3.endpoint"}},
-            {&params.S3Uri, {"s3.uri"}},
-            {&params.S3Region, {"s3.region"}},
-            // if hive is not set, hadoop is set, so no errors
-            {&params.HiveUri, {}},
-            // if hadoop is not set, hive is set, so no errors
-            {&params.Hadoop, {}},
+        std::vector<std::pair<TClusterConfigBuilder, std::vector<TString>>> cases = {
+            // token is required expect error
+            {params.clone().SetToken(""), {"warehouse.auth"}},
+            // s3.path is non required
+            {params.clone().SetS3Path(""), {}},
+            // s3.bucket is required
+            {params.clone().SetS3Bucket(""), {"s3.bucket"}},
+            // s3.bucket is required, slashes has to be removed
+            {params.clone().SetS3Bucket("///"), {"s3.bucket"}},
+            // warehouse is required
+            {params.clone().SetS3Bucket("").SetS3Path(""), {"warehouse"}},
+            // hive.uri is required when hadoop is not set
+            {params.clone().SetHadoopDir("").SetHiveUri(""), {"hive_metastore.uri"}},
+            // hive.db is required when hadoop is not set
+            {params.clone().SetHadoopDir("").SetHiveDb(""), {"hive_metastore.database"}},
+            // catalog is required
+            {params.clone().SetHadoopDir("").SetHiveUri("").SetHiveDb(""), {"catalog"}},
+            // hadoop.dir is set, hive is empty, no errors
+            {params.clone().SetHiveUri("").SetHiveDb(""), {}}
         };
 
-        // Unset value and expect errors 
-        for (auto [propertyValue, waitErrors] : cases) {
-            auto oldValue = *propertyValue;
-            *propertyValue = "";
+        int count = 1;
 
+        // process params and expect errors
+        for (auto [params, waitErrors] : cases) {
             auto cluster = params.Build();
             NYql::TIssues issues;
-            TIcebergProcessor processor(cluster,issues);
+            TIcebergProcessor processor(cluster, issues);
 
             processor.Process();
             auto r = GetErrorsFromIssues(issues);
+            Cerr << "test case: " << count++ << "\n";
 
             UNIT_ASSERT_VALUES_EQUAL(r.size(), waitErrors.size());
 
             for (size_t i = 0; i < waitErrors.size(); ++i) {
                 UNIT_ASSERT_STRING_CONTAINS(r[i], waitErrors[i]);
             }
-
-            *propertyValue = oldValue;
         }
     }
 }

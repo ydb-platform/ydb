@@ -313,10 +313,8 @@ TString MakeCreateExternalDataSourceQuery(
         }
         break;
         case FederatedQuery::ConnectionSetting::kIceberg: {
-            auto useTls = common.GetDisableSslForGenericDataSources();
             auto settings = connectionContent.setting().iceberg();
-
-            properties = NFq::MakeIcebergCreateExternalDataSourceProperties(settings, useTls);
+            properties = NFq::MakeIcebergCreateExternalDataSourceProperties(common, settings);
             break;
         }
         case FederatedQuery::ConnectionSetting::kMysqlCluster: {

@@ -526,58 +526,58 @@ message Logging {
 }
 
 // TIcebergWarehouse represents settings specific to iceberg warehouse
-message TIcebergWarehouse {
+message IcebergWarehouse {
     // Iceberg data located in a S3 storage
-    message TS3 {
-        // Data location in a storage
-        // e.g., s3a://iceberg-bucket/storage
-        optional string uri = 1;
+    message S3 {
+        // Bucket in a storage
+        // e.g., s3a://iceberg-bucket
+        optional string bucket = 1 [(Ydb.length).le = 1024];
 
-        // Endpoint to access a storage
-        // e.g., https://storage.yandexcloud.net
-        optional string endpoint = 2;
-
-        // Region where a storage is located
-        // e.g., ru-central1
-        optional string region = 3;
+        // Path in a bucket
+         // e.g., /storage
+        optional string path = 2 [(Ydb.length).le = 1024];
     }
 
     oneof payload {
-        TS3 s3 = 1;
+        S3 s3 = 1;
     }
 }
 
 // TIcebergCatalog represents settings specific to iceberg catalog
-message TIcebergCatalog {
+message IcebergCatalog {
     // Hadoop Iceberg Catalog which is built on top of a storage
-    message THadoop {
+    message Hadoop {
+        // Directory where iceberg tables are located. In case of a S3 storage the location
+        // will be "S3.uri + S3.path + Hadoop.path", e.g., if "Hadoop.path" is equal "warehouse" then
+        // the final location will be "s3a://iceberg-bucket/storage/warehouse"
+        optional string directory = 1 [(Ydb.length).le = 1024];
     }
 
     // Hive Iceberg Catalog which is based on a Hive Metastore
-    message THive {
+    message HiveMetastore {
         // Location of a hive metastore
         // e.g., thrift://host:9083/
-        optional string uri = 1;
+        optional string uri = 1 [(Ydb.length).le = 1024];
+
+        // Hive metastore database which holds iceberg namespace
+        optional string database_name = 2 [(Ydb.length).le = 1024];
     }
 
     oneof payload {
-        THadoop hadoop = 1;
-        THive hive = 2;
+        Hadoop hadoop = 1;
+        HiveMetastore hive = 2;
     }
 }
 
 message Iceberg {
-    // namespace of a catalog
-    string database_name = 1 [(Ydb.length).le = 1024];
-
     // credentials to access a warehouse
     IamAuth warehouse_auth = 2;
 
     // warehouse config
-    TIcebergWarehouse warehouse = 3;
+    IcebergWarehouse warehouse = 3;
 
     // catalog config
-    TIcebergCatalog catalog = 4;
+    IcebergCatalog catalog = 4;
 }
 
 message ConnectionSetting {

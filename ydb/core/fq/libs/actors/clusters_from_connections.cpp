@@ -351,7 +351,7 @@ void AddClustersFromConnections(
             auto& clusterConfig = *gatewaysConfig.MutableGeneric()->AddClusterMapping();
 
             clusterConfig.SetName(connectionName);
-            NFq::FillIcebergGenericClusterConfig(db, clusterConfig);
+            NFq::FillIcebergGenericClusterConfig(common, db, clusterConfig);
             FillClusterAuth(clusterConfig, db.warehouse_auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;

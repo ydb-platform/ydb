@@ -219,10 +219,16 @@ namespace NKikimr::NStorage {
         } else if (!targetDedicatedStorageSection) {
             ProposedStorageConfig.ClearCompressedStorageYaml();
         }
-
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig);
-        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
+            if (request.GetDryRun()) {
+                if (!CheckConfigUpdate(ProposedStorageConfig)) {
+                    return;
+                }
+                return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
+            } else {
+                StartProposition(&ProposedStorageConfig);
+            }
+        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields(), request.GetBypassMetadataChecks())) {
             FinishWithError(TResult::ERROR, "console pipe is not available");
         }
     }
@@ -328,6 +334,7 @@ namespace NKikimr::NStorage {
         }
 
         record.SetDedicatedConfigMode(replaceStorageConfig.GetDedicatedStorageSectionConfigMode());
+        record.SetDryRun(replaceStorageConfig.GetDryRun());
 
         // fill in operation and operation-dependent fields
         switch (ControllerOp) {
@@ -437,6 +444,13 @@ namespace NKikimr::NStorage {
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid:
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
+                }
+                const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
+                if (replaceConfig.GetDryRun()) {
+                    if (!CheckConfigUpdate(ProposedStorageConfig)) {
+                        return;
+                    }
+                    return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
                 }
                 return StartProposition(&ProposedStorageConfig);
         }

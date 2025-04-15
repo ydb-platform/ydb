@@ -1907,11 +1907,13 @@ public:
 
     TSession GetSession() const;
     void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
     TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
 
     class TImpl;
 

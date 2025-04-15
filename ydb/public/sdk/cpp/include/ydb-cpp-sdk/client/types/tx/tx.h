@@ -6,7 +6,8 @@
 
 namespace NYdb::inline Dev {
 
-using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
+using TPrecommitTransactionCallback = std::function<TAsyncStatus()>;
+using TOnFailureTransactionCallback = std::function<NThreading::TFuture<void>()>;
 
 class TTransactionBase {
 public:
@@ -19,6 +20,7 @@ public:
     }
 
     virtual void AddPrecommitCallback(TPrecommitTransactionCallback cb) = 0;
+    virtual void AddOnFailureCallback(TOnFailureTransactionCallback cb) = 0;
 
     virtual ~TTransactionBase() = default;
 

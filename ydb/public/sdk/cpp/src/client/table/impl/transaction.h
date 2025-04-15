@@ -21,6 +21,8 @@ public:
     }
 
     TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
+
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
@@ -29,6 +31,7 @@ public:
     }
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb);
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb);
 
     TSession Session_;
     std::string TxId_;
@@ -36,6 +39,7 @@ public:
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
 };
 
 }

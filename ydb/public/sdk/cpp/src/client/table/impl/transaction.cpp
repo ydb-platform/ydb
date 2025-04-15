@@ -11,7 +11,7 @@ TTransaction::TImpl::TImpl(const TSession& session, const std::string& txId)
 
 TAsyncStatus TTransaction::TImpl::Precommit() const
 {
-    auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+    TStatus status(EStatus::SUCCESS, {});
 
     for (auto& callback : PrecommitCallbacks) {
         if (!callback) {
@@ -21,45 +21,61 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
         // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
         // Therefore, precommit operations are performed sequentially. Here we capture the closure to
         // trigger it later.
-        auto action = [callback = std::move(callback)](const TAsyncStatus& prev) {
-            if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
-                return prev;
-            }
+        if (!status.IsSuccess()) {
+            co_return status;
+        }
 
-            return callback();
-        };
-
-        result = result.Apply(action);
+        status = co_await callback();
     }
 
-    return result;
+    co_return status;
+}
+
+NThreading::TFuture<void> TTransaction::TImpl::ProcessFailure() const
+{
+    for (auto& callback : OnFailureCallbacks) {
+        if (!callback) {
+            continue;
+        }
+
+        // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
+        // Therefore, precommit operations are performed sequentially. Here we capture the closure to
+        // trigger it later.
+        co_await callback();
+    }
+
+    co_return;
 }
 
 TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSettings& settings)
 {
     ChangesAreAccepted = false;
 
-    auto result = Precommit();
+    auto precommitResult = co_await Precommit();
 
-    auto precommitsCompleted = [this, settings](const TAsyncStatus& result) mutable {
-        if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {
-            return NThreading::MakeFuture(TCommitTransactionResult(TStatus(status), std::nullopt));
-        }
+    if (!precommitResult.IsSuccess()) {
+        co_return TCommitTransactionResult(TStatus(precommitResult), std::nullopt);
+    }
 
-        PrecommitCallbacks.clear();
+    PrecommitCallbacks.clear();
 
-        return Session_.Client_->CommitTransaction(Session_,
-                                                   TxId_,
-                                                   settings);
-    };
+    auto commitResult = co_await Session_.Client_->CommitTransaction(Session_, TxId_, settings);
 
-    return result.Apply(precommitsCompleted);
+    if (!commitResult.IsSuccess()) {
+        co_await ProcessFailure();
+    }
+
+    co_return commitResult;
 }
 
 TAsyncStatus TTransaction::TImpl::Rollback(const TRollbackTxSettings& settings)
 {
     ChangesAreAccepted = false;
-    return Session_.Client_->RollbackTransaction(Session_, TxId_, settings);
+
+    auto rollbackResult = co_await Session_.Client_->RollbackTransaction(Session_, TxId_, settings);
+
+    co_await ProcessFailure();
+    co_return rollbackResult;
 }
 
 void TTransaction::TImpl::AddPrecommitCallback(TPrecommitTransactionCallback cb)
@@ -69,6 +85,15 @@ void TTransaction::TImpl::AddPrecommitCallback(TPrecommitTransactionCallback cb)
     }
 
     PrecommitCallbacks.push_back(std::move(cb));
+}
+
+void TTransaction::TImpl::AddOnFailureCallback(TOnFailureTransactionCallback cb)
+{
+    if (!ChangesAreAccepted) {
+        ythrow TContractViolation("Changes are no longer accepted");
+    }
+
+    OnFailureCallbacks.push_back(std::move(cb));
 }
 
 }

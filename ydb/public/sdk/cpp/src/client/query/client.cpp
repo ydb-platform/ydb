@@ -19,6 +19,8 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev::NQuery {
 
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
@@ -750,7 +752,7 @@ public:
     }
 
     TAsyncStatus Precommit() const {
-        auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+        TStatus status(EStatus::SUCCESS, {});
 
         for (auto& callback : PrecommitCallbacks) {
             if (!callback) {
@@ -760,43 +762,58 @@ public:
             // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
             // Therefore, precommit operations are performed sequentially. Here we capture the closure to
             // trigger it later.
-            auto action = [callback = std::move(callback)](const TAsyncStatus& prev) {
-                if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
-                    return prev;
-                }
-    
-                return callback();
-            };
+            if (!status.IsSuccess()) {
+                co_return status;
+            }
 
-            result = result.Apply(action);
+            status = co_await callback();
         }
 
-        return result;
+        co_return status;
+    }
+
+    NThreading::TFuture<void> ProcessFailure() const {
+        for (auto& callback : OnFailureCallbacks) {
+            if (!callback) {
+                continue;
+            }
+
+            // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
+            // Therefore, precommit operations are performed sequentially. Here we capture the closure to
+            // trigger it later.
+            co_await callback();
+        }
+
+        co_return;
     }
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings()) {
         ChangesAreAccepted = false;
 
-        auto result = Precommit();
+        auto precommitResult = co_await Precommit();
 
-        auto precommitsCompleted = [this, settings](const TAsyncStatus& result) mutable {
-            if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {
-                return NThreading::MakeFuture(TCommitTransactionResult(TStatus(status)));
-            }
+        if (!precommitResult.IsSuccess()) {
+            co_return TCommitTransactionResult(TStatus(precommitResult));
+        }
 
-            PrecommitCallbacks.clear();
+        PrecommitCallbacks.clear();
 
-            return Session_.Client_->CommitTransaction(TxId_,
-                                                       settings,
-                                                       Session_);
-        };
+        auto commitResult = co_await Session_.Client_->CommitTransaction(TxId_, settings, Session_);
 
-        return result.Apply(precommitsCompleted);
+        if (!commitResult.IsSuccess()) {
+            co_await ProcessFailure();
+        }
+
+        co_return commitResult;
     }
 
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings()) {
         ChangesAreAccepted = false;
-        return Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+
+        auto rollbackResult = co_await Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+
+        co_await ProcessFailure();
+        co_return rollbackResult;
     }
 
     TSession GetSession() const {
@@ -811,12 +828,21 @@ public:
         PrecommitCallbacks.push_back(std::move(cb));
     }
 
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+        if (!ChangesAreAccepted) {
+            ythrow TContractViolation("Changes are no longer accepted");
+        }
+
+        OnFailureCallbacks.push_back(std::move(cb));
+    }
+
     TSession Session_;
     std::string TxId_;
 
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
 };
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
@@ -834,6 +860,10 @@ TAsyncStatus TTransaction::Precommit() const {
     return TransactionImpl_->Precommit();
 }
 
+NThreading::TFuture<void> TTransaction::ProcessFailure() const {
+    return TransactionImpl_->ProcessFailure();
+}
+
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
     return TransactionImpl_->Commit(settings);
 }
@@ -848,6 +878,10 @@ TSession TTransaction::GetSession() const {
 
 void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb) {
     TransactionImpl_->AddPrecommitCallback(std::move(cb));
+}
+
+void TTransaction::AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+    TransactionImpl_->AddOnFailureCallback(std::move(cb));
 }
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)

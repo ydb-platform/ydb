@@ -13,6 +13,8 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev::NQuery {
 
 using namespace NThreading;
@@ -237,7 +239,7 @@ public:
         if (session.has_value()) {
             request.set_session_id(TStringType{session->GetId()});
         } else if ((std::holds_alternative<TTxSettings>(txControl.Tx_) && !txControl.CommitTx_) ||
-                    std::holds_alternative<TTransaction>(txControl.Tx_) && !txControl.CommitTx_ ||
+                    std::holds_alternative<TTransaction>(txControl.Tx_) ||
                     std::holds_alternative<std::string>(txControl.Tx_)) {
             throw TContractViolation("Interactive tx must use explisit session");
         }
@@ -305,42 +307,36 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
     const TDbDriverStatePtr& driverState, const std::string& query, const TTxControl& txControl,
     const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
-    auto promise = NewPromise<TExecuteQueryIterator>();
-
-    auto iteratorCallback = [promise, session](TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> future) mutable {
-        Y_ASSERT(future.HasValue());
-        auto pair = future.ExtractValue();
-        promise.SetValue(TExecuteQueryIterator(
-            pair.second
-                ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(pair.second, pair.first.Endpoint, session)
-                : nullptr,
-            std::move(pair.first))
-        );
-    };
-
-    auto paramsProto = params
-        ? &params->GetProtoMap()
-        : nullptr;
+    TPlainStatus plainStatus;
+    TExecuteQueryProcessorPtr processor;
+    std::optional<TSession> sessionCopy = session;
 
     if (auto* tx = std::get_if<TTransaction>(&txControl.Tx_); tx && txControl.CommitTx_) {
-        auto onPrecommitCompleted = [connections, driverState, session, query, txControl, paramsProto,
-                                     settings, iteratorCallback, promise](const NThreading::TFuture<TStatus>& f) mutable {
-            TStatus status = f.GetValueSync();
-            if (status.IsSuccess()) {
-                TExecQueryInternal::ExecuteQueryCommon(connections, driverState, query, txControl, paramsProto, settings, session)
-                    .Subscribe(iteratorCallback);
-            } else {
-                promise.SetValue(TExecuteQueryIterator(nullptr, std::move(status)));
-            }
-        };
+        auto precommitStatus = co_await tx->Precommit();
 
-        tx->Precommit().Subscribe(onPrecommitCompleted);
+        if (!precommitStatus.IsSuccess()) {
+            co_return TExecuteQueryIterator(nullptr, std::move(precommitStatus));
+        }
+
+        std::tie(plainStatus, processor) = co_await TExecQueryInternal::ExecuteQueryCommon(
+            connections, driverState, query, txControl, params ? &params->GetProtoMap() : nullptr, settings, sessionCopy);
+
+        if (!plainStatus.Ok()) {
+            co_await tx->ProcessFailure();
+
+            co_return TExecuteQueryIterator(nullptr, std::move(plainStatus));
+        }
     } else {
-        TExecQueryInternal::ExecuteQueryCommon(connections, driverState, query, txControl, paramsProto, settings, session)
-            .Subscribe(iteratorCallback);
+        std::tie(plainStatus, processor) = co_await AsExtractingAwaitable(TExecQueryInternal::ExecuteQueryCommon(
+            connections, driverState, query, txControl, params ? &params->GetProtoMap() : nullptr, settings, sessionCopy));
     }
 
-    return promise.GetFuture();
+    co_return TExecuteQueryIterator(
+        processor
+            ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(processor, plainStatus.Endpoint, sessionCopy)
+            : nullptr,
+        std::move(plainStatus)
+    );
 }
 
 TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,

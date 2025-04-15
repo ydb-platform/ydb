@@ -18,6 +18,8 @@
 #include "request_migrator.h"
 #include "readers.h"
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 
 namespace NYdb::inline Dev {
 namespace NTable {
@@ -179,24 +181,24 @@ private:
         const TExecDataQuerySettings& settings, bool fromCache
     ) {
         if (!txControl.Tx_.has_value() || !txControl.CommitTx_) {
-            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+            co_return co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
         }
 
-        auto onPrecommitCompleted = [this, session, query, txControl, params, settings, fromCache](const NThreading::TFuture<TStatus>& f) {
-            TStatus status = f.GetValueSync();
-            if (!status.IsSuccess()) {
-                return NThreading::MakeFuture(TDataQueryResult(std::move(status),
-                                                               {},
-                                                               txControl.Tx_,
-                                                               std::nullopt,
-                                                               false,
-                                                               std::nullopt));
-            }
+        auto status = co_await txControl.Tx_->Precommit();
 
-            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
-        };
+        if (!status.IsSuccess()) {
+            co_return TDataQueryResult(std::move(status), {}, txControl.Tx_, std::nullopt, false, std::nullopt);
+        }
 
-        return txControl.Tx_->Precommit().Apply(onPrecommitCompleted);
+        auto dataQueryResult = co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
+
+        if (!dataQueryResult.IsSuccess()) {
+            co_await txControl.Tx_->ProcessFailure();
+
+            co_return std::move(dataQueryResult);
+        }
+
+        co_return std::move(dataQueryResult);
     }
 
     template <typename TQueryType, typename TParamsType>

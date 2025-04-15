@@ -2272,6 +2272,134 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(CreateAsSelectTypes) {
+        const bool NotNull = false;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString createSource = std::format(R"(
+                CREATE TABLE `/Root/Source` (
+                    Key         Int8    NOT NULL,
+                    CBool       Bool         {0},
+                    CInt8       Int8         {0},
+                    CUint8      Uint8        {0},
+                    CInt16      Int16        {0},
+                    CUint16     Uint16       {0},
+                    CInt32      Int32        {0},
+                    CUint32     Uint32       {0},
+                    CInt64      Int64        {0},
+                    CUint64     Uint64       {0},
+                    CFloat      Float        {0},
+                    CDouble     Double       {0},
+                    CDate       Date         {0},
+                    CDatetime       Datetime     {0},
+                    CTimestamp      Timestamp    {0},
+                    CInterval       Interval     {0},
+                    CDate32     Date32       {0},
+                    CDatetime64     Datetime64   {0},
+                    CTimestamp64        Timestamp64  {0},
+                    CInterval64     Interval64   {0},
+                    --CTzDate     TzDate       {0},  -- can't be used for column
+                    --CTzDatetime     TzDatetime   {0}, -- can't be used for column
+                    --CTzTimestamp        TzTimestamp  {0}, -- can't be used for column
+                    CString     String       {0},
+                    CUtf8       Utf8         {0},
+                    CYson       Yson         {0},
+                    CJson       Json         {0},
+                    CUuid       Uuid         {0},
+                    CJsonDocument       JsonDocument {0},
+                    CDyNumber       DyNumber     {0},
+                    PRIMARY KEY (Key)
+                );
+            )", NotNull ? "NOT NULL" : "");
+
+            auto result = client.ExecuteQuery(createSource, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/Source` (
+                    Key,
+                    CBool,
+                    CInt8,
+                    CUint8,
+                    CInt16,
+                    CUint16,
+                    CInt32,
+                    CUint32,
+                    CInt64,
+                    CUint64,
+                    CFloat,
+                    CDouble,
+                    CDate,
+                    CDatetime,
+                    CTimestamp --,
+                    -- CInterval,
+                    --CDate32,
+                    --CDatetime64,
+                    --CTimestamp64,
+                    --CInterval64,
+                    --CString,
+                    --CUtf8,
+                    --CYson,
+                    --CJson,
+                    --CUuid,
+                    --CJsonDocument,
+                    --CDyNumber
+                )
+                VALUES (
+                    0,
+                    False,
+                    42,
+                    42,
+                    42,
+                    42,
+                    42,
+                    42,
+                    42,
+                    42,
+                    CAST(42.0 AS Float),
+                    42.0,
+                    Date("2025-01-01"),
+                    Datetime("2025-01-01T00:00:00Z"),
+                    Timestamp("2025-01-01T00:00:00Z")
+                );
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        /*{
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination1` (
+                    PRIMARY KEY (Col1)
+                )
+                AS SELECT Col2 As Col1, Col1 As Col2
+                FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT Col1, Col2 FROM `/Root/Destination1`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1];[1u]];[[10];[10u]];[[100];[100u]]])");
+        }*/
+    }
 }
 
 } // namespace NKqp

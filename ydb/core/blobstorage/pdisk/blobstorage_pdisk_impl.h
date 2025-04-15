@@ -393,7 +393,7 @@ public:
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();
     // Should be called to initiate TRIM (on chunk delete or prev trim done)
-    void TryTrimChunk(bool prevDone, ui64 trimmedSize, const NWilson::TSpan& parentSpan);
+    void TryTrimChunk(bool prevDone, ui64 trimmedSize);
     void ProcessFastOperationsQueue();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Drive info and write cache

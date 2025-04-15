@@ -310,7 +310,7 @@ TCompletionChunkRead::~TCompletionChunkRead() {
 }
 
 void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
-    auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkRead.Exec");
+    Read->Span.Event("PDisk.CompletionChunkRead.Exec"); // ???
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
     result->Data = std::move(CommonBuffer);
@@ -330,10 +330,9 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
 
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;
+    Read->Span.EndOk();
 
     PDisk->Mon.GetReadCounter(Read->PriorityClass)->CountResponse();
-    execSpan.EndOk();
-    Span.EndOk();
     delete this;
 }
 
@@ -352,6 +351,7 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     LOG_WARN_S(*actorSystem, NKikimrServices::BS_PDISK, error.Str());
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;
+    Read->Span.EndError(reason);
 }
 
 // Returns true if there is some pending requests to wait
@@ -398,9 +398,7 @@ void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
             << ui64(responseTimeMs) << " sizeBytes# " << SizeBytes);
     LWPROBE(PDiskTrimResponseTime, PDisk->PCtx->PDiskId, ReqId.Id, responseTimeMs, SizeBytes);
     PDisk->Mon.Trim.CountResponse();
-    NWilson::TSpan span(TWilson::PDiskBasic, std::move(TraceId), "PDisk.TryTrimChunk", NWilson::EFlags::AUTO_END, actorSystem);
-    span.Attribute("size", static_cast<i64>(SizeBytes));
-    TTryTrimChunk *tryTrim = PDisk->ReqCreator.CreateFromArgs<TTryTrimChunk>(SizeBytes, std::move(span));
+    TTryTrimChunk *tryTrim = PDisk->ReqCreator.CreateFromArgs<TTryTrimChunk>(SizeBytes);
     PDisk->InputRequest(tryTrim);
     delete this;
 }

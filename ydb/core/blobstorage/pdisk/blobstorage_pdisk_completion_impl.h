@@ -174,12 +174,11 @@ class TCompletionChunkRead : public TCompletionAction {
     TAtomic Deletes;
     std::function<void()> OnDestroy;
     ui64 ChunkNonce;
-    NWilson::TSpan Span;
 
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce, NWilson::TSpan&& span)
+            ui64 chunkNonce)
         : TCompletionAction()
         , PDisk(pDisk)
         , Read(read)
@@ -189,7 +188,6 @@ public:
         , Deletes(0)
         , OnDestroy(std::move(onDestroy))
         , ChunkNonce(chunkNonce)
-        , Span(std::move(span))
         , DoubleFreeCanary(ReferenceCanary)
     {}
 
@@ -223,7 +221,7 @@ public:
 
     void Release(TActorSystem *actorSystem) override {
         ReplyError(actorSystem, "TCompletionChunkRead is released");
-        Span.EndError("release");
+        Read->Span.EndError("TCompletionChunkRead is released");
     }
 };
 

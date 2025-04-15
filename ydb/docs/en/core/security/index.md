@@ -2,7 +2,7 @@
 
 This section of {{ ydb-short-name }} documentation covers security-related aspects of working with {{ ydb-short-name }}. It'll be useful for compliance purposes too.
 
-## {{ ydb-short-name }} security elements
+## {{ ydb-short-name }} security elements and concepts
 
 Security model in {{ ydb-short-name }} introduces the following concepts and elements:
 

@@ -23,13 +23,13 @@ Default value: `true`
 
 Valid values:
 
-- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple tenant databases.
+- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [tenant databases](../../concepts/glossary.md#tenant-database).
 
     In this scenario, users are added only to the [root database](../../concepts/glossary.md#root-database).
 
 - `false` — internal users can exist either in a {{ ydb-short-name }} cluster or in tenant databases. The scope of access rights for internal users in tenant databases is limited to the database, in which they are created.
 
-    In this scenario, users are added either to the [root database](../../concepts/glossary.md#root-database) or to tenant databases.
+    In this scenario, users are added either to the root database or to tenant databases.
 
 Default value: `true`
     ||

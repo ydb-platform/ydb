@@ -2273,8 +2273,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsSelectTypes) {
-        const bool NotNull = false;
+    Y_UNIT_TEST_TWIN(CreateAsSelectTypes, NotNull) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
@@ -2310,9 +2309,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     CDatetime64     Datetime64   {0},
                     CTimestamp64        Timestamp64  {0},
                     CInterval64     Interval64   {0},
-                    --CTzDate     TzDate       {0},  -- can't be used for column
-                    --CTzDatetime     TzDatetime   {0}, -- can't be used for column
-                    --CTzTimestamp        TzTimestamp  {0}, -- can't be used for column
                     CString     String       {0},
                     CUtf8       Utf8         {0},
                     CYson       Yson         {0},
@@ -2345,19 +2341,19 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     CDouble,
                     CDate,
                     CDatetime,
-                    CTimestamp --,
-                    -- CInterval,
-                    --CDate32,
-                    --CDatetime64,
-                    --CTimestamp64,
-                    --CInterval64,
-                    --CString,
-                    --CUtf8,
-                    --CYson,
-                    --CJson,
-                    --CUuid,
-                    --CJsonDocument,
-                    --CDyNumber
+                    CTimestamp,
+                    CInterval,
+                    CDate32,
+                    CDatetime64,
+                    CTimestamp64,
+                    CInterval64,
+                    CString,
+                    CUtf8,
+                    CYson,
+                    CJson,
+                    CUuid,
+                    CJsonDocument,
+                    CDyNumber
                 )
                 VALUES (
                     0,
@@ -2374,31 +2370,82 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     42.0,
                     Date("2025-01-01"),
                     Datetime("2025-01-01T00:00:00Z"),
-                    Timestamp("2025-01-01T00:00:00Z")
+                    Timestamp("2025-01-01T00:00:00Z"),
+                    Interval("P1DT2H3M4.567890S"),
+                    Date("2025-01-01"),
+                    Datetime("2025-01-01T00:00:00Z"),
+                    Timestamp("2025-01-01T00:00:00Z"),
+                    Interval("P1DT2H3M4.567890S"),
+                    String("test"),
+                    Utf8("test"),
+                    Yson("<a=1>[3;%false]"),
+                    Json(@@{"a":1,"b":null}@@),
+                    Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
+                    JsonDocument('{"a":1,"b":null}'),
+                    DyNumber("42")
                 );
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
-        /*{
+        {
             auto prepareResult = client.ExecuteQuery(R"(
-                CREATE TABLE `/Root/Destination1` (
-                    PRIMARY KEY (Col1)
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Key)
                 )
-                AS SELECT Col2 As Col1, Col1 As Col2
+                AS SELECT *
                 FROM `/Root/Source`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
-
+            
         {
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT Col1, Col2 FROM `/Root/Destination1`;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[[1];[1u]];[[10];[10u]];[[100];[100u]]])");
-        }*/
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto desc = session.DescribeTable("/Root/Destination").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto columns = desc.GetTableDescription().GetTableColumns();
+            UNIT_ASSERT(columns.size() == 27);
+            for (const auto& column : columns) {
+                if (column.Name == "Key") {
+                    continue;
+                }
+
+                UNIT_ASSERT(!column.NotNull);
+
+                static THashMap<TString, TString> nameToType = {
+                    {"CBool",           "Bool?"},
+                    {"CInt8",           "Int8?"},
+                    {"CUint8",          "Uint8?"},
+                    {"CInt16",          "Int16?"},
+                    {"CUint16",         "Uint16?"},
+                    {"CInt32",          "Int32?"},
+                    {"CUint32",         "Uint32?"},
+                    {"CInt64",          "Int64?"},
+                    {"CUint64",         "Uint64?"},
+                    {"CFloat",          "Float?"},
+                    {"CDouble",         "Double?"},
+                    {"CDate",           "Date?"},
+                    {"CDatetime",       "Datetime?"},
+                    {"CTimestamp",      "Timestamp?"},
+                    {"CInterval",       "Interval?"},
+                    {"CDate32",         "Date32?"},
+                    {"CDatetime64",     "Datetime64?"},
+                    {"CTimestamp64",    "Timestamp64?"},
+                    {"CInterval64",     "Interval64?"},
+                    {"CString",         "String?"},
+                    {"CUtf8",           "Utf8?"},
+                    {"CYson",           "Yson?"},
+                    {"CJson",           "Json?"},
+                    {"CUuid",           "Uuid?"},
+                    {"CJsonDocument",   "JsonDocument?"},
+                    {"CDyNumber",       "DyNumber?"},
+                };
+
+                UNIT_ASSERT_VALUES_EQUAL_C(nameToType.at(column.Name), column.Type.ToString(), column.Name);
+            }
+        }
     }
 }
 

@@ -96,7 +96,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        if (source->MutableStageData().GetTable()->HasColumn(IIndexInfo::GetColumnIdVerified(f->name())) {
+        if (source->MutableStageData().GetTable()->HasColumn(IIndexInfo::GetColumnIdVerified(f->name()))) {
             auto arr = source->MutableStageData().GetTable()->GetArrayVerified(IIndexInfo::GetColumnIdVerified(f->name()));
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "spec_column_exists")("column_name", f->name())(
                 "col", NArrow::DebugJson(arr, 2, 2).GetStringRobust());

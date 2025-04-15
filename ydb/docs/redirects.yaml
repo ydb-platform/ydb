@@ -3,10 +3,10 @@ common:
     to: /reference/ydb-cli/table-ttl-reset.md
   - from: changelog.md
     to: changelog-server.md
-  - from: /administration/getting_started.md
-    to: /getting_started.md
+  - from: /administration/quickstart.md
+    to: /quickstart.md
   - from: /getting_started/create_db.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /getting_started/auth.md
     to: /concepts/auth.md
   - from: /getting_started/cli.md
@@ -14,15 +14,15 @@ common:
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
   - from: /getting_started/self_hosted/ydb_docker.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /getting_started/self_hosted/ydb_local.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /getting_started/self_hosted/ydb_minikube.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /getting_started/index.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /getting_started/quickstart/index.md
-    to: /getting_started.md
+    to: /quickstart.md
   - from: /cluster/topology.md
     to: /concepts/topology.md
   - from: /getting_started/yql.md

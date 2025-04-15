@@ -1412,13 +1412,21 @@ void TestReadWithProgramNoProjection(const TestTableDescription& table = {}) {
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(programText);
         auto rb = reader.ReadAll();
-        if (i == 1) {
-            UNIT_ASSERT(!reader.IsError());
-            UNIT_ASSERT(reader.IsFinished());
-        } else {
+        switch(i) {
+            case 0:
             UNIT_ASSERT(reader.IsError());
-            UNIT_ASSERT(reader.IsFinished());
+            break;
+
+            case 1:
+            UNIT_ASSERT(!reader.IsError());
+            break;
+
+            case 2:
+            UNIT_ASSERT(reader.IsError());
+            UNIT_ASSERT(reader.GetErrors().back().Getmessage().Contains("program has no projections"));
+            break;
         }
+        UNIT_ASSERT(reader.IsFinished());
         ++i;
     }
 }

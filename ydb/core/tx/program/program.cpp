@@ -100,7 +100,6 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     using TId = NKikimrSSA::TProgram::TCommand;
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
-//    Cerr << program.DebugString() << Endl;
     NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
     bool hasProjection = false;
     for (auto& cmd : program.GetCommand()) {

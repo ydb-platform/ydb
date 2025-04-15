@@ -265,17 +265,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
-    auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
+    auto path = TPath::Init(buildInfo.TablePathId, ss)
+        .Dive(buildInfo.IndexName)
+        .Dive(buildInfo.KMeans.WriteTo(true));
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
-    modifyScheme.SetWorkingDir(path.PathString());
-    if (path.LockedBy()) {
+    modifyScheme.SetWorkingDir(path.Parent().PathString());
+    if (path.IsLocked()) {
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     }
 
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-    modifyScheme.MutableDrop()->SetName(buildInfo.KMeans.WriteTo(true));
+    modifyScheme.MutableDrop()->SetName(path->Name);
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
         "DropBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -474,9 +476,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCancelIndexBuild);
     modifyScheme.SetInternal(true);
-
     modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
-
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
     auto& indexBuild = *modifyScheme.MutableCancelIndexBuild();
@@ -1361,12 +1361,12 @@ public:
             auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
             table = Self->Tables.at(path->PathId);
 
-            if (!path.IsLocked()) {
-                // lock is needed to prevent its shards from beeing split
+            if (!path.IsLocked()) { // lock is needed to prevent its shards from beeing split
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::LockBuild);
                 Progress(buildInfo.Id);
                 return false;
             }
+            Y_ASSERT(path.LockedBy() == buildInfo.LockTxId);
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());

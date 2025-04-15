@@ -161,6 +161,54 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }
     }
+
+    Y_UNIT_TEST(CommitWithWrongSessionId) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+
+        setup.Write("message-1");
+        setup.Write("message-2");
+        setup.Write("message-3");
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 1, "wrong-read-session-id");
+            UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
+        }
+
+        {
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL(0, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
+        }
+    }
+
+    Y_UNIT_TEST(CommitToPastWithWrongSessionId) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+
+        setup.Write("message-1");
+        setup.Write("message-2");
+        setup.Write("message-3");
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 2);
+            UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
+        }
+
+        {
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL(2, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
+        }
+
+        {
+            auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 0, "wrong-read-session-id");
+            UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
+        }
+
+        {
+            auto desc = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+            UNIT_ASSERT_VALUES_EQUAL(2, desc.GetPartitions().at(0).GetPartitionConsumerStats()->GetCommittedOffset());
+        }
+    }
 }
 
 } // namespace NKikimr

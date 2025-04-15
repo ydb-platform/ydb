@@ -12,7 +12,7 @@
 namespace NKikimr {
 
     template <class TKey, class TMemRec>
-    struct TRecIndex : public TThrRefBase {
+    struct TRecIndexBase : public TThrRefBase {
 #pragma pack(push, 4)
         struct TRec {
             TKey Key;
@@ -37,6 +37,13 @@ namespace NKikimr {
             };
         };
 #pragma pack(pop)
+    };
+
+    template <class TKey, class TMemRec>
+    struct TRecIndex
+        : public TRecIndexBase<TKey, TMemRec>
+    {
+        typedef TRecIndexBase<TKey, TMemRec>::TRec TRec;
 
         TTrackableVector<TRec> LoadedIndex;
 
@@ -55,34 +62,9 @@ namespace NKikimr {
     };
 
     template <>
-    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob> : public TThrRefBase {
-
-    // TODO: remove
-#pragma pack(push, 4)
-        struct TRec {
-            TKeyLogoBlob Key;
-            TMemRecLogoBlob MemRec;
-
-            TRec() = default;
-
-            TRec(const TKeyLogoBlob &key)
-                : Key(key)
-                , MemRec()
-            {}
-
-            TRec(const TKeyLogoBlob &key, const TMemRecLogoBlob &memRec)
-                : Key(key)
-                , MemRec(memRec)
-            {}
-
-            struct TLess {
-                bool operator ()(const TRec &x, const TKeyLogoBlob &key) const {
-                    return x.Key < key;
-                }
-            };
-        };
-#pragma pack(pop)
-
+    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>
+        : public TRecIndexBase<TKeyLogoBlob, TMemRecLogoBlob>
+    {
 #pragma pack(push, 4)
         struct TLogoBlobIdHigh {
             union {
@@ -95,6 +77,10 @@ namespace NKikimr {
 
                 ui64 X[2];
             } Raw;
+
+            TLogoBlobIdHigh() {
+                Raw.X[0] = Raw.X[1] = 0;
+            }
 
             explicit TLogoBlobIdHigh(const TLogoBlobID& id) {
                 Raw.X[0] = id.GetRaw()[0];
@@ -167,6 +153,10 @@ namespace NKikimr {
             TLogoBlobIdHigh Key;
             ui32 LowRangeEndIndex;
 
+            TRecHigh(TLogoBlobIdHigh key)
+                : Key(key)
+            {}
+
             struct TLess {
                 bool operator ()(const TRecHigh& l, const TLogoBlobIdHigh& r) const {
                     return l.Key < r;
@@ -179,6 +169,11 @@ namespace NKikimr {
         struct TRecLow {
             TLogoBlobIdLow Key;
             TMemRecLogoBlob MemRec;
+
+            TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
+                : Key(key)
+                , MemRec(memRec)
+            {}
 
             struct TLess {
                 bool operator ()(const TRecLow& l, const TLogoBlobIdLow& r) const {
@@ -193,21 +188,69 @@ namespace NKikimr {
         TTrackableVector<TRecHigh> IndexHigh;
         TTrackableVector<TRecLow> IndexLow;
 
-        TTrackableVector<TRec> LoadedIndex; // TODO: remove
-
         TRecIndex(TVDiskContextPtr vctx)
             : IndexHigh(TMemoryConsumer(vctx->SstIndex))
             , IndexLow(TMemoryConsumer(vctx->SstIndex))
-            , LoadedIndex(TMemoryConsumer(vctx->SstIndex))
         {}
 
         bool IsLoaded() const {
-            return !LoadedIndex.empty();
+            return !IndexLow.empty();
         }
 
         ui64 Elements() const {
             Y_DEBUG_ABORT_UNLESS(IsLoaded());
-            return LoadedIndex.size();
+            return IndexLow.size();
+        }
+
+        void LoadLinearIndex(const TTrackableVector<TRec>& linearIndex) {
+            IndexHigh.reserve(linearIndex.size());
+            IndexLow.reserve(linearIndex.size());
+
+            TLogoBlobIdHigh highPrev;
+            for (const auto& rec : linearIndex) {
+                auto blobId = rec.Key.LogoBlobID();
+                TLogoBlobIdHigh high(blobId);
+                TLogoBlobIdLow low(blobId);
+
+                if (Y_UNLIKELY(IndexHigh.empty())) {
+                    IndexHigh.emplace_back(high);
+                    highPrev = high;
+                } else if (Y_UNLIKELY(high != highPrev)) {
+                    IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+                    IndexHigh.emplace_back(high);
+                    highPrev = high;
+                }
+
+                IndexLow.emplace_back(low, rec.MemRec);
+            }
+
+            if (!IndexHigh.empty()) {
+                IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+            }
+
+            IndexHigh.shrink_to_fit();
+        }
+
+        void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
+            linearIndex->reserve(IndexLow.size());
+
+            const TRecHigh* high = IndexHigh.begin();
+            const TRecLow* low = IndexLow.begin();
+            const TRecLow* lowRangeEnd = low + high->LowRangeEndIndex;
+
+            while (low != IndexLow.end()) {
+                auto& highKey = high->Key;
+                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], low->Key.Raw.X);
+                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->MemRec);
+
+                ++low;
+                if (low == lowRangeEnd) {
+                    ++high;
+                    if (high != IndexHigh.end()) {
+                        lowRangeEnd = IndexLow.begin() + high->LowRangeEndIndex;
+                    }
+                }
+            }
         }
     };
 

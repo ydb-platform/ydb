@@ -30,7 +30,7 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
-ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, bool& rejected) {
+ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool& rejected) {
     TPath implTable = index.Child(name);
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
@@ -48,6 +48,9 @@ ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& n
     }
     rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+    if (implTable.IsLocked()) { // some impl tables may be not locked
+        *transaction.MutableLockGuard() = lockGuard;
+    }
     auto operation = transaction.MutableDrop();
     operation->SetName(name);
     return CreateDropTable(partId, transaction);
@@ -98,7 +101,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
             const auto partId = NextPartId(nextId, result);
             if (NTableIndex::IsBuildImplTable(indexImplTableName)) {
                 bool rejected = false;
-                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, rejected);
+                auto op = DropIndexImplTable(index, nextId, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(), rejected);
                 if (rejected) {
                     return {std::move(op)};
                 }
@@ -153,7 +156,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
             bool rejected = false;
-            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, rejected);
+            auto op = DropIndexImplTable(index, nextId, partId, indexChildItems.first, indexChildItems.second, tx.GetLockGuard(), rejected);
             if (rejected) {
                 return {std::move(op)};
             }

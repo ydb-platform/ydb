@@ -2446,6 +2446,56 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             }
         }
     }
+
+    Y_UNIT_TEST_TWIN(CreateAsSelectBadTypes, IsOlap) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(std::format(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = {0})
+                AS SELECT 1 AS Key, AsList(1, 2, 3, 4, 5) AS Value;
+            )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid type for column: Value.", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(std::format(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = {0})
+                AS SELECT 1 AS Key, NULL AS Value;
+            )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid type for column: Value.", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(std::format(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = {0})
+                AS SELECT 1 AS Key, [] AS Value;
+            )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid type for column: Value.", result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKqp

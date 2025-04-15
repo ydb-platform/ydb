@@ -309,7 +309,7 @@ public:
     }
 
     TUuidValue GetUuid() const {
-        return TUuidValue(ToString(Value));
+        return TUuidValue(std::string(Value));
     }
 
     bool IsNull() const {

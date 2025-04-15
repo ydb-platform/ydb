@@ -648,6 +648,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
+    Cerr << "XXX IsWide " << isWide << Endl;
     auto actor = isWide ?
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
             args.Alloc,

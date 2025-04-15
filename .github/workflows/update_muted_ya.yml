@@ -141,8 +141,7 @@ jobs:
               PR_BODY+=$'```\n'
               PR_BODY+=$(cat mute_update/flaky_debug.txt)
               PR_BODY+=$'\n```\n\n'
-          fi
-          if [ -s mute_update/flaky.txt ]; then
+
               BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
               MAX_TESTS=50
               TEST_COUNT=0
@@ -152,10 +151,10 @@ jobs:
               
               # Для каждого теста из flaky.txt, добавляем его в URL
               while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                # Заменяем пробелы на "/"
-                formatted_name=$(echo "${test_name}" | tr ' ' '/')
-                # URL-кодируем имя теста
-                encoded_name=$(echo "${formatted_name}" | sed 's/[\/]/%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g')
+                # Заменяем ТОЛЬКО ПЕРВЫЙ пробел на "/"
+                formatted_name=$(echo "${test_name}" | sed 's/ /\//' )
+                # URL-кодируем имя теста и заменяем пробелы на %20
+                encoded_name=$(echo "${formatted_name}" | sed 's/ /%20/g' | sed 's/[\/]/%2F/g' | sed 's/\[/%5B/g' | sed 's/\]/%5D/g')
                 # Добавляем параметр в URL без переноса строки
                 FULL_URL="${FULL_URL}&full_name=${encoded_name}"
                 TEST_COUNT=$((TEST_COUNT+1))

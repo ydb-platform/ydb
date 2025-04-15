@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        auto res = job->Download(params, {{"test_cluster.test_path", TClusterConnection()}});
+        auto res = job->Download(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
         auto err = std::get_if<TError>(&res);
         auto statistics = std::get_if<TStatistics>(&res);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
 
-        auto res = job->Upload(params, {{"test_cluster.test_path", TClusterConnection()}});
+        auto res = job->Upload(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
         auto err = std::get_if<TError>(&res);
 
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         tableDataServicePtr->Put(key_1, GetBinaryYson(TableContent_1));
         tableDataServicePtr->Put(key_3, GetBinaryYson(TableContent_3));
 
-        auto res = job->Merge(params, {{"test_cluster.test_path", TClusterConnection()}});
+        auto res = job->Merge(params, {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         auto err = std::get_if<TError>(&res);
 
         UNIT_ASSERT_C(!err, err->ErrorMessage);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
+        TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
         // No tables in tableDataService
         try {
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto params = TMergeTaskParams(inputs, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", {{"test_cluster.test_path", TClusterConnection()}});
+        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
 
         auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
         auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);

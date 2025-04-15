@@ -25,7 +25,7 @@ struct TStartOperationRequest {
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
     ui32 NumRetries = 1; // Not supported yet
-    std::unordered_map<TString, TClusterConnection> ClusterConnections = {};
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
 };
 
@@ -41,6 +41,7 @@ struct TGetOperationRequest {
 struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
+    std::vector<TTableStats> OutputTablesStats = {};
 };
 
 struct TDeleteOperationRequest {

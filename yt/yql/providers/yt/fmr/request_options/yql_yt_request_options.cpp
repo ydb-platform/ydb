@@ -2,7 +2,15 @@
 
 namespace NYql::NFmr {
 
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TString, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode>& jobSettings) {
+TFmrTableId::TFmrTableId(const TString& id): Id(id)
+{
+};
+
+TFmrTableId::TFmrTableId(const TString& cluster, const TString& path): Id(cluster + "." + path)
+{
+};
+
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode>& jobSettings) {
     return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnections, jobSettings);
 }
 
@@ -15,6 +23,11 @@ TString TFmrChunkMeta::ToString() const {
 }
 
 } // namespace NYql::NFmr
+
+template<>
+void Out<NYql::NFmr::TFmrTableId>(IOutputStream& out, const NYql::NFmr::TFmrTableId& tableId) {
+    out << tableId.Id;
+}
 
 template<>
 void Out<NYql::NFmr::TFmrError>(IOutputStream& out, const NYql::NFmr::TFmrError& error) {

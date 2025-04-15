@@ -21,7 +21,7 @@ public:
     {
     }
 
-    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
+    virtual std::variant<TError, TStatistics> Download(const TDownloadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) override {
         try {
             const auto ytTable = params.Input;
             const auto cluster = params.Input.Cluster;
@@ -46,7 +46,7 @@ public:
         }
     }
 
-    virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
+    virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) override {
         try {
             const auto ytTable = params.Output;
             const auto cluster = params.Output.Cluster;
@@ -68,7 +68,7 @@ public:
         }
     }
 
-    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const std::unordered_map<TString, TClusterConnection>& clusterConnections) override {
+    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) override {
         // расширить таск парамс. добавить туда мету
         try {
             const auto inputs = params.Input;
@@ -93,11 +93,11 @@ public:
     }
 
 private:
-    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const std::unordered_map<TString, TClusterConnection>& clusterConnections) const {
+    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
         auto ytTable = std::get_if<TYtTableRef>(&tableRef);
         auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
         if (ytTable) {
-            TString tableId = ytTable->Cluster + "." + ytTable->Path;
+            TFmrTableId tableId = {ytTable->Cluster, ytTable->Path};
             auto clusterConnection = clusterConnections.at(tableId);
             return YtService_->MakeReader(*ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
         } else if (fmrTable) {

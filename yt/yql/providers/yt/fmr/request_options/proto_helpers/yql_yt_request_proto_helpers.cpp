@@ -6,6 +6,7 @@ namespace NYql::NFmr {
 NProto::TFmrError FmrErrorToProto(const TFmrError& error) {
     NProto::TFmrError protoError;
     protoError.SetComponent(static_cast<NProto::EFmrComponent>(error.Component));
+    protoError.SetReason(static_cast<NProto::EFmrReason>(error.Reason));
     protoError.SetErrorMessage(error.ErrorMessage);
     if (error.WorkerId) {
         protoError.SetWorkerId(*error.WorkerId);
@@ -22,6 +23,7 @@ NProto::TFmrError FmrErrorToProto(const TFmrError& error) {
 TFmrError FmrErrorFromProto(const NProto::TFmrError& protoError) {
     TFmrError fmrError;
     fmrError.Component = static_cast<EFmrComponent>(protoError.GetComponent());
+    fmrError.Reason = static_cast<EFmrErrorReason>(protoError.GetReason());
     fmrError.ErrorMessage = protoError.GetErrorMessage();
     if (protoError.HasWorkerId()) {
         fmrError.WorkerId = protoError.GetWorkerId();
@@ -55,16 +57,26 @@ TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     return ytTableRef;
 }
 
+NProto::TFmrTableId FmrTableIdToProto(const TFmrTableId& fmrTableId) {
+    NProto::TFmrTableId protoFmrTableId;
+    protoFmrTableId.SetId(fmrTableId.Id);
+    return protoFmrTableId;
+}
+
+TFmrTableId FmrTableIdFromProto(const NProto::TFmrTableId& protoFmrTableId) {
+    return TFmrTableId(protoFmrTableId.GetId());
+}
+
 NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef) {
     NProto::TFmrTableRef protoFmrTableRef;
-    protoFmrTableRef.SetTableId(fmrTableRef.TableId);
+    auto protoFmrTableId = FmrTableIdToProto(fmrTableRef.FmrTableId);
+    protoFmrTableRef.MutableFmrTableId()->Swap(&protoFmrTableId);
     return protoFmrTableRef;
 }
 
 TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
-    TFmrTableRef fmrTableRef;
-    fmrTableRef.TableId = protoFmrTableRef.GetTableId();
-    return fmrTableRef;
+    auto tableId = FmrTableIdFromProto(protoFmrTableRef.GetFmrTableId());
+    return TFmrTableRef(tableId);
 }
 
 NProto::TTableRange TableRangeToProto(const TTableRange& tableRange) {
@@ -227,10 +239,10 @@ NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploa
 }
 
 TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams) {
-    TUploadOperationParams uploadOperationParams;
-    uploadOperationParams.Input = FmrTableRefFromProto(protoUploadOperationParams.GetInput());
-    uploadOperationParams.Output = YtTableRefFromProto(protoUploadOperationParams.GetOutput());
-    return uploadOperationParams;
+    return TUploadOperationParams(
+        FmrTableRefFromProto(protoUploadOperationParams.GetInput()),
+        YtTableRefFromProto(protoUploadOperationParams.GetOutput())
+    );
 }
 
 TUploadTaskParams UploadTaskParamsFromProto(const NProto::TUploadTaskParams& protoUploadTaskParams) {
@@ -259,10 +271,10 @@ NProto::TDownloadTaskParams DownloadTaskParamsToProto(const TDownloadTaskParams&
 }
 
 TDownloadOperationParams DownloadOperationParamsFromProto(const NProto::TDownloadOperationParams& protoDownloadOperationParams) {
-    TDownloadOperationParams downloadOperationParams;
-    downloadOperationParams.Input = YtTableRefFromProto(protoDownloadOperationParams.GetInput());
-    downloadOperationParams.Output = FmrTableRefFromProto(protoDownloadOperationParams.GetOutput());
-    return downloadOperationParams;
+    return TDownloadOperationParams(
+        YtTableRefFromProto(protoDownloadOperationParams.GetInput()),
+        FmrTableRefFromProto(protoDownloadOperationParams.GetOutput())
+    );
 }
 
 TDownloadTaskParams DownloadTaskParamsFromProto(const NProto::TDownloadTaskParams& protoDownloadTaskParams) {
@@ -297,14 +309,14 @@ NProto::TMergeTaskParams MergeTaskParamsToProto(const TMergeTaskParams& mergeTas
 }
 
 TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperationParams& protoMergeOperationParams) {
-    TMergeOperationParams mergeOperationParams;
-    std::vector<TOperationTableRef> input;
+    TMergeOperationParams mergeOperationParams(
+        {},
+        FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
+    );
     for (size_t i = 0; i < protoMergeOperationParams.InputSize(); ++i) {
         TOperationTableRef inputTable = OperationTableRefFromProto(protoMergeOperationParams.GetInput(i));
-        input.emplace_back(inputTable);
+        mergeOperationParams.Input.emplace_back(inputTable);
     }
-    mergeOperationParams.Input = input;
-    mergeOperationParams.Output = FmrTableRefFromProto(protoMergeOperationParams.GetOutput());
     return mergeOperationParams;
 }
 
@@ -353,15 +365,13 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
 }
 
 TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoOperationParams) {
-    TOperationParams operationParams;
     if (protoOperationParams.HasDownloadOperationParams()) {
-        operationParams = DownloadOperationParamsFromProto(protoOperationParams.GetDownloadOperationParams());
+        return DownloadOperationParamsFromProto(protoOperationParams.GetDownloadOperationParams());
     } else if (protoOperationParams.HasUploadOperationParams()) {
-        operationParams = UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
+        return UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
     } else {
-        operationParams = MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
+        return MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
     }
-    return operationParams;
 }
 
 TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
@@ -406,7 +416,7 @@ NProto::TTask TaskToProto(const TTask& task) {
     protoTask.SetNumRetries(task.NumRetries);
     auto clusterConnections = *protoTask.MutableClusterConnections();
     for (auto& [tableName, conn]: task.ClusterConnections) {
-        clusterConnections[tableName] = ClusterConnectionToProto(conn);
+        clusterConnections[tableName.Id] = ClusterConnectionToProto(conn);
     }
     if (task.JobSettings) {
         protoTask.SetJobSettings(NYT::NodeToYsonString(*task.JobSettings));
@@ -421,7 +431,7 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     task.TaskParams = TaskParamsFromProto(protoTask.GetTaskParams());
     task.SessionId = protoTask.GetSessionId();
     task.NumRetries = protoTask.GetNumRetries();
-    std::unordered_map<TString, TClusterConnection> taskClusterConnections;
+    std::unordered_map<TFmrTableId, TClusterConnection> taskClusterConnections;
     for (auto& [tableName, conn]: protoTask.GetClusterConnections()) {
         taskClusterConnections[tableName] = ClusterConnectionFromProto(conn);
     }

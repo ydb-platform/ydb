@@ -46,7 +46,7 @@ private:
 
 TDownloadOperationParams downloadOperationParams{
     .Input = TYtTableRef{"Path","Cluster"},
-    .Output = TFmrTableRef{"TableId"}
+    .Output = TFmrTableRef{{"TestCluster", "TestPath"}}
 };
 
 TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
@@ -54,7 +54,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
         .TaskType = taskType,
         .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnections = {{"Cluster.Path", TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
+        .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
 }
 
@@ -67,7 +67,7 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
             .TaskType = taskType,
             .OperationParams = operationParams,
             .IdempotencyKey = "IdempotencyKey_" + ToString(i),
-            .ClusterConnections = {{"Cluster.Path", TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
+            .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
         };
     }
     return startOperationRequests;
@@ -172,7 +172,10 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{});
+        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{
+            {{"Cluster", "Path"}},
+            {}
+        });
         auto uploadOperationResponse = coordinator->StartOperation(uploadOperationRequest).GetValueSync();
         auto uploadOperationId = uploadOperationResponse.OperationId;
 

@@ -19,6 +19,7 @@ struct TOperationInfo {
     EOperationStatus OperationStatus;
     std::vector<TFmrError> ErrorMessages;
     TString SessionId;
+    std::vector<TString> OutputTableIds = {};
 };
 
 struct TIdempotencyKeyInfo {
@@ -85,7 +86,11 @@ public:
         auto& operationInfo = Operations_[operationId];
         auto operationStatus =  operationInfo.OperationStatus;
         auto errorMessages = operationInfo.ErrorMessages;
-        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages));
+        std::vector<TTableStats> outputTablesStats;
+        for (auto& tableId : operationInfo.OutputTableIds) {
+            outputTablesStats.emplace_back(FmrTableStatistics_[tableId].Stats);
+        }
+        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats));
     }
 
     NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) override {
@@ -159,6 +164,7 @@ public:
                         Cerr << "Current statistic from table with id" << fmrTableId.TableId << "_" << fmrTableId.PartId << ": " << tableStats;
                     }
                 }
+                Operations_[operationId].OutputTableIds.emplace_back(fmrTableId.TableId);
                 FmrTableStatistics_[fmrTableId.TableId] = TCoordinatorFmrTableStats{
                     .Stats = tableStats,
                     .PartId = fmrTableId.PartId
@@ -280,7 +286,7 @@ private:
         if (const TUploadOperationParams* uploadOperationParams = std::get_if<TUploadOperationParams>(&operationParams)) {
             TUploadTaskParams uploadTaskParams{};
             uploadTaskParams.Output = uploadOperationParams->Output;
-            TString inputTableId = uploadOperationParams->Input.TableId;
+            TString inputTableId = uploadOperationParams->Input.FmrTableId.Id;
             TFmrTableInputRef fmrTableInput{
                 .TableId = inputTableId,
                 .TableRanges = {GetTableRangeFromId(inputTableId)}
@@ -290,7 +296,7 @@ private:
         } else if (const TDownloadOperationParams* downloadOperationParams = std::get_if<TDownloadOperationParams>(&operationParams)) {
             TDownloadTaskParams downloadTaskParams{};
             downloadTaskParams.Input = downloadOperationParams->Input;
-            TString outputTableId = downloadOperationParams->Output.TableId;
+            TString outputTableId = downloadOperationParams->Output.FmrTableId.Id;
             TFmrTableOutputRef fmrTableOutput{
                 .TableId = outputTableId,
                 .PartId = GetTableRangeFromId(outputTableId).PartId
@@ -306,7 +312,7 @@ private:
                     mergeInputTasks.emplace_back(*ytTableRef);
                 } else {
                     TFmrTableRef fmrTableRef = std::get<TFmrTableRef>(elem);
-                    TString inputTableId = fmrTableRef.TableId;
+                    TString inputTableId = fmrTableRef.FmrTableId.Id;
                     TFmrTableInputRef tableInput{
                         .TableId = inputTableId,
                         .TableRanges = {GetTableRangeFromId(inputTableId)}
@@ -316,7 +322,7 @@ private:
             }
             mergeTaskParams.Input = mergeInputTasks;
             TFmrTableOutputRef outputTable;
-            mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams.Output.TableId};
+            mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams.Output.FmrTableId.Id};
             return mergeTaskParams;
         }
     }
@@ -356,7 +362,7 @@ private:
     std::atomic<bool> StopCoordinator_;
     TDuration TimeToSleepBetweenClearKeyRequests_;
     TDuration IdempotencyKeyStoreTime_;
-    std::unordered_map<TString, TCoordinatorFmrTableStats> FmrTableStatistics_; // TableId -> Statistics
+    std::unordered_map<TFmrTableId, TCoordinatorFmrTableStats> FmrTableStatistics_; // TableId -> Statistics
     TMaybe<NYT::TNode> DefaultFmrOperationSpec_;
 };
 

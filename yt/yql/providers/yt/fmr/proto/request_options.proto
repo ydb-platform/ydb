@@ -35,12 +35,18 @@ enum EFmrComponent {
     COMPONENT_JOB = 3;
 }
 
+enum EFmrReason {
+    REASON_UNKNOWN = 0;
+    USER_ERROR = 1;
+}
+
 message TFmrError {
     EFmrComponent Component = 1;
-    string ErrorMessage = 2;
-    optional uint32 WorkerId = 3;
-    optional string TaskId = 4;
-    optional string OperationId = 5;
+    EFmrReason Reason = 2;
+    string ErrorMessage = 3;
+    optional uint32 WorkerId = 4;
+    optional string TaskId = 5;
+    optional string OperationId = 6;
 }
 
 message TYtTableRef {
@@ -49,8 +55,12 @@ message TYtTableRef {
     optional string FilePath = 3;
 }
 
+message TFmrTableId {
+    string Id = 1;
+}
+
 message TFmrTableRef {
-    string TableId = 1;
+    TFmrTableId FmrTableId = 1;
 }
 
 message TTableRange {

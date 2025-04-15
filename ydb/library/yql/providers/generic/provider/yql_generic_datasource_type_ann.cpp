@@ -136,7 +136,7 @@ namespace NYql {
 
         TStatus HandleReadTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             Y_UNUSED(output);
-            if (!EnsureArgsCount(*input, 5, ctx)) {
+            if (!EnsureMinMaxArgsCount(*input, 5, 6, ctx)) {
                 return TStatus::Error;
             }
 
@@ -171,6 +171,19 @@ namespace NYql {
                             TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicated column name: " << name));
                         return TStatus::Error;
                     }
+                }
+            }
+
+            bool isListify = false;
+            if (input->ChildrenSize() > TGenReadTable::idx_Listify) {
+                auto listify = input->Child(TGenReadTable::idx_Listify);
+                if (listify->IsAtom({"listify"sv})) {
+                    isListify = true;
+                } else if (listify->IsCallable(TCoVoid::CallableName())) {
+                } else {
+                    Cerr << "Not recognized " << listify->Dump() << Endl;
+                    // TODO
+                    return TStatus::Error;
                 }
             }
 
@@ -209,6 +222,18 @@ namespace NYql {
                 itemType = ctx.MakeType<TStructExprType>(items);
 
                 YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order" << (static_cast<const TStructExprType*>(itemType))->ToString();
+            }
+
+            if (isListify) {
+                TVector<const TItemExprType*> items = itemType->GetItems();
+                for (auto& item: items) {
+                    auto itemType = item->GetItemType();
+                    if (!itemType->HasOptional()) {
+                        itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                    }
+                    item = ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TListExprType>(itemType));
+                }
+                itemType = ctx.MakeType<TStructExprType>(items);
             }
 
             // Filter

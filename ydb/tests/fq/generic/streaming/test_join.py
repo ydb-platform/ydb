@@ -53,8 +53,8 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
-                on(e.Data = u.data)
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                on(AsList(e.Data) = u.data)
             ;
 
             insert into myyds.`{output_topic}`

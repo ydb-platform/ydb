@@ -103,18 +103,23 @@ class TestCompatibility(object):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-        session.execute_scheme(
-            "create table `sample_table` (id Uint64, payload Utf8, PRIMARY KEY(id));"
-        )
-        query = """INSERT INTO `sample_table` (id, payload) VALUES
-            (1, 'Payload 1'),
-            (2, 'Payload 2'),
-            (3, 'Payload 3'),
-            (4, 'Payload 4'),
-            (5, 'Payload 5');"""
-        session.transaction().execute(
-            query, commit_tx=True
-        )
+        
+        for table_num in range(1, 6):
+            table_name = f"sample_table_{table_num}"
+            
+            session.execute_scheme(
+                f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
+            )
+            
+            query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
+                (1, 'Payload 1 for table {table_num}'),
+                (2, 'Payload 2 for table {table_num}'),
+                (3, 'Payload 3 for table {table_num}'),
+                (4, 'Payload 4 for table {table_num}'),
+                (5, 'Payload 5 for table {table_num}');"""
+            session.transaction().execute(
+                query, commit_tx=True
+            )
 
         export_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -133,7 +138,7 @@ class TestCompatibility(object):
             "--secret-key",
             s3_secret_key,
             "--item",
-            "src=/Root/sample_table,dst=sample_table"
+            "src=/Root,dst=Root"
         ]
 
         yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)

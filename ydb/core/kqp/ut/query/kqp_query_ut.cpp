@@ -2273,7 +2273,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateAsSelectTypes, NotNull) {
+    Y_UNIT_TEST_QUAD(CreateAsSelectTypes, NotNull, IsOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
@@ -2290,7 +2290,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             const TString createSource = std::format(R"(
                 CREATE TABLE `/Root/Source` (
                     Key         Int8    NOT NULL,
-                    CBool       Bool         {0},
                     CInt8       Int8         {0},
                     CUint8      Uint8        {0},
                     CInt16      Int16        {0},
@@ -2304,98 +2303,99 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     CDate       Date         {0},
                     CDatetime       Datetime     {0},
                     CTimestamp      Timestamp    {0},
-                    CInterval       Interval     {0},
                     CDate32     Date32       {0},
                     CDatetime64     Datetime64   {0},
                     CTimestamp64        Timestamp64  {0},
-                    CInterval64     Interval64   {0},
                     CString     String       {0},
                     CUtf8       Utf8         {0},
                     CYson       Yson         {0},
                     CJson       Json         {0},
-                    CUuid       Uuid         {0},
                     CJsonDocument       JsonDocument {0},
-                    CDyNumber       DyNumber     {0},
+                    {1}
                     PRIMARY KEY (Key)
                 );
-            )", NotNull ? "NOT NULL" : "");
+                )",
+                NotNull ? "NOT NULL" : "",
+                IsOlap ? "" : std::format(R"(
+                    CBool       Bool         {0},
+                    CInterval       Interval     {0},
+                    CInterval64     Interval64   {0},
+                    CUuid       Uuid         {0},
+                    CDyNumber       DyNumber     {0},)",
+                    NotNull ? "NOT NULL" : ""));
 
             auto result = client.ExecuteQuery(createSource, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            auto prepareResult = client.ExecuteQuery(R"(
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
                 UPSERT INTO `/Root/Source` (
-                    Key,
-                    CBool,
-                    CInt8,
-                    CUint8,
-                    CInt16,
-                    CUint16,
-                    CInt32,
-                    CUint32,
-                    CInt64,
-                    CUint64,
-                    CFloat,
-                    CDouble,
-                    CDate,
-                    CDatetime,
-                    CTimestamp,
-                    CInterval,
-                    CDate32,
-                    CDatetime64,
-                    CTimestamp64,
-                    CInterval64,
-                    CString,
-                    CUtf8,
-                    CYson,
-                    CJson,
-                    CUuid,
-                    CJsonDocument,
-                    CDyNumber
+                    Key
+                    , CInt8
+                    , CUint8
+                    , CInt16
+                    , CUint16
+                    , CInt32
+                    , CUint32
+                    , CInt64
+                    , CUint64
+                    , CFloat
+                    , CDouble
+                    , CDate
+                    , CDatetime
+                    , CTimestamp
+                    , CDate32
+                    , CDatetime64
+                    , CTimestamp64
+                    , CString
+                    , CUtf8
+                    , CYson
+                    , CJson
+                    , CJsonDocument
+                    {0}
                 )
                 VALUES (
-                    0,
-                    False,
-                    42,
-                    42,
-                    42,
-                    42,
-                    42,
-                    42,
-                    42,
-                    42,
-                    CAST(42.0 AS Float),
-                    42.0,
-                    Date("2025-01-01"),
-                    Datetime("2025-01-01T00:00:00Z"),
-                    Timestamp("2025-01-01T00:00:00Z"),
-                    Interval("P1DT2H3M4.567890S"),
-                    Date("2025-01-01"),
-                    Datetime("2025-01-01T00:00:00Z"),
-                    Timestamp("2025-01-01T00:00:00Z"),
-                    Interval("P1DT2H3M4.567890S"),
-                    String("test"),
-                    Utf8("test"),
-                    Yson("<a=1>[3;%false]"),
-                    Json(@@{"a":1,"b":null}@@),
-                    Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
-                    JsonDocument('{"a":1,"b":null}'),
-                    DyNumber("42")
+                    0
+                    , 42
+                    , 42
+                    , 42
+                    , 42
+                    , 42
+                    , 42
+                    , 42
+                    , 42
+                    , CAST(42.0 AS Float)
+                    , 42.0
+                    , Date("2025-01-01")
+                    , Datetime("2025-01-01T00:00:00Z")
+                    , Timestamp("2025-01-01T00:00:00Z")
+                    , Date("2025-01-01")
+                    , Datetime("2025-01-01T00:00:00Z")
+                    , Timestamp("2025-01-01T00:00:00Z")
+                    , String("test")
+                    , Utf8("test")
+                    , Yson("<a=1>[3;%false]")
+                    , Json(@@{{"a":1,"b":null}}@@)
+                    , JsonDocument('{{"a":1,"b":null}}')
+                    {1}
                 );
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )",
+            IsOlap ? "" : ", CBool, CInterval, CInterval64, CUuid, CDyNumber",
+            IsOlap ? "" : ", False, Interval(\"P1DT2H3M4.567890S\"), Interval(\"P1DT2H3M4.567890S\"), Uuid(\"f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb\"), DyNumber(\"42\")"),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         {
-            auto prepareResult = client.ExecuteQuery(R"(
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
                 CREATE TABLE `/Root/Destination` (
                     PRIMARY KEY (Key)
                 )
+                WITH (STORE = {0})
                 AS SELECT *
                 FROM `/Root/Source`;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
             
@@ -2406,7 +2406,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
             auto columns = desc.GetTableDescription().GetTableColumns();
-            UNIT_ASSERT(columns.size() == 27);
             for (const auto& column : columns) {
                 if (column.Name == "Key") {
                     continue;

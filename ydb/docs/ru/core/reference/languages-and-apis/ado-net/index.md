@@ -1,6 +1,6 @@
 # ADO.NET - .NET Access to YDB
 
-Ydb.Sdk - ADO.NET Data Provider для {{ ydb-short-name }}, это позволяет программам, написанных на C#, Visual Basic, F# получить доступ к {{ ydb-short-name }}. Провайдер реализован на 100% в коде C#, является бесплатным и с [открытым исходным кодом](https://github.com/ydb-platform/ydb-dotnet-sdk).
+`Ydb.Sdk` - ADO.NET Data Provider для {{ ydb-short-name }}, это позволяет программам, написанных на C#, Visual Basic, F# получить доступ к {{ ydb-short-name }}. Провайдер реализован на 100% в коде C#, является бесплатным и с [открытым исходным кодом](https://github.com/ydb-platform/ydb-dotnet-sdk).
 
 ## Документация
 

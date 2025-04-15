@@ -102,7 +102,7 @@ jobs:
         
       - name: Run create_new_muted_ya.py
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --build_type=${{ env.BUILD_TYPE }}
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
 
       - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
         run: |

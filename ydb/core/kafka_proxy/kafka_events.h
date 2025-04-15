@@ -29,6 +29,7 @@ struct TEvKafka {
         EvKillReadSession,
         EvCommitedOffsetsResponse,
         EvCreateTopicsResponse,
+        EvDescribeTopicsResponse,
         EvReadSessionInfo,
         EvSaveTxnProducerRequest,
         EvSaveTxnProducerResponse,
@@ -263,6 +264,25 @@ struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRe
     ui64 CorrelationId;
     const TMessagePtr<TAddPartitionsToTxnRequestData> Request;
     TActorId ConnectionId;
+};
+
+struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeResponse, EvDescribeTopicsResponse>
+                                , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
+{
+    enum EStatus {
+        OK,
+        BAD_REQUEST,
+        TOPIC_DOES_NOT_EXIST,
+    };
+
+    TEvTopicDescribeResponse()
+    {}
+
+    TString TopicPath;
+    EKafkaErrors Status;
+    TString Message;
+    Ydb::Topic::DescribeTopicResult Response;
+
 };
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {

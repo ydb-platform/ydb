@@ -8,6 +8,7 @@
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_describe_configs_actor.h>
 #include <ydb/core/discovery/discovery.h>
 
 
@@ -62,6 +63,30 @@ public:
         Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(CachedMessage), 0, ev->Cookie);
     }
 };
+
+struct TMetarequestTestParams {
+    NPersQueue::TTestServer Server;
+    ui64 KafkaPort;
+    NKikimrConfig::TKafkaProxyConfig KafkaConfig;
+    TString FullTopicName;
+};
+
+TMetarequestTestParams SetupServer(const TString shortTopicName) {
+    TStringBuilder fullTopicName;
+    fullTopicName << "rt3.dc1--" << shortTopicName;
+    auto pm = MakeSimpleShared<TPortManager>();
+    ui16 kafkaPort = pm->GetPort();
+    auto serverSettings = NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
+    serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+
+    serverSettings.AppConfig->MutableKafkaProxyConfig()->SetListeningPort(kafkaPort);
+    NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
+
+    server.AnnoyingClient->CreateTopic(fullTopicName, 1);
+    server.WaitInit(shortTopicName);
+
+    return {std::move(server), kafkaPort, serverSettings.AppConfig->GetKafkaProxyConfig(), fullTopicName};
+}
 
 namespace NKafka::NTests {
     Y_UNIT_TEST_SUITE(DiscoveryIsNotBroken) {
@@ -163,29 +188,6 @@ namespace NKafka::NTests {
                 }
             }
             UNIT_ASSERT(hasKafkaPort);
-        }
-        struct TMetarequestTestParams {
-            NPersQueue::TTestServer Server;
-            ui64 KafkaPort;
-            NKikimrConfig::TKafkaProxyConfig KafkaConfig;
-            TString FullTopicName;
-        };
-
-        TMetarequestTestParams SetupServer(const TString shortTopicName) {
-            TStringBuilder fullTopicName;
-            fullTopicName << "rt3.dc1--" << shortTopicName;
-            auto pm = MakeSimpleShared<TPortManager>();
-            ui16 kafkaPort = pm->GetPort();
-            auto serverSettings = NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
-            serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
-
-            serverSettings.AppConfig->MutableKafkaProxyConfig()->SetListeningPort(kafkaPort);
-            NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
-
-            server.AnnoyingClient->CreateTopic(fullTopicName, 1);
-            server.WaitInit(shortTopicName);
-
-            return {std::move(server), kafkaPort, serverSettings.AppConfig->GetKafkaProxyConfig(), fullTopicName};
         }
 
         void CreateMetarequestActor(
@@ -317,6 +319,25 @@ namespace NKafka::NTests {
             CreateMetarequestActor(edge, {path, path}, runtime, config);
 
             CheckKafkaMetaResponse(runtime, kafkaPort, false, 2);
+        }
+    }
+
+    Y_UNIT_TEST_SUITE(RequestUtilityActors) {
+        Y_UNIT_TEST(DescribeConfigs) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            auto path = NKikimr::JoinPath({"/Root/PQ/", topicName});
+            auto actor = new TKafkaDescribeTopicActor(edge, nullptr, path, "/Root");
+            auto actorId = runtime->Register(actor);
+            runtime->EnableScheduleForActor(actorId);
+            auto ev = runtime->GrabEdgeEvent<TEvKafka::TEvTopicDescribeResponse>();
+            UNIT_ASSERT(ev);
+            Cerr << "Response: " << ev->Response.DebugString() << Endl;
+            UNIT_ASSERT(ev->Status == EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Response.partitioning_settings().min_active_partitions(), 1);
         }
     }
 }

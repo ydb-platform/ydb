@@ -230,7 +230,7 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn, build_preset):
+def render_testlist_html(rows, fn, build_preset, branch):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
@@ -273,7 +273,7 @@ def render_testlist_html(rows, fn, build_preset):
         tests_names_for_history.append(test.full_name)
 
     try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
     except Exception:
         print(traceback.format_exc())
    
@@ -308,7 +308,9 @@ def render_testlist_html(rows, fn, build_preset):
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
-        build_preset=buid_preset_params
+        build_preset=build_preset,
+        buid_preset_params=buid_preset_params,
+        branch=branch
     )
 
     with open(fn, "w") as fp:
@@ -345,7 +347,7 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
             tests_data_with_owners.append(test)
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -359,7 +361,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset)
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset)
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset, branch)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -418,6 +420,7 @@ def main():
     parser.add_argument("--public_dir_url", required=True)
     parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--branch', default="main", required=False)
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)
     parser.add_argument('--is_last_retry', required=True, type=int)
@@ -434,7 +437,13 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
+    summary = gen_summary(args.public_dir,
+                          args.public_dir_url,
+                          title_path,
+                          is_retry=bool(args.is_retry),
+                          build_preset=args.build_preset,
+                          branch=args.branch
+                          )
     write_summary(summary)
 
     if summary.is_failed and not args.is_test_result_ignored:

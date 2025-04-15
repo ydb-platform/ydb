@@ -489,6 +489,7 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
     auto *const cmpFunc = command->MutableFunction();
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
+    bool needCastToBool = false;
 
     if (const auto cmpInfo = comparsions.FindPtr(comparison.Operator())) {
         function = cmpInfo->Function;
@@ -498,12 +499,17 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
             comparison.Right(),
             ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
         cmpFunc->SetKernelIdx(idx);
+        needCastToBool = false;
     }
     cmpFunc->SetId(function);
     cmpFunc->AddArguments()->SetId(leftColumnId);
     cmpFunc->AddArguments()->SetId(rightColumnId);
 
-    return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Boolean", ctx);
+    if (needCastToBool) {
+        return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Boolean", ctx);
+    }
+
+    return command->GetColumn().GetId();
 }
 
 ui64 CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
@@ -701,7 +707,6 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
     cmpFunc->SetYqlOperationId((ui32)op);
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
     cmpFunc->SetKernelIdx(kernel.first);
-    cmpFunc->SetKernelName(std::string(oper));
     cmpFunc->AddArguments()->SetId(leftColumn.Id);
     cmpFunc->AddArguments()->SetId(rightColumn.Id);
     return {command->GetColumn().GetId(), kernel.second};

@@ -1435,14 +1435,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     DROP TABLE `%s`;
                 )", table
             ));
-            ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                    CREATE TABLE `%s` (
-                        Key Uuid,
-                        Value Utf8,
-                        PRIMARY KEY (Key)
-                    );
-                )", table
-            ));
 
             auto result = backupClient.Restore(pathToBackup, dbPath, opts);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

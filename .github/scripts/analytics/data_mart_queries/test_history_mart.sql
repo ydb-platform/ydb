@@ -26,8 +26,7 @@ SELECT
 FROM `test_results/test_runs_column` 
 
 WHERE
-    run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
-    and build_type = 'relwithdebinfo'
+    run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
     and String::Contains(test_name, '.flake8')  = FALSE
     and (CASE 
         WHEN String::Contains(test_name, 'chunk chunk') OR String::Contains(test_name, 'chunk+chunk') THEN TRUE

@@ -4,7 +4,7 @@
 
 ### Version 24.4.4.2 {#24-4-4-2}
 
-Release date: April 14, 2025
+Release date: April 15, 2025
 
 #### Functionality
 

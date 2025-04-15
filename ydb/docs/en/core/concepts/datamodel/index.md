@@ -21,7 +21,7 @@ Cluster scheme root/
     └── ...
 ```
 
-## Data model
+## {{ ydb-short-name }} scheme objects
 
 Scheme objects in {{ ydb-short-name }} databases:
 

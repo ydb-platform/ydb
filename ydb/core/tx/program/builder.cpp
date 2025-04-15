@@ -17,50 +17,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-namespace {
-
-// TKernelRequestBuilder::EBinaryOp BinaryOpFromString(string_view oper) {
-//     if (oper == "string_contains"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::StringContains;
-//     } else if (oper == "starts_with"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::StartsWith;
-//     } else if (oper == "ends_with"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::EndsWith;
-//     } else if (oper == "string_contains_ci"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::StringContainsCI;
-//     } else if (oper == "starts_with_ci"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::StartsWithCI;
-//     } else if (oper == "ends_with_ci"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::EndsWithCI;
-//     } else if (oper == "eq"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::Equals;
-//     } else if (oper == "neq"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::NotEquals;
-//     } else if (oper == "lt"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::Less;
-//     } else if (oper == "lte"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::LessOrEqual;
-//     } else if (oper == "gt"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::Greater;
-//     } else if (oper == "gte"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
-//     } else if (oper == "+"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::Add;
-//     } else if (oper == "-"sv) {
-//         return TKernelRequestBuilder::EBinaryOp::Sub;
-//     } else if (oper == "*"sv) {
-//         op = TKernelRequestBuilder::EBinaryOp::Mul;
-//     } else if (oper == "/"sv) {
-//         op = TKernelRequestBuilder::EBinaryOp::Div;
-//     } else if (oper == "%"sv) {
-//         op = TKernelRequestBuilder::EBinaryOp::Mod;
-//     } else if (oper == "??"sv) {
-//         op = TKernelRequestBuilder::EBinaryOp::Coalesce;
-//     }
-// }
-
-} //namespace
-
 TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const TColumnInfo& name,
     const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<NArrow::NSSA::IKernelLogic>& kernelLogic,
     std::vector<TColumnChainInfo>& arguments) const {
@@ -79,15 +35,21 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         arguments.emplace_back(col.GetId());
     }
 
-    if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) { //IgnoreCase
+    if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) {
         if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
             kernelLogic = std::make_shared<TLogicEquals>(false);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
             kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, false);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
             kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWithIgnoreCase) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false, false);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
             kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::EndsWithIgnoreCase) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false, false);
         }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {

@@ -138,6 +138,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }
+
+            session->Close(TDuration::Seconds(1));
         }
 
         // Check describe for topic wich contains messages, has commited offset of first message and read second message
@@ -158,7 +160,6 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }
-
     }
 }
 

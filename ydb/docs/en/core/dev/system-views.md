@@ -370,7 +370,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 ## Auth users, groups, permissions {#auth}
 
-### Auth users
+### Auth users {#users}
 
 The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 

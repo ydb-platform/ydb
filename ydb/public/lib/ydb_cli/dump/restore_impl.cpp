@@ -988,6 +988,29 @@ TRestoreResult TRestoreClient::RestoreFolder(
     return RestorePermissions(fsPath, dbPath, settings, dbPathExists);
 }
 
+TRestoreResult TRestoreClient::Drop(ESchemeEntryType type, const TString& path, bool isAlreadyExisting, bool verifyExistence) {
+    if (isAlreadyExisting) {
+        auto settings = TRemoveDirectoryRecursiveSettings().NotExistsIsOk(!verifyExistence);
+        auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, settings);
+        TSchemeEntry entry;
+        entry.Type = type;
+        entry.Name = path;
+        TStatus result = remover(entry);
+
+        if (result.IsSuccess()) {
+            LOG_D("Dropped " << path.Quote());
+            return Result<TRestoreResult>();
+        }
+        LOG_E("Failed to drop " << path.Quote());
+        return Result<TRestoreResult>(path, std::move(result));
+    }
+    if (verifyExistence) {
+        LOG_E("Failed to drop " << path.Quote());
+        return Result<TRestoreResult>(path, EStatus::SCHEME_ERROR, "Cannot drop the object, because it does not exist in the database");
+    }
+    return Result<TRestoreResult>();
+}
+
 TRestoreResult TRestoreClient::RestoreView(
     const TFsPath& fsPath,
     const TString& dbRestoreRoot,
@@ -1006,6 +1029,12 @@ TRestoreResult TRestoreClient::RestoreView(
 
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::View);
+    }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::View, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
     }
 
     TString query = ReadViewQuery(fsPath, Log.get());
@@ -1050,6 +1079,12 @@ TRestoreResult TRestoreClient::RestoreTopic(
 
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::Topic);
+    }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::Topic, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
     }
 
     const auto request = ReadTopicCreationRequest(fsPath, Log.get());
@@ -1107,6 +1142,12 @@ TRestoreResult TRestoreClient::RestoreReplication(
 
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::Replication);
+    }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::Replication, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
     }
 
     auto query = ReadAsyncReplicationQuery(fsPath, Log.get());
@@ -1210,6 +1251,12 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::CoordinationNode);
     }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::CoordinationNode, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
+    }
 
     const auto request = ReadCoordinationNodeCreationRequest(fsPath, Log.get());
     auto result = CreateCoordinationNode(CoordinationNodeClient, dbPath, request);
@@ -1243,6 +1290,12 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::ExternalDataSource);
+    }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::ExternalDataSource, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
     }
 
     TString query = ReadExternalDataSourceQuery(fsPath, Log.get());
@@ -1287,6 +1340,12 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
     if (settings.DryRun_) {
         return CheckExistenceAndType(SchemeClient, dbPath, ESchemeEntryType::ExternalTable);
     }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::ExternalTable, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
+    }
 
     TString query = ReadExternalTableQuery(fsPath, Log.get());
 
@@ -1330,6 +1389,12 @@ TRestoreResult TRestoreClient::RestoreTable(
 
     if (settings.DryRun_) {
         return CheckSchema(dbPath, dumpedDesc);
+    }
+    if (settings.Overwrite_) {
+        auto result = Drop(ESchemeEntryType::Table, dbPath, isAlreadyExisting, settings.VerifyExistence_);
+        if (!result.IsSuccess()) {
+            return result;
+        }
     }
 
     LOG_I("Restore table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());

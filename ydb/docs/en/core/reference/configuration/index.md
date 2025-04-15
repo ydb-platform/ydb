@@ -621,11 +621,11 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-### Configuring password complexity {#password-complexity}
+### A Password Complexity Policies {#password-complexity}
 
-{{ ydb-short-name }} allows users to be authenticated by login and password. More details can be found in the section [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }} it is possible to configure the complexity of user passwords. To configure password requirements the `password_complexity` section needs to be described.
+{{ ydb-short-name }} allows users to be authenticated by login and password. More details can be found in the section [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }} it is possible to configure the complexity of user passwords. You can enable the password complexity policy due include addition section `password_complexity`.
 
-Example of the `password_complexity` section:
+Syntax of the `password_complexity` section:
 
 ```yaml
 auth_config:

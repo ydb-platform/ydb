@@ -275,12 +275,13 @@ Y_UNIT_TEST_SUITE(DiskTimeAvailable) {
 }
 
 template <typename TInflightActor>
-void TestDSProxyAndVDiskEqualByteCounters(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
+void TestDSProxyAndVDiskEqualByteCounters(TInflightActor* actor) {
     std::unique_ptr<TEnvironmentSetup> env;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
+    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
     SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
     actor->SetGroupId(TGroupId::FromValue(groupId));
     env->Runtime->Register(actor, 1);
@@ -298,8 +299,8 @@ void TestDSProxyAndVDiskEqualByteCounters(const TBlobStorageGroupInfo::TTopology
                     GetSubgroup("sizeClass", sizeClass)->
                     GetCounter("generatedSubrequestBytes")->Val();
     }
-    vdiskCounter = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
-            "PutTabletLog", "requestBytes", false, true);
+    vdiskCounter = env->AggregateVDiskCountersWithHandleClass(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
+            "PutTabletLog", "requestBytes");
     if constexpr(VERBOSE) {
         for (ui32 i = 1; i <= groupSize; ++i) {
             Cerr << " ##################### Node " << i << " ##################### " << Endl;
@@ -313,9 +314,13 @@ void TestDSProxyAndVDiskEqualByteCounters(const TBlobStorageGroupInfo::TTopology
 
 Y_UNIT_TEST_SUITE(TestDSProxyAndVDiskEqualByteCounters) {
     Y_UNIT_TEST(MultiPut) {
-        TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);                     
         auto actor = new TInflightActorPut({10, 10}, 1000, 10);                       
-        TestDSProxyAndVDiskEqualByteCounters(topology, actor);    
+        TestDSProxyAndVDiskEqualByteCounters(actor);    
+    }
+
+    Y_UNIT_TEST(SinglePut) {
+        auto actor = new TInflightActorPut({1, 1}, 1000);                       
+        TestDSProxyAndVDiskEqualByteCounters(actor);    
     }
 }
 

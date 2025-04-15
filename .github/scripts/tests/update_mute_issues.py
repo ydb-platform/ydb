@@ -1,5 +1,4 @@
 import os
-import re
 import requests
 from github import Github #pip3 install PyGithub
 from urllib.parse import quote, urlencode
@@ -309,9 +308,9 @@ def generate_github_issue_title_and_body(test_data):
 
     # Title
     if len(test_full_names) > 1:
-        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests'
+        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}'
     else:
-        title = f'Mute {test_data[0]["full_name"]}'
+        title = f'Mute {test_data[0]["full_name"]} in {branch}'
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
@@ -322,11 +321,12 @@ def generate_github_issue_title_and_body(test_data):
 
     # Создаем ссылку на историю тестов, кодируя параметры
 
-    test_run_history_params = "&".join(
+    test_name_params = "&".join(
         urlencode({"full_name": f"__in_{test}"})
         for test in test_full_names
     )
-    test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_run_history_params}"
+    branch_param = urlencode({"&branch": branch})
+    test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_name_params}{branch_param}"
 
     # owner
     # Тело сообщения и кодирование
@@ -397,12 +397,6 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             body = content['body']
-
-            # for debug
-            if content['id'] == 'I_kwDOGzZjoM6V3BoE':
-                print(1)
-            #
-
             tests, branches = parse_body(body)
 
             field_values = issue.get('fieldValues', {}).get('nodes', [])
@@ -423,6 +417,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             print(f"Status: {status}")
             print(f"Status updated: {status_updated}")
             print(f"Owner: {owner}")
+            print(f"Branch: {(',').join(branches) if branches else 'main'}")
             print("Tests:")
 
             all_issues_with_contet[content['id']] = {}
@@ -473,14 +468,6 @@ def main():
         return 1
     else:
         github_token = os.environ["GITHUB_TOKEN"]
-    # muted_tests = get_muted_tests_from_issues()
-
-    # create_github_issues(tests)
-
-
-# create_and_add_issue_to_project('test issue','test_issue_body', state = 'Muted', owner = 'fq')
-# print(1)
-# update_issue_state(muted_tests, github_token, "closed")
 
 if __name__ == "__main__":
     main()

@@ -599,7 +599,18 @@ def main():
                         raise_on_error=True
                     )
 
-                    node.ssh_command()
+                    node.ssh_command([
+                        f'screen -s workload_log_{store_type} -d -m bash -c "while true; do',
+                        './ydb',
+                        '-d', '/Root/db1',
+                        '-e', f'grpc://localhost:{node.grpc_port}',
+                        'sql', '-s',
+                        'delete from `log_workload_column` where `timestamp` between CurrentUtcDateTime()-DateTime::IntervalFromMinutes(120) and CurrentUtcTimestamp()-DateTime::IntervalFromMinutes(121);',
+                        'sleep 600',
+                        '; done"'
+                        ],
+                        raise_on_error=True
+                    )
 
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_row":

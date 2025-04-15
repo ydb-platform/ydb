@@ -1001,7 +1001,7 @@ struct TEnvironmentSetup {
     }
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false, bool handleclass = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1019,7 +1019,7 @@ struct TEnvironmentSetup {
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup("subsystem", subsystem)->
+                        GetSubgroup(handleclass ? "handleclass" : "subsystem", subsystem)->
                         GetCounter(counter, derivative)->Val();
             }
         }

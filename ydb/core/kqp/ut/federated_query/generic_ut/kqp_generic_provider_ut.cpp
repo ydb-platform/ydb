@@ -196,7 +196,7 @@ namespace NKikimr::NKqp {
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.credentialsFactory = NTestUtils::CreateCredentialProvider()});
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -312,7 +312,7 @@ namespace NKikimr::NKqp {
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.credentialsFactory = NTestUtils::CreateCredentialProvider()});
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -427,7 +427,7 @@ namespace NKikimr::NKqp {
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.credentialsFactory = NTestUtils::CreateCredentialProvider()});
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -561,7 +561,7 @@ namespace NKikimr::NKqp {
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.credentialsFactory = NTestUtils::CreateCredentialProvider()});
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -629,7 +629,7 @@ namespace NKikimr::NKqp {
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.credentialsFactory = NTestUtils::CreateCredentialProvider()});
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             // Create trash query
             NYdbGrpc::TGRpcClientLow clientLow;

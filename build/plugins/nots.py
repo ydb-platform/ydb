@@ -801,6 +801,19 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
+def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
+    if unit.get("TS_LOCAL_CLI") == "yes":
+        return False
+
+    if unit.get("_WITH_NODE_MODULES") == "yes":
+        return True
+
+    node_modules_for = unit.get("NODE_MODULES_FOR")
+    nm_required_for = node_modules_for.split(":") if node_modules_for else []
+
+    return arc_path in nm_required_for
+
+
 @_with_report_configure_error
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
@@ -809,8 +822,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+
+        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):

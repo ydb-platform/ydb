@@ -1,3 +1,4 @@
+import re
 import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
@@ -293,6 +294,19 @@ def _with_report_configure_error(fn):
             logger.reset(*last_state)
 
     return _wrapper
+
+
+def _get_var_name(s: str) -> tuple[bool, str]:
+    if not s.startswith("$"):
+        return False, ""
+
+    PLAIN_VAR_PATTERN = r"^\$\w+$"
+    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
+    if re.match(PLAIN_VAR_PATTERN, s):
+        return True, s[1:]
+    if re.match(WRAPPED_VAR_PATTERN, s):
+        return True, s[2:-1]
+    return False, ""
 
 
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
@@ -994,12 +1008,19 @@ def on_depends_on_mod(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_script: str) -> None:
+def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: str) -> None:
+    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
+
+    def process_input(input: str) -> str:
+        is_var, var_name = _get_var_name(input)
+        if is_var:
+            return f"${{hide;input:{var_name}}}"
+        return _build_cmd_input_paths([input], hide=True)
+
+    processed_inputs = [process_input(i) for i in inputs if i]
+
     js_script = os.path.normpath(js_script)
-    if js_script.startswith("node_modules/"):
-        return
+    if not js_script.startswith("node_modules/"):
+        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
-    __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)
-
-
-# Zero-diff commit
+    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])

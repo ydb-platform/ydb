@@ -31,6 +31,7 @@ target_link_libraries(core-tx-sequenceproxy PUBLIC
 target_sources(core-tx-sequenceproxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_allocate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_get_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_resolve.cpp
 )

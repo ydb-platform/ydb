@@ -38,7 +38,6 @@ constexpr ui32 RecordsInSysLog = 16;
 
 constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
 constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
-constexpr bool PlainDataChunk = false;
 
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
@@ -699,6 +698,14 @@ struct TDiskFormat {
         }
     }
 
+    void SetPlainDataChunks(bool plain) {
+        if (plain) {
+            FormatFlags |= FormatFlagPlainDataChunks;
+        } else {
+            FormatFlags &= ~FormatFlagPlainDataChunks;
+        }
+    }
+
     ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx, ui64 offset) const {
         return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx + offset;
     }
@@ -846,7 +853,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        FormatFlags |= PlainDataChunk ? FormatFlagPlainDataChunks : 0;
+
         Hash = 0;
 
         memset(FormatText, 0, sizeof(FormatText));
@@ -866,11 +873,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        if (format.IsPlainDataChunks()) {
-            FormatFlags |= FormatFlagPlainDataChunks;
-        } else {
-            FormatFlags &= !FormatFlagPlainDataChunks;
-        }
+        SetPlainDataChunks(format.IsPlainDataChunks());
 
         Y_VERIFY(format.Version <= Version);
         Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));

@@ -324,8 +324,17 @@ TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRe
     auto newSize = read->ChunkEncrypted
         ? read->Size
         : read->Size + read->Offset % sectorSize;
-    size_t tailroom = newSize - read->Size;
+    size_t tailroom = AlignUp<size_t>(newSize, sectorSize) - newSize;
     CommonBuffer = TBufferWithGaps(read->Offset, newSize, tailroom);
+    Cerr << (TStringBuilder() <<
+
+        "[" << read->ChunkEncrypted <<
+        " " << read->Size <<
+        " " << read->Offset <<
+        " " << newSize <<
+        " " << tailroom <<
+        "]"
+    );
 }
 
 TCompletionChunkRead::~TCompletionChunkRead() {

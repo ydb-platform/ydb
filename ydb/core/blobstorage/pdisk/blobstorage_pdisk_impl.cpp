@@ -1012,7 +1012,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     size_t diskSize = sectorsToRead * Format.SectorSize;
     ui64 diskOffset = (ui64)read->ChunkIdx * Format.ChunkSize + AlignDown<ui32>(read->Offset, Format.SectorSize);
-    P_LOG(PRI_DEBUG, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
+    P_LOG(PRI_NOTICE, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
         (FirstSector, read->FirstSector), (Offset, read->Offset), (DiskSize, diskSize), (DiskOffset, diskOffset),
         (BytesToRead, bytesToRead), (PieceSizeLimit, pieceSizeLimit));
     if (!read->ChunkEncrypted) {
@@ -1706,11 +1706,12 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
         const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
         TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-        std::optional<TRcBuf> metadata) {
+        std::optional<TRcBuf> metadata, bool plainDataChunks) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format;
     format.Clear();
+    format.SetPlainDataChunks(plainDataChunks);
     format.DiskSize = diskSizeBytes;
     format.SectorSize = sectorSizeBytes;
     ui64 erasureFlags = FormatFlagErasureEncodeUserLog;
@@ -3021,6 +3022,11 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 SendChunkReadError(read, err, NKikimrProto::ERROR);
                 return false;
             }
+            //if (state.CommitState == TChunkState::DATA_RESERVED) {
+            //    err << "chunk is empty and has CommitState# " << state.CommitState;
+            //    SendChunkReadError(read, err, NKikimrProto::CORRUPTED);
+            //    return false;
+            //}
             ui64 offset = 0;
             if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, read->Offset, read->Size,
                         read->FirstSector, read->LastSector, offset, PCtx->PDiskLogPrefix)) {
@@ -3032,7 +3038,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             read->SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.ReadThroughput.Increment(read->Size, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindRead;
-            read->ChunkEncrypted = !PlainDataChunk;
+            read->ChunkEncrypted = !Cfg->PlainDataChunks;
             if (!read->ChunkEncrypted) {
                 read->FirstSector = read->Offset / Format.SectorSize;
                 read->LastSector = (read->Offset + read->Size + Format.SectorSize - 1) / Format.SectorSize - 1;
@@ -3135,7 +3141,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ev.SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.WriteThroughput.Increment(ev.TotalSize, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindWrite;
-            ev.ChunkEncrypted = !PlainDataChunk;
+            ev.ChunkEncrypted = !Cfg->PlainDataChunks;
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());

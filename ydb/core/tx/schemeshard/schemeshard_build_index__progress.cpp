@@ -265,9 +265,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
-    auto path = TPath::Init(buildInfo.TablePathId, ss)
-        .Dive(buildInfo.IndexName)
-        .Dive(buildInfo.KMeans.WriteTo(true));
+    auto path = GetBuildPath(ss, buildInfo, buildInfo.KMeans.WriteTo(true));
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
@@ -534,8 +532,8 @@ private:
         if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
-            auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
+            auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
+            path->PathId.ToProto(ev->Record.MutablePathId());
         }
 
         ev->Record.SetK(buildInfo.KMeans.K);
@@ -657,8 +655,8 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvPrefixKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
+        auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
+        path->PathId.ToProto(ev->Record.MutablePathId());
         path.Rise();
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
@@ -701,7 +699,7 @@ private:
             buildInfo.SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
         } else {
             if (buildInfo.TargetName.empty()) {
-                TPath implTable = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName).Dive(
+                TPath implTable = GetBuildPath(Self, buildInfo,
                     buildInfo.IsBuildPrefixedVectorIndex() ? buildInfo.KMeans.WriteTo() : NTableIndex::ImplTable);
                 buildInfo.TargetName = implTable.PathString();
 
@@ -743,9 +741,7 @@ private:
 
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-        auto path = TPath::Init(buildInfo.TablePathId, Self)
-                        .Dive(buildInfo.IndexName)
-                        .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(),
             buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
@@ -1361,7 +1357,7 @@ public:
             auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
             table = Self->Tables.at(path->PathId);
 
-            if (!path.IsLocked()) { // lock is needed to prevent its shards from beeing split
+            if (!path.IsLocked()) { // lock is needed to prevent table shards from beeing split
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::LockBuild);
                 Progress(buildInfo.Id);
                 return false;

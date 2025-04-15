@@ -1,7 +1,5 @@
 # Начало работы
 
-[![NuGet](https://img.shields.io/nuget/v/Ydb.Sdk)](https://www.nuget.org/packages/Ydb.Sdk)
-
 Лучший способ использовать `Ydb.Sdk` - это установить его [nuget пакет](https://www.nuget.org/packages/Ydb.Sdk).
 
 `Ydb.Sdk.Ado` стремиться быть полностью совместимым с ADO.NET, его API должен быть практически идентичен другим драйверам баз дынных .NET.

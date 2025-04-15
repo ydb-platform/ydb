@@ -126,8 +126,7 @@ class TestCompatibility(object):
             "--secret-key",
             s3_secret_key,
             "--item",
-            "s=/Root",
-            "d=sample_table"
+            "src=/Root/sample_table,dst=sample_table"
         ]
 
         yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)

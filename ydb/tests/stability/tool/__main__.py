@@ -566,6 +566,22 @@ def main():
                         ],
                         raise_on_error=True
                     )
+                    node.ssh_command([
+                        f'screen -s workload_log_{store_type} -d -m bash -c "while true; do',
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'log', 'run', 'insert',
+                        '--rows', "2000",
+                        '--threads', '10',
+                        '--date-from', '1744521956',
+                        '--date-to', '1744721956',
+                        '--seconds', '86400',
+                        '--path', f'log_workload_{store_type}',
+                        '; done"'
+                        ],
+                        raise_on_error=True
+                    )
 
                     node.ssh_command([
                         f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
@@ -582,6 +598,9 @@ def main():
                         ],
                         raise_on_error=True
                     )
+
+                    node.ssh_command()
+
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):

@@ -2,7 +2,7 @@ items:
 - name: Contents
   href: index.yaml
 - name: Quick start
-  href: getting_started.md
+  href: quickstart.md
 - name: Concepts
   href: concepts/index.md
   include:

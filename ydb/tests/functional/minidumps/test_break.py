@@ -6,7 +6,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 def test_create_minidump():
     dump_path = os.path.join(yatest.common.tempfile.gettempdir(), 'dumps1')
     os.makedirs(dump_path, exist_ok=True)
-    os.environ['BREAKPAD_MINIDUMPS_PATH'] = dump_path
+    os.environ['INTERNAL_BREAKPAD_MINIDUMPS_PATH'] = dump_path
     cluster = KiKiMR()
     cluster.start()
     for node in cluster.nodes.values():
@@ -31,8 +31,8 @@ def test_minidump_script():
             'echo $SUCCESS >${PATH}.success\n'
         )
     os.chmod(script_path, 0o777)
-    os.environ['BREAKPAD_MINIDUMPS_SCRIPT'] = script_path
-    os.environ['BREAKPAD_MINIDUMPS_PATH'] = dump_path
+    os.environ['INTERNAL_BREAKPAD_MINIDUMPS_SCRIPT'] = script_path
+    os.environ['INTERNAL_BREAKPAD_MINIDUMPS_PATH'] = dump_path
     cluster = KiKiMR()
     cluster.start()
     for node in cluster.nodes.values():

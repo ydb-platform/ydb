@@ -12,14 +12,16 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.simple_queue.workload import Workload
 
 last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+prev_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-prev-stable")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
     [last_stable_binary_path],
     [current_binary_path],
     [last_stable_binary_path, current_binary_path],
+    [prev_stable_binary_path, last_stable_binary_path],
 ]
-all_binary_combinations_ids = ["last_stable", "current", "mixed"]
+all_binary_combinations_ids = ["last_stable", "current", "last_stable_to_current","stable_prev_to_last"]
 
 
 class TestStress(object):

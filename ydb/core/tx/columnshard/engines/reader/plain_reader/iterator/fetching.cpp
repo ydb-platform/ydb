@@ -35,7 +35,8 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
 }
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto collection = source->GetStageData().GetTable()->SelectOptional(std::vector<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }), false);
+    auto collection =
+        source->GetStageData().GetTable()->SelectOptional(std::vector<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }), false);
     if (!collection) {
         return true;
     }
@@ -95,9 +96,16 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        source->MutableStageData().GetTable()->AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
-            std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
+        if (source->MutableStageData().GetTable()->HasColumn(IIndexInfo::GetColumnIdVerified(f->name()))) {
+            auto arr = source->MutableStageData().GetTable()->GetArrayVerified(IIndexInfo::GetColumnIdVerified(f->name()));
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "spec_column_exists")("column_name", f->name())(
+                "col", NArrow::DebugJson(arr, 2, 2).GetStringRobust());
+        } else {
+            source->MutableStageData().GetTable()->AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
+                std::make_shared<NArrow::NAccessor::TTrivialArray>(
+                    NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())),
+                true);
+        }
     }
     return true;
 }

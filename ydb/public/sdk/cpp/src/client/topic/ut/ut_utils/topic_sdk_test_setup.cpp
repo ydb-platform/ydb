@@ -93,14 +93,12 @@ void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId, con
     }
     auto session = client.CreateSimpleBlockingWriteSession(settings);
 
-    TWriteMessage msg(TStringBuilder() << message);
-    msg.SeqNo(seqNo);
-    UNIT_ASSERT(session->Write(std::move(msg)));
+    UNIT_ASSERT(session->Write(message, seqNo));
 
     session->Close(TDuration::Seconds(5));
 }
 
-void TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout) {
+std::shared_ptr<IReadSession> TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout) {
     TTopicClient client(MakeDriver());
 
     auto reader = client.CreateReadSession(
@@ -146,6 +144,8 @@ void TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consu
     }
 
     UNIT_ASSERT_C(!continueFlag, "Unable to wait result");
+
+    return reader;
 }
 
 TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {

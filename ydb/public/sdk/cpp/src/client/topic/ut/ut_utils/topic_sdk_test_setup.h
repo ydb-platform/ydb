@@ -25,7 +25,7 @@ public:
     TConsumerDescription DescribeConsumer(const std::string& path = TEST_TOPIC, const std::string& consumer = TEST_CONSUMER);
 
     void Write(const std::string& message, ui32 partitionId = 0, const std::optional<std::string> producer = std::nullopt, std::optional<ui64> seqNo = std::nullopt);
-    void Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout = TDuration::Seconds(15));
+    std::shared_ptr<IReadSession> Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout = TDuration::Seconds(15));
     TStatus Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId = std::nullopt);
 
     TString GetEndpoint() const;

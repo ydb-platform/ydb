@@ -45,6 +45,18 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs) {
     }
 }
 
+void DFS(int vertex, TVector<int>& sortedStages, THashSet<int>& visited, const THashMap<int, TVector<int>> & stageInputs) {
+    visited.emplace(vertex);
+
+    for ( auto u : stageInputs.at(vertex)) {
+        if (!visited.contains(u)) {
+            DFS(u, sortedStages, visited, stageInputs);
+        }
+    }
+
+    sortedStages.push_back(vertex);
+}
+
 }
 
 namespace NKikimr {
@@ -69,6 +81,57 @@ TInfoUnit::TInfoUnit(TString name) {
 
 inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs) {
     return lhs.Alias == rhs.Alias && lhs.ColumnName == rhs.ColumnName;
+}
+
+TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    return Build<TDqCnBroadcast>(ctx, node->Pos())
+        .Output()
+            .Stage(inputStage)
+            .Index().Build("0")
+        .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    return Build<TDqCnUnionAll>(ctx, node->Pos())
+        .Output()
+            .Stage(inputStage)
+            .Index().Build("0")
+        .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    TVector<TCoAtom> keyColumns;
+
+    for ( auto k : Keys ) {
+        TString fullName = "_alias_" + k.Alias + "." + k.ColumnName;
+        auto atom = Build<TCoAtom>(ctx, node->Pos()).Value(fullName).Done();
+        keyColumns.push_back(atom);
+    }
+
+    return Build<TDqCnHashShuffle>(ctx, node->Pos())
+        .Output()
+            .Stage(inputStage)
+            .Index().Build("0")
+        .Build()
+        .KeyColumns()
+            .Add(keyColumns)
+        .Build()
+        .Done().Ptr();
+}
+
+void TStageGraph::TopologicalSort() {
+    TVector<int> sortedStages;
+    THashSet<int> visited;
+
+    for (auto id : StageIds) {
+        if (!visited.contains(id)) {
+            DFS(id, sortedStages, visited, StageInputs);
+        }
+    }
+
+    StageIds = sortedStages;
 }
 
 TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node) {
@@ -212,18 +275,38 @@ TOpJoin::TOpJoin(TExprNode::TPtr node) : IBinaryOperator(EOperator::Join, node) 
     auto leftInputIUs = Children[0]->GetOutputIUs();
     auto rightInputIUs = Children[1]->GetOutputIUs();
 
-    //FIXME: Check the alias
     OutputIUs.insert(OutputIUs.end(), leftInputIUs.begin(), leftInputIUs.end());
     OutputIUs.insert(OutputIUs.end(), rightInputIUs.begin(), rightInputIUs.end());
+
+    JoinKind = opJoin.JoinKind().StringValue();
+    for (auto k : opJoin.JoinKeys()) {
+        TInfoUnit leftKey(k.LeftLabel().StringValue(), k.LeftColumn().StringValue());
+        TInfoUnit rightKey(k.RightLabel().StringValue(), k.RightColumn().StringValue());
+
+        JoinKeys.push_back(std::make_pair(leftKey, rightKey));
+    }
 }
 
 std::shared_ptr<IOperator> TOpJoin::Rebuild(TExprContext& ctx) {
     auto current = TKqpOpJoin(Node);
+    
+    TVector<TDqJoinKeyTuple> keys;
+    for (auto k : JoinKeys ) {
+        keys.push_back(Build<TDqJoinKeyTuple>(ctx, Node->Pos())
+                .LeftLabel().Value(k.first.Alias).Build()
+                .LeftColumn().Value(k.first.ColumnName).Build()
+                .RightLabel().Value(k.second.Alias).Build()
+                .RightColumn().Value(k.second.ColumnName).Build()
+                .Done());
+    }
+
+    auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, Node->Pos()).Add(keys).Done();
+
     auto node = Build<TKqpOpJoin>(ctx, Node->Pos())
         .LeftInput(Children[0]->Rebuild(ctx)->Node)
         .RightInput(Children[1]->Rebuild(ctx)->Node)
-        .JoinKind(current.JoinKind())
-        .JoinKeys(current.JoinKeys())
+        .JoinKind().Value(JoinKind).Build()
+        .JoinKeys(joinKeys)
         .Done().Ptr();
     return std::make_shared<TOpJoin>(node);
 }

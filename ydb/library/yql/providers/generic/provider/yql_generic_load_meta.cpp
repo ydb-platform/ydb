@@ -131,8 +131,7 @@ namespace NYql {
             auto issues = FillDescribeTableRequest(request, it->second, tableAddress.TableName);
 
             if (!issues.Empty()) {
-                desc->Issues.AddIssues(issues);
-                return desc->Issues;
+                return issues;
             }
 
             auto promise = NThreading::NewPromise();

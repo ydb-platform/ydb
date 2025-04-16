@@ -1069,7 +1069,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> partition0Messages;
 
-        setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        auto reader = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];

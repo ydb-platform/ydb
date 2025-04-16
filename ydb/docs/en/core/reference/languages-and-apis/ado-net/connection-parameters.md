@@ -8,13 +8,13 @@ Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
 
 ## Basic connection
 
-| Parameter         | Description                                                                                                 | Default value |
-|-------------------|-------------------------------------------------------------------------------------------------------------|---------------|
-| `Host`            | Specifies the {{ ydb-short-name }} server host                                                              | `localhost`   |
-| `Port`            | Specifies the {{ ydb-short-name }}  server port                                                             | `2136`        |
-| `Database`        | Specifies the database name                                                                                 | `/local`      |
-| `User`            | Specifies the username                                                                                      | Not defined   |
-| `Password`        | Specifies the user password                                                                                 | Not defined   |
+| Parameter         | Description                                                                                                | Default value |
+|-------------------|------------------------------------------------------------------------------------------------------------|---------------|
+| `Host`            | Specifies the {{ ydb-short-name }} server host                                                             | `localhost`   |
+| `Port`            | Specifies the {{ ydb-short-name }} server port                                                             | `2136`        |
+| `Database`        | Specifies the database name                                                                                | `/local`      |
+| `User`            | Specifies the username                                                                                     | Not defined   |
+| `Password`        | Specifies the user password                                                                                | Not defined   |
 
 ## Security and encryption
 

@@ -1,6 +1,4 @@
-# Yandex Cloud
-
-[![Nuget](https://img.shields.io/nuget/v/Ydb.Sdk.Yc.Auth)](https://www.nuget.org/packages/Ydb.Sdk.Yc.Auth/)
+# Подключение ADO.NET к Yandex Cloud
 
 ## Установка
 

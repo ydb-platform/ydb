@@ -1,6 +1,6 @@
 # Using Dapper
 
-[Dapper](https://www.learndapper.com/) is a micro ORM (Object-Relational Mapping) tool that provides a simple and flexible way to interact with databases. It operates on top of the [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) standard and offers various features that simplify database operations.
+[Dapper](https://www.learndapper.com/) is a micro ORM (Object-Relational Mapping) tool that provides a simple and flexible way to interact with databases. It operates on top of the [ADO.NET](../../reference/languages-and-apis/ado-net/index.md) standard and offers various features that simplify database operations.
 
 ## Getting started
 

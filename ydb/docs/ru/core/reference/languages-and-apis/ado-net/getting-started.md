@@ -1,4 +1,4 @@
-# Начало работы
+# Начало работы ADO.NET
 
 Лучший способ использовать `Ydb.Sdk` - это установить его [NuGet пакет](https://www.nuget.org/packages/Ydb.Sdk).
 

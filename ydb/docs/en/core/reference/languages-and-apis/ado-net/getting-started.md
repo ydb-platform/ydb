@@ -1,4 +1,4 @@
-# Getting Started
+# Getting Started with ADO.NET
 
 The best way to use `Ydb.Sdk` is to install its [NuGet package](https://www.nuget.org/packages/Ydb.Sdk).
 

@@ -1,4 +1,4 @@
-# Supported Types and Their Mappings
+# ADO.NET Supported Types and Their Mappings
 
 The following lists the built-in mappings when reading and writing CLR types to YDB types.
 

@@ -1,4 +1,6 @@
-# Ydb.Sdk.Ado Basic Usage
+# Basic Usage ADO.NET
+
+This article covers core ADO.NET usage scenarios for YDB, including database connections, query execution, and result processing. For other details, see the main [documentation](index.md).
 
 ## Connections
 
@@ -243,9 +245,3 @@ The `YdbException` exception has the following properties, which can help you ha
 Please note that ADO.NET does not automatically retry failed operations, and you must implement retry logic in your code.
 
 {% endnote %}
-
-##  See also
-
-- [ADO.NET Examples](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet)
-- [Connect to Yandex Cloud](yandex-cloud.md)
-- [Dapper](./../../../integrations/orm/dapper.md)

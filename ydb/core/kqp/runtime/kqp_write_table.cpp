@@ -248,6 +248,7 @@ public:
             SerializedMemory += GetCellHeaderSize() * row.size() + size;
             Memory += size;
         }
+        AFL_ENSURE(Memory < (i64)1_MB);
     }
 
 private:
@@ -803,6 +804,8 @@ public:
         
         AFL_ENSURE(newMemory == Batches.back()->AddRow(std::move(row)));
         Memory += newMemory;
+
+        AFL_ENSURE(Memory < (i64)1_MB);
     }
 
     i64 GetMemory() const {
@@ -998,6 +1001,7 @@ private:
 
     bool Closed = false;
 };
+
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1122,6 +1126,7 @@ public:
             if (BatchesInFlight != 0 && Cookie == cookie) {
                 TBatchInfo result;
                 for (size_t index = 0; index < BatchesInFlight; ++index) {
+                    AFL_ENSURE(!Batches.empty());
                     const i64 batchMemory = Batches.front().GetMemory();
                     result.DataSize += batchMemory;
                     Memory -= batchMemory;

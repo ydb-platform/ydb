@@ -1891,7 +1891,9 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write queries aren't allowed.",
+                TStringBuilder() << "Stream write queries aren't allowed. TotalFreeSpace: "
+                    << GetTotalFreeSpace() << " from " << MessageSettings.InFlightMemoryLimitPerActorBytes << ". "
+                    << "TotalWrites: " << WriteInfos.size(),
                 {});
             return false;
         }
@@ -2967,7 +2969,7 @@ private:
     }
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
-        CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+        CA_LOG_E("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
         InFlight = false;
 
         EgressStats.Bytes += DataSize;
@@ -2981,10 +2983,10 @@ private:
         DataSize = 0;
 
         if (Closed) {
-            CA_LOG_D("Finished");
+            CA_LOG_E("Finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         } else {
-            CA_LOG_D("Resume with freeSpace=" << GetFreeSpace());
+            CA_LOG_E("Resume with freeSpace=" << GetFreeSpace());
             Callbacks->ResumeExecution();
         }
     }
@@ -3033,7 +3035,7 @@ private:
 
         ev->SendTime = TInstant::Now();
 
-        CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
+        CA_LOG_E("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
     }
 
@@ -3064,7 +3066,7 @@ private:
         Batcher->AddData(data);
         DataSize += size;
 
-        CA_LOG_D("Add data: " << size << " / " << DataSize);
+        CA_LOG_E("Add data: " << size << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
             WriteToBuffer();
         }

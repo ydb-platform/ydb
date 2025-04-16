@@ -408,12 +408,13 @@ struct TEvPQProxy {
 
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset)
+        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset, const bool readingFinishedSent)
             : AssignId(assignId)
             , StartCookie(startCookie)
             , LastCookie(lastCookie)
             , Offset(offset)
             , EndOffset(endOffset)
+            , ReadingFinishedSent(readingFinishedSent)
         { }
 
         ui64 AssignId;
@@ -421,6 +422,7 @@ struct TEvPQProxy {
         ui64 LastCookie;
         ui64 Offset;
         ui64 EndOffset;
+        bool ReadingFinishedSent;
     };
 
     struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
@@ -645,12 +647,13 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
             : Topic(topic)
             , PartitionId(partitionId)
             , FirstMessage(first)
             , AdjacentPartitionIds(std::move(adjacentPartitionIds))
             , ChildPartitionIds(std::move(childPartitionIds))
+            , EndOffset(endOffset)
         {}
 
         TString Topic;
@@ -659,6 +662,8 @@ struct TEvPQProxy {
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
+
+        ui64 EndOffset;
     };
 
     struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>

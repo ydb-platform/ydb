@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_pdisk_config_pb2 as kikimr_pdisk_config
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import math
@@ -75,6 +76,7 @@ def do(args):
         'PoolId',
         'ErasureSpecies',
         'Kind',
+        'OccupySlotUnitSize',
         'VDiskKind',
         'Groups_TOTAL',
         'Groups_UNKNOWN',
@@ -103,6 +105,7 @@ def do(args):
         'PoolName',
         'ErasureSpecies',
         'Kind',
+        'OccupySlotUnitSize',
         'Groups_TOTAL',
         'VDisks_TOTAL',
     ]
@@ -180,6 +183,7 @@ def do(args):
         row['PoolName'] = sp.Name
         row['ErasureSpecies'] = sp.ErasureSpecies
         row['Kind'] = sp.Kind
+        row['OccupySlotUnitSize'] = kikimr_pdisk_config.TPDiskSlotUnitSize.E.Name(sp.OccupySlotUnitSize and sp.OccupySlotUnitSize.Value or 0)
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
 

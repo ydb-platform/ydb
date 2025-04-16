@@ -333,7 +333,7 @@ message TPqClusterConfig {
     optional bool SharedReading = 101;
     optional string ReconnectPeriod = 102; // disabled by default, example of a parameter: 5m
     optional string ReadGroup = 103;
-    optional bool UseIncompleteMetrics = 104;
+    optional bool UseReducedMetrics = 104;
 }
 
 message TPqGatewayConfig {

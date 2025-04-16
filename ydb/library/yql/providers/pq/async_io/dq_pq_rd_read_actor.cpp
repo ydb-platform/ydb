@@ -477,7 +477,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Cluster(cluster)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
-        , Metrics(txId, taskId, counters, SourceParams.GetUseIncompleteMetrics())
+        , Metrics(txId, taskId, counters, SourceParams.GetUseReducedMetrics())
         , PqGateway(pqGateway)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)

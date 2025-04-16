@@ -627,7 +627,7 @@ void TRowDispatcher::UpdateMetrics() {
 }
 
 void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
-    if (Config.GetUseIncompleteMetrics()) {
+    if (Config.GetUseReducedMetrics()) {
         return;
     }
     auto queryGroup = Metrics.Counters->GetSubgroup("query_id", queryKey.QueryId);

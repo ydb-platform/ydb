@@ -110,7 +110,7 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-            auto queryGroup = Counters->GetSubgroup("query_id", !Self.Config.GetUseIncompleteMetrics() ? ev->Get()->Record.GetQueryId() : "streaming");
+            auto queryGroup = Counters->GetSubgroup("query_id", !Self.Config.GetReducedMetrics() ? ev->Get()->Record.GetQueryId() : "streaming");
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
@@ -377,7 +377,7 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, Config.GetUseIncompleteMetrics());
+    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, Config.GetReducedMetrics());
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");

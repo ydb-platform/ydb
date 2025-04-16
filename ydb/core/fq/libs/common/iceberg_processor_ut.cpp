@@ -12,8 +12,8 @@ struct TClusterConfigBuilder {
     TString Token;
     TString S3Path;
     TString S3Bucket;
-    TString HiveUri;
-    TString HiveDb;
+    TString HiveMetastoreUri;
+    TString HiveMetastoreDb;
     TString HadoopDir;
 
     TClusterConfigBuilder& FillWarehouseWithS3() {
@@ -32,9 +32,9 @@ struct TClusterConfigBuilder {
         return *this;
     }
 
-    TClusterConfigBuilder& FillHiveCatalog() {
-        HiveUri = "hive_uri";
-        HiveDb = "hive_db";
+    TClusterConfigBuilder& FillHiveMetastoreCatalog() {
+        HiveMetastoreUri = "hive_metastore_uri";
+        HiveMetastoreDb = "hive_metastore_db";
         return *this;
     }
 
@@ -65,16 +65,16 @@ struct TClusterConfigBuilder {
                 ->set_directory(HadoopDir);
         }
 
-        if (!HiveUri.empty()) {
+        if (!HiveMetastoreUri.empty()) {
             cluster.mutable_catalog()
-                ->mutable_hive()
-                ->set_uri(HiveUri);
+                ->mutable_hive_metastore()
+                ->set_uri(HiveMetastoreUri);
         }
 
-        if (!HiveDb.empty()) {
+        if (!HiveMetastoreDb.empty()) {
             cluster.mutable_catalog()
-                ->mutable_hive()
-                ->set_database_name(HiveDb);
+                ->mutable_hive_metastore()
+                ->set_database_name(HiveMetastoreDb);
         }
 
         return cluster;
@@ -100,13 +100,13 @@ struct TClusterConfigBuilder {
         return *this;
     }
 
-    TClusterConfigBuilder& SetHiveUri(const TString& uri) {
-        HiveUri = uri;
+    TClusterConfigBuilder& SetHiveMetastoreUri(const TString& uri) {
+        HiveMetastoreUri = uri;
         return *this;
     }
 
-    TClusterConfigBuilder& SetHiveDb(const TString& db) {
-        HiveDb = db;
+    TClusterConfigBuilder& SetHiveMetastoreDb(const TString& db) {
+        HiveMetastoreDb = db;
         return *this;
     }
 
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
             .SetS3Bucket("s3a://iceberg-bucket/")
             .SetS3Path("/storage/")
             .FillAuthToken()
-            .FillHiveCatalog()
+            .FillHiveMetastoreCatalog()
             .Build();
 
         NConfig::TCommonConfig common;
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
 
-        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"true\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"s3a://iceberg-bucket/storage\",catalog_type=\"hive\",catalog_hive_uri=\"hive_uri\",database_name=\"hive_db\"");
+        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"true\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"s3a://iceberg-bucket/storage\",catalog_type=\"hive\",catalog_hive_uri=\"hive_metastore_uri\",database_name=\"hive_metastore_db\"");
     }
 
     // Test parsing for FederatedQuery::IcebergCluster without warehouse
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
         NYql::TIssues issues;
         auto cluster = TClusterConfigBuilder()
             .FillAuthToken()
-            .FillHiveCatalog()
+            .FillHiveMetastoreCatalog()
             .Build();
 
         TIcebergProcessor processor(cluster, issues);
@@ -214,12 +214,12 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
         // initially fill all params, in test cases
         // remove some params and expect error
         NFq::TClusterConfigBuilder params = {
-            .Token          = "token",
-            .S3Path         = "path",
-            .S3Bucket       = "bucket",
-            .HiveUri        = "hive_uri",
-            .HiveDb         = "hive_db",
-            .HadoopDir      = "hadoop_dir"
+            .Token            = "token",
+            .S3Path           = "path",
+            .S3Bucket         = "bucket",
+            .HiveMetastoreUri = "hive_metastore_uri",
+            .HiveMetastoreDb  = "hive_metastore db",
+            .HadoopDir        = "hadoop_dir"
         };
 
         // Defines which errors to expect if param is not set
@@ -234,14 +234,14 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
             {params.clone().SetS3Bucket("///"), {"s3.bucket"}},
             // warehouse is required
             {params.clone().SetS3Bucket("").SetS3Path(""), {"warehouse"}},
-            // hive.uri is required when hadoop is not set
-            {params.clone().SetHadoopDir("").SetHiveUri(""), {"hive_metastore.uri"}},
-            // hive.db is required when hadoop is not set
-            {params.clone().SetHadoopDir("").SetHiveDb(""), {"hive_metastore.database"}},
+            // hive_metastore.uri is required when hadoop is not set
+            {params.clone().SetHadoopDir("").SetHiveMetastoreUri(""), {"hive_metastore.uri"}},
+            // hive_metastore.db is required when hadoop is not set
+            {params.clone().SetHadoopDir("").SetHiveMetastoreDb(""), {"hive_metastore.database_name"}},
             // catalog is required
-            {params.clone().SetHadoopDir("").SetHiveUri("").SetHiveDb(""), {"catalog"}},
-            // hadoop.dir is set, hive is empty, no errors
-            {params.clone().SetHiveUri("").SetHiveDb(""), {}}
+            {params.clone().SetHadoopDir("").SetHiveMetastoreUri("").SetHiveMetastoreDb(""), {"catalog"}},
+            // hadoop.dir is set, hive_metastore is empty, no errors
+            {params.clone().SetHiveMetastoreUri("").SetHiveMetastoreDb(""), {}}
         };
 
         int count = 1;

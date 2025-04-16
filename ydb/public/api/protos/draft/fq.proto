@@ -565,7 +565,7 @@ message IcebergCatalog {
 
     oneof payload {
         Hadoop hadoop = 1;
-        HiveMetastore hive = 2;
+        HiveMetastore hive_metastore = 2;
     }
 }
 

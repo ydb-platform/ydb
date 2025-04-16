@@ -294,8 +294,8 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  pgschema ? ", SCHEMA=" + EncloseAndEscapeString(pgschema, '"') : TString{});
+            break;
         }
-        break;
         case FederatedQuery::ConnectionSetting::kGreenplumCluster: {
             const auto gpschema = connectionContent.setting().greenplum_cluster().schema();
             properties = fmt::format(
@@ -310,8 +310,8 @@ TString MakeCreateExternalDataSourceQuery(
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().greenplum_cluster().database_name(), '"'),
                 "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  gpschema ? ", SCHEMA=" + EncloseAndEscapeString(gpschema, '"') : TString{});
+            break;
         }
-        break;
         case FederatedQuery::ConnectionSetting::kIceberg: {
             auto settings = connectionContent.setting().iceberg();
             properties = NFq::MakeIcebergCreateExternalDataSourceProperties(common, settings);
@@ -339,7 +339,6 @@ TString MakeCreateExternalDataSourceQuery(
                 "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().logging().folder_id(), '"'));
             break;
         }
-        break;
     }
 
     auto sourceName = connectionContent.name();

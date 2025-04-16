@@ -115,7 +115,7 @@ void TIcebergProcessor::ProcessCatalogHadoop(const FederatedQuery::IcebergCatalo
     }
 }
 
-void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::IcebergCatalog_HiveMetastore& hive) {
+void TIcebergProcessor::ProcessCatalogHiveMetastore(const FederatedQuery::IcebergCatalog_HiveMetastore& hive) {
     if (!hive.has_uri()
         || hive.uri().empty()) {
         DoOnPropertyRequiredError("hive_metastore.uri");
@@ -123,7 +123,7 @@ void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::IcebergCatalog_
 
     if (!hive.has_database_name()
         || hive.database_name().empty()) {
-        DoOnPropertyRequiredError("hive_metastore.database");
+        DoOnPropertyRequiredError("hive_metastore.database_name");
     }
 
     if (OnHiveCallback_ && !HasErrors()) {
@@ -132,8 +132,8 @@ void TIcebergProcessor::ProcessCatalogHive(const FederatedQuery::IcebergCatalog_
 }
 
 void TIcebergProcessor::ProcessCatalog(const FederatedQuery::IcebergCatalog& catalog) {
-    if (catalog.has_hive()) {
-        ProcessCatalogHive(catalog.hive());
+    if (catalog.has_hive_metastore()) {
+        ProcessCatalogHiveMetastore(catalog.hive_metastore());
     } else if (catalog.has_hadoop()) {
         ProcessCatalogHadoop(catalog.hadoop());
     } else {
@@ -172,7 +172,7 @@ TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConf
     // catalog configuration
     TString catalogSection;
 
-    processor.SetDoOnCatalogHive([&catalogSection](const FederatedQuery::IcebergCatalog_HiveMetastore& hive) {
+    processor.SetDoOnCatalogHive([&catalogSection](const FederatedQuery::IcebergCatalog_HiveMetastore& hiveMetastore) {
         catalogSection = fmt::format(
             R"(
                 {catalog_type}={catalog_type_value},
@@ -182,8 +182,8 @@ TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConf
             "catalog_type"_a            = CATALOG_TYPE,
             "catalog_type_value"_a      = EncloseAndEscapeString(VALUE_HIVE, '"'),
             "catalog_hive_uri"_a        = CATALOG_HIVE_URI,
-            "catalog_hive_uri_value"_a  = EncloseAndEscapeString(hive.uri(), '"'),
-            "database_name"_a           = EncloseAndEscapeString(hive.database_name(), '"')
+            "catalog_hive_uri_value"_a  = EncloseAndEscapeString(hiveMetastore.uri(), '"'),
+            "database_name"_a           = EncloseAndEscapeString(hiveMetastore.database_name(), '"')
         );
     });
 
@@ -240,11 +240,11 @@ void FillIcebergGenericClusterConfig(const NConfig::TCommonConfig& yqConfig, con
         options[WAREHOUSE_S3_URI]       = uri;
     });
 
-    processor.SetDoOnCatalogHive([&options, &cluster](const FederatedQuery::IcebergCatalog_HiveMetastore& hive) {
+    processor.SetDoOnCatalogHive([&options, &cluster](const FederatedQuery::IcebergCatalog_HiveMetastore& hiveMetastore) {
         options[CATALOG_TYPE]           = VALUE_HIVE;
-        options[CATALOG_HIVE_URI]       = hive.uri();
+        options[CATALOG_HIVE_URI]       = hiveMetastore.uri();
 
-        cluster.SetDatabaseName(hive.database_name());
+        cluster.SetDatabaseName(hiveMetastore.database_name());
     });
 
     processor.SetDoOnCatalogHadoop([&options, &cluster](const FederatedQuery::IcebergCatalog_Hadoop& hadoop) {

@@ -47,7 +47,7 @@ private:
 
     void ProcessCatalogHadoop(const FederatedQuery::IcebergCatalog_Hadoop& hadoop);
 
-    void ProcessCatalogHive(const FederatedQuery::IcebergCatalog_HiveMetastore& hive);
+    void ProcessCatalogHiveMetastore(const FederatedQuery::IcebergCatalog_HiveMetastore& hive);
 
     bool HasErrors() const {
         return Issues_ && !Issues_->Empty();

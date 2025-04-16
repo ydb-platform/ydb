@@ -19,13 +19,15 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
         }
 
         // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
-        // Therefore, precommit operations are performed sequentially. Here we capture the closure to
-        // trigger it later.
+        // Therefore, precommit operations are performed sequentially. Here we move the callback to a local variable,
+        // because otherwise it may be called twice.
+        auto localCallback = std::move(callback);
+
         if (!status.IsSuccess()) {
             co_return status;
         }
 
-        status = co_await callback();
+        status = co_await localCallback();
     }
 
     co_return status;
@@ -39,9 +41,11 @@ NThreading::TFuture<void> TTransaction::TImpl::ProcessFailure() const
         }
 
         // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
-        // Therefore, precommit operations are performed sequentially. Here we capture the closure to
-        // trigger it later.
-        co_await callback();
+        // Therefore, precommit operations are performed sequentially. Here we move the callback to a local variable,
+        // because otherwise it may be called twice.
+        auto localCallback = std::move(callback);
+
+        co_await localCallback();
     }
 
     co_return;

@@ -184,16 +184,18 @@ private:
             co_return co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
         }
 
-        auto status = co_await txControl.Tx_->Precommit();
+        auto tx = *txControl.Tx_;
+
+        auto status = co_await tx.Precommit();
 
         if (!status.IsSuccess()) {
-            co_return TDataQueryResult(std::move(status), {}, txControl.Tx_, std::nullopt, false, std::nullopt);
+            co_return TDataQueryResult(std::move(status), {}, tx, std::nullopt, false, std::nullopt);
         }
 
         auto dataQueryResult = co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
 
         if (!dataQueryResult.IsSuccess()) {
-            co_await txControl.Tx_->ProcessFailure();
+            co_await tx.ProcessFailure();
 
             co_return std::move(dataQueryResult);
         }

@@ -104,7 +104,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
-                } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+                } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const &&
+                           i.second->GetProcessor()->GetProcessorType() != EProcessorType::ReserveMemory) {
                     AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
                     ResultRoot = i.second;
                 } else {
@@ -124,6 +125,9 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         for (; it->IsValid(); it->Next()) {
             it->MutableCurrentNode().SetSequentialIdx(currentIndex);
             for (auto&& i : it->GetProcessorVerified()->GetInput()) {
+                if (!i.GetColumnId()) {
+                    continue;
+                }
                 if (resolver.HasColumn(i.GetColumnId())) {
                     if (IsFilterRoot(it->GetCurrentGraphNode()->GetIdentifier())) {
                         FilterColumns.emplace(i.GetColumnId());
@@ -133,6 +137,9 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 usage[i.GetColumnId()].InUsage(currentIndex);
             }
             for (auto&& i : it->GetProcessorVerified()->GetOutput()) {
+                if (!i.GetColumnId()) {
+                    continue;
+                }
                 usage[i.GetColumnId()].Constructed(currentIndex);
             }
             sortedNodes.emplace_back(&it->MutableCurrentNode());

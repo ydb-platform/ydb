@@ -107,7 +107,7 @@ while (await reader.ReadAsync())
 
 Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync). There are various ways to execute a command, based on what results you expect from it:
 
-1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL which doesn't return any results, typically INSERT, UPDATE or DELETE statements.
+1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL which doesn't return any results, typically `INSERT`, `UPDATE`, or `DELETE` statements.
 
    {% note warning %}
 

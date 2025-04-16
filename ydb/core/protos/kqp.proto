@@ -653,6 +653,8 @@ message TEvScanPing {
 }
 
 message TEvKqpScanCursor {
+    optional uint64 TabletId = 1;
+
     message TColumnShardScanPlain {
     }
     message TColumnShardScanSimple {

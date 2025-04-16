@@ -492,6 +492,7 @@ message TEvExecuterStreamData {
     optional uint32 QueryResultIndex = 3;
     optional uint32 ChannelId = 4;
     optional NActorsProto.TActorId ChannelActorId = 5;
+    optional TKqpSnapshot VirtualTimestamp = 6;
 };
 
 message TEvExecuterStreamDataAck {

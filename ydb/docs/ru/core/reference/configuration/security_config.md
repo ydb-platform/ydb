@@ -89,9 +89,9 @@ security_config:
 flowchart TD
     request --> enforce
 
-    enforce  --> |true| q1{{check auth token}}
+    enforce  --> |true| q1{check auth token}
 
-        q1 --> |provided| q11{{validate auth token}}
+        q1 --> |provided| q11{validate auth token}
 
             q11 --> |valid| p[Processed]
             q11 --> |invalid| r[Rejected]
@@ -101,15 +101,15 @@ flowchart TD
         default --> |specified| r2[Processed]
         default --> |empty| r3[Rejected]
 
-    enforce  --> |false| auth-token{{check auth token}}
+    enforce  --> |false| auth-token{check auth token}
 
         auth-token --> |not provided| anonym[Processed in anonymous mode]
         auth-token --> |provided| check
 
-            check --> |true| q2{{validate auth token}}
+            check --> |true| q2{validate auth token}
                 q2 --> |valid| r4[Processed]
                 q2 --> |invalid| r5[Rejected]
-            check --> |false| q3{{validate auth token}}
+            check --> |false| q3{validate auth token}
                 q3 --> |valid| r6[Processed]
                 q3 --> |invalid| r7[Processed in anonymous mode]
 

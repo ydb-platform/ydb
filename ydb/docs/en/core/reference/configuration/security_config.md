@@ -115,13 +115,9 @@ flowchart TD
                 q2 --> |invalid| r5[Rejected]
             check --> |false| q3{validate auth token}
                 q3 --> |valid| r6[Processed]
-                q3 --> |invalid| default3
-
-                    default3 --> |specified| default3_specified[Processed]
-                    default3 --> |empty| default3_empty[Processed in
+                q3 --> |invalid| default3_empty[Processed in
             anonymous mode]
 
-default3(default_user_sids)
 default2(default_user_sids)
 default(default_user_sids)
 enforce(enforce_user_token_requirement)

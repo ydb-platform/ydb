@@ -44,6 +44,7 @@ public:
         Self->SubscribeForConfigUpdates(ctx);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
+        Self->PrepareUpdateNodesLog();
         Self->SignalTabletActive(ctx);
     }
 

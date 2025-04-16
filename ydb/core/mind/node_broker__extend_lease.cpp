@@ -87,7 +87,9 @@ public:
             auto& node = Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId());
             Self->Committed.ExtendLease(node);
             Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
         }
+        Self->SendUpdateNodes(ctx);
     }
 
 private:

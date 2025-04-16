@@ -174,16 +174,19 @@ public:
             Self->Committed.UpdateEpochVersion();
             Self->Committed.RegisterNewNode(*Node);
             Self->AddNodeToEpochCache(*Node);
+            Self->AddNodeToUpdateNodesLog(*Node);
         } else if (ExtendLease) {
             Self->Committed.UpdateEpochVersion();
             auto &node = Self->Committed.Nodes.at(NodeId);
             Self->Committed.ExtendLease(node);
             Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
         } else if (FixNodeId) {
             Self->Committed.UpdateEpochVersion();
             auto &node = Self->Committed.Nodes.at(NodeId);
             Self->Committed.FixNodeId(node);
             Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
         }
 
         if (SetLocation) {
@@ -191,6 +194,7 @@ public:
             auto &node = Self->Committed.Nodes.at(NodeId);
             Self->Committed.UpdateLocation(node, TNodeLocation(Event->Get()->Record.GetLocation()));
             Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
         }
 
         if (UpdateNodeAuthorizedByCertificate) {
@@ -222,6 +226,7 @@ public:
         }
 
         ctx.Send(Event->Sender, Response.Release());
+        Self->SendUpdateNodes(ctx);
     }
 
 private:

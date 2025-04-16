@@ -7,8 +7,9 @@ option java_package = "ru.yandex.kikimr.proto";
 option (NKikimr.TabletTypeName) = "NodeBroker"; // Used as prefix for all counters
 
 enum ESimpleCounters {
-    COUNTER_EPOCH_SIZE_BYTES = 0           [(CounterOpts) = {Name: "EpochSizeBytes"}];
-    COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1    [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
+    COUNTER_EPOCH_SIZE_BYTES = 0            [(CounterOpts) = {Name: "EpochSizeBytes"}];
+    COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1     [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
+    COUNTER_UPDATE_NODES_LOG_SIZE_BYTES = 2 [(CounterOpts) = {Name: "UpdateNodesLogSizeBytes"}];
 }
 
 enum ECumulativeCounters {
@@ -17,6 +18,8 @@ enum ECumulativeCounters {
     COUNTER_REGISTRATION_REQUESTS = 2      [(CounterOpts) = {Name: "RegistrationRequests"}];
     COUNTER_EXTEND_LEASE_REQUESTS = 3      [(CounterOpts) = {Name: "ExtendLeaseRequests"}];
     COUNTER_GRACEFUL_SHUTDOWN_REQUESTS = 4 [(CounterOpts) = {Name: "GracefulShutdownRequests"}];
+    COUNTER_SUBSCRIBE_NODES_REQUESTS = 5   [(CounterOpts) = {Name: "SubscribeNodesRequests"}];
+    COUNTER_SYNC_NODES_REQUESTS = 6        [(CounterOpts) = {Name: "SyncNodesRequests"}];
 }
 
 enum EPercentileCounters {

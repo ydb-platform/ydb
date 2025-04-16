@@ -493,13 +493,14 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         auto it = Nodes.find(id);
         Y_ABORT_UNLESS(it != Nodes.end());
 
-        LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    LogPrefix() << " Node " << it->second.IdString() << " has expired");
-
-        Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
         it->second.State = ENodeState::Expired;
         it->second.Version = diff.NewEpoch.Version;
         ExpiredNodes.emplace(id, std::move(it->second));
+
+        LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+            LogPrefix() << " Node " << it->second.IdShortString() << " has expired");
+
+        Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
         Nodes.erase(it);
     }
 
@@ -507,14 +508,14 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         auto it = ExpiredNodes.find(id);
         Y_ABORT_UNLESS(it != ExpiredNodes.end());
 
+        auto [rit, _] = RemovedNodes.emplace(id, TNodeInfo(id, ENodeState::Removed, diff.NewEpoch.Version));
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    LogPrefix() << " Remove node " << it->second.IdString());
+                    LogPrefix() << " Node " << rit->second.IdShortString() << " has removed");
 
         if (!IsBannedId(id) && id >= Self->MinDynamicId && id <= Self->MaxDynamicId) {
             FreeIds.Set(id);
         }
         ReleaseSlotIndex(it->second);
-        RemovedNodes.emplace(id, TNodeInfo(id, ENodeState::Removed, diff.NewEpoch.Version));
         ExpiredNodes.erase(it);
     }
 
@@ -568,12 +569,60 @@ void TNodeBroker::PrepareEpochCache()
             Y_PROTOBUF_SUPPRESS_NODISCARD deltaInfo.SerializeToString(&delta);
 
             EpochDeltasCache += delta;
-            EpochDeltasByVersion.emplace(v, EpochDeltasCache.size());
+            EpochDeltasByVersion[v] = EpochDeltasCache.size();
 
             deltaInfo.ClearNodes();
         }
     }
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
+}
+
+void TNodeBroker::PrepareUpdateNodesLog()
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Preparing update nodes log for epoch #" << Committed.Epoch.ToString()
+                << " nodes=" << Committed.Nodes.size()
+                << " expired=" << Committed.ExpiredNodes.size()
+                << " removed=" << Committed.RemovedNodes.size());
+
+    UpdateNodesLog.clear();
+    UpdateNodesLogByVersion.clear();
+
+    TMultiMap<ui64, ui64> nodeIdsSortedByVersion;
+
+    for (auto &entry : Committed.Nodes) {
+        nodeIdsSortedByVersion.emplace(entry.second.Version, entry.second.NodeId);
+    }
+    for (auto &entry : Committed.ExpiredNodes) {
+        nodeIdsSortedByVersion.emplace(entry.second.Version, entry.second.NodeId);
+    }
+    for (auto &entry : Committed.RemovedNodes) {
+        nodeIdsSortedByVersion.emplace(entry.second.Version, entry.second.NodeId);
+    }
+
+    NKikimrNodeBroker::TUpdateNodes updateNodes;
+    TString delta;
+    for (const auto &[v, id] : nodeIdsSortedByVersion) {
+        const auto& node = *Committed.FindNode(id);
+        switch (node.State) {
+            case ENodeState::Active:
+                FillNodeInfo(node, *updateNodes.AddUpdates()->MutableNode());
+                break;
+            case ENodeState::Expired:
+                updateNodes.AddUpdates()->SetExpiredNode(node.NodeId);
+                break;
+            case ENodeState::Removed:
+                updateNodes.AddUpdates()->SetRemovedNode(node.NodeId);
+                break;
+        }
+
+        Y_PROTOBUF_SUPPRESS_NODISCARD updateNodes.SerializeToString(&delta);
+
+        UpdateNodesLog += delta;
+        UpdateNodesLogByVersion[v] = UpdateNodesLog.size();
+        updateNodes.ClearUpdates();
+    }
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
 }
 
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
@@ -591,8 +640,35 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     EpochDeltasCache += delta;
-    EpochDeltasByVersion.emplace(node.Version, EpochDeltasCache.size());
+    EpochDeltasByVersion[node.Version] = EpochDeltasCache.size();
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
+}
+
+void TNodeBroker::AddNodeToUpdateNodesLog(const TNodeInfo &node)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Add node " << node.IdString() << " to update nodes log");
+
+    NKikimrNodeBroker::TUpdateNodes updateNodes;
+
+    switch (node.State) {
+        case ENodeState::Active:
+            FillNodeInfo(node, *updateNodes.AddUpdates()->MutableNode());
+            break;
+        case ENodeState::Expired:
+            updateNodes.AddUpdates()->SetExpiredNode(node.NodeId);
+            break;
+        case ENodeState::Removed:
+            updateNodes.AddUpdates()->SetRemovedNode(node.NodeId);
+            break;
+    }
+
+    TString delta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD updateNodes.SerializeToString(&delta);
+
+    UpdateNodesLog += delta;
+    UpdateNodesLogByVersion[node.Version] = UpdateNodesLog.size();
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
 }
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
@@ -600,6 +676,43 @@ void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
     ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
     ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
+}
+
+void TNodeBroker::SendUpdateNodes(const TActorContext &ctx)
+{
+    if (SentVersion >= Committed.Epoch.Version) {
+        return;
+    }
+
+    for (auto subscriber : Subscribers) {
+        SendUpdateNodes(subscriber, SentVersion, ctx);
+    }
+    SentVersion = Committed.Epoch.Version;
+}
+
+void TNodeBroker::SendUpdateNodes(TActorId subscriber, ui64 version, const TActorContext &ctx)
+{
+    if (version >= Committed.Epoch.Version) {
+        return;
+    }
+
+    NKikimrNodeBroker::TUpdateNodes record;
+    record.SetFromVersion(version);
+    Committed.Epoch.Serialize(*record.MutableEpoch());
+    auto response = MakeHolder<TEvNodeBroker::TEvUpdateNodes>(record);
+
+    auto it = UpdateNodesLogByVersion.lower_bound(version + 1);
+    if (it != UpdateNodesLogByVersion.begin()) {
+        response->PreSerializedData = UpdateNodesLog.substr(std::prev(it)->second);
+    } else {
+        response->PreSerializedData = UpdateNodesLog;
+    }
+
+    LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Send TUpdateNodes v" << version << " -> v" << Committed.Epoch.Version
+                << " to " << subscriber);
+
+    ctx.Send(subscriber, response.Release());
 }
 
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
@@ -1447,6 +1560,36 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     Execute(CreateTxUpdateConfig(ev), ctx);
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SUBSCRIBE_NODES_REQUESTS].Increment(1);
+
+    if (auto [_, inserted] = Subscribers.insert(ev->Sender); inserted) {
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                    "New subscriber " << ev->Sender);
+    }
+    SendUpdateNodes(ev->Sender, ev->Get()->Record.GetCachedVersion(), ctx);
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SYNC_NODES_REQUESTS].Increment(1);
+    SendUpdateNodes(ev->Sender, ev->Get()->Record.GetCachedVersion(), ctx);
+    auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TNodeBroker::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    if (Subscribers.erase(ev->Get()->ClientId) != 0) {
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                    "Unsubscribed " << ev->Get()->ClientId);
+    }
 }
 
 void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,

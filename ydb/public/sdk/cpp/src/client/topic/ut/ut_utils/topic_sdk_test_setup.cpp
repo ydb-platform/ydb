@@ -66,6 +66,43 @@ TTopicDescription TTopicSdkTestSetup::DescribeTopic(const TString& path)
     return status.GetTopicDescription();
 }
 
+TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const TString& path, const TString& consumer)
+{
+    TTopicClient client(MakeDriver());
+
+    TDescribeConsumerSettings settings;
+    settings.IncludeStats(true);
+    settings.IncludeLocation(true);
+
+    auto status = client.DescribeConsumer(path, consumer, settings).GetValueSync();
+    UNIT_ASSERT(status.IsSuccess());
+
+    return status.GetConsumerDescription();
+}
+
+void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId) {
+    TTopicClient client(MakeDriver());
+
+    TWriteSessionSettings settings;
+    settings.Path(TEST_TOPIC);
+    settings.PartitionId(partitionId);
+    settings.DeduplicationEnabled(false);
+    auto session = client.CreateSimpleBlockingWriteSession(settings);
+
+    TWriteMessage msg(TStringBuilder() << message);
+    UNIT_ASSERT(session->Write(std::move(msg)));
+
+    session->Close(TDuration::Seconds(5));
+}
+
+TStatus TTopicSdkTestSetup::Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {
+    TTopicClient client(MakeDriver());
+
+    TCommitOffsetSettings commitSettings {.ReadSessionId_ = sessionId};
+    return client.CommitOffset(path, partitionId, consumerName, offset, commitSettings).GetValueSync();
+}
+
+
 TString TTopicSdkTestSetup::GetEndpoint() const {
     return "localhost:" + ToString(Server.GrpcPort);
 }

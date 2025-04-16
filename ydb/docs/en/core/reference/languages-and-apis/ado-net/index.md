@@ -1,6 +1,6 @@
 # ADO.NET - .NET Access to {{ ydb-short-name }}
 
-`Ydb.Sdk` is ADO.NET Data Provider for {{ ydb-short-name }}, it allows programs written in C#, Visual Basic, F# to access the {{ ydb-short-name }} database server. It is implemented in 100% C# code, is free and is [open source](https://github.com/ydb-platform/ydb-dotnet-sdk).
+`Ydb.Sdk` is an ADO.NET Data Provider for {{ ydb-short-name }}. It allows programs written in C#, Visual Basic, and F# to access the {{ ydb-short-name }} database server. It is implemented in 100% C# code, is free, and is [open source](https://github.com/ydb-platform/ydb-dotnet-sdk).
 
 ## Documentation
 

@@ -43,16 +43,6 @@ ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario2
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_DistributedTxCommit_CheckOffsetCommitForDifferentCases_SplitedTopic

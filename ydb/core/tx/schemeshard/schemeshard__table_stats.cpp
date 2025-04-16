@@ -509,6 +509,12 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    if (auto lock = Self->LockedPaths.FindPtr(pathId); lock) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Postpone split tablet " << datashardId << " because it is locked by " << *lock);
+        return true;
+    }
+
     // Request histograms from the datashard
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Requesting full tablet stats " << datashardId << " to split it");

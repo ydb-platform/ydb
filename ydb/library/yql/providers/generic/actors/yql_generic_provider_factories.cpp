@@ -54,7 +54,8 @@ namespace NYql::NDq {
                  "LoggingGeneric",
                  "IcebergGeneric",
                  "RedisGeneric",
-                 "PrometheusGeneric"}) {
+                 "PrometheusGeneric",
+                 "MongoDBGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }

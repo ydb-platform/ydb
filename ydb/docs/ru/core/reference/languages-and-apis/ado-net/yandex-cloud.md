@@ -8,13 +8,13 @@
 dotnet add package Ydb.Sdk.Yc.Auth
 ```
 
-Этот пакет предоставляет необходимые инструменты для аутентификации в сервисах Yandex Cloud, включая поддержку для [сервисных аккаунтов](https://yandex.cloud/ru/docs/iam/concepts/users/service-accounts) и [аутентификация на основе метаданных](https://yandex.cloud/ru/docs/compute/operations/vm-connect/auth-inside-vm).
+Этот пакет предоставляет необходимые инструменты для аутентификации в сервисах Yandex Cloud.
 
 ## Аутентификация
 
 Поддерживаемые Yandex Cloud методы аутентификации:
 
-- `Ydb.Sdk.Yc.ServiceAccountProvider`. Аутентификация через сервисный аккаунт, пример использования:
+- `Ydb.Sdk.Yc.ServiceAccountProvider`. Аутентификация через [сервисный аккаунт](https://yandex.cloud/ru/docs/iam/concepts/users/service-accounts), пример использования:
     
     ```c#
     var saProvider = new ServiceAccountProvider(
@@ -23,7 +23,7 @@ dotnet add package Ydb.Sdk.Yc.Auth
     );
     ```
 
-- `Ydb.Sdk.Yc.MetadataProvider`. Аутентификация в сервисе метаданных, работает внутри облачных виртуальных машин Яндекса и облачных функций. Пример использования:
+- `Ydb.Sdk.Yc.MetadataProvider`. Аутентификация в [сервисе метаданных](https://yandex.cloud/ru/docs/compute/operations/vm-connect/auth-inside-vm), работает внутри облачных виртуальных машин Яндекса и облачных функций. Пример использования:
     
     ```c#
     var metadataProvider = new MetadataProvider(loggerFactory: loggerFactory);

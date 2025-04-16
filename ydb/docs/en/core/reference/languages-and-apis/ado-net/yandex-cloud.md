@@ -8,13 +8,13 @@ To use [Yandex Cloud](https://yandex.cloud/en) authentication in your .NET appli
 dotnet add package Ydb.Sdk.Yc.Auth
 ```
 
-This package provides the necessary tools for authenticating with Yandex Cloud services, including support for [service accounts](https://yandex.cloud/en/docs/iam/concepts/users/service-accounts) and [metadata-based](https://yandex.cloud/en/docs/compute/operations/vm-connect/auth-inside-vm) authentication.
+This package provides the necessary tools for authenticating with Yandex Cloud services.
 
 ## Authentication
 
 Supported Yandex.Cloud authentication methods:
 
-- `Ydb.Sdk.Yc.ServiceAccountProvider`. Service account authentication, sample usage:
+- `Ydb.Sdk.Yc.ServiceAccountProvider`. [Service account](https://yandex.cloud/en/docs/iam/concepts/users/service-account) authentication, sample usage:
     
     ```c#
     var saProvider = new ServiceAccountProvider(
@@ -23,7 +23,7 @@ Supported Yandex.Cloud authentication methods:
     );
     ```
 
-- `Ydb.Sdk.Yc.MetadataProvider`. Metadata service authentication, works inside Yandex Cloud VMs and Cloud Functions. Sample usage:
+- `Ydb.Sdk.Yc.MetadataProvider`. [Metadata service](https://yandex.cloud/en/docs/compute/operations/vm-connect/auth-inside-vm) authentication, works inside Yandex Cloud VMs and Cloud Functions. Sample usage:
     
     ```c#
     var metadataProvider = new MetadataProvider(loggerFactory: loggerFactory);

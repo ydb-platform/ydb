@@ -407,11 +407,11 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<TOriginal>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<TOriginal>(serializedArray.Get(i)));
     }
 }
 
+// Does not check for duplicates.
 template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
 void FromProtoArrayImpl(
     THashMap<TOriginalKey, TOriginalValue>* originalArray,
@@ -420,8 +420,7 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
     }
 }
 

@@ -84,7 +84,6 @@ struct TRowDispatcherReadActorMetrics {
         if (!counters) {
             return;
         }
-        Cerr << "useIncompleteMetrics " << useIncompleteMetrics << Endl;
         SubGroup = Counters->GetSubgroup("source", "RdPqRead");
         auto source = SubGroup->GetSubgroup("tx_id", !useIncompleteMetrics ? TxId : "streaming");
         auto task = source->GetSubgroup("task_id", ToString(taskId));

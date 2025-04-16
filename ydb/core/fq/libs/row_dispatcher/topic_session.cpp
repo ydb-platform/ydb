@@ -27,6 +27,8 @@ namespace {
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId, bool useIncompleteMetrics) {
         
+                Cerr << "useIncompleteMetrics777 " << useIncompleteMetrics << Endl;
+
         TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
         ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
         PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(useIncompleteMetrics ? partitionId : 0));

@@ -323,7 +323,9 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-        Add(props, UseIncompleteMetrics, ToString(clusterConfiguration->UseIncompleteMetrics), pos, ctx);
+        if (clusterConfiguration->UseIncompleteMetrics) {
+            Add(props, UseIncompleteMetrics, ToString(clusterConfiguration->UseIncompleteMetrics), pos, ctx);
+        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

@@ -327,9 +327,12 @@ The structure of the data to transmit is as follows:
 
 |ts|button|device_id|zone_id|
 |:-:|:-:|:-:|:-:|
-|100|1|17|3|
-|200|2|17|3|
-|300|3|17|3|
+|600|3|17|3|
+|500|3|4|2|
+|400|2|17|3|
+|300|2|4|2|
+|200|1|17|3|
+|100|1|4|2|
 
 The body of the SQL query looks like this:
 
@@ -351,3 +354,10 @@ SELECT * FROM input MATCH_RECOGNIZE ( -- Performing pattern matching from input
         B3 AS B3.button = 3  -- Defining the B3 variable as event of clicking button 3 (the button field equals 3)
 );
 ```
+
+Result:
+
+|b1|b3|device_id|zone_id|
+|:-:|:-:|:-:|:-:|
+|100|500|4|2|
+|200|600|17|3|

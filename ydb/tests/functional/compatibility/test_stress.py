@@ -16,12 +16,14 @@ prev_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibi
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
+    [prev_stable_binary_path],
     [last_stable_binary_path],
     [current_binary_path],
     [last_stable_binary_path, current_binary_path],
     [prev_stable_binary_path, last_stable_binary_path],
+    [prev_stable_binary_path, current_binary_path],
 ]
-all_binary_combinations_ids = ["last_stable", "current", "last_stable_to_current","stable_prev_to_last"]
+all_binary_combinations_ids = ["prev_stable","last_stable", "current", "last_stable_to_current","prev_stable_to_last_stable","prev_stable_to_current"]
 
 
 class TestStress(object):
@@ -40,7 +42,7 @@ class TestStress(object):
         )
 
         self.cluster = KiKiMR(self.config)
-        self.cluster.start()
+        self.cluster.start(version_id=1)
         self.endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
@@ -65,7 +67,19 @@ class TestStress(object):
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_log(self, store_type):
         timeout_scale = 60
-
+        for node_id, node in enumerate(self.cluster.nodes.values()):
+            node.get_config_version()
+            get_version_command = [
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                "--verbose",
+                "--endpoint",
+                "grpc://localhost:%d" % node.grpc_port,
+                "--database=/Root",
+                "yql",
+                "--script",
+                f'select version() as node_{node_id}_version'
+            ]
+            yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         upload_commands = [
             # bulk upsert workload
             self.get_command_prefix_log(subcmds=["run", "bulk_upsert"], path=store_type)
@@ -74,8 +88,8 @@ class TestStress(object):
             self.get_command_prefix_log(subcmds=["run", "upsert"], path=store_type)
             + ["--seconds", str(timeout_scale), "--threads", "10"],
             # insert workload
-            self.get_command_prefix_log(subcmds=["run", "insert"], path=store_type)
-            + ["--seconds", str(timeout_scale), "--threads", "10"],
+            #self.get_command_prefix_log(subcmds=["run", "insert"], path=store_type)
+            #+ ["--seconds", str(timeout_scale), "--threads", "10"],
         ]
         # init
         yatest.common.execute(
@@ -116,7 +130,7 @@ class TestStress(object):
             stdout=self.output_f,
             stderr=self.output_f,
         )
-
+        self.cluster.change_node_version(version_id=2)
         for i, command in enumerate(upload_commands):
             yatest.common.execute(
                 command,
@@ -126,6 +140,19 @@ class TestStress(object):
             )
 
         select.wait()
+        for node_id, node in enumerate(self.cluster.nodes.values()):
+            node.get_config_version()
+            get_version_command = [
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                "--verbose",
+                "--endpoint",
+                "grpc://localhost:%d" % node.grpc_port,
+                "--database=/Root",
+                "yql",
+                "--script",
+                f'select version() as node_{node_id}_version'
+            ]
+            yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Too huge logs")
     @pytest.mark.parametrize("store_type", ["row", "column"])

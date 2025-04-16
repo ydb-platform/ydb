@@ -31,9 +31,7 @@ bool operator<(const TUuidValue& lhs, const TUuidValue& rhs) {
     return cmp < 0;
 }
 
-}
-
-namespace NYdb::NDump {
+namespace NDump {
 
 using namespace NImport;
 using namespace NTable;

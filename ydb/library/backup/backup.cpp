@@ -121,6 +121,9 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         case EPrimitiveType::Uint8:
             out << (ui32)parser.GetUint8();
             break;
+        case EPrimitiveType::Uuid:
+            out << parser.GetUuidHack().ToString();
+            break;
         CASE_PRINT_PRIMITIVE_TYPE(out, Int16);
         CASE_PRINT_PRIMITIVE_TYPE(out, Uint16);
         CASE_PRINT_PRIMITIVE_TYPE(out, Int32);
@@ -138,7 +141,6 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
-        CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzTimestamp);

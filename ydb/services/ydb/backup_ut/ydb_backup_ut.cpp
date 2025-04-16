@@ -392,88 +392,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST(ImportDataShouldHandleErrors) {
-        TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
-        TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-        TTempDir tempDir;
-        const auto& pathToBackup = tempDir.Path();
-
-        constexpr const char* dbPath = "/Root";
-        constexpr const char* table = "/Root/table";
-
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Value Utf8,
-                    PRIMARY KEY (Key)
-                );
-            )",
-            table
-        ));
-        ExecuteDataModificationQuery(session, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value)
-                VALUES (1, "one");
-            )",
-            table
-        ));
-
-        NDump::TClient backupClient(driver);
-        {
-            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
-        using TYdbErrorException = ::NYdb::Dev::NStatusHelpers::TYdbErrorException;
-
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                DROP TABLE `%s`;
-            )", table
-        ));
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Utf8,
-                    Value Uint32,
-                    PRIMARY KEY (Key)
-                );
-            )", table
-        ));
-        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
-            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
-
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                DROP TABLE `%s`;
-            )", table
-        ));
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    PRIMARY KEY (Key)
-                );
-            )", table
-        ));
-        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
-            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
-
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                DROP TABLE `%s`;
-            )", table
-        ));
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Value Utf8,
-                    PRIMARY KEY (Key),
-                    INDEX Idx GLOBAL SYNC ON (Value)
-                );
-            )", table
-        ));
-        UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
-            [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
-    }
-
     Y_UNIT_TEST(BackupUuid) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -518,11 +436,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         const auto originalContent = GetTableContent(session, table);
 
-        NDump::TClient backupClient(driver);
-        {
-            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        NBackup::BackupFolder(driver, dbPath, ".", pathToBackup, {}, false, false, true);
 
         // Check that backup file contains all uuids as strings, making sure we stringify UUIDs correctly in backups
         TString backupFileContent = TFileInput(pathToBackup.GetPath() + "/table/data_00.csv").ReadAll();
@@ -538,6 +452,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 )", table
             ));
 
+            NDump::TClient backupClient(driver);
             auto result = backupClient.Restore(pathToBackup, dbPath, opts);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

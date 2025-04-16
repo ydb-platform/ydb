@@ -1,4 +1,5 @@
 import enum
+import reprlib
 import sys
 from abc import abstractmethod
 from array import array
@@ -55,7 +56,6 @@ class _Impl(Generic[_V]):
         self.incr_version()
 
     def incr_version(self) -> None:
-        global _version
         v = _version
         v[0] += 1
         self._version = v[0]
@@ -121,6 +121,7 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
                 raise RuntimeError("Dictionary changed during iteration")
             yield self._keyfunc(k), v
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
         for i, k, v in self._impl._items:
@@ -254,7 +255,7 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
         except TypeError:
             return NotImplemented
         ret: set[Union[tuple[str, _V], _T]] = self - rgt
-        ret |= (rgt - self)
+        ret |= rgt - self
         return ret
 
     __rxor__ = __xor__
@@ -288,6 +289,7 @@ class _ValuesView(_ViewBase[_V], ValuesView[_V]):
                 raise RuntimeError("Dictionary changed during iteration")
             yield v
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
         for i, k, v in self._impl._items:
@@ -425,7 +427,7 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         except TypeError:
             return NotImplemented
         ret: set[Union[str, _T]] = self - rgt  # type: ignore[assignment]
-        ret |= (rgt - self)
+        ret |= rgt - self
         return ret
 
     __rxor__ = __xor__
@@ -453,6 +455,8 @@ class _CSMixin:
 
 
 class _CIMixin:
+    _ci: bool = True
+
     def _key(self, key: str) -> str:
         if type(key) is istr:
             return key
@@ -474,6 +478,7 @@ class _CIMixin:
 
 class _Base(MultiMapping[_V]):
     _impl: _Impl[_V]
+    _ci: bool = False
 
     @abstractmethod
     def _key(self, key: str) -> str: ...
@@ -579,6 +584,7 @@ class _Base(MultiMapping[_V]):
                 return True
         return False
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
         body = ", ".join(f"'{k}': {v!r}" for i, k, v in self._impl._items)
         return f"<{self.__class__.__name__}({body})>"
@@ -628,7 +634,12 @@ class MultiDict(_CSMixin, _Base[_V], MutableMultiMapping[_V]):
     ) -> None:
         if arg:
             if isinstance(arg, (MultiDict, MultiDictProxy)):
-                items = arg._impl._items
+                if self._ci is not arg._ci:
+                    items = [(self._title(k), k, v) for _, k, v in arg._impl._items]
+                else:
+                    items = arg._impl._items
+                    if kwargs:
+                        items = items.copy()
                 if kwargs:
                     for key, value in kwargs.items():
                         items.append((self._title(key), key, value))

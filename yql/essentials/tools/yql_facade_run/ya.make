@@ -44,6 +44,8 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/v1
     yql/essentials/sql
+    yql/essentials/public/langver
+    yql/essentials/core/langver
 
     library/cpp/resource
     library/cpp/getopt

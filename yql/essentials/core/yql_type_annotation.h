@@ -9,6 +9,7 @@
 
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
@@ -375,6 +376,7 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TLangVersion LangVer = UnknownLangVersion;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

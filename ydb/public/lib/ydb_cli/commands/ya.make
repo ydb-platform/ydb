@@ -45,6 +45,7 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
+    ydb/library/arrow_inference
     ydb/library/backup
     ydb/library/formats/arrow/csv/table
     ydb/library/workload

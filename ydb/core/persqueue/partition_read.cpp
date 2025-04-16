@@ -513,6 +513,11 @@ TReadAnswer TReadInfo::FormAnswer(
                     << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
             for (size_t i = pos; i < batch.Blobs.size(); ++i) {
+                if (0 < LastOffset && LastOffset <= Offset) {
+                    needStop = true;
+                    break;
+                }
+
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
@@ -686,7 +691,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
             Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
-            if (lastOffset != 0 && offset >= lastOffset) {
+            if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {

@@ -238,7 +238,9 @@ public:
             request->allow_unknown_fields() || request->bypass_checks(),
             request->bypass_checks(),
             /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
-            /*disableConfigV2=*/ ff.GetSwitchToConfigV1());
+            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
+            Request_->GetPeerName(),
+            Request_->GetSerializedToken());
     }
 
 private:

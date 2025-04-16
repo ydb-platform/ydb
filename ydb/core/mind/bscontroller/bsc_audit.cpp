@@ -1,14 +1,14 @@
-#include "distconf_audit.h"
+#include "bsc_audit.h"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
 
-namespace NKikimr::NStorage {
+namespace NKikimr::NBsController {
 
-static const TString COMPONENT_NAME = "distconf";
+static const TString COMPONENT_NAME = "bsc";
 static const TString EMPTY_VALUE = "{none}";
 
-void AuditLogReplaceConfig(
+void AuditLogCommitConfigTransaction(
     const TString& peer,
     const TString& userSID,
     const TString& sanitizedToken,
@@ -32,4 +32,4 @@ void AuditLogReplaceConfig(
     );
 }
 
-} // namespace NKikimr::NStorage
+} // namespace NKikimr::NBsController

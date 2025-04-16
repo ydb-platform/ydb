@@ -91,6 +91,7 @@ protected:
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     TMaybe<TString> IngressDatabase;
     bool WarnDatabaseBypass = false;
+    bool SkipAuditLog = false;
 };
 
 class TConfigsManager::TTxReplaceMainYamlConfig

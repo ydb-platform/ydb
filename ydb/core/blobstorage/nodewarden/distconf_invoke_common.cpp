@@ -1,3 +1,4 @@
+#include "distconf_audit.h"
 #include "distconf_invoke.h"
 
 namespace NKikimr::NStorage {
@@ -191,11 +192,11 @@ namespace NKikimr::NStorage {
         }
 
         const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
-        const TStringBuilder oldConfig;
+        TStringBuilder oldConfig;
         oldConfig << Self->MainConfigYaml << (Self->StorageConfigYaml ? *Self->StorageConfigYaml : "");
-        const TStringBuilder newConfig;
+        TStringBuilder newConfig;
         newConfig << *NewYaml << (NewStorageYaml ? *NewStorageYaml : "");
-        const TString userToken = replaceConfig.GetUserToken();
+        NACLib::TUserToken userToken = NACLib::TUserToken{replaceConfig.GetUserToken()};
         AuditLogReplaceConfig(
             /* peer = */ replaceConfig.GetPeerName(),
             /* userSID = */ userToken.GetUserSID(),

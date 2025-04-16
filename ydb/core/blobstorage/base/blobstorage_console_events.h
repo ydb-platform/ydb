@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr {
 
@@ -79,7 +80,7 @@ namespace NKikimr {
 
         TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
                 std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode, bool allowUnknownFields,
-                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2) {
+                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2, TString peerName, TString userToken) {
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
             }
@@ -97,6 +98,8 @@ namespace NKikimr {
             } else if (disableConfigV2) {
                 Record.SetSwitchEnableConfigV2(false);
             }
+            Record.SetPeerName(peerName);
+            Record.SetUserToken(userToken);
         }
 
         TString ToString() const override {

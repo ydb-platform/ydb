@@ -1449,6 +1449,8 @@ message TEvControllerReplaceConfigRequest {
     optional bool SwitchDedicatedStorageSection = 6;
     optional bool DedicatedConfigMode = 7;
     optional bool SwitchEnableConfigV2 = 10; // if set, overrides EnableConfigV2 field in BSC
+    optional string PeerName = 11;
+    optional bytes UserToken = 12;
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;

@@ -43,7 +43,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
                     .LeftInput(joinExpr)
                     .RightInput(opRead)
-                    .JoinKind().Value("Inner").Build()
+                    .JoinKind().Value("Cross").Build()
                     .JoinKeys(joinKeys)
                     .Done().Ptr();
             }

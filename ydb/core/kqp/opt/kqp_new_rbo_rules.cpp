@@ -89,7 +89,13 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         return input;
     }
 
+    // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross") {
+        YQL_CLOG(TRACE, CoreDq) << "Wrong join type";
+        return input;
+    }
+
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
@@ -137,6 +143,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     }
 
     if (!pushLeft.size() && !pushRight.size() && !joinConditions.size()) {
+        YQL_CLOG(TRACE, CoreDq) << "Nothing to push";
         return input;
     }
 
@@ -150,6 +157,11 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     }
     if (pushRight.size()) {
         rightArg = BuildFilterFromConjuncts(rightArg, pushRight, ctx);
+    }
+
+    TString joinKind = joinNode.JoinKind().StringValue();
+    if (joinKind == "Cross" && joinConditions.size()) {
+        joinKind = "Inner";
     }
 
     TVector<TExprNode::TPtr> joinConds;
@@ -168,7 +180,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     auto newJoin = Build<TKqpOpJoin>(ctx, filterNode.Pos())
             .LeftInput(leftArg)
             .RightInput(rightArg)
-            .JoinKind(joinNode.JoinKind())
+            .JoinKind().Value(joinKind).Build()
             .JoinKeys()
                 .Add(joinConds)
             .Build()
@@ -216,11 +228,30 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         auto leftStage = join->GetLeftInput()->Props.StageId;
         auto rightStage = join->GetRightInput()->Props.StageId;
 
-        auto newStageId = props.StageGraph.AddStage();
-        join->Props.StageId = newStageId;
+        // For cross-join we add the cross join to the left stage and make a
+        // Broadcast connection from the right stage
+        if (join->JoinKind == "Cross") {
+            join->Props.StageId = leftStage;
 
-        props.StageGraph.Connect(*leftStage, newStageId, "Shuffle");
-        props.StageGraph.Connect(*rightStage, newStageId, "Shuffle");
+            props.StageGraph.Connect(*rightStage, *leftStage, std::make_shared<TBroadcastConnection>());
+        }
+        
+        // For inner join (we don't support other joins yet) we build a new stage
+        // with GraceJoinCore and connect inputs via Shuffle connections
+        else {
+            auto newStageId = props.StageGraph.AddStage();
+            join->Props.StageId = newStageId;
+
+            TVector<TInfoUnit> leftShuffleKeys;
+            TVector<TInfoUnit> rightShuffleKeys;
+            for (auto k : join->JoinKeys) {
+                leftShuffleKeys.push_back(k.first);
+                rightShuffleKeys.push_back(k.second);
+            }
+
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys));
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys));
+        }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     }
     else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
@@ -231,7 +262,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         auto prevStageId = *(input->Children[0]->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, "UnionAll");
+        props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TUnionAllConnection>());
     }
     else {
         Y_ENSURE(true, "Unknown operator encountered");

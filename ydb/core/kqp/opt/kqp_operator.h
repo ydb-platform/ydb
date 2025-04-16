@@ -51,11 +51,39 @@ struct TPhysicalOpProps {
     std::optional<TString> Algorithm;
 };
 
+struct TConnection {
+    TConnection(TString type) : Type(type) {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) = 0;
+    virtual ~TConnection() = default;
+
+    TString Type;
+};
+
+struct TBroadcastConnection : public TConnection {
+    TBroadcastConnection() : TConnection("Broadcast") {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+
+};
+
+struct TUnionAllConnection : public TConnection {
+    TUnionAllConnection() : TConnection("UnionAll") {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+
+};
+
+struct TShuffleConnection : public TConnection {
+    TShuffleConnection(TVector<TInfoUnit> keys) : TConnection("Shuffle")
+    ,Keys(keys) {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+
+    TVector<TInfoUnit> Keys;
+};
+
 struct TStageGraph {
     TVector<int> StageIds;
     THashMap<int, TVector<int>> StageInputs;
     THashMap<int, TVector<int>> StageOutputs;
-    THashMap<std::pair<int,int>, TString> ConnectionType;
+    THashMap<std::pair<int,int>, std::shared_ptr<TConnection>> Connections;
 
     int AddStage() {
         int newStageId = StageIds.size();
@@ -65,17 +93,19 @@ struct TStageGraph {
         return newStageId;
     }
 
-    void Connect(int from, int to, TString connType) {
+    void Connect(int from, int to, std::shared_ptr<TConnection> conn) {
         auto & outputs = StageOutputs.at(from);
         outputs.push_back(to);
         auto & inputs = StageInputs.at(to);
         inputs.push_back(from);
-        ConnectionType[std::make_pair(from,to)] = connType;
+        Connections[std::make_pair(from,to)] = conn;
     }
 
-    TString GetConnection(int from, int to) {
-        return ConnectionType.at(std::make_pair(from,to));
+    std::shared_ptr<TConnection> GetConnection(int from, int to) {
+        return Connections.at(std::make_pair(from,to));
     }
+
+    void TopologicalSort();
 };
 
 struct TPlanProps {
@@ -173,6 +203,8 @@ class TOpJoin : public IBinaryOperator {
     TOpJoin(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
+    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TString JoinKind;
 };
 
 class TOpLimit : public IUnaryOperator {

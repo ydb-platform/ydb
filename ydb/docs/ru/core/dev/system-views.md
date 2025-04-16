@@ -49,7 +49,7 @@
 `TxRejectedByOutOfStorage` | Количество транзакций, отменённых из-за нехватки места в хранилище. | `Uint64` | Кумулятивная
 `LastTtlRunTime` | Последний момент запуска очистки партиции по TTL | `Timestamp` | Моментальная
 `LastTtlRowsProcessed` | Количество проверенных строк партиции при последней очистке по TTL | `Uint64` | Моментальная
-`LastTtlRowsErased` | Количество удаленных строк партиции при последней очистке по TTL | `Uint64` | Моментальная
+`LastTtlRowsErased` | Количество удалённых строк партиции при последней очистке по TTL | `Uint64` | Моментальная
 `LocksAcquired` | Количество установленных [блокировок](../contributor/datashard-locks-and-change-visibility.md) . | `Uint64` | Кумулятивная
 `LocksWholeShard` | Количество установленных [блокировок "весь шард"](../contributor/datashard-locks-and-change-visibility.md#ограничения). | `Uint64` | Кумулятивная
 `LocksBroken` | Количество [сломанных блокировок](../contributor/datashard-locks-and-change-visibility.md#высокоуровневая-схема-работы). | `Uint64` | Кумулятивная

@@ -48,8 +48,8 @@ Column | Description | Data type | Instant/Cumulative
 `TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative
 `TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative
 `LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant
-`LastTtlRowsProcessed` | Number of rows checked at the last TTL erasure procedure | `Uint64` | Instant
-`LastTtlRowsErased` | Number of rows deleted at the last TTL erasure procedure | `Uint64` | Instant
+`LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant
+`LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant
 `LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) acquired. | `Uint64` | Cumulative
 `LocksWholeShard` | The number of ["whole shard" locks](../contributor/datashard-locks-and-change-visibility.md#limitations) taken. | `Uint64` | Cumulative
 `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#high-level-overview). | `Uint64` | Cumulative

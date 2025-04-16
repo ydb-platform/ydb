@@ -1,3 +1,4 @@
+* Added `--overwrite` option to `ydb tools restore`. When enabled, existing database objects that match those in the backup are removed before restoration.
 * Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
 * Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.

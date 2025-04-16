@@ -25,7 +25,7 @@
    await ydbConnection.OpenAsync();
    ```
 
-   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. Поддерживаемый набор настроек описан на [странице параметров подключения](connection_parameters.md).
+   В данном случае подключение будет установлено по URL: `grpc://database-sample-grpc:2135/root/database-sample`. Поддерживаемый набор настроек описан на [странице параметров подключения](connection-parameters.md).
 
 3. **Использование конструктора с аргументом `YdbConnectionStringBuilder`**:
 
@@ -43,7 +43,7 @@
     await ydbConnection.OpenAsync();
     ```
 
-   `YdbConnectionStringBuilder` поддерживает дополнительные [настройки](connection_parameters.md#connection-builder-parameters), помимо строки подключения, такие как логирование, расширенные параметры аутентификации.
+   `YdbConnectionStringBuilder` поддерживает дополнительные [настройки](connection-parameters.md#connection-builder-parameters), помимо строки подключения, такие как логирование, расширенные параметры аутентификации.
 
 ## Pooling
 
@@ -111,7 +111,7 @@ while (await reader.ReadAsync())
 
    {% note warning %} 
 
-   YDB не возвращает количество затронутых строк.
+   {{ ydb-short-name }} не возвращает количество затронутых строк.
 
    {% endnote %}
 
@@ -178,7 +178,7 @@ ADO.NET за вас подготовит запрос, чтобы перемен
 
 {{ ydb-short-name }} имеет строго типизированную систему типов: столбцы и параметры имеют тип, а типы обычно не преобразуются неявным образом в другие типы. Это означает, что вам нужно подумать о том, какой тип вы будете отправлять: попытка вставить строку в целочисленный столбец (или наоборот) приведет к сбою.
 
-Для получения дополнительной информации о поддерживаемых типах и их сопоставления смотрите эту [страницу](type_mapping.md).
+Для получения дополнительной информации о поддерживаемых типах и их сопоставления смотрите эту [страницу](type-mapping.md).
 
 ## Транзакции
 
@@ -247,5 +247,5 @@ catch (YdbException e)
 ## Дополнительная информация
 
 - [Примеры ADO.NET](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet)
-- [Подключения к Yandex Cloud](yandex_cloud.md)
+- [Подключения к Yandex Cloud](yandex-cloud.md)
 - [Dapper](./../../../integrations/orm/dapper.md)

@@ -25,7 +25,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
    await ydbConnection.OpenAsync();
    ```
 
-   In this case, the connection is established at the URL `grpc://database-sample-grpc:2135/root/database-sample`. The supported set of settings is explained on the [connection parameters page](connection_parameters.md).
+   In this case, the connection is established at the URL `grpc://database-sample-grpc:2135/root/database-sample`. The supported set of settings is explained on the [connection parameters page](connection-parameters.md).
 
 3. **Using the constructor with a `YdbConnectionStringBuilder` argument**:
 
@@ -43,7 +43,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
     await ydbConnection.OpenAsync();
     ```
 
-   `YdbConnectionStringBuilder` supports additional [configuration](connection_parameters.md#connection-builder-parameters) beyond the connection string, such as logging, advanced authentication options.
+   `YdbConnectionStringBuilder` supports additional [configuration](connection-parameters.md#connection-builder-parameters) beyond the connection string, such as logging, advanced authentication options.
 
 ## Pooling
 
@@ -111,7 +111,7 @@ Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-r
 
    {% note warning %}
 
-   YDB does not return the number of rows affected.
+   {{ ydb-short-name }} does not return the number of rows affected.
 
    {% endnote %}
 
@@ -172,13 +172,13 @@ ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));                         
 ```
 
-ADO.NET the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
+With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
 
 ## Parameter types
 
 {{ ydb-short-name }} has a strongly-typed type system: columns and parameters have a type, and types are usually not implicitly converted to other types. This means you have to think about which type you will be sending: trying to insert a string into an integer column (or vice versa) will fail.
 
-For more information on supported types and their mappings, see this [page](type_mapping.md).
+For more information on supported types and their mappings, see this [page](type-mapping.md).
 
 ## Transactions
 
@@ -244,8 +244,8 @@ Please note that ADO.NET does not automatically retry failed operations, and you
 
 {% endnote %}
 
-## Other information
+##  See also
 
 - [ADO.NET Examples](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet)
-- [Connect to Yandex Cloud](yandex_cloud.md)
+- [Connect to Yandex Cloud](yandex-cloud.md)
 - [Dapper](./../../../integrations/orm/dapper.md)

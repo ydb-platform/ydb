@@ -245,3 +245,7 @@ catch (YdbException e)
 Обратите внимание, что ADO.NET не выполняет автоматических попыток повторения, и вам нужно реализовать повтор попытки в своем коде.
 
 {% endnote %}
+
+## Примеры
+
+Примеры приведены на GitHub по [ссылке](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet).

@@ -10,5 +10,4 @@
 - [{#T}](connection-parameters.md)
 - [{#T}](type-mapping.md)
 - [{#T}](yandex-cloud.md)
-- [Примеры ADO.NET](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet)
 - [{#T}](./../../../integrations/orm/dapper.md)

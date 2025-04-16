@@ -245,3 +245,7 @@ The `YdbException` exception has the following properties, which can help you ha
 Please note that ADO.NET does not automatically retry failed operations, and you must implement retry logic in your code.
 
 {% endnote %}
+
+## Examples
+
+Examples are provided on GitHub at [link](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/AdoNet).

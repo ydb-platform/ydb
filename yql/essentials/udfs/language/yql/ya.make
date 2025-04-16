@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/v1/format
+    yql/essentials/sql/v1/reflect
     library/cpp/protobuf/util
 )
 

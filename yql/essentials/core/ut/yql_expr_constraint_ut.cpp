@@ -1124,6 +1124,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((one,{two,xxx},yyy))");
     }
 
+    Y_UNIT_TEST(UniqueNarrowCast) {
+        const auto s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
+                (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
+                (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'z)))
+            ))
+            (let list (AssumeUnique list '('key 'subkey)))
+            (let list (Map list (lambda '(item)
+                (SafeCast item (StructType '('key (DataType 'String)) '('value (DataType 'String))))
+            )))
+            (let world (Write! world res (Key) list '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "");
+    }
+
     Y_UNIT_TEST(Distinct) {
         const auto s = R"((
     (let res (DataSink 'result))

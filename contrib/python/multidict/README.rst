@@ -6,8 +6,8 @@ multidict
    :target: https://github.com/aio-libs/multidict/actions
    :alt: GitHub status for master branch
 
-.. image:: https://codecov.io/gh/aio-libs/multidict/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/multidict
+.. image:: https://codecov.io/gh/aio-libs/multidict/branch/master/graph/badge.svg?flag=pytest
+   :target: https://codecov.io/gh/aio-libs/multidict?flags[]=pytest
    :alt: Coverage metrics
 
 .. image:: https://img.shields.io/pypi/v/multidict.svg
@@ -17,6 +17,10 @@ multidict
 .. image:: https://readthedocs.org/projects/multidict/badge/?version=latest
    :target: https://multidict.aio-libs.org
    :alt: Read The Docs build status badge
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/multidict
+   :alt: CodSpeed
 
 .. image:: https://img.shields.io/pypi/pyversions/multidict.svg
    :target: https://pypi.org/project/multidict

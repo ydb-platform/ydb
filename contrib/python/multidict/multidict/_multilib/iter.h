@@ -12,8 +12,7 @@ static PyTypeObject multidict_keys_iter_type;
 typedef struct multidict_iter {
     PyObject_HEAD
     MultiDictObject *md;  // MultiDict or CIMultiDict
-    Py_ssize_t current;
-    uint64_t version;
+    pair_list_pos_t current;
 } MultidictIter;
 
 static inline void
@@ -22,8 +21,7 @@ _init_iter(MultidictIter *it, MultiDictObject *md)
     Py_INCREF(md);
 
     it->md = md;
-    it->current = 0;
-    it->version = pair_list_version(&md->pairs);
+    pair_list_init_pos(&md->pairs, &it->current);
 }
 
 static inline PyObject *
@@ -78,17 +76,21 @@ multidict_items_iter_iternext(MultidictIter *self)
     PyObject *value = NULL;
     PyObject *ret = NULL;
 
-    if (self->version != pair_list_version(&self->md->pairs)) {
-        PyErr_SetString(PyExc_RuntimeError, "Dictionary changed during iteration");
+    int res = pair_list_next(&self->md->pairs, &self->current,
+                             NULL, &key, &value);
+    if (res < 0) {
         return NULL;
     }
-
-    if (!_pair_list_next(&self->md->pairs, &self->current, NULL, &key, &value, NULL)) {
+    if (res == 0) {
+        Py_CLEAR(key);
+        Py_CLEAR(value);
         PyErr_SetNone(PyExc_StopIteration);
         return NULL;
     }
 
     ret = PyTuple_Pack(2, key, value);
+    Py_CLEAR(key);
+    Py_CLEAR(value);
     if (ret == NULL) {
         return NULL;
     }
@@ -101,17 +103,15 @@ multidict_values_iter_iternext(MultidictIter *self)
 {
     PyObject *value = NULL;
 
-    if (self->version != pair_list_version(&self->md->pairs)) {
-        PyErr_SetString(PyExc_RuntimeError, "Dictionary changed during iteration");
+    int res = pair_list_next(&self->md->pairs, &self->current,
+                             NULL, NULL, &value);
+    if (res < 0) {
         return NULL;
     }
-
-    if (!pair_list_next(&self->md->pairs, &self->current, NULL, NULL, &value)) {
+    if (res == 0) {
         PyErr_SetNone(PyExc_StopIteration);
         return NULL;
     }
-
-    Py_INCREF(value);
 
     return value;
 }
@@ -121,17 +121,15 @@ multidict_keys_iter_iternext(MultidictIter *self)
 {
     PyObject *key = NULL;
 
-    if (self->version != pair_list_version(&self->md->pairs)) {
-        PyErr_SetString(PyExc_RuntimeError, "Dictionary changed during iteration");
+    int res = pair_list_next(&self->md->pairs, &self->current,
+                             NULL, &key, NULL);
+    if (res < 0) {
         return NULL;
     }
-
-    if (!pair_list_next(&self->md->pairs, &self->current, NULL, &key, NULL)) {
+    if (res == 0) {
         PyErr_SetNone(PyExc_StopIteration);
         return NULL;
     }
-
-    Py_INCREF(key);
 
     return key;
 }

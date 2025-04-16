@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
+    library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/yql/providers/yt/fmr/job/interface
     yt/yql/providers/yt/fmr/request_options

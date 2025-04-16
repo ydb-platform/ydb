@@ -4,9 +4,18 @@ sourceSets {
 {%-     if target.jar_source_set|length -%}
 {%-         for source_set in target.jar_source_set -%}
 {%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set out = srcdir_glob[0] -%}
-{%-             if out != 'src/main/java' %}
-        java.srcDir({{ PatchRoots(out) }})
+{%-             set srcdir = srcdir_glob[0] -%}
+{%-             if srcdir != 'src/main/java' %}
+        java.srcDir({{ PatchRoots(srcdir) }})
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif %}
+{%-     if target.jar_resource_set|length -%}
+{%-         for resource_set in target.jar_resource_set -%}
+{%-             set resdir_glob = split(resource_set, ':') -%}
+{%-             set resdir = resdir_glob[0] -%}
+{%-             if resdir != 'src/main/resources' %}
+        resources.srcDir({{ PatchRoots(resdir) }})
 {%-             endif -%}
 {%-         endfor -%}
 {%-     endif %}

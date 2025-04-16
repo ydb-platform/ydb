@@ -240,6 +240,9 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
             }
         }
     }
+    while (richYPath.Path_.EndsWith('&')) {
+        richYPath.Path_.pop_back();
+    }
     return {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),

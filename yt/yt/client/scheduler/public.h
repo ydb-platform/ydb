@@ -195,7 +195,7 @@ DEFINE_ENUM(EAutoMergeMode,
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
 
-DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+DECLARE_REFCOUNTED_STRUCT(TSpecPatch);
 using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////

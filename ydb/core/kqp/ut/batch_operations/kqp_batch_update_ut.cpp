@@ -309,15 +309,17 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
 
     Y_UNIT_TEST(Large_2) {
         ui32 sizeLimit = NSan::PlainOrUnderSanitizer(10000, 1000);
+        ui32 shardRows = NSan::PlainOrUnderSanitizer(10000, 5000);
         for (size_t size = 100; size <= sizeLimit; size *= 10) {
-            TestLarge(size, 10000);
+            TestLarge(size, shardRows);
         }
     }
 
     Y_UNIT_TEST(Large_3) {
         ui32 sizeLimit = NSan::PlainOrUnderSanitizer(100000, 10000);
+        ui32 shardRows = NSan::PlainOrUnderSanitizer(50000, 25000);
         for (size_t size = 1000; size <= sizeLimit; size *= 10) {
-            TestLarge(size, 100000);
+            TestLarge(size, shardRows);
         }
     }
 

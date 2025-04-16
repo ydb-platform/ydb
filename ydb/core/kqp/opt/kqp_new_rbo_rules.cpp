@@ -219,7 +219,11 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
-        YQL_CLOG(TRACE, CoreDq) << "Assign stages source";
+        TString readName;
+        if (input->Kind == EOperator::Source) {
+            readName = CastOperator<TOpRead>(input)->TableName;
+        }
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
 
     }
 
@@ -228,20 +232,18 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         auto leftStage = join->GetLeftInput()->Props.StageId;
         auto rightStage = join->GetRightInput()->Props.StageId;
 
-        // For cross-join we add the cross join to the left stage and make a
-        // Broadcast connection from the right stage
-        if (join->JoinKind == "Cross") {
-            join->Props.StageId = leftStage;
+        auto newStageId = props.StageGraph.AddStage();
+        join->Props.StageId = newStageId;
 
-            props.StageGraph.Connect(*rightStage, *leftStage, std::make_shared<TBroadcastConnection>());
+        // For cross-join we build a stage with map and broadcast connections
+        if (join->JoinKind == "Cross") {
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>());
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>());
         }
         
         // For inner join (we don't support other joins yet) we build a new stage
         // with GraceJoinCore and connect inputs via Shuffle connections
         else {
-            auto newStageId = props.StageGraph.AddStage();
-            join->Props.StageId = newStageId;
-
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
             for (auto k : join->JoinKeys) {

@@ -92,6 +92,15 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
         .Done().Ptr();
 }
 
+TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    return Build<TDqCnMap>(ctx, node->Pos())
+        .Output()
+            .Stage(inputStage)
+            .Index().Build("0")
+        .Build()
+        .Done().Ptr();
+}
+
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
     return Build<TDqCnUnionAll>(ctx, node->Pos())
         .Output()
@@ -141,6 +150,8 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node) {
     for (auto c : opSource.Columns()) {
         OutputIUs.push_back(TInfoUnit(alias, c.StringValue()));
     }
+
+    TableName= alias;
 }
 
 std::shared_ptr<IOperator> TOpRead::Rebuild(TExprContext& ctx) {

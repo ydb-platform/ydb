@@ -24,13 +24,7 @@ target_link_libraries(tools-ytrun-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
   providers-yt-provider
-  fmr-coordinator-client
-  fmr-coordinator-impl
-  fmr-job-impl
-  fmr-job_factory-impl
-  fmr-table_data_service-local
-  fmr-worker-impl
-  fmr-yt_service-impl
+  yt-fmr-fmr_tool_lib
   yt-gateway-native
   yt-gateway-fmr
   yt-lib-config_clusters

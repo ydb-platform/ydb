@@ -26,11 +26,13 @@ target_link_libraries(essentials-core-sql_types PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  essentials-core-issue
   tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(essentials-core-sql_types PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/match_recognize.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/normalize_name.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/simple_types.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/block.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/match_recognize.h

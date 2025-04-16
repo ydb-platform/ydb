@@ -18,6 +18,9 @@ add_library(yt-library-column_converters)
 target_compile_options(yt-library-column_converters PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
 )
 
 target_link_libraries(yt-library-column_converters PUBLIC

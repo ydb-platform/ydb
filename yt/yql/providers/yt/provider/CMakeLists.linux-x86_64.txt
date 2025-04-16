@@ -19,6 +19,13 @@ get_built_tool_path(
   enum_parser
 )
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
 add_library(providers-yt-provider)
 
 
@@ -32,6 +39,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   yutil
   cpp-yson-node
   cpp-json-writer
+  library-cpp-json
   library-cpp-disjoint_sets
   cpp-mapreduce-common
   cpp-mapreduce-interface
@@ -91,6 +99,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   ytflow-integration-interface
   ytflow-integration-proto
   tools-enum_parser-enum_serialization_runtime
+  library-cpp-resource
 )
 
 target_sources(providers-yt-provider PRIVATE
@@ -169,3 +178,116 @@ generate_enum_serilization(providers-yt-provider
   INCLUDE_HEADERS
   yt/yql/providers/yt/provider/yql_yt_op_settings.h
 )
+
+add_global_library_for(providers-yt-provider.global
+  providers-yt-provider)
+
+
+target_compile_options(providers-yt-provider.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(providers-yt-provider.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-yson-node
+  cpp-json-writer
+  library-cpp-json
+  library-cpp-disjoint_sets
+  cpp-mapreduce-common
+  cpp-mapreduce-interface
+  yql-essentials-ast
+  essentials-core-extract_predicate
+  essentials-public-udf
+  public-udf-tz
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  parser-pg_wrapper-interface
+  yql-essentials-utils
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-dq_expr_nodes
+  essentials-core-dqs_expr_nodes
+  essentials-core-expr_nodes
+  essentials-core-issue
+  core-issue-protos
+  essentials-core-peephole_opt
+  essentials-core-type_ann
+  essentials-core-file_storage
+  core-url_lister-interface
+  essentials-core-dq_integration
+  yql-essentials-minikql
+  providers-common-codec
+  providers-common-config
+  providers-common-dq
+  providers-common-mkql
+  providers-common-proto
+  providers-common-activation
+  providers-common-provider
+  common-schema-expr
+  providers-common-structured_token
+  providers-common-transform
+  providers-result-expr_nodes
+  providers-stat-expr_nodes
+  providers-yt-common
+  providers-yt-expr_nodes
+  yt-lib-expr_traits
+  yt-lib-graph_reorder
+  yt-lib-hash
+  yt-lib-key_filter
+  yt-lib-mkql_helpers
+  yt-lib-res_pull
+  yt-lib-row_spec
+  yt-lib-schema
+  yt-lib-skiff
+  yt-lib-yson_helpers
+  providers-yt-opt
+  yt-gateway-qplayer
+  providers-yt-proto
+  providers-ytflow-expr_nodes
+  ytflow-integration-interface
+  ytflow-integration-proto
+  tools-enum_parser-enum_serialization_runtime
+  library-cpp-resource
+)
+
+target_sources(providers-yt-provider.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/6af5bab986fc6d13fbe5f431f8d473b2.cpp
+)
+
+
+add_custom_command(
+  OUTPUT
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.json
+  DEPENDS
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.h
+  ${TOOL_enum_parser_bin}
+  COMMAND
+  ${TOOL_enum_parser_bin}
+  --output
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.unused.cpp
+  --json-output
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.json
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.h
+)
+
+resources(providers-yt-provider.global
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/6af5bab986fc6d13fbe5f431f8d473b2.cpp
+  INPUTS
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/provider/yql_yt_op_settings.json
+  KEYS
+  /yql_yt_op_settings.json
+  OPTS
+)
+
+
+if(NOT CMAKE_CROSSCOMPILING)
+  add_dependencies(providers-yt-provider.global
+    enum_parser
+  )
+endif()

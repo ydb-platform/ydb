@@ -54,6 +54,7 @@ target_link_libraries(essentials-tools-yql_facade_run PUBLIC
   yql-essentials-protos
   essentials-sql-settings
   sql-v1-format
+  v1-lexer-check
   v1-lexer-antlr4
   v1-lexer-antlr4_ansi
   v1-proto_parser-antlr4

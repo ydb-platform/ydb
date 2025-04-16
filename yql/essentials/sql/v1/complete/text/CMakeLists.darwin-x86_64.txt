@@ -21,6 +21,7 @@ target_link_libraries(v1-complete-text PUBLIC
 )
 
 target_sources(v1-complete-text PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/text/case.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/text/word.cpp
 )
 

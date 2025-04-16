@@ -34,6 +34,7 @@ target_link_libraries(v1-complete-syntax PUBLIC
 
 target_sources(v1-complete-syntax PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/ansi.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/format.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/grammar.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/local.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/parser_call_stack.cpp

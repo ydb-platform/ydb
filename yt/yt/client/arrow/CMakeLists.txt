@@ -20,6 +20,9 @@ add_library(yt-client-arrow)
 target_compile_options(yt-client-arrow PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
 )
 
 target_link_libraries(yt-client-arrow PUBLIC

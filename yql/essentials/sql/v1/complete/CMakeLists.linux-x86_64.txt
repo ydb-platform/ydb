@@ -15,6 +15,7 @@
 add_subdirectory(antlr4)
 add_subdirectory(text)
 add_subdirectory(name)
+add_subdirectory(core)
 add_subdirectory(syntax)
 
 add_library(sql-v1-complete)
@@ -25,8 +26,6 @@ target_link_libraries(sql-v1-complete PUBLIC
   contrib-libs-cxxsupp
   yutil
   sql-v1-lexer
-  v1-lexer-antlr4_pure
-  v1-lexer-antlr4_pure_ansi
   v1-complete-antlr4
   v1-complete-name
   complete-name-static

@@ -18,6 +18,9 @@ add_library(yt-library-skiff_ext)
 target_compile_options(yt-library-skiff_ext PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
 )
 
 target_link_libraries(yt-library-skiff_ext PUBLIC

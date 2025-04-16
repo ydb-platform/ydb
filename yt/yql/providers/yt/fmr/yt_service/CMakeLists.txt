@@ -14,3 +14,4 @@
 
 add_subdirectory(impl)
 add_subdirectory(interface)
+add_subdirectory(file)

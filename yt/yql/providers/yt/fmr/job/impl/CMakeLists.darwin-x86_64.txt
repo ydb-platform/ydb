@@ -23,6 +23,7 @@ target_link_libraries(fmr-job-impl PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
+  cpp-yson-node
   cpp-mapreduce-interface
   fmr-job-interface
   yt-fmr-request_options

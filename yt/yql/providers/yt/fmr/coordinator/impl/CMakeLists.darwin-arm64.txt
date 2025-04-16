@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
 add_library(fmr-coordinator-impl)
 
 
@@ -23,8 +30,10 @@ target_link_libraries(fmr-coordinator-impl PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-random_provider
+  library-cpp-resource
   cpp-threading-future
   cpp-yson-node
+  cpp-mapreduce-common
   fmr-coordinator-interface
   essentials-utils-log
   yql-essentials-utils
@@ -34,3 +43,38 @@ target_sources(fmr-coordinator-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.cpp
 )
 
+
+add_global_library_for(fmr-coordinator-impl.global
+  fmr-coordinator-impl)
+
+
+target_compile_options(fmr-coordinator-impl.global PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(fmr-coordinator-impl.global PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-random_provider
+  library-cpp-resource
+  cpp-threading-future
+  cpp-yson-node
+  cpp-mapreduce-common
+  fmr-coordinator-interface
+  essentials-utils-log
+  yql-essentials-utils
+)
+
+target_sources(fmr-coordinator-impl.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/87f8577cda5a4636761985e0b9ff7afb.cpp
+)
+
+
+resources(fmr-coordinator-impl.global
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/87f8577cda5a4636761985e0b9ff7afb.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/default_coordinator_settings.yson
+  KEYS
+  default_coordinator_settings.yson
+  OPTS
+)

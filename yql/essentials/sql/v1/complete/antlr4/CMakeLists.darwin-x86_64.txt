@@ -12,14 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(v1-complete-antlr4 INTERFACE)
+add_library(v1-complete-antlr4)
 
 
-target_link_libraries(v1-complete-antlr4 INTERFACE
+target_link_libraries(v1-complete-antlr4 PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-antlr4_cpp_runtime
   contrib-libs-antlr4-c3
   v1-complete-text
+)
+
+target_sources(v1-complete-antlr4 PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/antlr4/vocabulary.cpp
 )
 

@@ -18,6 +18,9 @@ add_library(yt-client-formats)
 target_compile_options(yt-client-formats PRIVATE
   -Wdeprecated-this-capture
   -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
 )
 
 target_link_libraries(yt-client-formats PUBLIC

@@ -20,5 +20,6 @@ add_library(v1-complete-name INTERFACE)
 target_link_libraries(v1-complete-name INTERFACE
   contrib-libs-cxxsupp
   yutil
+  v1-complete-core
 )
 

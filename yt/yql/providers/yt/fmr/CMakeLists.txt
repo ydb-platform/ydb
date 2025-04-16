@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(fmr_tool_lib)
 add_subdirectory(coordinator)
 add_subdirectory(request_options)
 add_subdirectory(proto)

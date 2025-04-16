@@ -21,5 +21,6 @@ target_link_libraries(v1-complete-name INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  v1-complete-core
 )
 

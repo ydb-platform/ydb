@@ -53,21 +53,25 @@ target_link_libraries(complete-name-static.global PUBLIC
 )
 
 target_sources(complete-name-static.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/53e28e026aeda8d036494d1ab8ca712f.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/d3f0df615b5d550e9f6cca3039350b82.cpp
 )
 
 
 resources(complete-name-static.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/53e28e026aeda8d036494d1ab8ca712f.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/d3f0df615b5d550e9f6cca3039350b82.cpp
   INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/pragmas_opensource.json
   ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/types.json
   ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/sql_functions.json
   ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/udfs_basic.json
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/statements_opensource.json
   ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/rules_corr_basic.json
   KEYS
+  pragmas_opensource.json
   types.json
   sql_functions.json
   udfs_basic.json
+  statements_opensource.json
   rules_corr_basic.json
   OPTS
 )

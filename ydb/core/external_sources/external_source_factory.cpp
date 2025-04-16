@@ -144,6 +144,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Redis),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Prometheus),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"protocol", "use_tls"}, hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

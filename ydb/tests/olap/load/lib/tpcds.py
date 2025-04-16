@@ -11,7 +11,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_DS
     iterations: int = 3
     tables_size: dict[str, int] = {}
-    check_canonical: bool = CheckCanonicalPolicy.ERROR
+    check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
 
     @classmethod
     def _get_tables_size(cls) -> dict[str, int]:
@@ -36,7 +36,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
     @classmethod
     def do_setup_class(cls):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
+        if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 

@@ -144,6 +144,7 @@ message TConfigItem {
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
         HealthCheckConfigItem = 89;
+        WorkloadManagerConfigItem = 90;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

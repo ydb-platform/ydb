@@ -761,6 +761,9 @@ namespace NKikimr::NBlobDepot {
         void ExecuteTxCommitAssimilatedBlob(std::vector<TAssimilatedBlobInfo>&& blobs, ui32 notifyEventType,
             TActorId parentId, ui64 cookie);
 
+        class TTxHardCollectAssimilatedBlobs;
+        void ExecuteTxHardCollectAssimilatedBlobs(ui64 tabletId, ui8 channel, TGenStep barrier, TActorId parentId);
+
         class TTxResolve;
         void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});
 

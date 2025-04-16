@@ -497,24 +497,32 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 {
     // Reply to all outstanding requests in order to destroy corresponding actors
 
+    NPersQueue::NErrorCode::EErrorCode errorCode;
     TStringBuilder ss;
-    ss << "Tablet is restarting, topic '" << TopicName() << "'";
+
+    if (IsSupportive()) {
+        errorCode = NPersQueue::NErrorCode::ERROR;
+        ss << "The transaction is completed";
+    } else {
+        errorCode = NPersQueue::NErrorCode::INITIALIZING;
+        ss << "Tablet is restarting, topic '" << TopicName() << "'";
+    }
 
     for (const auto& ev : WaitToChangeOwner) {
-        ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, ev->Cookie, errorCode, ss);
     }
 
     for (auto& w : PendingRequests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, w.GetCookie(), errorCode, ss);
         w.Span.EndError(static_cast<const TString&>(ss));
     }
 
     for (const auto& w : Responses) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, TStringBuilder() << ss << " (WriteResponses)");
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
     }
 
     for (const auto& ri : ReadInfo) {
-        ReplyError(ctx, ri.second.Destination, NPersQueue::NErrorCode::INITIALIZING,
+        ReplyError(ctx, ri.second.Destination, errorCode,
             TStringBuilder() << ss << " (ReadInfo) cookie " << ri.first);
     }
 
@@ -3646,7 +3654,13 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
 
-    RequestBlobQuota();
+    if (NeedDeletePartition) {
+        // deferred TEvPQ::TEvDeletePartition
+        DeletePartitionState = DELETION_INITED;
+    } else {
+        RequestBlobQuota();
+    }
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -3749,6 +3763,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
+
+    NeedDeletePartition = true;
+
+    if (TopicQuotaRequestCookie != 0) {
+        // wait for TEvPQ::TEvApproveWriteQuota
+        return;
+    }
 
     DeletePartitionState = DELETION_INITED;
 

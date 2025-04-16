@@ -20,6 +20,7 @@ security_config:
   viewer_allowed_sids: <list of SIDs that are allowed to view the cluster state>
   monitoring_allowed_sids: <list of SIDs that are allowed to monitor and change the cluster state>
   administration_allowed_sids: <list of SIDs that are allowed cluster administration>
+  register_dynamic_node_allowed_sids: <list of SIDs that are allowed to register database nodes in the cluster>
 
   # built-in security configuration
   disable_builtin_security: false
@@ -27,13 +28,11 @@ security_config:
   disable_builtin_access: false
 ```
 
-[//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <list of SIDs that are allowed to add database nodes to the cluster>")
-
 ## Configuring authentication mode {#security-auth}
 
 #|
 || Parameter | Description ||
-|| `enforce_user_token_requirement` | Enforces user [authentication](../../security/authentication.md) mode.
+|| `enforce_user_token_requirement` | Selects user [authentication](../../security/authentication.md) mode.
 
 - `enforce_user_token_requirement: true` — User authentication is mandatory. Requests to {{ ydb-short-name }} must include an [auth token](../../concepts/glossary.md#auth-token).
 
@@ -70,11 +69,17 @@ Default value: empty.
 This virtual group is created automatically by {{ ydb-short-name }}. You cannot delete this virtual group, list its members, or modify them.
 You can use this group to grant [access rights](../../concepts/glossary.md#access-right) on [scheme objects](../../concepts/glossary.md#scheme-object).
 
+{% note tip %}
+
+You can get information about access rights on scheme objects in the system views. For more information see, [{#T}](../../dev/system-views#informaciya-o-pravah-dostupa).
+
+{% endnote %}
+
 Default value: `all-users@well-known`.
     ||
 || `all_users_group` | Specifies the name of the [group](../../concepts/glossary.md#access-group) that includes all local [users](../../concepts/glossary.md#access-user).
 
-If `all_users_group` is not empty, all local users will be added to the group with this name upon creation. This group must exist when new users are added.
+If `all_users_group` is not empty, all local users will be added to the group with this name upon creation. The group specified in this parameter must exist when new users are added.
 
 The `all_users_group` parameter is used during the initialization of [built-in security](../../security/builtin-security.md).
 
@@ -119,6 +124,12 @@ Errors in the `default_users` list, such as duplicate logins, are logged but do 
 
 The list includes groups and their members.
 
+{% note warning %}
+
+These groups are created in the [root database](../../concepts/glossary.md#root-database) for the entire {{ ydb-short-name }} cluster.
+
+{% endnote %}
+
 Example:
 
 ```yaml
@@ -153,8 +164,6 @@ default_access:
 |#
 
 Errors in access right entries are logged but do not affect {{ ydb-short-name }} cluster startup. Access rights with errors will not be granted.
-
-[//]: # (TODO: Requires a bugfix, right now, errors in access right entries result in the process ending abnormally)
 
 ## Configuring administrative and other privileges {#security-access-levels}
 
@@ -205,7 +214,9 @@ The access level lists can include the SIDs of [users](../../concepts/glossary.m
 
 It is recommended to add user groups and separate service accounts to the `*_allowed_sids` access level lists. This way, granting access levels to individual users does not require changing the {{ ydb-short-name }} cluster configuration.
 
-You can treat access level lists as layers of additional privileges:
+{% note info %}
+
+Access level lists are layers of additional privileges:
 
 - An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../embedded-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../embedded-ui/ydb-monitoring.md#node_list_page)).
 - Each of the `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` lists adds privileges to the access subject. For the maximum level of privileges, an access subject must be added to all three access level lists.
@@ -215,6 +226,8 @@ For example:
 
 - An operator (the SID of the user or the group to which the user belongs) must be added to `viewer_allowed_sids` and `monitoring_allowed_sids`.
 - An administrator must be added to `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids`.
+
+{% endnote %}
 
 ## Built-in security configuration
 

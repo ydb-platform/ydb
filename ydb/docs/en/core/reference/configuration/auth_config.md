@@ -167,23 +167,78 @@ auth_config:
   #...
 ```
 
-| Parameter | Description |
-| --- | --- |
-| `hosts` | Specifies a list of hostnames where the LDAP server is running. |
-| `port` | Specifies the port used to connect to the LDAP server. |
-| `base_dn` | Specifies the root of the subtree in the LDAP directory from which the user entry search begins. |
-| `bind_dn` | Specifies the Distinguished Name (DN) of the service account used to search for the user entry. |
-| `bind_password` | Specifies the password for the service account used to search for the user entry. |
-| `search_filter` | Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database. |
-| `use_tls` | Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server. |
-| `enable` | Indicates whether a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`. |
-| `ca_cert_file` | Specifies the path to the certification authority's certificate file. |
-| `cert_require` | Specifies the certificate requirement level for the LDAP server.<br>Possible values:<ul><li>`NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.</li><li>`ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.</li><li>`TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.</li><li>`DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.</li></ul> |
-| `ldap_authentication_domain` | Specifies an identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers. The default value is `ldap`. |
-| `scheme` | Specifies the connection scheme to the LDAP server.<br>Possible values:<ul><li>`ldap` - Connects without encryption, sending passwords in plain text. This is the default value.</li><li>`ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.</li><li>Any other value defaults to `ldap`.</li></ul> |
-| `requested_group_attribute` | Specifies the attribute used for reverse group membership. The default is `memberOf`. |
-| `extended_settings.enable_nested_groups_search` | Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong. |
-| `host` | Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter. |
+#|
+|| Parameter | Description ||
+|| `hosts`
+| Specifies a list of hostnames where the LDAP server is running.
+    ||
+|| `port`
+| Specifies the port used to connect to the LDAP server.
+    ||
+|| `base_dn`
+| Specifies the root of the subtree in the LDAP directory from which the user entry search begins.
+    ||
+|| `bind_dn`
+| Specifies the Distinguished Name (DN) of the service account used to search for the user entry.
+    ||
+|| `bind_password`
+| Specifies the password for the service account used to search for the user entry.
+    ||
+|| `search_filter`
+| Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database.
+    ||
+|| `use_tls`
+| Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server.
+    ||
+|| `enable`
+| Indicates whether a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`.
+    ||
+|| `ca_cert_file`
+| Specifies the path to the certification authority's certificate file.
+    ||
+|| `cert_require`
+| Specifies the certificate requirement level for the LDAP server.
+
+Possible values:
+
+- `NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.
+- `ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.
+- `TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.
+- `DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.
+    ||
+|| `ldap_authentication_domain`
+| Specifies an identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers.
+
+Default value: `ldap`
+    ||
+|| `scheme`
+| Specifies the connection scheme to the LDAP server.
+
+Possible values:
+
+- `ldap` - Connects without encryption, sending passwords in plain text.
+- `ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.
+- Any other value defaults to `ldap`.
+
+Default value: `ldap`
+    ||
+|| `requested_group_attribute`
+| Specifies the attribute used for reverse group membership. The default is `memberOf`.
+    ||
+|| `extended_settings.enable_nested_groups_search`
+| Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong.
+
+Possible values:
+
+- `true` — {{ ydb-short-name }} requests information about all groups to which the user's direct groups belong. It might take a long time to traverse the entire hierarchy of nested parent groups.
+- `false` — {{ ydb-short-name }} requests a flat list of groups, to which the user belongs. This request does not traverse possible nested parent groups.
+
+Default value: `false`
+    ||
+|| `host`
+| Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter.
+    ||
+|#
 
 ## Configuring third-party IAM authentication {#iam-auth-config}
 
@@ -233,38 +288,56 @@ Default value: `false`
     ||
 |#
 
-## Configuring token life cycle
+## Configuring user token life cycle
 
-Parameters for configuring the token life cycle are applicable to all authentication methods.
+Parameters for configuring the [user token](../../concepts/glossary.md#user-token) life cycle are applicable to all authentication methods.
 
 #|
 || refresh_period
-| Specifies the time interval for detecting expired tokens
+| Specifies how often a {{ ydb-short-name }} node scans cached user tokens to find the ones that need to be refreshed because the `refresh_time`, `life_time` or `expire_time` interval elapses. The lower this parameter value, the higher the CPU load.
 
 Default value: `1s`
     ||
 || refresh_time
-| Specifies the time interval for refreshing user information. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
+| Specifies the time interval since the last user token update after which a {{ ydb-short-name }} node updates the user token again. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
 
 Default value: `1h`
     ||
 || life_time
-| Specifies the time interval for keeping a token in cache since its last use.
+| Specifies the time interval for keeping a user token in {{ ydb-short-name }} node cache since its last use. If a {{ ydb-short-name }} node does not receive queries from a user within the specified time interval, the node deletes the user token from its cache.
 
 Default value: `1h`
     ||
 || expire_time
-| Specifies the time period, after which a token expires and is deleted from cache.
+| Specifies the time period, after which a user token is deleted from {{ ydb-short-name }} node cache. Deletion occurs regardless of the `life_time` interval.
+
+{% note warning %}
+
+If a third-party system has successfully authenticated in the {{ydb-short-name }} node and regularly (more often than the `life_time` interval) sends requests to the same node, {{ydb-short-name }} will detect the possible deletion or change in the user account privileges only after the `expire_time` interval elapses.
+
+{% endnote %}
+
+The shorter this time period, the more often {{ ydb-short-name }} nodes re-authenticate users and refresh their privileges. However, excessive user re-authentication slows down {{ ydb-short-name }}, especially so for external users. Setting this parameter to seconds negates the effect of caching user tokens.
 
 Default value: `24h`
     ||
 || min_error_refresh_time
-| Specifies minimum period of time that must elapse since a failed attempt to refresh a token before retrying the attempt.
+| Specifies minimum period of time that must elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+
+Together with the `max_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+
+{% note warning %}
+
+Setting this parameter to `0` is not recommended, because instant retries results in excessive load.
+
+{% endnote %}
 
 Default value: `1s`
     ||
 || max_error_refresh_time
-| Specifies the maximum time interval that can elapse since a failed attempt to refresh a token before retrying the attempt.
+| Specifies the maximum time interval that can elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+
+Together with the `min_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
 
 Default value: `1m`
     ||

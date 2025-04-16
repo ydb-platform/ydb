@@ -103,8 +103,12 @@ flowchart TD
 
     enforce  --> |false| auth-token{check auth token}
 
-        auth-token --> |not provided| anonym[Processed in
-        anonymous mode]
+        auth-token --> |not provided| default2
+
+            default2 --> |specified| default2_specified[Processed]
+            default2 --> |empty| default2_empty[Processed in
+            anonymous mode]
+
         auth-token --> |provided| check
 
             check --> |true| q2{validate auth token}
@@ -112,9 +116,14 @@ flowchart TD
                 q2 --> |invalid| r5[Rejected]
             check --> |false| q3{validate auth token}
                 q3 --> |valid| r6[Processed]
-                q3 --> |invalid| r7[Processed in
-                anonymous mode]
+                q3 --> |invalid| default3
 
+                    default3 --> |specified| default3_specified[Processed]
+                    default3 --> |empty| default3_empty[Processed in
+            anonymous mode]
+
+default3(default_user_sids)
+default2(default_user_sids)
 default(default_user_sids)
 enforce(enforce_user_token_requirement)
 check(enforce_user_token_check_requirement)

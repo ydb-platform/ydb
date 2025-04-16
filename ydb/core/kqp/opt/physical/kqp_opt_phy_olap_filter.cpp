@@ -21,7 +21,12 @@ static TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 static const std::unordered_set<std::string> SecondLevelFilters = {
     "string_contains",
     "starts_with",
-    "ends_with"
+    "ends_with",
+    "string_contains_ignore_case",
+    "starts_with_ignore_case",
+    "ends_with_ignore_case",
+
+
 };
 
 static TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd, bool trueForEmpty) {
@@ -475,14 +480,19 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
-    } else {
-        // We introduced LIKE pushdown in v2 of SSA program
-        if (predicate.Maybe<TCoCmpStringContains>()) {
-            compareOperator = "string_contains";
-        } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-            compareOperator = "starts_with";
-        } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-            compareOperator = "ends_with";
+    } else if (predicate.Maybe<TCoCmpStringContains>()) {
+        compareOperator = "string_contains";
+    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+        compareOperator = "starts_with";
+    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+        compareOperator = "ends_with";
+    } else if constexpr(NSsa::RuntimeVersion >= 6) {
+        if (predicate.Maybe<TCoCmpStringContainsIgnoreCase>()) {
+            compareOperator = "string_contains_ignore_case";
+        } else if (predicate.Maybe<TCoCmpStartsWithIgnoreCase>()) {
+            compareOperator = "starts_with_ignore_case";
+        } else if (predicate.Maybe<TCoCmpEndsWithIgnoreCase>()) {
+            compareOperator = "ends_with_ignore_case";
         }
     }
 

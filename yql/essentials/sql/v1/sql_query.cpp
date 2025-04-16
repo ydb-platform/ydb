@@ -3416,6 +3416,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             Ctx.Engine = *literal;
+        } else if (normalizedPragma == "optimizesimpleilike") {
+            Ctx.OptimizeSimpleIlike = true;
+            Ctx.IncrementMonCounter("sql_pragma", "OptimizeSimpleILIKE");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

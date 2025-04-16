@@ -1241,6 +1241,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
+
 #endif
         };
 
@@ -1453,6 +1454,36 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
+
+    Y_UNIT_TEST(PredicatePushdown_ILikePushedDownForStringType) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls("tableWithNulls", 1);
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+        auto query = R"(PRAGMA OptimizeSimpleILIKE; SELECT id, binary_str FROM `/Root/tableWithNulls` WHERE binary_str ILIKE "%cAse%")";
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+        Cerr << "AST:\n" << ast << Endl;
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                        TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+        Cerr << "Plan:\n" << plan["plan"]["plans"] << Endl;
+    }
+
+
+
 #if SSA_RUNTIME_VERSION < 5U
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
         auto settings = TKikimrSettings()

@@ -1013,12 +1013,17 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%", "??"})) {
+        if (!op->IsAtom({
+            "eq", "neq", "lt", "lte", "gt", "gte", 
+            "string_contains", "starts_with", "ends_with",
+            "string_contains_ignore_case", "starts_with_ignore_case", "ends_with_ignore_case",
+            "+", "-", "*", "/", "%", "??"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP binary operation: " << op->Content()
             ));
             return false;
         }
+        //TODO validate parameters (IgnoreCase)
         return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Left), itemType, ctx)
             && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Right), itemType, ctx);
     } else if (TKqpOlapFilterTernaryOp::Match(node)) {

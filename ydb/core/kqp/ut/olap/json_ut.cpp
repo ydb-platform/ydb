@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             const i64 headerSkipStart = controller->GetHeadersSkippingOnSelect().Val();
             const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
             const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
-
+            Command = "PRAGMA OptimizeSimpleILIKE; " + Command;
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1022,22 +1022,22 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "%1b4%" ORDER BY Col1;
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
-#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
-#            IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
-#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
-#            IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
-#            EXPECTED: []
-#            IDX_ND_SKIP_APPROVE: 0, 5, 0
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
-#            EXPECTED: []
-#            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a4" ORDER BY Col1;
             EXPECTED: [[4u;["{\"a\":\"a4\",\"b.c.d\":\"b4\"}"]];[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
@@ -1189,18 +1189,18 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "%1b4%" ORDER BY Col1;
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
-#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
-#            IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
-#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
-#            IDX_ND_SKIP_APPROVE: 0, 4, 1
-#            ------
-#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
-#            EXPECTED: []
-#            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
             EXPECTED: []

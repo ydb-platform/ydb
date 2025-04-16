@@ -46,10 +46,10 @@
 `ImmediateTxCompleted` | Количество завершившихся [одношардовых транзакций](../concepts/glossary.md#transactions). | `Uint32` | Кумулятивная
 `CoordinatedTxCompleted` | Количество завершившихся [распределенных транзакций](../concepts/glossary.md#transactions). | `Uint64` | Кумулятивная
 `TxRejectedByOverload` | Количество транзакций, отменённых по причине [высокой нагрузки](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Кумулятивная
+`TxRejectedByOutOfStorage` | Количество транзакций, отменённых из-за нехватки места в хранилище. | `Uint64` | Кумулятивная
 `LastTtlRunTime` | Последний момент запуска очистки партиции по TTL | `Timestamp` | Моментальная
 `LastTtlRowsProcessed` | Количество проверенных строк партиции при последней очистке по TTL | `Uint64` | Моментальная
 `LastTtlRowsErased` | Количество удаленных строк партиции при последней очистке по TTL | `Uint64` | Моментальная
-`TxRejectedByOutOfStorage` | Количество транзакций, отменённых из-за нехватки места в хранилище. | `Uint64` | Кумулятивная
 `LocksAcquired` | Количество установленных [блокировок](../contributor/datashard-locks-and-change-visibility.md) . | `Uint64` | Кумулятивная
 `LocksWholeShard` | Количество установленных [блокировок "весь шард"](../contributor/datashard-locks-and-change-visibility.md#ограничения). | `Uint64` | Кумулятивная
 `LocksBroken` | Количество [сломанных блокировок](../contributor/datashard-locks-and-change-visibility.md#высокоуровневая-схема-работы). | `Uint64` | Кумулятивная

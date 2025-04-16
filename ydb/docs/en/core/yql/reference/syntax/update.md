@@ -52,7 +52,7 @@ SELECT * FROM $to_update;
 
 ## BATCH UPDATE {#batch-update}
 
-Updates large tables that the standard `UPDATE` cannot update. It independently applies changes to each partition of the specified table, processing a limited number of rows per iteration (by default, 10000 rows). The query is executed in a non-transactional mode. In case of an error, changes are not rolled back. The semantics are inherited from the standard `UPDATE` with the following restrictions:
+Updates large tables that cannot be updated using the standard `UPDATE` method due to transaction limits and the risk of potential transaction locks invalidation failure. It independently applies changes to each partition of the specified table, processing a limited number of rows per iteration (by default, 10000 rows). The query is executed in a non-transactional mode. In case of an error, changes are not rolled back. The semantics are inherited from the standard `UPDATE` with the following restrictions:
 
 * Supported only for row-oriented tables.
 * Only idempotent updates are supported: expressions following `SET` should not depend on the current values of the columns being modified.

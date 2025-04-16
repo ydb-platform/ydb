@@ -209,7 +209,7 @@ await command2.ExecuteNonQueryAsync();
 await transaction.CommitAsync();
 ```
 
-{{ ydb-short-name }} does not support nested or concurrent transactions. At any given moment, only one transaction can be in progress, and starting a new transaction while another is already running throws an exception. Therefore, there is no need to pass the `YdbTransaction` object returned by `BeginTransaction()` to commands you execute. When starting a transaction, all subsequent commands are automatically included until a commit or rollback is made. To ensure maximum portability, however, it is best to explicitly set the transaction scope for your commands.
+{{ ydb-short-name }} does not support nested or concurrent transactions. At any given moment, only one transaction per connection can be in progress, and starting a new transaction while another is already running throws an exception. Therefore, there is no need to pass the `YdbTransaction` object returned by `BeginTransaction()` to commands you execute. When a transaction is started, all subsequent commands are automatically included until a commit or rollback is made. To ensure maximum portability, however, it is best to set the transaction scope for your commands explicitly.
 
 ## Error handling
 

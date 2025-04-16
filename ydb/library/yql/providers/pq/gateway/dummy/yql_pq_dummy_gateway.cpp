@@ -9,8 +9,10 @@
 namespace NYql {
 
 struct TDummyFederatedTopicClient : public IFederatedTopicClient {
-    TDummyFederatedTopicClient(const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}):
-        FederatedClientSettings_(settings) {}
+    using TClusterNPath = TDummyPqGateway::TClusterNPath;
+    TDummyFederatedTopicClient(const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}, const THashMap<TClusterNPath, TDummyTopic>& topics = {})
+        : Topics_(topics)
+        , FederatedClientSettings_(settings) {}
 
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
         std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
@@ -21,8 +23,17 @@ struct TDummyFederatedTopicClient : public IFederatedTopicClient {
                 NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
         return NThreading::MakeFuture(std::move(dbInfo));
     }
+
+    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& settings) override {
+        if (!FileTopicClient_) {
+            FileTopicClient_ = MakeIntrusive<TFileTopicClient>(std::move(Topics_));
+        }
+        return FileTopicClient_->CreateWriteSession(settings);
+    }
 private:
+    THashMap<TClusterNPath, TDummyTopic> Topics_;
     NYdb::NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings_;
+    TFileTopicClient::TPtr FileTopicClient_;
 };
 
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
@@ -103,7 +114,7 @@ ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const N
 }
 
 IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) {
-    return MakeIntrusive<TDummyFederatedTopicClient>(settings);
+    return MakeIntrusive<TDummyFederatedTopicClient>(settings, Topics);
 }
 NYdb::NFederatedTopic::TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings() const {
     return {};

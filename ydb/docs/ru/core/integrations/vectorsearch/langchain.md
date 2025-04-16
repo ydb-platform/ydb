@@ -1,26 +1,34 @@
 # LangChain
 
-Интеграция {{ ydb-short-name }} с [langchain](https://python.langchain.com/docs/introduction/) позволяет использовать {{ ydb-short-name }} в качестве [векторного хранилища](https://python.langchain.com/docs/concepts/vectorstores/) для RAG приложений.
+Интеграция {{ ydb-short-name }} с [langchain](https://python.langchain.com/docs/introduction/) позволяет использовать {{ ydb-short-name }} в качестве [векторного хранилища](https://python.langchain.com/docs/concepts/vectorstores/) для [RAG](https://python.langchain.com/docs/concepts/rag/) приложений.
 
 Эта интеграция позволяет разработчикам эффективно управлять, запрашивать и извлекать векторизованные данные, что является основой для современных приложений, связанных с обработкой естественного языка, поиском и анализом данных. Используя модели эмбеддингов, пользователи могут создавать сложные системы, способные понимать и извлекать информацию на основе семантического сходства.
 
 ## Установка {#setup}
+Для использования этой интеграции установите следующее программное обеспечение:
 
-Чтобы воспользоваться этой интеграцией, необходимо установить пакет `langchain-ydb`:
+- `langchain-ydb`
 
-```shell
-pip install -qU langchain-ydb
-```
+    Для установки `langchain-ydb`, полните следующую команду:
 
-Для запуска {{ ydb-short-name }}, выполните действия из [этого руководства](../../quickstart.md#install).
+    ```shell
+    pip install -qU langchain-ydb
+    ```
+- Модель ембеддингов
+
+    В этом руководстве используется `HuggingFaceEmbeddings`. Чтобы установить этот пакет, выполните следующую команду:
+
+    ```shell
+    pip install -qU langchain-huggingface
+    ```
+
+- Локальный {{ ydb-short-name }}
+
+    Для получения дополнительной информации смотрите [{#T}](../../quickstart.md#install).
 
 ## Инициализация {#initialization}
 
 Для создания векторного хранилища {{ ydb-short-name }}, требуется указать модель эмбеддингов. В данном примере используется `HuggingFaceEmbeddings`:
-
-```shell
-pip install -qU langchain-huggingface
-```
 
 ```python
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -127,6 +135,8 @@ uuids = [str(uuid4()) for _ in range(len(documents))]
 vector_store.add_documents(documents=documents, ids=uuids)
 ```
 
+Вывод:
+
 ```shell
 Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.67it/s]
 ['947be6aa-d489-44c5-910e-62e4d58d2ffb',
@@ -148,6 +158,8 @@ Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.6
 ```python
 vector_store.delete(ids=[uuids[-1]])
 ```
+
+Вывод:
 
 ```shell
 True
@@ -171,6 +183,8 @@ for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
 
+Вывод:
+
 ```shell
 * Building an exciting new project with LangChain - come check it out! [{'source': 'tweet'}]
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
@@ -185,6 +199,8 @@ results = vector_store.similarity_search_with_score("Will it be hot tomorrow?", 
 for res, score in results:
     print(f"* [SIM={score:.3f}] {res.page_content} [{res.metadata}]")
 ```
+
+Вывод:
 
 ```shell
 * [SIM=0.595] The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees. [{'source': 'news'}]
@@ -205,6 +221,8 @@ results = vector_store.similarity_search_with_score(
 for res, _ in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
+
+Вывод:
 
 ```shell
 * I had chocalate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
@@ -230,6 +248,8 @@ results = retriever.invoke(
 for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
+
+Вывод:
 
 ```shell
 * Robbers broke into the city bank and stole $1 million in cash. [{'source': 'news'}]

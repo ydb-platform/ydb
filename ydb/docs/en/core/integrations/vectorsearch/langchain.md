@@ -1,26 +1,35 @@
 # LangChain
 
-Integration of {{ ydb-short-name }} with [langchain](https://python.langchain.com/docs/introduction/) enables the use of {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/) for RAG applications.
+Integration of {{ ydb-short-name }} with [langchain](https://python.langchain.com/docs/introduction/) enables the use of {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/) for [RAG](https://python.langchain.com/docs/concepts/rag/) applications.
 
 This integration allows developers to efficiently manage, query, and retrieve vectorized data, which is fundamental for modern applications involving natural language processing, search, and data analysis. By leveraging embedding models, users can create sophisticated systems that understand and retrieve information based on semantic similarity.
 
 ## Setup {#setup}
 
-To use this integration, the `langchain-ydb` package must be installed:
+To use this integration, install the following software:
 
-```shell
-pip install -qU langchain-ydb
-```
+- `langchain-ydb`
 
-To start the local {{ ydb-short-name }} follow [this guide](../../quickstart.md#install).
+    To install `langchain-ydb`, run the following command:
+
+    ```shell
+    pip install -qU langchain-ydb
+    ```
+- embedding model
+
+    This tutorial uses `HuggingFaceEmbeddings`. To install this package, run the following command:
+
+    ```shell
+    pip install -qU langchain-huggingface
+    ```
+
+- Local {{ ydb-short-name }}
+
+    For more information, see [{#T}](../../quickstart.md#install).
 
 ## Initialization {#initialization}
 
-Creating a {{ ydb-short-name }} vector store requires specifying an embeddings model. In this instance, `HuggingFaceEmbeddings` is used:
-
-```shell
-pip install -qU langchain-huggingface
-```
+Creating a {{ ydb-short-name }} vector store requires specifying an embedding model. In this instance, `HuggingFaceEmbeddings` is used:
 
 ```python
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -28,7 +37,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 ```
 
-Once the embeddings model is created, the {{ ydb-short-name }} vector store can be initiated:
+Once the embedding model is created, the {{ ydb-short-name }} vector store can be initiated:
 
 ```python
 from langchain_ydb.vectorstores import YDB, YDBSearchStrategy, YDBSettings
@@ -45,11 +54,11 @@ vector_store = YDB(embeddings, config=settings)
 
 ## Manage Vector Store {#manage_vector_store}
 
-After the vector store has been established, interactions such as adding and removing different items are possible.
+After the vector store has been established, you can start adding and removing items from the store.
 
 ### Add items to vector store {#add_items_to_vector_store}
 
-Documents are prepared for usage:
+The following code prepares the documents:
 
 ```python
 from uuid import uuid4
@@ -127,6 +136,8 @@ Items are added to the vector store using the `add_documents` function.
 vector_store.add_documents(documents=documents, ids=uuids)
 ```
 
+Output:
+
 ```shell
 Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.67it/s]
 ['947be6aa-d489-44c5-910e-62e4d58d2ffb',
@@ -149,13 +160,15 @@ Items are deleted from the vector store by ID using the `delete` function.
 vector_store.delete(ids=[uuids[-1]])
 ```
 
+Output:
+
 ```shell
 True
 ```
 
 ## Query Vector Store {#query_vector_store}
 
-After establishing the vector store and adding relevant documents, it's likely desired to query it during chain or agent execution.
+After establishing the vector store and adding relevant documents, you can query the store during chain or agent execution.
 
 ### Query directly {#query_directly}
 
@@ -171,6 +184,8 @@ for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
 
+Output:
+
 ```shell
 * Building an exciting new project with LangChain - come check it out! [{'source': 'tweet'}]
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
@@ -185,6 +200,8 @@ results = vector_store.similarity_search_with_score("Will it be hot tomorrow?", 
 for res, score in results:
     print(f"* [SIM={score:.3f}] {res.page_content} [{res.metadata}]")
 ```
+
+Output:
 
 ```shell
 * [SIM=0.595] The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees. [{'source': 'news'}]
@@ -205,6 +222,8 @@ results = vector_store.similarity_search_with_score(
 for res, _ in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
+
+Output:
 
 ```shell
 * I had chocalate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
@@ -230,6 +249,8 @@ results = retriever.invoke(
 for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
+
+Output:
 
 ```shell
 * Robbers broke into the city bank and stole $1 million in cash. [{'source': 'news'}]

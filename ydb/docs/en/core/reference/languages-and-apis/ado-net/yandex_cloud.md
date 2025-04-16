@@ -41,7 +41,7 @@ var certs = Ydb.Sdk.Yc.YcCerts.GetYcServerCertificates();
 
 ## How connect to ADO.NET
 
-To establish a secure connection to {{ ydb-short-name }} using ADO.NET, configure YdbConnectionStringBuilder with the required authentication and TLS settings. Below are detailed example:
+To establish a secure connection to {{ ydb-short-name }} using ADO.NET, configure `YdbConnectionStringBuilder` with the required authentication and TLS settings. Below is a detailed example:
 
 ```c#
 var builder = new YdbConnectionStringBuilder

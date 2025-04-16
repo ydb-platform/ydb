@@ -2496,6 +2496,90 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid type for column: Value.", result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST_TWIN(CreateAsSelectPath, UseTablePathPrefix) {
+        const auto dirPath = UseTablePathPrefix ? "" : "/Root/test/";
+        const auto pragma = UseTablePathPrefix ? "PRAGMA TablePathPrefix(\"/Root/test\");" : "";
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true)
+            .SetAuthToken("user0@builtin");;
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
+
+            {
+                auto result = schemeClient.MakeDirectory("/Root/test").ExtractValueSync();
+                AssertSuccessResult(result);
+            }
+            {
+                NYdb::NScheme::TPermissions permissions("user0@builtin",
+                    {"ydb.generic.read", "ydb.generic.write"}
+                );
+                auto result = schemeClient.ModifyPermissions("/Root/test",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync();
+                AssertSuccessResult(result);
+            }
+        }
+
+        const TString query = std::format(R"(
+            {1}
+            CREATE TABLE `{0}Source` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            );
+        )", dirPath, pragma);
+
+        auto client = kikimr.GetQueryClient();
+        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
+                {1}
+                REPLACE INTO `{0}Source` (Col1, Col2) VALUES
+                    (1u, 1), (100u, 100), (10u, 10);
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(std::format(R"(
+                {1}
+                CREATE TABLE `{0}Destination1` (
+                    PRIMARY KEY (Col1)
+                )
+                AS SELECT Col2 As Col1, Col1 As Col2
+                FROM `{0}Source`;
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(std::format(R"(
+                {1}
+                SELECT Col1, Col2 FROM `{0}Destination1`;
+            )", dirPath, pragma), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1];[1u]];[[10];[10u]];[[100];[100u]]])");
+        }
+    }
+
 }
 
 } // namespace NKqp

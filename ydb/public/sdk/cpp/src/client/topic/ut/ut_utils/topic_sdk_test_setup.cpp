@@ -80,10 +80,26 @@ TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const TString& path, c
     return status.GetConsumerDescription();
 }
 
-TStatus TTopicSdkTestSetup::Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset) {
+void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId) {
     TTopicClient client(MakeDriver());
 
-    return client.CommitOffset(path, partitionId, consumerName, offset).GetValueSync();
+    TWriteSessionSettings settings;
+    settings.Path(TEST_TOPIC);
+    settings.PartitionId(partitionId);
+    settings.DeduplicationEnabled(false);
+    auto session = client.CreateSimpleBlockingWriteSession(settings);
+
+    TWriteMessage msg(TStringBuilder() << message);
+    UNIT_ASSERT(session->Write(std::move(msg)));
+
+    session->Close(TDuration::Seconds(5));
+}
+
+TStatus TTopicSdkTestSetup::Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {
+    TTopicClient client(MakeDriver());
+
+    TCommitOffsetSettings commitSettings {.ReadSessionId_ = sessionId};
+    return client.CommitOffset(path, partitionId, consumerName, offset, commitSettings).GetValueSync();
 }
 
 

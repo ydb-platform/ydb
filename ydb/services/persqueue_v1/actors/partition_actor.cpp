@@ -26,8 +26,8 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
-        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, std::set<NPQ::TPartitionGraph::Node*> parents,
-        std::unordered_set<ui64> notCommitedToFinishParents
+        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
+        const std::unordered_set<ui64>& notCommitedToFinishParents
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -108,7 +108,7 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     if (it != NextCommits.end() && *it == 0) { //commit of readed in prev session data
         NextCommits.erase(NextCommits.begin());
         if (ClientReadOffset <= ClientCommitOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, 0, 0, CommittedOffset, EndOffset));
+            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, 0, 0, CommittedOffset, EndOffset, ReadingFinishedSent));
         } else {
             ClientCommitOffset = ClientReadOffset;
             CommitsInfly.emplace_back(0, TCommitInfo{0, ClientReadOffset, ctx.Now()});
@@ -931,7 +931,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
 
     CommittedOffset = CommitsInfly.front().second.Offset;
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
-    ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset, EndOffset));
+    ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset, EndOffset, ReadingFinishedSent));
 
     Kqps.erase(CommitsInfly.front().first);
     CommitsInfly.pop_front();
@@ -1313,7 +1313,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
-                     std::move(adjacentPartitionIds), std::move(childPartitionIds)));
+                     std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         }

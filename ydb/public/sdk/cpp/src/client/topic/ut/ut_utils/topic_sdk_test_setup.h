@@ -24,7 +24,8 @@ public:
     TTopicDescription DescribeTopic(const TString& path = TString{TEST_TOPIC});
     TConsumerDescription DescribeConsumer(const TString& path = TString{TEST_TOPIC}, const TString& consumer = TString{TEST_CONSUMER});
 
-    TStatus Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset);
+    void Write(const std::string& message, ui32 partitionId = 0);
+    TStatus Commit(const TString& path, const TString& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId = std::nullopt);
 
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TString{TEST_TOPIC}) const;

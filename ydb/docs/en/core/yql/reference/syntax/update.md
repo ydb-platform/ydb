@@ -54,6 +54,7 @@ SELECT * FROM $to_update;
 
 Updates large tables that the standard `UPDATE` cannot update. It independently applies changes to each partition of the specified table, processing a limited number of rows per iteration (by default, 10000 rows). The query is executed in a non-transactional mode. In case of an error, changes are not rolled back. The semantics are inherited from the standard `UPDATE` with the following restrictions:
 
+* Supported only for row-oriented tables.
 * Only idempotent updates are supported: expressions following `SET` should not depend on the current values of the columns being modified.
 * The use of subqueries and multiple queries in a single expression, including `UPDATE ON`, is prohibited.
 * The `RETURNING` keyword is unavailable.

@@ -495,7 +495,14 @@ public:
             size_t listSize = listPtr->ChildrenSize();
             if (listSize == 3) {
                 TString compSign = TString(listPtr->Child(0)->Content());
-                TString attr = TString(listPtr->Child(1)->Content());
+                auto left = listPtr->ChildPtr(1);
+                auto right = listPtr->ChildPtr(2);
+                if (IsConstantExpr(left) && OlapOppositeCompSigns.contains(compSign)) {
+                    compSign = OlapOppositeCompSigns[compSign];
+                    std::swap(left, right);
+                }
+
+                TString attr = TString(left->Content());
 
                 TExprContext dummyCtx;
                 TPositionHandle dummyPos;
@@ -511,12 +518,12 @@ public:
                             .Name().Build(attr)
                         .Done();
 
-                auto value = TExprBase(listPtr->ChildPtr(2));
+                auto value = TExprBase(right);
                 if (listPtr->ChildPtr(2)->ChildrenSize() >= 2 && listPtr->ChildPtr(2)->ChildPtr(0)->Content() == "just") {
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeComparisonSelectivity(member, value);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value);
                 } else if (compSign == "neq") {
@@ -549,6 +556,16 @@ private:
         "starts_with",
         "ends_with"
     };
+
+    THashMap<TString, EInequalityPredicateType> OlapCompStrToEInequalityPredicate = {
+        {"lt", EInequalityPredicateType::Less},
+        {"lte", EInequalityPredicateType::LessOrEqual},
+        {"gt", EInequalityPredicateType::GreaterOrEqual},
+        {"gte", EInequalityPredicateType::GreaterOrEqual},
+    };
+
+    THashMap<TString, TString> OlapOppositeCompSigns = {{"lt", "gt"},   {"lte", "gte"}, {"gt", "lt"},
+                                                        {"gte", "lte"}, {"eq", "neq"},  {"neq", "eq"}};
 };
 
 void InferStatisticsForOlapFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {

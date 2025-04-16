@@ -141,6 +141,9 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kLogging: {
         return GetServiceAccountId(setting.logging().auth());
     }
+    case FederatedQuery::ConnectionSetting::kIceberg: {
+        return GetServiceAccountId(setting.iceberg().warehouse_auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -178,6 +181,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.mysql_cluster().login();
         case FederatedQuery::ConnectionSetting::kLogging:
             return {};
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return {};
     }
 }
 
@@ -202,6 +207,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().password();
         case FederatedQuery::ConnectionSetting::kLogging:
+            return {};
+        case FederatedQuery::ConnectionSetting::kIceberg:
             return {};
     }
 }
@@ -228,6 +235,9 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.mysql_cluster().auth());
         case FederatedQuery::ConnectionSetting::kLogging:
             return GetIamAuthMethod(setting.logging().auth());
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return GetIamAuthMethod(setting.iceberg().warehouse_auth());
+
     }
 }
 
@@ -251,8 +261,37 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().mysql_cluster().auth();
     case FederatedQuery::ConnectionSetting::kLogging:
         return connection.content().setting().logging().auth();
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        return connection.content().setting().iceberg().warehouse_auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
+    }
+}
+
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting) {
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        return setting.mutable_object_storage()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        return setting.mutable_ydb_database()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        return setting.mutable_clickhouse_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        return setting.mutable_data_streams()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        return setting.mutable_monitoring()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        return setting.mutable_postgresql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        return setting.mutable_greenplum_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        return setting.mutable_mysql_cluster()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kLogging:
+        return setting.mutable_logging()->mutable_auth();
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        return setting.mutable_iceberg()->mutable_warehouse_auth();
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        return nullptr;
     }
 }
 

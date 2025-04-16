@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -151,6 +152,9 @@ void FillGenericClusterConfigBase(
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         case NYql::EGenericDataSourceKind::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
+            break;
+        case NYql::EGenericDataSourceKind::ICEBERG:
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         default:
@@ -335,6 +339,17 @@ void AddClustersFromConnections(
             clusterCfg->SetName(connectionName);
             clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
             FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
+
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            const auto& db = conn.content().setting().iceberg();
+            auto& clusterConfig = *gatewaysConfig.MutableGeneric()->AddClusterMapping();
+
+            clusterConfig.SetName(connectionName);
+            NFq::FillIcebergGenericClusterConfig(common, db, clusterConfig);
+            FillClusterAuth(clusterConfig, db.warehouse_auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }

@@ -88,28 +88,31 @@ The following diagram displays the relationship between authentication mode para
 flowchart TD
     request --> enforce
 
-    enforce  --> |true| q1{{auth token?}}
+    enforce  --> |true| q1{{check auth token}}
 
-        q1 --> |no| r1[Rejected]
-        q1 --> |invalid| r2[Rejected]
-        q1 --> |valid| r3[Processed]
+        q1 --> |provided| q11{{validate auth token}}
 
-    enforce  --> |false| auth-token{{auth token?}}
+            q11 --> |valid| p[Processed]
+            q11 --> |invalid| r[Rejected]
 
-        auth-token --> |no| default
-            default --> |default user| anonym[Processed]
-        auth-token --> |yes| check
+        q1 --> |not provided| default
 
-            check --> |true| q2{{auth token?}}
+        default --> |specified| r2[Processed]
+        default --> |empty| r3[Rejected]
+
+    enforce  --> |false| auth-token{{check auth token}}
+
+        auth-token --> |not provided| anonym[Processed in anonymous mode]
+        auth-token --> |provided| check
+
+            check --> |true| q2{{validate auth token}}
                 q2 --> |valid| r4[Processed]
                 q2 --> |invalid| r5[Rejected]
-            check --> |false| q3{{auth token?}}
+            check --> |false| q3{{validate auth token}}
                 q3 --> |valid| r6[Processed]
-                q3 --> |invalid| default2
-                default2 --> |default_user| r7[Processed]
+                q3 --> |invalid| r7[Processed in anonymous mode]
 
 default(default_user_sids)
-default2(default_user_sids)
 enforce(enforce_user_token_requirement)
 check(enforce_user_token_check_requirement)
 ```

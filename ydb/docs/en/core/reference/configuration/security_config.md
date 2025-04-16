@@ -86,42 +86,23 @@ The following diagram displays the relationship between authentication mode para
 
 ```mermaid
 flowchart TD
-    request --> enforce
+    request --> check-auth-token{check auth token}
 
-    enforce  --> |true| q1{check auth token}
+        check-auth-token --> |provided| validate{validate auth token}
+            validate{validate auth token} --> |valid| Processed
+            validate{validate auth token} --> |invalid| enforce_user_token_requirement
+                enforce_user_token_requirement --> |true| r[Rejected]
+                enforce_user_token_requirement --> |false| invalid_check_requirement(enforce_user_token_check_requirement)
+                    invalid_check_requirement --> |true| Rejected
+                    invalid_check_requirement --> |false| anonym[Processed in
+                    anonymous mode]
 
-        q1 --> |provided| q11{validate auth token}
-
-            q11 --> |valid| p[Processed]
-            q11 --> |invalid| r[Rejected]
-
-        q1 --> |not provided| default
-
-        default --> |specified| r2[Processed]
-        default --> |empty| r3[Rejected]
-
-    enforce  --> |false| auth-token{check auth token}
-
-        auth-token --> |not provided| default2
-
-            default2 --> |specified| default2_specified[Processed]
-            default2 --> |empty| default2_empty[Processed in
-            anonymous mode]
-
-        auth-token --> |provided| check
-
-            check --> |true| q2{validate auth token}
-                q2 --> |valid| r4[Processed]
-                q2 --> |invalid| r5[Rejected]
-            check --> |false| q3{validate auth token}
-                q3 --> |valid| r6[Processed]
-                q3 --> |invalid| default3_empty[Processed in
-            anonymous mode]
-
-default2(default_user_sids)
-default(default_user_sids)
-enforce(enforce_user_token_requirement)
-check(enforce_user_token_check_requirement)
+        check-auth-token --> |missing| missing_default(default_user_sids)
+            missing_default --> |specified| default_specified_enforce(Processed)
+            missing_default --> |empty| default_empty_enforce(enforce_user_token_requirement)
+                default_empty_enforce --> |true| default_empty_enforce_true[Rejected]
+                default_empty_enforce --> |false| default_empty_enforce_false[Processed in
+                anonymous mode]
 ```
 
 ## Bootstrapping security {#security-bootstrap}

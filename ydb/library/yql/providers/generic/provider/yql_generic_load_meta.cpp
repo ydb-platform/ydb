@@ -228,7 +228,7 @@ namespace NYql {
                         });
                 });
 
-            return desc->Issues;
+            return TIssues{};
         }
 
     public:

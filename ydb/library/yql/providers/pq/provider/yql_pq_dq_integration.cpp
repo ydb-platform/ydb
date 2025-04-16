@@ -203,6 +203,8 @@ public:
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
+                    } else if (name == UseReducedMetrics) {
+                        srcDesc.SetUseReducedMetrics(FromString<bool>(Value(setting)));
                     }
                 }
 
@@ -321,6 +323,9 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
+        if (clusterConfiguration->UseReducedMetrics) {
+            Add(props, UseReducedMetrics, ToString(clusterConfiguration->UseReducedMetrics), pos, ctx);
+        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

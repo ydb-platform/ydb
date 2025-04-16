@@ -201,6 +201,8 @@ public:
             cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
         }
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
+        cmd->SetUserToken(Request_->GetSerializedToken());
+        cmd->SetPeerName(Request_->GetPeerName());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

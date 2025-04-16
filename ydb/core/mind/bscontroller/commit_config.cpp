@@ -16,6 +16,9 @@ namespace NKikimr::NBsController {
         std::optional<ui64> ExpectedStorageYamlConfigVersion;
         std::unique_ptr<IEventHandle> Handle;
         std::optional<bool> SwitchEnableConfigV2;
+        std::optional<bool> SkipAuditLog;
+        TString PeerName;
+        NACLib::TUserToken UserToken;
 
         ui64 GenerationOnStart = 0;
         TString FingerprintOnStart;
@@ -25,7 +28,8 @@ namespace NKikimr::NBsController {
                 std::optional<std::optional<TString>>&& storageYamlConfig,
                 std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
                 std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
-                std::optional<bool> switchEnableConfigV2)
+                std::optional<bool> switchEnableConfigV2, TString peerName,
+                NACLib::TUserToken userToken, bool skipAuditLog)
             : TTransactionBase(controller)
             , YamlConfig(std::move(yamlConfig))
             , StorageYamlConfig(std::move(storageYamlConfig))
@@ -33,6 +37,9 @@ namespace NKikimr::NBsController {
             , ExpectedStorageYamlConfigVersion(expectedStorageYamlConfigVersion)
             , Handle(std::move(handle))
             , SwitchEnableConfigV2(switchEnableConfigV2)
+            , SkipAuditLog(skipAuditLog)
+            , PeerName(peerName)
+            , UserToken(userToken)
         {}
 
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
@@ -68,6 +75,17 @@ namespace NKikimr::NBsController {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
                 Y_DEBUG_ABORT("Storage config changed");
             }
+            if (!SkipAuditLog) {
+                AuditLogCommitConfigTransaction(
+                    /* peer = */ PeerName,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ newConfig,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
+
             if (StorageConfig) {
                 Self->StorageConfig = std::move(*StorageConfig);
                 Self->ApplyStorageConfig(true);
@@ -136,9 +154,9 @@ namespace NKikimr::NBsController {
             std::optional<std::optional<TString>>&& storageYamlConfig,
             std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
             std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
-            std::optional<bool> switchEnableConfigV2) {
+            std::optional<bool> switchEnableConfigV2, TString peerName, NACLib::TUserToken userToken, std::optional<bool> skipAuditLog) {
         return new TTxCommitConfig(this, std::move(yamlConfig), std::move(storageYamlConfig), std::move(storageConfig),
-            expectedStorageYamlConfigVersion, std::move(handle), switchEnableConfigV2);
+            expectedStorageYamlConfigVersion, std::move(handle), switchEnableConfigV2, peerName, userToken, skipAuditLog);
     }
 
 } // namespace NKikimr::NBsController

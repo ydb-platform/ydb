@@ -30,6 +30,7 @@ class TConfigsManager::TTxReplaceYamlConfigBase
             , AllowUnknownFields(ev->Get()->Record.GetRequest().allow_unknown_fields())
             , DryRun(ev->Get()->Record.GetRequest().dry_run())
             , IngressDatabase(ev->Get()->Record.HasIngressDatabase() ? TMaybe<TString>{ev->Get()->Record.GetIngressDatabase()} : TMaybe<TString>{})
+            , SkipAuditLog(ev->Get()->Record.GetSkipAuditLog() ? true : false)
     {
     }
 
@@ -177,14 +178,16 @@ public:
         ctx.Send(Response.Release());
 
         if (!Error && Modify && !DryRun) {
-            AuditLogReplaceConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->MainYamlConfig,
-                /* newConfig = */ Config,
-                /* reason = */ {},
-                /* success = */ true);
+            if (!SkipAuditLog) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ Self->MainYamlConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
 
             Self->YamlVersion = Version + 1;
             Self->MainYamlConfig = UpdatedMainConfig;
@@ -195,14 +198,16 @@ public:
             auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->DatabaseYamlConfigs);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
-            AuditLogReplaceConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* oldConfig = */ Self->MainYamlConfig,
-                /* newConfig = */ Config,
-                /* reason = */ ErrorReason,
-                /* success = */ false);
+            if (!SkipAuditLog) {
+                AuditLogReplaceConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ Self->MainYamlConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ ErrorReason,
+                    /* success = */ false);
+            }
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);
@@ -360,15 +365,17 @@ public:
         }
 
         if (!Error && Modify && !DryRun) {
-            AuditLogReplaceDatabaseConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* database =  */ TargetDatabase,
-                /* oldConfig = */ oldConfig,
-                /* newConfig = */ Config,
-                /* reason = */ {},
-                /* success = */ true);
+            if (!SkipAuditLog) {
+                AuditLogReplaceDatabaseConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* database =  */ TargetDatabase,
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
 
             Self->DatabaseYamlConfigs[TargetDatabase] = TDatabaseYamlConfig {
                 .Config = UpdatedDatabaseConfig,
@@ -383,15 +390,17 @@ public:
 
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
-            AuditLogReplaceDatabaseConfigTransaction(
-                /* peer = */ Peer,
-                /* userSID = */ UserToken.GetUserSID(),
-                /* sanitizedToken = */ UserToken.GetSanitizedToken(),
-                /* database =  */ TargetDatabase,
-                /* oldConfig = */ oldConfig,
-                /* newConfig = */ Config,
-                /* reason = */ ErrorReason,
-                /* success = */ false);
+            if (!SkipAuditLog) {
+                AuditLogReplaceDatabaseConfigTransaction(
+                    /* peer = */ Peer,
+                    /* userSID = */ UserToken.GetUserSID(),
+                    /* sanitizedToken = */ UserToken.GetSanitizedToken(),
+                    /* database =  */ TargetDatabase,
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ Config,
+                    /* reason = */ ErrorReason,
+                    /* success = */ false);
+            }
         }
 
         Self->TxProcessor->TxCompleted(this, ctx);

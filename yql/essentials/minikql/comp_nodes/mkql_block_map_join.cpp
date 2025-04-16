@@ -10,13 +10,18 @@
 #include <yql/essentials/minikql/mkql_block_map_join_utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/computation/mkql_resource_meter.h>
 
 #include <util/generic/serialized_enum.h>
+
+#include <chrono>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+using namespace std::chrono_literals;
 
 size_t CalcMaxBlockLength(const TVector<TType*>& items) {
     return CalcBlockLen(std::accumulate(items.cbegin(), items.cend(), 0ULL,
@@ -988,6 +993,15 @@ private:
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+            Y_DEFER {
+                const auto end = std::chrono::steady_clock::now();
+                const auto spent =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
+                globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
+            };
+
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& indexState = *static_cast<TIndexState*>(RightBlockIndex_.GetResource());
             auto& storageState = *static_cast<TStorageState*>(indexState.GetBlockStorage().GetResource());

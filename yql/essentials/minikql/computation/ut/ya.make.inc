@@ -12,6 +12,7 @@ ENDIF()
 SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(
+    block_layout_converter_ut.cpp
     mkql_block_trimmer_ut.cpp
     mkql_computation_node_holders_ut.cpp
     mkql_computation_node_pack_ut.cpp
@@ -24,7 +25,6 @@ SRCS(
     mkql_value_builder_ut.cpp
     presort_ut.cpp
     mkql_vector_spiller_adapter_ut.cpp
-    mkql_method_address_helper_ut.cpp
 )
 
 PEERDIR(
@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
+    ydb/library/yql/minikql/comp_nodes/packed_tuple
 )
 
 YQL_LAST_ABI_VERSION()

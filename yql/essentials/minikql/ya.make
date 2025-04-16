@@ -7,6 +7,7 @@ SRCS(
     compact_hash.h
     defs.h
     mkql_alloc.cpp
+    mkql_block_grace_join_policy.h
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
     mkql_buffer.cpp

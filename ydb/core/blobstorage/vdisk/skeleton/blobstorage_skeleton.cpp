@@ -2287,6 +2287,14 @@ namespace NKikimr {
                                     TABLED() {str << "PDiskId";}
                                     TABLED() {str << Config->BaseInfo.PDiskId;}
                                 }
+                                // TABLER() {
+                                //     TABLED() {str << "PDiskSlotUnitSize";}
+                                //     TABLED() {str << GInfo->Group->GetOccupySlotUnitSize().GetValue();}
+                                // }
+                                TABLER() {
+                                    TABLED() {str << "OccupySlotUnitSize";}
+                                    TABLED() {str << GInfo->OccupySlotUnitSize;}
+                                }
                                 TABLER() {
                                     TABLED() {str << "BlobStorage GroupId (decimal)";}
                                     TABLED() {str << GInfo->GroupID;}

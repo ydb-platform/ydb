@@ -419,7 +419,7 @@ message TPDiskLocation {
 message TRestartPDisk {
     oneof PDisk {
         NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
-        TPDiskLocation TargetPDiskLocation = 2;   
+        TPDiskLocation TargetPDiskLocation = 2;
     }
 }
 
@@ -680,6 +680,7 @@ message TBaseConfig {
         repeated TDonorDisk Donors = 11;
         bool Ready = 12; // is disk READY in terms of BSC (stable READY status for some period of time)
         bool ReadOnly = 13;
+        NKikimrBlobStorage.TPDiskSlotUnitSize OccupySlotUnitSize = 14;
     }
     message TVirtualGroupInfo {
         NKikimrBlobStorage.EVirtualGroupState State = 1;

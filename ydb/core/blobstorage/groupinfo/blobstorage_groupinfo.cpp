@@ -563,10 +563,12 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(TGroupId groupId, ui32 groupGe
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
-        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId)
+        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId,
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize)
     : GroupID(groupId)
     , GroupGeneration(1)
     , Type(gtype)
+    , OccupySlotUnitSize(occupySlotUnitSize)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(encryptionMode)
     , LifeCyclePhase(lifeCyclePhase)
@@ -593,10 +595,12 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType,
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize)
     : GroupID(dyn.GroupId)
     , GroupGeneration(dyn.GroupGeneration)
     , Type(topology->GType)
+    , OccupySlotUnitSize(occupySlotUnitSize)
     , Topology(std::move(topology))
     , Dynamic(std::move(dyn))
     , AcceptedScope(acceptedScope)
@@ -605,9 +609,10 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
 {}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType,
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize)
     : TBlobStorageGroupInfo(std::make_shared<TTopology>(std::move(topology)), std::move(dyn), std::move(storagePoolName),
-            std::move(acceptedScope), deviceType)
+            std::move(acceptedScope), deviceType, occupySlotUnitSize)
 {
     Topology->FinalizeConstruction();
 }
@@ -617,6 +622,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     : GroupID(vdiskId.GroupID)
     , GroupGeneration(vdiskId.GroupGeneration)
     , Type(info->Type)
+    , OccupySlotUnitSize(info->OccupySlotUnitSize)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -671,6 +677,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     }
     if (group.HasDecommitStatus()) {
         res->DecommitStatus = group.GetDecommitStatus();
+    }
+    if (group.HasOccupySlotUnitSize()) {
+        res->OccupySlotUnitSize = group.GetOccupySlotUnitSize().GetValue();
     }
 
     // process encryption parameters

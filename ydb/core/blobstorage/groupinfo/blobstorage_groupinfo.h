@@ -10,6 +10,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
 
 #include <util/str_stl.h>
@@ -311,13 +312,16 @@ public:
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero());
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero(),
+            NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified);
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType);
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType,
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified);
 
     TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN);
+        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN,
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E occupySlotUnitSize = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified);
 
     TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TVDiskID& vdiskId, const TActorId& actorId);
 
@@ -424,9 +428,10 @@ public:
     std::optional<ui64> BlobDepotId;
     // assimilating group id
     NKikimrBlobStorage::TGroupDecommitStatus::E DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+    // every VDisk of the storage group will occupy at least this count of PDisk slot units.
+    NKikimrBlobStorage::TPDiskSlotUnitSize::E OccupySlotUnitSize;
     // origin of the group info content
     std::optional<NKikimrBlobStorage::TGroupInfo> Group;
-
     TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> PutErrorMuteChecker;
 
 private:

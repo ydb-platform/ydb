@@ -41,10 +41,13 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     }
 
     std::shared_ptr<arrow::csv::TableReader> reader;
+
+    config->ReadOpts.use_threads = false;
+    config->ReadOpts.block_size = static_cast<int32_t>(fileSize);
     auto readerStatus = arrow::csv::TableReader::Make(
         arrow::io::default_io_context(),
         std::move(file),
-        arrow::csv::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
+        config->ReadOpts,
         config->ParseOpts,
         config->ConvOpts
     )

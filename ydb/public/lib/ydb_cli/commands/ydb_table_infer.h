@@ -27,7 +27,7 @@ public:
 private:
     std::vector<std::string> FilePaths;
     TString HeaderRow;
-    std::optional<TString> NullValue;
+    std::vector<std::string> NullValues;
     bool Header = false;
 };
 

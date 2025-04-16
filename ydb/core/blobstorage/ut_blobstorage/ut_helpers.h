@@ -96,9 +96,10 @@ protected:
 
 class TInflightActorPut : public TInflightActor {
 public:
-    TInflightActorPut(TSettings settings, ui32 dataSize = 1024)
+    TInflightActorPut(TSettings settings, ui32 dataSize = 1024, ui32 putsInBatch = 1)
         : TInflightActor(settings)
         , DataSize(dataSize)
+        , PutsInBatch(putsInBatch)
     {}
 
     STRICT_STFUNC(StateWork,
@@ -116,10 +117,12 @@ public:
 
 protected:
     void SendRequest() override {
-        TString data = MakeData(DataSize);
-        auto ev = new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++),
-                data, TInstant::Max(), NKikimrBlobStorage::UserData);
-        SendToBSProxy(SelfId(), GroupId, ev, 0);
+        for (ui32 i = 0; i < PutsInBatch; ++i) {
+            TString data = MakeData(DataSize);
+            auto ev = new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 10, DataSize, Cookie++),
+                    data, TInstant::Max(), NKikimrBlobStorage::TabletLog);
+            SendToBSProxy(SelfId(), GroupId, ev, 0);
+        }
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr res) {
@@ -129,6 +132,7 @@ protected:
 private:
     std::string Data;
     ui32 DataSize;
+    ui32 PutsInBatch;
 };
 
 /////////////////////////////////// TInflightActorGet ///////////////////////////////////

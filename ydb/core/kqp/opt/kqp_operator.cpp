@@ -199,6 +199,14 @@ TOpFilter::TOpFilter(TExprNode::TPtr node) : IUnaryOperator(EOperator::Filter, n
     OutputIUs = Children[0]->GetOutputIUs();
 }
 
+TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext& ctx, TPositionHandle pos) : IUnaryOperator(EOperator::Filter) {
+    Children.push_back(input);
+    Node = Build<TKqpOpFilter>(ctx, pos)
+        .Input(Children[0]->Node)
+        .Lambda(filterLambda)
+        .Done().Ptr();
+}
+
 std::shared_ptr<IOperator> TOpFilter::Rebuild(TExprContext& ctx) {
     auto current = TKqpOpFilter(Node);
     auto node = Build<TKqpOpFilter>(ctx, Node->Pos())
@@ -250,27 +258,27 @@ TConjunctInfo TOpFilter::GetConjuctInfo() const {
                 if (!leftArg->IsCallable("Member") || !rightArg->IsCallable("Member")) {
                     TVector<TInfoUnit> conjIUs;
                     GetAllMembers(conj, conjIUs);
-                    res.Filters.push_back(std::make_pair(conj, conjIUs));
+                    res.Filters.push_back(TFilterInfo(conj, conjIUs));
                 }
                 else {
                     TVector<TInfoUnit> leftIUs;
                     TVector<TInfoUnit> rightIUs;
                     GetAllMembers(leftArg, leftIUs);
                     GetAllMembers(rightArg, rightIUs);
-                    res.JoinConditions.push_back(std::make_tuple(conjObj, leftIUs[0], rightIUs[0]));
+                    res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
                 }
             }
             else {
                 TVector<TInfoUnit> conjIUs;
                 GetAllMembers(conj, conjIUs);
-                res.Filters.push_back(std::make_pair(conj, conjIUs));
+                res.Filters.push_back(TFilterInfo(conj, conjIUs));
             }
         }
     }
     else {
         TVector<TInfoUnit> filterIUs;
         GetAllMembers(lambdaBody, filterIUs);
-        res.Filters.push_back(std::make_pair(lambdaBody, filterIUs));
+        res.Filters.push_back(TFilterInfo(lambdaBody, filterIUs));
     }
 
     return res;

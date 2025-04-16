@@ -37,14 +37,14 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
     }
 }
 
-TExprNode::TPtr BuildFilterFromConjuncts(TExprNode::TPtr input, TVector<TExprNode::TPtr> conjuncts, TExprContext& ctx) {
-    auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("lambda_arg").Done();
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext& ctx) {
+    auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
     if (conjuncts.size()==1) {
-        auto body = TExprBase(ReplaceArg(conjuncts[0], arg.Ptr(), ctx));
+        auto body = TExprBase(ReplaceArg(conjuncts[0].FilterBody, arg.Ptr(), ctx));
 
-        lambda = Build<TCoLambda>(ctx, input->Pos())
+        return Build<TCoLambda>(ctx, pos)
             .Args(arg)
             .Body(body)
             .Done().Ptr();
@@ -53,21 +53,16 @@ TExprNode::TPtr BuildFilterFromConjuncts(TExprNode::TPtr input, TVector<TExprNod
         TVector<TExprNode::TPtr> newConjuncts;
 
         for (auto c : conjuncts ) {
-            newConjuncts.push_back( ReplaceArg(c, arg.Ptr(), ctx));
+            newConjuncts.push_back( ReplaceArg(c.FilterBody, arg.Ptr(), ctx));
         }
 
-        lambda = Build<TCoLambda>(ctx, input->Pos())
+        return Build<TCoLambda>(ctx, pos)
             .Args(arg)
             .Body<TCoAnd>()
                 .Add(newConjuncts)
             .Build()
             .Done().Ptr();
     }
-
-    return Build<TKqpOpFilter>(ctx, input->Pos())
-        .Input(input)
-        .Lambda(lambda)
-        .Done().Ptr();
 }
 }
 
@@ -106,38 +101,38 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     auto conjunctInfo = filter->GetConjuctInfo();
 
     // Check if we need a top level filter
-    TVector<TExprNode::TPtr> topLevelPreds;
-    TVector<TExprNode::TPtr> pushLeft;
-    TVector<TExprNode::TPtr> pushRight;
+    TVector<TFilterInfo> topLevelPreds;
+    TVector<TFilterInfo> pushLeft;
+    TVector<TFilterInfo> pushRight;
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
-    for (auto c : conjunctInfo.Filters) {
-        if (!IUSetDiff(c.second, leftIUs).size()) {
-            pushLeft.push_back(c.first);
+    for (auto f : conjunctInfo.Filters) {
+        if (!IUSetDiff(f.FilterIUs, leftIUs).size()) {
+            pushLeft.push_back(f);
         }
-        else if (!IUSetDiff(c.second, rightIUs).size()) {
-            pushRight.push_back(c.first);
+        else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
+            pushRight.push_back(f);
         }
         else {
-            topLevelPreds.push_back(c.first);
+            topLevelPreds.push_back(f);
         }
     }
 
     for (auto c: conjunctInfo.JoinConditions) {
-        if (!IUSetDiff({std::get<1>(c)}, leftIUs).size() && !IUSetDiff({std::get<2>(c)}, rightIUs).size()) {
-            joinConditions.push_back(std::make_pair(std::get<1>(c), std::get<2>(c)));
+        if (!IUSetDiff({c.LeftIU}, leftIUs).size() && !IUSetDiff({c.RightIU}, rightIUs).size()) {
+            joinConditions.push_back(std::make_pair(c.LeftIU, c.RightIU));
         }
-        else if (!IUSetDiff({std::get<1>(c)}, rightIUs).size() && !IUSetDiff({std::get<2>(c)}, leftIUs).size()) {
-            joinConditions.push_back(std::make_pair(std::get<2>(c), std::get<1>(c)));
+        else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
+            joinConditions.push_back(std::make_pair(c.RightIU, c.LeftIU));
         }
         else {
-            TVector<TInfoUnit> vars = {std::get<1>(c)};
-            vars.push_back(std::get<2>(c));
+            TVector<TInfoUnit> vars = {c.LeftIU};
+            vars.push_back(c.RightIU);
             if (!IUSetDiff(vars, leftIUs).size()) {
-                pushLeft.push_back(std::get<0>(c));
+                pushLeft.push_back(TFilterInfo(c.ConjunctExpr, vars));
             }
             else {
-                pushRight.push_back(std::get<0>(c));
+                pushRight.push_back(TFilterInfo(c.ConjunctExpr, vars));
             }
         }
     }
@@ -147,50 +142,32 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         return input;
     }
 
-    auto joinNode = TKqpOpJoin(join->Node);
-    auto filterNode = TKqpOpFilter(filter->Node);
-    auto leftArg = joinNode.LeftInput().Ptr();
-    auto rightArg = joinNode.RightInput().Ptr();
+    join->JoinKeys.insert(join->JoinKeys.end(), joinConditions.begin(), joinConditions.end());
+    auto leftInput = join->GetLeftInput();
+    auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        leftArg = BuildFilterFromConjuncts(leftArg, pushLeft, ctx);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Node->Pos(), pushLeft, ctx);
+        leftInput = std::make_shared<TOpFilter>(leftInput, leftLambda, ctx, leftInput->Node->Pos());
     }
+
     if (pushRight.size()) {
-        rightArg = BuildFilterFromConjuncts(rightArg, pushRight, ctx);
+        auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
+        rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda, ctx, rightInput->Node->Pos());
     }
 
-    TString joinKind = joinNode.JoinKind().StringValue();
-    if (joinKind == "Cross" && joinConditions.size()) {
-        joinKind = "Inner";
+    if (join->JoinKind == "Cross" && joinConditions.size()) {
+        join->JoinKind = "Inner";
     }
 
-    TVector<TExprNode::TPtr> joinConds;
-    for (auto cond : joinNode.JoinKeys()) {
-        joinConds.push_back(cond.Ptr());
-    }
-    for (auto cond : joinConditions) {
-        joinConds.push_back(Build<TDqJoinKeyTuple>(ctx, joinNode.Pos())
-            .LeftLabel().Value(cond.first.Alias).Build()
-            .LeftColumn().Value(cond.first.ColumnName).Build()
-            .RightLabel().Value(cond.second.Alias).Build()
-            .RightColumn().Value(cond.second.ColumnName).Build()
-            .Done().Ptr());
-    }
-
-    auto newJoin = Build<TKqpOpJoin>(ctx, filterNode.Pos())
-            .LeftInput(leftArg)
-            .RightInput(rightArg)
-            .JoinKind().Value(joinKind).Build()
-            .JoinKeys()
-                .Add(joinConds)
-            .Build()
-            .Done().Ptr();
+    join->Children[0] = leftInput;
+    join->Children[1] = rightInput;
 
     if (topLevelPreds.size()) {
-        auto newFilter = BuildFilterFromConjuncts(newJoin, topLevelPreds, ctx);
-        return std::make_shared<TOpFilter>(newFilter);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Node->Pos(), topLevelPreds, ctx);
+        return std::make_shared<TOpFilter>(join, topFilterLambda, ctx, join->Node->Pos());
     } else {
-        return std::make_shared<TOpJoin>(newJoin);
+        return join;
     }
 }
 

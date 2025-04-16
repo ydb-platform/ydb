@@ -1,10 +1,10 @@
-# Configuring built-in security
+# Built-in security configuration
 
 Built-in security is configured automatically when the {{ ydb-short-name }} cluster starts for the first time, if the [`security_config`](../reference/configuration/index.md#security) section in the cluster configuration file does not define the `default_users`, `default_groups`, or `default_access` parameters.
 
-To bypass built-in security configuration before the {{ ydb-short-name }} cluster starts for the first time, set the [`domains_config.disable_builtin_security`](../reference/configuration/index.md#domains-config) parameter to `true`.
+Built-in security configuration can be disabled by setting the [`domains_config.disable_builtin_security`](../reference/configuration/index.md#domains-config) parameter to `true`.
 
-Built-in security adds a superuser and configures a set of roles for user access management.
+Built-in security configuration adds a superuser and a set of roles for user access management.
 
 ## Roles
 
@@ -48,6 +48,6 @@ By default, a superuser is the `root` user with an empty password.
 
 ## A group for all users
 
-The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all local [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
+The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all internal [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
 
 For more information about managing groups and users, see [{#T}](../security/authorization.md).

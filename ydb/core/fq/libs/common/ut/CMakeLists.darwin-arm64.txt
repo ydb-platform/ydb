@@ -47,6 +47,7 @@ target_link_options(ydb-core-fq-libs-common-ut PRIVATE
 target_sources(ydb-core-fq-libs-common-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/cache_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/iceberg_processor_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util_ut.cpp
 )

@@ -44,11 +44,13 @@ target_sources(fq-libs-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/debug_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/iceberg_processor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/cache.h
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.h
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/iceberg_processor.h
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.h
 )
 

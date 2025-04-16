@@ -25,11 +25,11 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
-    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId, bool useIncompleteMetrics) {
+    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroup, ui32 partitionId, bool useReducedMetrics) {
 
         TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
         ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
-        PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(useIncompleteMetrics ? partitionId : 0));
+        PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(useReducedMetrics ? partitionId : 0));
 
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
@@ -110,7 +110,7 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
-            auto queryGroup = Counters->GetSubgroup("query_id", !Self.Config.GetReducedMetrics() ? ev->Get()->Record.GetQueryId() : "streaming");
+            auto queryGroup = Counters->GetSubgroup("query_id", !Self.Config.GetUseReducedMetrics() ? ev->Get()->Record.GetQueryId() : "streaming");
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
             RestartSessionByOffsetsByQuery = readSubGroup->GetCounter("RestartSessionByOffsetsByQuery", true);
@@ -377,7 +377,7 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, Config.GetReducedMetrics());
+    Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, Config.GetUseReducedMetrics());
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");

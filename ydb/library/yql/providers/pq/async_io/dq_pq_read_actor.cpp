@@ -122,11 +122,11 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool useIncompleteMetrics)
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool useReducedMetrics)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             SubGroup = Counters->GetSubgroup("source", "PqRead");
-            auto source = SubGroup->GetSubgroup("tx_id", !useIncompleteMetrics ? TxId : "streaming");
+            auto source = SubGroup->GetSubgroup("tx_id", !useReducedMetrics ? TxId : "streaming");
             auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
@@ -187,7 +187,7 @@ public:
         const IPqGateway::TPtr& pqGateway)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, SourceParams.GetReducedMetrics())
+        , Metrics(txId, taskId, counters, SourceParams.GetUseReducedMetrics())
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))

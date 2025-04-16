@@ -78,14 +78,14 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool useIncompleteMetrics)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, bool useReducedMetrics)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (!counters) {
             return;
         }
         SubGroup = Counters->GetSubgroup("source", "RdPqRead");
-        auto source = SubGroup->GetSubgroup("tx_id", !useIncompleteMetrics ? TxId : "streaming");
+        auto source = SubGroup->GetSubgroup("tx_id", !useReducedMetrics ? TxId : "streaming");
         auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");

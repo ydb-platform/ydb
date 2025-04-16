@@ -18,10 +18,10 @@ Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
 
 ## Security and encryption
 
-| Parameter         | Description                                                                                                 | Default value |
-|-------------------|-------------------------------------------------------------------------------------------------------------|---------------|
-| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                               | `false`       |
-| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, `UseTls` will be `true` | Not defined   |
+| Parameter         | Description                                                                                                                            | Default value |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `UseTls`          | Indicates whether to use the TLS protocol (`grpcs` or `grpc`)                                                                          | `false`       |
+| `RootCertificate` | Specifies the path to the trusted server TLS certificate. If this parameter is set, the `UseTls` parameter will be forced to be `true` | Not defined   |
 
 
 ## Pooling

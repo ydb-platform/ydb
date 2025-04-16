@@ -40,7 +40,7 @@ class TestCompatibility(object):
 
         if hasattr(cls, 'cluster'):
             cls.cluster.stop(kill=True)  # TODO fix
-    
+
     @staticmethod
     def setup_s3():
         s3_endpoint = os.getenv("S3_ENDPOINT")
@@ -98,19 +98,19 @@ class TestCompatibility(object):
                 result = list(result_sets[0].rows[0].values())
                 assert len(result) == 1
                 assert result[0] == upsert_count * iteration_count
-    
+
     def test_export(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-        
+
         for table_num in range(1, 6):
             table_name = f"sample_table_{table_num}"
-            
+
             session.execute_scheme(
                 f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
             )
-            
+
             query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
                 (1, 'Payload 1 for table {table_num}'),
                 (2, 'Payload 2 for table {table_num}'),

@@ -1374,7 +1374,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         };
 
         auto getConsumerState = [&](ui32 partition) {
-            auto description = setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
+            auto description = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
 
             auto stats = description.GetPartitions().at(partition).GetPartitionConsumerStats();
             UNIT_ASSERT(stats);

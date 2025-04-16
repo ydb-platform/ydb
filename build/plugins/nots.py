@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+# 0.0 - not to use chunks
+ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
 

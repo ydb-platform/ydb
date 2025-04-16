@@ -154,7 +154,7 @@ Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.6
 
 ### Delete items from vector store {#delete_items_from_vector_store}
 
-Items are deleted from the vector store by ID using the `delete` function.
+To delete items from the vector store by ID, use the `delete` function:
 
 ```python
 vector_store.delete(ids=[uuids[-1]])
@@ -193,7 +193,7 @@ Output:
 
 #### Similarity search with score
 
-A search with a score can also be performed:
+To perform a similarity search with score, use the following code:
 
 ```python
 results = vector_store.similarity_search_with_score("Will it be hot tomorrow?", k=3)

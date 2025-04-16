@@ -24,7 +24,7 @@
 
 - Локальный {{ ydb-short-name }}
 
-    Для получения дополнительной информации смотрите [{#T}](../../quickstart.md#install).
+    Для получения дополнительной информации см. [{#T}](../../quickstart.md#install).
 
 ## Инициализация {#initialization}
 
@@ -135,7 +135,7 @@ uuids = [str(uuid4()) for _ in range(len(documents))]
 vector_store.add_documents(documents=documents, ids=uuids)
 ```
 
-Вывод:
+Результат:
 
 ```shell
 Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.67it/s]
@@ -159,7 +159,7 @@ Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.6
 vector_store.delete(ids=[uuids[-1]])
 ```
 
-Вывод:
+Результат:
 
 ```shell
 True
@@ -183,7 +183,7 @@ for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
 
-Вывод:
+Результат:
 
 ```shell
 * Building an exciting new project with LangChain - come check it out! [{'source': 'tweet'}]
@@ -200,7 +200,7 @@ for res, score in results:
     print(f"* [SIM={score:.3f}] {res.page_content} [{res.metadata}]")
 ```
 
-Вывод:
+Результат:
 
 ```shell
 * [SIM=0.595] The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees. [{'source': 'news'}]
@@ -222,7 +222,7 @@ for res, _ in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
 
-Вывод:
+Результат:
 
 ```shell
 * I had chocalate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
@@ -249,7 +249,7 @@ for res in results:
     print(f"* {res.page_content} [{res.metadata}]")
 ```
 
-Вывод:
+Результат:
 
 ```shell
 * Robbers broke into the city bank and stole $1 million in cash. [{'source': 'news'}]

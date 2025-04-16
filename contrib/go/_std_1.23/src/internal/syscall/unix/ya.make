@@ -61,6 +61,28 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         sysnum_linux_amd64.go
         tcsetpgrp_linux.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        at.go
+        at_fstatat.go
+        at_sysnum_fstatat64_linux.go
+        at_sysnum_linux.go
+        constants.go
+        copy_file_range_linux.go
+        eaccess_linux.go
+        fcntl_unix.go
+        getrandom.go
+        getrandom_linux.go
+        kernel_version_linux.go
+        net.go
+        nofollow_posix.go
+        nonblocking_unix.go
+        pidfd_linux.go
+        siginfo_linux.go
+        siginfo_linux_other.go
+        sysnum_linux_arm.go
+        tcsetpgrp_linux.go
+    )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
         kernel_version_other.go

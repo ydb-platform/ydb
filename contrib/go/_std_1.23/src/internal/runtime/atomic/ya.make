@@ -19,5 +19,16 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         types_64bit.go
         unaligned.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        atomic_andor_generic.go
+        atomic_arm.go
+        atomic_arm.s
+        doc.go
+        stubs.go
+        sys_linux_arm.s
+        types.go
+        unaligned.go
+    )
 ENDIF()
 END()

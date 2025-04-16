@@ -133,6 +133,39 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         zsysnum_linux_amd64.go
         ztypes_linux_amd64.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        asm_linux_arm.s
+        badlinkname_unix.go
+        dirent.go
+        env_unix.go
+        exec_linux.go
+        exec_unix.go
+        flock_linux.go
+        flock_linux_32bit.go
+        forkpipe2.go
+        linkname_unix.go
+        lsf_linux.go
+        net.go
+        netlink_linux.go
+        rlimit.go
+        rlimit_stub.go
+        setuidgid_32_linux.go
+        sockcmsg_linux.go
+        sockcmsg_unix.go
+        sockcmsg_unix_other.go
+        syscall.go
+        syscall_linux.go
+        syscall_linux_accept.go
+        syscall_linux_arm.go
+        syscall_unix.go
+        time_nofake.go
+        timestruct.go
+        zerrors_linux_arm.go
+        zsyscall_linux_arm.go
+        zsysnum_linux_arm.go
+        ztypes_linux_arm.go
+    )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
         dll_windows.go

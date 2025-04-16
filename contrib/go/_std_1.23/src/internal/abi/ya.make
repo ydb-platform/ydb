@@ -35,5 +35,23 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         symtab.go
         type.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        abi.go
+        abi_generic.go
+        abi_test.s
+        compiletype.go
+        escape.go
+        funcpc.go
+        iface.go
+        map.go
+        rangefuncconsts.go
+        runtime.go
+        stack.go
+        stub.s
+        switch.go
+        symtab.go
+        type.go
+    )
 ENDIF()
 END()

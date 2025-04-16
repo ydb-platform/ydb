@@ -53,5 +53,18 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         runtime_auxv.go
         runtime_auxv_go121.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        byteorder.go
+        cpu.go
+        cpu_arm.go
+        cpu_linux.go
+        cpu_linux_arm.go
+        endian_little.go
+        hwcap_linux.go
+        parse.go
+        runtime_auxv.go
+        runtime_auxv_go121.go
+    )
 ENDIF()
 END()

@@ -33,5 +33,20 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         indexbyte_native.go
         lastindexbyte_generic.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        bytealg.go
+        compare_arm.s
+        compare_native.go
+        count_arm.s
+        count_native.go
+        equal_arm.s
+        equal_generic.go
+        equal_native.go
+        index_generic.go
+        indexbyte_arm.s
+        indexbyte_native.go
+        lastindexbyte_generic.go
+    )
 ENDIF()
 END()

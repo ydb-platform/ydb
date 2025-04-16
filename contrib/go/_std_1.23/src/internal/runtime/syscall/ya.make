@@ -13,5 +13,12 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         defs_linux_amd64.go
         syscall_linux.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        asm_linux_arm.s
+        defs_linux.go
+        defs_linux_arm.go
+        syscall_linux.go
+    )
 ENDIF()
 END()

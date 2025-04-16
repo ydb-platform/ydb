@@ -39,6 +39,13 @@ IF (CGO_ENABLED)
         )
     ENDIF()
 
+    IF (ARCH_ARM7)
+        SRCS(
+            asm_arm.s
+            gcc_arm.S
+        )
+    ENDIF()
+
     IF (OS_DARWIN)
         SRCS(
             callbacks_traceback.go
@@ -78,17 +85,22 @@ IF (CGO_ENABLED)
             callbacks_traceback.go
             CGO_EXPORT gcc_fatalf.c
             CGO_EXPORT gcc_libinit.c
-            CGO_EXPORT gcc_mmap.c
             CGO_EXPORT gcc_setenv.c
-            CGO_EXPORT gcc_sigaction.c
             CGO_EXPORT gcc_stack_unix.c
             CGO_EXPORT gcc_traceback.c
             linux.go
             CGO_EXPORT linux_syscall.c
-            mmap.go
             setenv.go
-            sigaction.go
         )
+
+        IF (ARCH_ARM64 OR ARCH_X86_64)
+            SRCS(
+                CGO_EXPORT gcc_mmap.c
+                mmap.go
+                CGO_EXPORT gcc_sigaction.c
+                sigaction.go
+            )
+        ENDIF()
 
         IF (ARCH_ARM64)
             SRCS(
@@ -99,6 +111,12 @@ IF (CGO_ENABLED)
         IF (ARCH_X86_64)
             SRCS(
                 CGO_EXPORT gcc_linux_amd64.c
+            )
+        ENDIF()
+
+        IF (ARCH_ARM7)
+            SRCS(
+                CGO_EXPORT gcc_linux.c
             )
         ENDIF()
     ENDIF()

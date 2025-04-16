@@ -121,5 +121,61 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         trig_reduce.go
         unsafe.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        abs.go
+        acosh.go
+        asin.go
+        asinh.go
+        atan.go
+        atan2.go
+        atanh.go
+        bits.go
+        cbrt.go
+        const.go
+        copysign.go
+        dim.go
+        dim_noasm.go
+        erf.go
+        erfinv.go
+        exp.go
+        exp2_noasm.go
+        exp_noasm.go
+        expm1.go
+        floor.go
+        floor_noasm.go
+        fma.go
+        frexp.go
+        gamma.go
+        hypot.go
+        hypot_noasm.go
+        j0.go
+        j1.go
+        jn.go
+        ldexp.go
+        lgamma.go
+        log.go
+        log10.go
+        log1p.go
+        log_stub.go
+        logb.go
+        mod.go
+        modf.go
+        modf_noasm.go
+        nextafter.go
+        pow.go
+        pow10.go
+        remainder.go
+        signbit.go
+        sin.go
+        sincos.go
+        sinh.go
+        sqrt.go
+        stubs.go
+        tan.go
+        tanh.go
+        trig_reduce.go
+        unsafe.go
+    )
 ENDIF()
 END()

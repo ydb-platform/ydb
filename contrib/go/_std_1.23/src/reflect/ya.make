@@ -27,5 +27,19 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         value.go
         visiblefields.go
     )
+ELSEIF (OS_LINUX AND ARCH_ARM7 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        abi.go
+        asm_arm.s
+        badlinkname.go
+        deepequal.go
+        float32reg_generic.go
+        iter.go
+        makefunc.go
+        swapper.go
+        type.go
+        value.go
+        visiblefields.go
+    )
 ENDIF()
 END()

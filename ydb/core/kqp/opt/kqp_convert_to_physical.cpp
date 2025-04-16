@@ -241,7 +241,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                 auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
                 stageArgs[opStageId].push_back(rightInput);
 
-                return Build<TDqPhyMapJoin>(ctx, root.Node->Pos())
+                currentStageBody = Build<TDqPhyCrossJoin>(ctx, root.Node->Pos())
                     .LeftInput(leftInput)
                     .LeftLabel<TCoVoid>().Build()
                     .RightInput(rightInput)
@@ -258,8 +258,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                 auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
                 stageArgs[opStageId].push_back(rightInput);
 
-                TVector<TCoAtom> leftKeyColumns;
-                TVector<TCoAtom> rightKeyColumns;
+                TVector<TDqJoinKeyTuple> joinKeys;
                 TVector<TCoAtom> leftKeyColumnNames;
                 TVector<TCoAtom> rightKeyColumnNames;
 
@@ -267,23 +266,26 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                     TString leftFullName = "_alias_" + p.first.Alias + "." + p.first.ColumnName;
                     TString rightFullName = "_alias_" + p.second.Alias + "." + p.second.ColumnName;
 
-                    leftKeyColumns.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(leftFullName).Done());
-                    rightKeyColumns.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(rightFullName).Done());
-                    leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(p.first.ColumnName).Done());
-                    rightKeyColumnNames.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(p.second.ColumnName).Done());
+                    joinKeys.push_back(Build<TDqJoinKeyTuple>(ctx, root.Node->Pos())
+                        .LeftLabel().Value("_alias_" + p.first.Alias).Build()
+                        .LeftColumn().Value(p.first.ColumnName).Build()
+                        .RightLabel().Value("_alias_" + p.second.Alias).Build()
+                        .RightColumn().Value(p.second.ColumnName).Build()
+                        .Done());
+
+                    leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(leftFullName).Done());
+                    rightKeyColumnNames.push_back(Build<TCoAtom>(ctx, root.Node->Pos()).Value(rightFullName).Done());
                 }
 
-                return Build<TCoGraceJoinCore>(ctx, root.Node->Pos())
+                currentStageBody = Build<TDqPhyGraceJoin>(ctx, root.Node->Pos())
                     .LeftInput(leftInput)
+                    .LeftLabel<TCoVoid>().Build()
                     .RightInput(rightInput)
-                    .JoinKind<TCoAtom>().Value("Inner").Build()
-                    .LeftKeysColumns<TCoAtomList>().Add(leftKeyColumns).Build()
-                    .RightKeysColumns<TCoAtomList>().Add(rightKeyColumns).Build()
-                    .LeftRenames<TCoAtomList>().Build()
-                    .RightRenames<TCoAtomList>().Build()
-                    .LeftKeysColumnNames<TCoAtomList>().Add(leftKeyColumnNames).Build()
-                    .RightKeysColumnNames<TCoAtomList>().Add(rightKeyColumnNames).Build()
-                    .Flags<TCoAtomList>().Build()
+                    .RightLabel<TCoVoid>().Build()
+                    .JoinType<TCoAtom>().Value("Inner").Build()
+                    .JoinKeys<TDqJoinKeyTupleList>().Add(joinKeys).Build()
+                    .LeftJoinKeyNames<TCoAtomList>().Add(leftKeyColumnNames).Build()
+                    .RightJoinKeyNames<TCoAtomList>().Add(rightKeyColumnNames).Build()
                     .Done().Ptr();
                 }
             else {

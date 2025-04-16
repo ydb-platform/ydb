@@ -1956,8 +1956,8 @@
         "Hosts": "2",
         "LoadAverage": "not-zero-number",
         "MapDataCenters": {
-            "1": 1,
-            "value": 2
+            "": 2,
+            "1": 1
         },
         "MapNodeRoles": {
             "Bootstrapper": 1,

@@ -1,0 +1,12 @@
+{%- if move_files|length -%}
+{%-     for move in move_files -%}
+{%-         set src = move.args[0] -%}
+{%-         set dst = move.args[1] %}
+
+val {{ varprefix }}{{ move['_object_index'] }} = tasks.register("{{ varprefix }}{{ move['_object_index'] }}") {
+    doLast {
+        file({{ PatchRoots(src, move['flags']|select("eq", "src_is_depend")|length) }}).renameTo(file({{ PatchRoots(dst) }}))
+    }
+}
+{%      endfor -%}
+{%- endif -%}

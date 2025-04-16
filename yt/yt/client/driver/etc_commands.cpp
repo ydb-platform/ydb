@@ -412,9 +412,9 @@ void TDiscoverProxiesCommand::Register(TRegistrar registrar)
         .Alias("type")
         .Default(EProxyKind::Rpc);
     registrar.Parameter("role", &TThis::Role)
-        .Optional();;
+        .Optional();
     registrar.Parameter("address_type", &TThis::AddressType)
-        .Optional();;
+        .Optional();
     registrar.Parameter("network_name", &TThis::NetworkName)
         .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)

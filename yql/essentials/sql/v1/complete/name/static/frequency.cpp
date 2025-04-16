@@ -14,10 +14,14 @@ namespace NSQLComplete {
             const char* Sum = "sum";
         } Key;
         struct {
+            const char* Pragma = "PRAGMA";
             const char* Type = "TYPE";
             const char* Func = "FUNC";
+            const char* Keyword = "KEYWORD";
             const char* Module = "MODULE";
             const char* ModuleFunc = "MODULE_FUNC";
+            const char* ReadHint = "READ_HINT";
+            const char* InsertHint = "INSERT_HINT";
         } Parent;
     } Json;
 
@@ -53,20 +57,31 @@ namespace NSQLComplete {
     TFrequencyData Convert(TVector<TFrequencyItem> items) {
         TFrequencyData data;
         for (auto& item : items) {
-            if (item.Parent == Json.Parent.Type ||
+            if (item.Parent == Json.Parent.Pragma ||
+                item.Parent == Json.Parent.Type ||
                 item.Parent == Json.Parent.Func ||
+                item.Parent == Json.Parent.Keyword ||
                 item.Parent == Json.Parent.ModuleFunc ||
-                item.Parent == Json.Parent.Module) {
+                item.Parent == Json.Parent.Module ||
+                item.Parent == Json.Parent.ReadHint ||
+                item.Parent == Json.Parent.InsertHint) {
                 item.Rule = ToLowerUTF8(item.Rule);
             }
 
-            if (item.Parent == Json.Parent.Type) {
+            if (item.Parent == Json.Parent.Pragma) {
+                data.Pragmas[item.Rule] += item.Sum;
+            } else if (item.Parent == Json.Parent.Type) {
                 data.Types[item.Rule] += item.Sum;
+            } else if (item.Parent == Json.Parent.Keyword) {
+                data.Keywords[item.Rule] += item.Sum;
+            } else if (item.Parent == Json.Parent.Module) {
+                // Ignore, unsupported: Modules
             } else if (item.Parent == Json.Parent.Func ||
                        item.Parent == Json.Parent.ModuleFunc) {
                 data.Functions[item.Rule] += item.Sum;
-            } else if (item.Parent == Json.Parent.Module) {
-                // Ignore, unsupported: Modules
+            } else if (item.Parent == Json.Parent.ReadHint ||
+                       item.Parent == Json.Parent.InsertHint) {
+                data.Hints[item.Rule] += item.Sum;
             } else {
                 // Ignore, unsupported: Parser Call Stacks
             }

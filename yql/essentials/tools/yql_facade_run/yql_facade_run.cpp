@@ -43,6 +43,7 @@
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -436,6 +437,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     if (CustomTests) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
+        opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
 
@@ -575,6 +577,24 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
         ctx.NextUniqueId = NPg::GetSqlLanguageParser()->GetContext().NextUniqueId;
     }
     IModuleResolver::TPtr moduleResolver;
+    TModuleResolver::TModuleChecker moduleChecker;
+    if (RunOptions_.TestLexers) {
+        moduleChecker = [](const TString& query, const TString& fileName, TExprContext& ctx) {
+            TIssues issues;
+            if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
+                auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
+                for (const auto& i : issues) {
+                    issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                }
+
+                ctx.AddError(issue);
+                return false;
+            }
+
+            return true;
+        };
+    }
+
     if (RunOptions_.MountConfig) {
         TModulesTable modules;
         FillUserDataTableFromFileSystem(*RunOptions_.MountConfig, RunOptions_.DataTable);
@@ -585,9 +605,11 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             return -1;
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate);
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
+            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate)) {
+        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
+            RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -743,6 +765,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
             if (srcQuery.Str() != frmQuery.Str()) {
                 *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+            TIssues issues;
+            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+                *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }
         }

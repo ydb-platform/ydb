@@ -12,7 +12,7 @@ bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext
     NIceDb::TNiceDb db(txc.DB);
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
+    auto localInsertTable = std::make_unique<NOlap::TInsertTable>(Self->VersionCounters);
     for (auto&& i : Self->TablesManager.GetTables()) {
         localInsertTable->RegisterPathInfo(i.first);
     }
@@ -206,7 +206,7 @@ bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionCon
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
     TTablesManager tablesManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(),
-        NOlap::TSchemaCachesManager::GetCache(Self->OwnerPathId), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
+        NOlap::TSchemaCachesManager::GetCache(Self->OwnerPathId), Self->Counters.GetPortionIndexCounters(), Self->VersionCounters, Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
         if (!tablesManagerLocal.InitFromDB(db)) {

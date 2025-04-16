@@ -3,6 +3,7 @@
 #include "path_info.h"
 
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -133,6 +134,7 @@ private:
 
     TInsertedContainer Inserted;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
+    std::shared_ptr<TVersionCounters> VersionCounters;
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<TInternalPathId, TPathInfo> PathInfo;
@@ -141,11 +143,18 @@ private:
 
     void OnNewCommitted(const ui64 dataSize, const bool load = false) noexcept;
     void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
-    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
-    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
+    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVversion, const bool load) noexcept;
+    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize, const ui64 schemaVersion) noexcept;
+    void OnNewAborted(const ui64 schemaVersion);
+    void OnEraseAborted(const ui64 schemaVersion);
     static TAtomicCounter CriticalInserted;
 
 public:
+    TInsertionSummary(const std::shared_ptr<TVersionCounters>& versionCounters)
+        : VersionCounters(versionCounters)
+    {
+    }
+
     bool HasPathIdData(const TInternalPathId pathId) const {
         auto it = PathInfo.find(pathId);
         if (it == PathInfo.end()) {

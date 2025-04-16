@@ -4,6 +4,8 @@
 
 namespace NKikimr::NOlap {
 
+void ApplyToScheme(NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
+
 class TSchemaDiffView {
 private:
     ui64 Version = 0;
@@ -22,6 +24,20 @@ public:
     static NKikimrSchemeOp::TColumnTableSchemaDiff MakeSchemasDiff(
         const NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchema& next);
 
+    void AddNext(const TSchemaDiffView& nextDiff) {
+        Version = nextDiff.GetVersion();
+        SchemaOptions = &nextDiff.GetSchemaOptions();
+        if (nextDiff.GetCompressionOptions()) {
+            CompressionOptions = nextDiff.GetCompressionOptions();
+        }
+        for (const auto& [id, column]: nextDiff.GetModifiedColumns()) {
+            ModifiedColumns[id] = column;
+        }
+        for (const auto& [id, index]: nextDiff.GetModifiedIndexes()) {
+            ModifiedIndexes[id] = index;
+        }
+    }
+
     const NKikimrSchemeOp::TColumnTableSchemeOptions& GetSchemaOptions() const;
     const NKikimrSchemeOp::TCompressionOptions* GetCompressionOptions() const {
         return CompressionOptions;
@@ -36,6 +52,7 @@ public:
     ui64 GetVersion() const;;
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
+    void SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
 };
 
 }   // namespace NKikimr::NOlap

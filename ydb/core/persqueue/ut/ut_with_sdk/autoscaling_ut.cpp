@@ -1370,7 +1370,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
         auto commit = [&](const std::string& sessionId, ui64 offset) {
-            return setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, offset, sessionId);
+            return setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, offset, sessionId);
         };
 
         auto getConsumerState = [&](ui32 partition) {
@@ -1381,7 +1381,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             return stats;
         };
 
-        auto msg = TString("msg-value");
+        auto msg = TString("msg-value-1");
 
         auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
         auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);

@@ -42,12 +42,13 @@ SELECT * FROM $to_delete;
 
 Deletes data from large tables that the standard `DELETE` cannot delete. It independently applies deletions to each partition of the specified table, removing a limited number of rows per iteration (by default, 10000 rows). The query is executed in a non-transactional mode. In case of an error, changes are not rolled back. The semantics are inherited from the standard `DELETE` with the following restrictions:
 
+* Supported only for row-oriented tables.
 * The use of subqueries and multiple queries in a single expression, including `DELETE FROM ... ON`, is prohibited.
 * The `RETURNING` keyword is unavailable.
 
 ### Example
 
 ```yql
-BATCH DELETE my_table
+BATCH DELETE FROM my_table
 WHERE Key1 > 1 AND Key2 >= "One";
 ```

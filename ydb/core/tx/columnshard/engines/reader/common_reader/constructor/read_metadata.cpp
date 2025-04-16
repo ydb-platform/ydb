@@ -44,7 +44,7 @@ TConclusionStatus TReadMetadata::Init(
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
-          read.GetScanCursorOptional())
+          read.GetScanCursorOptional(), read.GetTabletId())
     , PathId(read.PathId)
     , ReadStats(std::make_shared<TReadStats>()) {
 }

@@ -32,10 +32,14 @@ public:
         return DoHasData();
     }
 
-    std::shared_ptr<IScanCursor> BuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const {
+    std::shared_ptr<IScanCursor> BuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const {
         AFL_VERIFY(source);
         AFL_VERIFY(readyRecords <= source->GetRecordsCount())("count", source->GetRecordsCount())("ready", readyRecords);
-        return DoBuildCursor(source, readyRecords);
+        auto result = DoBuildCursor(source, readyRecords);
+        AFL_VERIFY(result);
+        result->SetTabletId(tabletId);
+        AFL_VERIFY(tabletId);
+        return result;
     }
 
     TString DebugString() const {

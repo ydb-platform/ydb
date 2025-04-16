@@ -21,6 +21,7 @@ private:
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
+    YDB_READONLY(ui64, TabletId, 0);
 
 public:
     // Table
@@ -47,9 +48,10 @@ public:
         ScanCursor = cursor;
     }
 
-    TReadDescription(const TSnapshot& snapshot, const ERequestSorting sorting)
+    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting)
         : Snapshot(snapshot)
         , Sorting(sorting)
+        , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>()) {
     }
 

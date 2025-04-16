@@ -8,7 +8,7 @@ Add a new column to the table and then delete it.
 
 Add a non-key column to the existing table:
 
-```sql
+```yql
 ALTER TABLE episodes ADD COLUMN viewers Uint64;
 ```
 
@@ -16,7 +16,7 @@ ALTER TABLE episodes ADD COLUMN viewers Uint64;
 
 Delete the column you added from the table:
 
-```sql
+```yql
 ALTER TABLE episodes DROP COLUMN viewers;
 ```
 

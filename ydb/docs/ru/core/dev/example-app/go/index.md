@@ -1,14 +1,16 @@
 # Приложение на Go
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3) {{ ydb-short-name }}.
+<!-- markdownlint-disable blanks-around-fences -->
+
+На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk).
 
 ## Скачивание и запуск {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [YDB Go SDK](../../../reference/ydb-sdk/install.md).
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [{{ ydb-short-name }} Go SDK](../../../reference/ydb-sdk/install.md).
 
-Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
+Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с GitHub:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-go-examples/
 ```
 
@@ -16,11 +18,9 @@ git clone https://github.com/ydb-platform/ydb-go-examples/
 
 {% include [run_options.md](_includes/run_options.md) %}
 
-
-
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Для работы с `YDB` в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
+Для работы с {{ ydb-short-name }} в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
 
 ```go
 import (
@@ -53,7 +53,7 @@ token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 db, err := ydb.Open(ctx, dsn,
 //  yc.WithInternalCA(), // используем сертификаты Яндекс Облака
   ydb.WithAccessTokenCredentials(token), // аутентификация с помощью токена
-//  ydb.WithAnonimousCredentials(), // анонимная аутентификация (например, в docker ydb)
+//  ydb.WithAnonymousCredentials(), // анонимная аутентификация (например, в docker ydb)
 //  yc.WithMetadataCredentials(token), // аутентификация изнутри виртуальной машины в Яндекс Облаке или из Яндекс Функции
 //  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // аутентификация в Яндекс Облаке с помощью файла сервисного аккаунта
 //  environ.WithEnvironCredentials(ctx), // аутентификация с использованием переменных окружения
@@ -73,7 +73,7 @@ defer db.Close(ctx)
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `table.Session.CreateTable()`:
+Для создания строковых таблиц используется метод `table.Session.CreateTable()`:
 
 ```go
 err = db.Table().Do(ctx,
@@ -93,7 +93,9 @@ if err != nil {
 }
 ```
 
-С помощью метода `table.Session.DescribeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+Метод `table.Session.CreateTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `table.Session.Execute()`, который выполняет YQL-запросы.
+
+Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `table.Session.DescribeTable()`:
 
 ```go
 err = db.Table().Do(ctx,
@@ -227,13 +229,13 @@ err = c.Do(ctx,
         return err
       }
       for res.NextRow() {
-        // named.OptionalOrDefault позволяет "развернуть" опциональные
+        // named.OptionalWithDefault позволяет "развернуть" опциональные
         // результаты или использовать дефолтное значение типа go
         err = res.ScanNamed(
           named.Required("series_id", &seriesID),
-          named.OptionalOrDefault("season_id", &seasonID),
-          named.OptionalOrDefault("title", &title),
-          named.OptionalOrDefault("first_aired", &date),
+          named.OptionalWithDefault("season_id", &seasonID),
+          named.OptionalWithDefault("title", &title),
+          named.OptionalWithDefault("first_aired", &date),
         )
         if err != nil {
           return err

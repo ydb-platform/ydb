@@ -22,11 +22,11 @@ ydb-dstool device list --help
 Параметр | Описание
 ---|---
 `-H`, `--human-readable` | Вывести данные в человекочитаемом формате.
-`--sort-by` | Колонка сортировки.<br>Одно из значений: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, `NodeId:PDiskId`.
+`--sort-by` | Колонка сортировки.<br/>Одно из значений: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, `NodeId:PDiskId`.
 `--reverse` | Использовать обратный порядок сортировки.
-`--format` | Формат вывода.<br>Одно из значений: `pretty`, `json`, `tsv`, `csv`.
+`--format` | Формат вывода.<br/>Одно из значений: `pretty`, `json`, `tsv`, `csv`.
 `--no-header` | Не выводить строку с именами колонок.
-`--columns` | Список колонок, которые нужно вывести.<br>Одно или комбинация значений: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, `NodeId:PDiskId`.
+`--columns` | Список колонок, которые нужно вывести.<br/>Одно или комбинация значений: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, `NodeId:PDiskId`.
 `-A`, `--all-columns` | Вывести все колонки.
 
 ## Примеры {#examples}

@@ -10,7 +10,7 @@
 * [Получение информации об объекте схемы](../commands/scheme-describe.md).
 * [Работа с директориями](../commands/dir.md).
 * [Выполнение YQL](../yql-query-overview.md).
-* [Потоковое чтение таблицы](../commands/readtable.md).
+* [Потоковое чтение строковых таблиц](../commands/readtable.md).
 * [Работа со вторичными индексами](../commands/secondary_index.md).
 * [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).
 * [Нагрузочное тестирование](../commands/workload/index.md).

@@ -3387,6 +3387,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableemitunionmerge") {
             Ctx.EmitUnionMerge = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
+        } else if (normalizedPragma == "distinctoverkeys") {
+            Ctx.DistinctOverKeys = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DistinctOverKeys");
+        } else if (normalizedPragma == "disabledistinctoverkeys") {
+            Ctx.DistinctOverKeys = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverKeys");
         } else if (normalizedPragma == "engine") {
             Ctx.IncrementMonCounter("sql_pragma", "Engine");
 

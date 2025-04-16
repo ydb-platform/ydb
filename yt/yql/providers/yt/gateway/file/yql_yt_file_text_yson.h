@@ -9,6 +9,6 @@ struct TColumnsInfo {
     TMaybe<NYT::TRichYPath::TRenameColumnsDescriptor> RenameColumns;
 };
 
-TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files);
+TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TString, TColumnsInfo>>& files, bool addRowIndex = true);
 
-}//namespace NYql::NFile
+} // namespace NYql::NFile

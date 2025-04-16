@@ -1843,9 +1843,13 @@ private:
                         TString path = normalizedPath.Path_;
 
                         // Convert back from absolute path to relative
-                        // All futhrer YT operations will use the path with YT_PREFIX
+                        // All further YT operations will use the path with YT_PREFIX
                         if (path.StartsWith("//")) {
                             path = path.substr(2);
+                        }
+                        // Ignore & at the and
+                        while (path.EndsWith('&')) {
+                            path = path.pop_back();
                         }
                         res.Data[idx].Path = path;
                         if (normalizedPath.Columns_) {
@@ -2851,7 +2855,7 @@ private:
 
         const auto entry = execCtx->GetEntry();
 
-        toRemove = entry->CancelDeleteAtFinalize(toRemove);
+        toRemove = entry->FilterTablesToDeleteAtFinalize(toRemove);
         if (toRemove.empty()) {
             return MakeFuture();
         }
@@ -2862,7 +2866,12 @@ private:
             batchResults.push_back(batch->Remove(p, TRemoveOptions().Force(true)));
         }
         batch->ExecuteBatch();
-        return WaitExceptionOrAll(batchResults);
+        return WaitExceptionOrAll(batchResults).Apply([entry = std::move(entry), toRemove = std::move(toRemove)] (const TFuture<void>& f) {
+            if (f.HasValue()) {
+                entry->CancelDeleteAtFinalize(toRemove);
+            }
+            return f;
+        });
     }
 
     static void FillMetadataResult(
@@ -5798,12 +5807,20 @@ private:
             TClusterConnectionResult clusterConnectionResult{};
             clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
             clusterConnectionResult.YtServerName = ytServer;
-            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            auto auth = options.Config()->Auth.Get();
+            if (!auth || auth->empty()) {
+                auth = Clusters_->GetAuth(options.Cluster());
+            }
+            clusterConnectionResult.Token = auth;
             clusterConnectionResult.SetSuccess();
             return clusterConnectionResult;
         } catch (...) {
             return ResultFromCurrentException<TClusterConnectionResult>({}, true);
         }
+    }
+
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&&) override {
+        return Nothing();
     }
 
     static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {

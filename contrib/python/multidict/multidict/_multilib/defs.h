@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 static PyObject *multidict_str_lower = NULL;
+static PyObject *multidict_str_canonical = NULL;
 
 /* We link this module statically for convenience.  If compiled as a shared
    library instead, some compilers don't allow addresses of Python objects

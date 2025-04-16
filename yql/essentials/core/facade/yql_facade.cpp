@@ -389,7 +389,7 @@ TProgram::TProgram(
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
                 if (GatewaysForMerge_) {
-                    YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
+                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
                 }
                 THashMap<TString, TString> clusterMapping;
                 GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
@@ -1140,7 +1140,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
             continue;
         }
@@ -1276,7 +1276,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
             continue;
         }
@@ -1355,7 +1355,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         dataProviders = DataProviders_;
     }
 
-    for (const auto& dp : DataProviders_) {
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
             continue;
         }

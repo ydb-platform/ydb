@@ -10,19 +10,19 @@ TString originalTableContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"ab
                             "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};"
                             "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};";
 
-Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
+Y_UNIT_TEST_SUITE(FmrReaderTests) {
     Y_UNIT_TEST(ReadOneChunkSmallPart) {
         size_t chunkSize = 1024;
 
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
 
-        TFmrTableDataServiceWriterSettings settings{chunkSize};
+        TFmrWriterSettings settings{chunkSize};
         TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataServicePtr, settings);
 
         outputWriter.Write(originalTableContent.data(), originalTableContent.size());
         outputWriter.Flush();
 
-        TFmrTableDataServiceReaderSettings readerSettings{1};
+        TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 1}};
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
 
@@ -38,13 +38,13 @@ Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
 
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
 
-        TFmrTableDataServiceWriterSettings settings{chunkSize};
+        TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
 
         outputStream.Write(originalTableContent.data(), originalTableContent.size());
         outputStream.Flush();
 
-        TFmrTableDataServiceReaderSettings readerSettings{1};
+        TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 1}};
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
 
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
         size_t chunkSize = 32;
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
 
-        TFmrTableDataServiceWriterSettings settings{chunkSize};
+        TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
 
         for (size_t i = 0; i < 3; ++i) {
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
         }
         outputStream.Flush();
 
-        TFmrTableDataServiceReaderSettings readerSettings{1};
+        TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 3}};
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
         size_t chunkSize = 32;
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
 
-        TFmrTableDataServiceWriterSettings settings{chunkSize};
+        TFmrWriterSettings settings{chunkSize};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
 
         for (size_t i = 0; i < 3; ++i) {
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(FmrRawTableReaderTests) {
         }
         outputStream.Flush();
 
-        TFmrTableDataServiceReaderSettings readerSettings{5};
+        TFmrReaderSettings readerSettings{5};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 3}};
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
 

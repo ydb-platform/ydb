@@ -184,10 +184,9 @@ struct TExecuteBatchOptions
     int Concurrency;
 };
 
-class TExecuteBatchCommandRequest
+struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-public:
     TString Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;

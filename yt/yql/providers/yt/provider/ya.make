@@ -74,6 +74,7 @@ SRCS(
 PEERDIR(
     library/cpp/yson/node
     library/cpp/json/writer
+    library/cpp/json
     library/cpp/disjoint_sets
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
@@ -137,6 +138,21 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_op_settings.h)
+
+RUN_PROGRAM(
+    tools/enum_parser/enum_parser
+        --output
+        ${BINDIR}/yql_yt_op_settings.unused.cpp
+        --json-output
+        ${BINDIR}/yql_yt_op_settings.json 
+        yql_yt_op_settings.h
+    IN yql_yt_op_settings.h
+    OUT_NOAUTO ${BINDIR}/yql_yt_op_settings.json
+)
+
+RESOURCE(
+    ${BINDIR}/yql_yt_op_settings.json /yql_yt_op_settings.json
+)
 
 END()
 

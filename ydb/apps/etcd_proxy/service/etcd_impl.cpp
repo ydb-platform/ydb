@@ -826,13 +826,13 @@ private:
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
-            else
-                ass->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            if (const auto lock = stuff.lock()) {
+                if (const auto res = future.GetValueSync(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                else
+                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+            }
         });
     }
 

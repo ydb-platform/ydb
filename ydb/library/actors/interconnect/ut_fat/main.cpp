@@ -1,4 +1,3 @@
-
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
@@ -16,9 +15,9 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/set.h>
 
-Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
-    using namespace NActors;
+using namespace NActors;
 
+namespace {
     class TSenderActor: public TSenderBaseActor {
         TDeque<ui64> InFly;
         ui16 SendFlags;
@@ -121,6 +120,20 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         }
     };
 
+    TString GetZcState(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+        auto httpResp = testCluster.GetSessionDbg(me, peer);
+        const TString& resp = httpResp.GetValueSync();
+        const TString pattern = "<tr><td>ZeroCopy state</td><td>";
+        auto pos = resp.find(pattern);
+        UNIT_ASSERT_C(pos != std::string::npos, "zero copy field was not found in http info");
+        pos += pattern.size();
+        size_t end = resp.find('<', pos);
+        UNIT_ASSERT(end != std::string::npos);
+        return resp.substr(pos, end - pos);
+    }
+}
+
+Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
     Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndelivered) {
         ui32 numNodes = 2;
         double bandWidth = 1000000;
@@ -167,5 +180,38 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         testCluster.RegisterActor(senderActor, 1);
 
         NanoSleep(30ULL * 1000 * 1000 * 1000);
+    }
+}
+
+Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
+
+    Y_UNIT_TEST(ZcIsDisabledByDefault) {
+        ui32 numNodes = 2;
+        TTestICCluster testCluster(numNodes, TChannelsConfig());
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, false);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(5ULL * 1000 * 1000 * 1000);
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+    }
+
+    Y_UNIT_TEST(ZcDisabledAfterHiddenCopy) {
+        ui32 numNodes = 2;
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), nullptr, nullptr, true);
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(5ULL * 1000 * 1000 * 1000);
+        // Zero copy send via loopback causes hidden copy inside linux kernel
+        UNIT_ASSERT_VALUES_EQUAL("DisabledHiddenCopy", GetZcState(testCluster, 1, 2));
     }
 }

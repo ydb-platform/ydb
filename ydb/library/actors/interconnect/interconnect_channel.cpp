@@ -1,4 +1,5 @@
 #include "interconnect_channel.h"
+#include "interconnect_zc_processor.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -54,10 +55,10 @@ namespace NActors {
         return true;
     }
 
-    void TEventOutputChannel::DropConfirmed(ui64 confirm) {
+    void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
         LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
-            Pool.Release(NotYetConfirmed, it++);
+            pool.Release(NotYetConfirmed, it++);
         }
     }
 
@@ -183,7 +184,7 @@ namespace NActors {
             if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
                 task.Write<External>(data, len);
             } else {
-                task.Append<External>(data, len);
+                task.Append<External>(data, len, &event.ZcTransferId);
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -332,7 +333,7 @@ namespace NActors {
         return complete;
     }
 
-    void TEventOutputChannel::NotifyUndelivered() {
+    void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
@@ -347,11 +348,17 @@ namespace NActors {
                 item.ForwardOnNondelivery(true);
             }
         }
-        Pool.Release(NotYetConfirmed);
+
+        // Events in the NotYetConfirmed may be actualy not sended by kernel.
+        // In case of enabled ZC we need to wait kernel send task to be completed before reusing buffers
+        if (zg) {
+            zg->ExtractToSafeTermination(NotYetConfirmed);
+        }
+        pool.Release(NotYetConfirmed);
         for (auto& item : Queue) {
             item.ForwardOnNondelivery(false);
         }
-        Pool.Release(Queue);
+        pool.Release(Queue);
     }
 
 }

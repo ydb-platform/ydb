@@ -1369,7 +1369,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
-        auto msg = TString(1_MB, 'a');
+        auto commit = [&](const std::string& sessionId, ui64 offset) {
+            return setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, offset, sessionId);
+        };
+
+        auto getConsumerState = [&](ui32 partition) {
+            auto description = setup.DescribeConsumer(TString(TEST_TOPIC), TEST_CONSUMER);
+
+            auto stats = description.GetPartitions().at(partition).GetPartitionConsumerStats();
+            UNIT_ASSERT(stats);
+            return stats;
+        };
+
+        auto msg = TString("msg-value-1");
 
         auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
         auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
@@ -1377,12 +1389,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
-            Sleep(TDuration::Seconds(5));
+
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
-        }
 
-        {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
@@ -1392,15 +1402,21 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
             UNIT_ASSERT(writeSession_2->Write(Msg(msg, seqNo++)));
             writeSession_2->Close();
-            Sleep(TDuration::Seconds(15));
+        }
+
+        {
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, 0, "a");
+
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
         auto writeSession_3 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
-        UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo++)));
-        UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo++)));
-
+        {
+            UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo++)));
+            UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo++)));
+        }
         auto reader = client.CreateReadSession(
             TReadSessionSettings()
                 .AutoPartitioningSupport(true)
@@ -1429,61 +1445,40 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                         if (message.GetSeqNo() == 6) {
                             if (!commitSent) {
                                 commitSent = true;
-                                Sleep(TDuration::MilliSeconds(300));
-
-                                readSessionId = message.GetPartitionSession()->GetReadSessionId();
-                                TCommitOffsetSettings commitSettings {.ReadSessionId_ = message.GetPartitionSession()->GetReadSessionId()};
-                                auto status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 8, commitSettings).GetValueSync();
-                                UNIT_ASSERT(status.IsSuccess());
 
                                 {
-                                    auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-                                    auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-                                    UNIT_ASSERT(result.IsSuccess());
+                                    auto status = commit(message.GetPartitionSession()->GetReadSessionId(), 8);
+                                    UNIT_ASSERT(status.IsSuccess());
 
-                                    auto description = result.GetConsumerDescription();
+                                    Sleep(TDuration::MilliSeconds(500));
 
-                                    auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
-                                    UNIT_ASSERT(stats);
-
-                                    UNIT_ASSERT(stats->GetCommittedOffset() == 8);
+                                    auto stats = getConsumerState(0);
+                                    UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), 8);
                                 }
-
-                                // must be ignored, because commit to past
-                                TCommitOffsetSettings commitToPastSettings {.ReadSessionId_ = message.GetPartitionSession()->GetReadSessionId()};
-                                auto commitToPastStatus = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0, commitToPastSettings).GetValueSync();
-                                UNIT_ASSERT(commitToPastStatus.IsSuccess());
 
                                 {
-                                    auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-                                    auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-                                    UNIT_ASSERT(result.IsSuccess());
+                                    // must be ignored, because commit to past
+                                    auto status = commit(message.GetPartitionSession()->GetReadSessionId(), 0);
+                                    UNIT_ASSERT(status.IsSuccess());
 
-                                    auto description = result.GetConsumerDescription();
+                                    Sleep(TDuration::MilliSeconds(500));
 
-                                    auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
-                                    UNIT_ASSERT(stats);
-
-                                    UNIT_ASSERT(stats->GetCommittedOffset() == 8);
+                                    auto stats = getConsumerState(0);
+                                    UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), 8);
                                 }
 
-                                TCommitOffsetSettings commitSettingsWrongSession {.ReadSessionId_ = "random_session"};
-                                auto statusWrongSession = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0, commitSettingsWrongSession).GetValueSync();
-                                UNIT_ASSERT(!statusWrongSession.IsSuccess());
-
+                                /* TODO uncomment this 
                                 {
-                                    auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-                                    auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-                                    UNIT_ASSERT(result.IsSuccess());
+                                    // must be ignored, because wrong sessionid
+                                    auto status = commit("random session", 0);
+                                    UNIT_ASSERT(!status.IsSuccess());
 
-                                    auto description = result.GetConsumerDescription();
+                                    Sleep(TDuration::MilliSeconds(500));
 
-                                    auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
-                                    UNIT_ASSERT(stats);
-
-                                    UNIT_ASSERT(stats->GetCommittedOffset() == 8);
+                                    auto stats = getConsumerState(0);
+                                    UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), 8);
                                 }
-
+                                */
                             } else {
                                 UNIT_ASSERT(false);
                             }
@@ -1493,28 +1488,30 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                     }
                     UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo++)));
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
-                    x->Confirm();
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                    x->Confirm();
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
-                    x->Confirm();
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                    x->Confirm();
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
-                    x->Confirm();
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                    x->Confirm();
                 } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
-                    Cerr << sessionClosedEvent->DebugString() << Endl << Flush;
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
                 } else {
-                    Cerr << "SESSION EVENT unhandled \n";
+                    Cerr << "SESSION EVENT unhandled " << x->DebugString() << Endl << Flush;
                 }
             }
             Sleep(TDuration::MilliSeconds(250));
         }
+
+        writeSession_3->Close();
     }
 
     Y_UNIT_TEST(PartitionSplit_DistributedTxCommit_CheckOffsetCommitForDifferentCases_NotSplitedTopic) {

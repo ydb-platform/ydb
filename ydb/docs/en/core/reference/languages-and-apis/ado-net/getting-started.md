@@ -1,8 +1,8 @@
 # Getting Started
 
-The best way to use `Ydb.Sdk` is to install its [nuget package](https://www.nuget.org/packages/Ydb.Sdk).
+The best way to use `Ydb.Sdk` is to install its [NuGet package](https://www.nuget.org/packages/Ydb.Sdk).
 
-`Ydb.Sdk.Ado` aims to be fully ADO.NET-compatible, its API should feel almost identical to other .NET database drivers.
+`Ydb.Sdk.Ado` aims to be fully ADO.NET-compatible; its API should feel almost identical to other .NET database drivers.
 
 Here's a basic code snippet to get you started:
 

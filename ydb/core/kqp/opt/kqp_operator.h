@@ -40,10 +40,21 @@ struct TInfoUnit {
 
 inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs);
 
+struct TFilterInfo {
+    TExprNode::TPtr FilterBody;
+    TVector<TInfoUnit> FilterIUs;
+};
+
+struct TJoinConditionInfo {
+    TExprNode::TPtr ConjunctExpr;
+    TInfoUnit LeftIU;
+    TInfoUnit RightIU;
+};
+
 struct TConjunctInfo {
     bool ToPg = false;
-    TVector<std::pair<TExprNode::TPtr, TVector<TInfoUnit>>> Filters;
-    TVector<std::tuple<TExprNode::TPtr, TInfoUnit, TInfoUnit>> JoinConditions;
+    TVector<TFilterInfo> Filters;
+    TVector<TJoinConditionInfo> JoinConditions;
 };
 
 struct TPhysicalOpProps {
@@ -163,6 +174,7 @@ std::shared_ptr<K> CastOperator(const std::shared_ptr<IOperator> & op) {
 
 class IUnaryOperator : public IOperator {
     public:
+    IUnaryOperator(EOperator kind) : IOperator(kind, {}) {}
     IUnaryOperator(EOperator kind, TExprNode::TPtr node) : IOperator(kind, node) {}
     std::shared_ptr<IOperator>& GetInput() { return Children[0]; }
 };
@@ -199,6 +211,7 @@ class TOpMap : public IUnaryOperator {
 class TOpFilter : public IUnaryOperator {
     public:
     TOpFilter(TExprNode::TPtr node);
+    TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda, TExprContext& ctx, TPositionHandle pos);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
     TVector<TInfoUnit> GetFilterIUs() const;

@@ -65,6 +65,12 @@ struct TBroadcastConnection : public TConnection {
 
 };
 
+struct TMapConnection : public TConnection {
+    TMapConnection() : TConnection("Map") {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+
+};
+
 struct TUnionAllConnection : public TConnection {
     TUnionAllConnection() : TConnection("UnionAll") {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
@@ -180,6 +186,7 @@ class TOpRead : public IOperator {
     TOpRead(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
+    TString TableName;
 };
 
 class TOpMap : public IUnaryOperator {

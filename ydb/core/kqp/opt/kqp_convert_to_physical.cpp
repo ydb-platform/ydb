@@ -236,11 +236,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
         else if(op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
 
-            if (join->JoinKind == "Cross") {
-                auto leftInput = currentStageBody;
-                auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(rightInput);
+            auto leftInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
+            stageArgs[opStageId].push_back(leftInput);
+            auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
+            stageArgs[opStageId].push_back(rightInput);
 
+            if (join->JoinKind == "Cross") {
                 currentStageBody = Build<TDqPhyCrossJoin>(ctx, root.Node->Pos())
                     .LeftInput(leftInput)
                     .LeftLabel<TCoVoid>().Build()
@@ -253,11 +254,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                     .Done().Ptr();
             }
             else if (join->JoinKind == "Inner") {
-                auto leftInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(leftInput);
-                auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(rightInput);
-
                 TVector<TDqJoinKeyTuple> joinKeys;
                 TVector<TCoAtom> leftKeyColumnNames;
                 TVector<TCoAtom> rightKeyColumnNames;
@@ -315,9 +311,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
 
         TVector<TExprNode::TPtr> inputs;
         for (auto inputStageId : stageInputIds.at(id)) {
+
             auto inputStage = finalizedStages.at(inputStageId);
-            auto conn = graph.GetConnection(inputStageId, id)->BuildConnection(inputStage, root.Node, ctx);
-            YQL_CLOG(TRACE, CoreDq) << "Build connection" << id;
+            auto c = graph.GetConnection(inputStageId, id);
+            auto conn = c->BuildConnection(inputStage, root.Node, ctx);
+            YQL_CLOG(TRACE, CoreDq) << "Build connection: " << inputStageId << "->" << id << ", " << c->Type;
             inputs.push_back(conn);
         }
 
@@ -339,12 +337,15 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
     // Build a union all for the last stage
     int lastStageIdx = stageIds[stageIds.size()-1];
 
-    return Build<TDqCnUnionAll>(ctx, root.Node->Pos())
+    auto result = Build<TDqCnUnionAll>(ctx, root.Node->Pos())
         .Output()
             .Stage(finalizedStages.at(lastStageIdx))
             .Index().Build("0")
         .Build()
         .Done().Ptr();
+    YQL_CLOG(TRACE, CoreDq) << "Final plan built";
+
+    return result;
 }
 
 }

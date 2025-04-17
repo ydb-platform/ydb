@@ -2830,6 +2830,11 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     TString ToString() const;
 
+    template <typename TSettingsPB>
+    void SetSettings(const TSettingsPB& settingsPb) {
+        Settings = SerializeSettings(settingsPb);
+    }
+
 private:
     template <typename TSettingsPB>
     static TString SerializeSettings(const TSettingsPB& settings) {
@@ -3378,7 +3383,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;

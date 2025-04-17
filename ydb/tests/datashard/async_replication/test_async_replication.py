@@ -1,7 +1,7 @@
 import pytest
 import time
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
-from ydb.tests.datashard.lib.dml import DML
+from ydb.tests.datashard.lib.dml import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
@@ -43,49 +43,48 @@ class TestAsyncReplication(MulticlusterTestBase):
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        dml_claster_1 = DML(self.create_query(
-            self.clusters[0]["pool"], self.clusters[0]["driver"]))
-        dml_claster_2 = DML(self.create_query(
-            self.clusters[1]["pool"], self.clusters[1]["driver"]))
+        query_cluster_1 = self.create_query(self.clusters[0])
+        query_cluster_2 = self.create_query(self.clusters[1])
+        dml_cluster_1 = DMLOperations(query_cluster_1)
+        dml_cluster_2 = DMLOperations(query_cluster_2)
 
-        dml_claster_1.create_table(table_name, pk_types, all_types,
+        dml_cluster_1.create_table(table_name, pk_types, all_types,
                                    index, ttl, unique, sync)
-        dml_claster_1.insert(table_name, all_types, pk_types, index, ttl)
-        self.query(f"""
+        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
+        query_cluster_2(f"""
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
                         WITH (
-                        CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0]["cluster"])}/?database={self.get_database()}'
+                        CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}'
                             )
-                         """, self.clusters[1]["pool"], self.clusters[1]["driver"])
+                         """)
         for _ in range(100):
             try:
-                rows = self.query(
-                    f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
+                rows = self.query_cluster_2(
+                    f"select count(*) as count from {table_name}")
                 break
             except Exception:
                 time.sleep(1)
-        dml_claster_2.select_after_insert(
+        dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
-        self.query(f"delete from {table_name}",
-                   self.clusters[0]["pool"], self.clusters[0]["driver"])
-        rows = self.query(
-            f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
+        query_cluster_1(f"delete from {table_name}")
+        rows = query_cluster_2(
+            f"select count(*) as count from {table_name}")
         for i in range(100):
-            rows = self.query(
-                f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
+            rows = query_cluster_2(
+                f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count == 0:
                 break
             time.sleep(1)
 
         assert len(
             rows) == 1 and rows[0].count == 0, "Expected zero rows after delete"
-        dml_claster_1.insert(table_name, all_types, pk_types, index, ttl)
+        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
         for i in range(100):
-            rows = self.query(
-                f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
+            rows = query_cluster_2(
+                f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count != 0:
                 break
             time.sleep(1)
-        dml_claster_2.select_after_insert(
+        dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)

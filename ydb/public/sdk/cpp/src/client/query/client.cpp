@@ -793,6 +793,7 @@ public:
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings()) {
         ChangesAreAccepted = false;
+        auto settingsCopy = settings;
 
         auto precommitResult = co_await Precommit();
 
@@ -802,7 +803,7 @@ public:
 
         PrecommitCallbacks.clear();
 
-        auto commitResult = co_await Session_.Client_->CommitTransaction(TxId_, settings, Session_);
+        auto commitResult = co_await Session_.Client_->CommitTransaction(TxId_, settingsCopy, Session_);
 
         if (!commitResult.IsSuccess()) {
             co_await ProcessFailure();
@@ -828,7 +829,7 @@ public:
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
-    
+
         PrecommitCallbacks.push_back(std::move(cb));
     }
 

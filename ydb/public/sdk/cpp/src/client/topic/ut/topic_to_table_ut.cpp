@@ -2,7 +2,10 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -17,6 +20,9 @@
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
+#include <grpcpp/create_channel.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -78,8 +84,6 @@ protected:
     };
 
     void SetUp(NUnitTest::TTestContext&) override;
-
-    void Execute_(NUnitTest::TTestContext& context) override;
 
     void NotifySchemeShard(const TFeatureFlags& flags);
 
@@ -297,6 +301,37 @@ private:
         NTable::TSession Session_;
     };
 
+    class TQuerySession : public ISession {
+    public:
+        TQuerySession(NQuery::TQueryClient& client,
+                      const std::string& endpoint,
+                      const std::string& database);
+
+        std::vector<TResultSet> Execute(const std::string& query,
+                                        TTransactionBase* tx,
+                                        bool commit = true,
+                                        const TParams& params = TParamsBuilder().Build()) override;
+
+        TExecuteInTxResult ExecuteInTx(const std::string& query,
+                                       bool commit = true,
+                                       const TParams& params = TParamsBuilder().Build()) override;
+
+        std::unique_ptr<TTransactionBase> BeginTx() override;
+        void CommitTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
+        void RollbackTx(TTransactionBase& tx, EStatus status = EStatus::SUCCESS) override;
+
+        void Close() override;
+
+        TAsyncStatus AsyncCommitTx(TTransactionBase& tx) override;
+
+    private:
+        NQuery::TSession Init(NQuery::TQueryClient& client);
+
+        NQuery::TSession Session_;
+        std::string Endpoint_;
+        std::string Database_;
+    };
+
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, TTransactionBase& tx);
     template<class E>
@@ -324,6 +359,14 @@ private:
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
+    std::unique_ptr<NQuery::TQueryClient> QueryClient;
+
+    enum class EClientType {
+        Table,
+        Query
+    };
+
+    EClientType ClientType = EClientType::Table;
 
     THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
@@ -351,14 +394,16 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
     Driver = std::make_unique<TDriver>(Setup->MakeDriver());
-    TableClient = std::make_unique<NTable::TTableClient>(*Driver);
-}
+    auto tableSettings = NTable::TClientSettings().SessionPoolSettings(NTable::TSessionPoolSettings()
+        .MaxActiveSessions(3000)
+    );
 
-void TFixture::Execute_(NUnitTest::TTestContext& context)
-{
-    Body_(context);
-    //SetUp(context);
-    //Body_(context);
+    auto querySettings = NQuery::TClientSettings().SessionPoolSettings(NQuery::TSessionPoolSettings()
+        .MaxActiveSessions(3000)
+    );
+
+    TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableSettings);
+    QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, querySettings);
 }
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
@@ -383,7 +428,7 @@ TFixture::TTableSession::TTableSession(NTable::TTableClient& client)
 
 NTable::TSession TFixture::TTableSession::Init(NTable::TTableClient& client)
 {
-    auto result = client.CreateSession().ExtractValueSync();
+    auto result = client.GetSession().ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return result.GetSession();
 }
@@ -465,12 +510,131 @@ TAsyncStatus TFixture::TTableSession::AsyncCommitTx(TTransactionBase& tx)
     });
 }
 
+TFixture::TQuerySession::TQuerySession(NQuery::TQueryClient& client,
+                                        const std::string& endpoint,
+                                        const std::string& database)
+    : Session_(Init(client))
+    , Endpoint_(endpoint)
+    , Database_(database)
+{
+}
+
+NQuery::TSession TFixture::TQuerySession::Init(NQuery::TQueryClient& client)
+{
+    auto result = client.GetSession().ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return result.GetSession();
+}
+
+std::vector<TResultSet> TFixture::TQuerySession::Execute(const std::string& query,
+                                                         TTransactionBase* tx,
+                                                         bool commit,
+                                                         const TParams& params)
+{
+    auto txQuery = dynamic_cast<NQuery::TTransaction*>(tx);
+    auto txControl = NQuery::TTxControl::Tx(*txQuery).CommitTx(commit);
+
+    auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    return result.GetResultSets();
+}
+
+TFixture::ISession::TExecuteInTxResult TFixture::TQuerySession::ExecuteInTx(const std::string& query,
+                                                                            bool commit,
+                                                                            const TParams& params)
+{
+    auto txControl = NQuery::TTxControl::BeginTx().CommitTx(commit);
+
+    auto result = Session_.ExecuteQuery(query, txControl, params).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    return {result.GetResultSets(), std::make_unique<NQuery::TTransaction>(*result.GetTransaction())};
+}
+
+std::unique_ptr<TTransactionBase> TFixture::TQuerySession::BeginTx()
+{
+    while (true) {
+        auto result = Session_.BeginTransaction(NQuery::TTxSettings()).ExtractValueSync();
+        if (result.GetStatus() != EStatus::SESSION_BUSY) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return std::make_unique<NQuery::TTransaction>(result.GetTransaction());
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+}
+
+void TFixture::TQuerySession::CommitTx(TTransactionBase& tx, EStatus status)
+{
+    auto txQuery = dynamic_cast<NQuery::TTransaction&>(tx);
+    while (true) {
+        auto result = txQuery.Commit().ExtractValueSync();
+        if (result.GetStatus() != EStatus::SESSION_BUSY) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+}
+
+void TFixture::TQuerySession::RollbackTx(TTransactionBase& tx, EStatus status)
+{
+    auto txQuery = dynamic_cast<NQuery::TTransaction&>(tx);
+    while (true) {
+        auto result = txQuery.Rollback().ExtractValueSync();
+        if (result.GetStatus() != EStatus::SESSION_BUSY) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+}
+
+void TFixture::TQuerySession::Close()
+{
+    // SDK doesn't provide a method to close the session for Query Client, so we use grpc API directly
+    auto credentials = grpc::InsecureChannelCredentials();
+    auto channel = grpc::CreateChannel(TString(Endpoint_), credentials);
+    auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
+
+    grpc::ClientContext context;
+    context.AddMetadata("x-ydb-database", TString(Database_));
+
+    Ydb::Query::DeleteSessionRequest request;
+    request.set_session_id(Session_.GetId());
+
+    Ydb::Query::DeleteSessionResponse response;
+    auto status = stub->DeleteSession(&context, request, &response);
+
+    NIssue::TIssues issues;
+    NYdb::NIssue::IssuesFromMessage(response.issues(), issues);
+    UNIT_ASSERT_C(status.ok(), status.error_message());
+    UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, issues.ToString());
+}
+
+TAsyncStatus TFixture::TQuerySession::AsyncCommitTx(TTransactionBase& tx)
+{
+    auto txQuery = dynamic_cast<NQuery::TTransaction&>(tx);
+    return txQuery.Commit().Apply([](auto result) {
+        return TStatus(result.GetValue());
+    });
+}
+
 std::unique_ptr<TFixture::ISession> TFixture::CreateSession()
 {
-    if (!TableClient) {
-        UNIT_FAIL("TableClient is not initialized");
+    switch (ClientType) {
+        case EClientType::Table: {
+            UNIT_ASSERT_C(TableClient, "TableClient is not initialized");
+            return std::make_unique<TFixture::TTableSession>(*TableClient);
+        }
+        case EClientType::Query: {
+            UNIT_ASSERT_C(QueryClient, "QueryClient is not initialized");
+            return std::make_unique<TFixture::TQuerySession>(*QueryClient,
+                                                             Setup->GetEndpoint(),
+                                                             Setup->GetDatabase());
+        }
     }
-    return std::make_unique<TFixture::TTableSession>(*TableClient);
+    UNIT_FAIL("Invalid client type");
 }
 
 auto TFixture::CreateReader() -> TTopicReadSessionPtr
@@ -2334,7 +2498,7 @@ void TFixture::WriteToTable(const TString& tablePath,
                             tablePath.data());
 
     for (const auto& r : records) {
-        auto params =TParamsBuilder()
+        auto params = TParamsBuilder()
                 .AddParam("$key").Utf8(r.Key).Build()
                 .AddParam("$value").Utf8(r.Value).Build()
             .Build();

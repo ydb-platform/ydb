@@ -309,12 +309,15 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
 {
     TPlainStatus plainStatus;
     TExecuteQueryProcessorPtr processor;
-    std::optional<TSession> sessionCopy = session;
-    auto paramsProto = params
-         ? &params->GetProtoMap()
-         : nullptr;
+
+    auto sessionCopy = session;
 
     if (auto* txPtr = std::get_if<TTransaction>(&txControl.Tx_); txPtr && txControl.CommitTx_) {
+        auto queryCopy = query;
+        auto txControlCopy = txControl;
+        auto paramsCopy = params;
+        auto settingsCopy = settings;
+
         auto tx = *txPtr;
         auto precommitStatus = co_await tx.Precommit();
 
@@ -323,7 +326,7 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         }
 
         std::tie(plainStatus, processor) = co_await TExecQueryInternal::ExecuteQueryCommon(
-            connections, driverState, query, txControl, paramsProto, settings, sessionCopy);
+            connections, driverState, queryCopy, txControlCopy, paramsCopy ? &paramsCopy->GetProtoMap() : nullptr, settingsCopy, sessionCopy);
 
         if (!plainStatus.Ok()) {
             co_await tx.ProcessFailure();
@@ -332,7 +335,7 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         }
     } else {
         std::tie(plainStatus, processor) = co_await AsExtractingAwaitable(TExecQueryInternal::ExecuteQueryCommon(
-            connections, driverState, query, txControl, paramsProto, settings, sessionCopy));
+            connections, driverState, query, txControl, params ? &params->GetProtoMap() : nullptr, settings, sessionCopy));
     }
 
     co_return TExecuteQueryIterator(

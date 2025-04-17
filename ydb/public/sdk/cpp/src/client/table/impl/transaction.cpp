@@ -54,6 +54,7 @@ NThreading::TFuture<void> TTransaction::TImpl::ProcessFailure() const
 TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSettings& settings)
 {
     ChangesAreAccepted = false;
+    auto settingsCopy = settings;
 
     auto precommitResult = co_await Precommit();
 
@@ -63,7 +64,7 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
 
     PrecommitCallbacks.clear();
 
-    auto commitResult = co_await Session_.Client_->CommitTransaction(Session_, TxId_, settings);
+    auto commitResult = co_await Session_.Client_->CommitTransaction(Session_, TxId_, settingsCopy);
 
     if (!commitResult.IsSuccess()) {
         co_await ProcessFailure();

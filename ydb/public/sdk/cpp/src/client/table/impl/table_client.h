@@ -184,18 +184,22 @@ private:
             co_return co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
         }
 
-        auto tx = *txControl.Tx_;
+        auto sessionCopy = session;
+        auto settingsCopy = settings;
+        auto queryCopy = query;
+        auto txControlCopy = txControl;
+        auto paramsCopy = params;
 
-        auto status = co_await tx.Precommit();
+        auto status = co_await txControlCopy.Tx_->Precommit();
 
         if (!status.IsSuccess()) {
-            co_return TDataQueryResult(std::move(status), {}, tx, std::nullopt, false, std::nullopt);
+            co_return TDataQueryResult(std::move(status), {}, txControlCopy.Tx_, std::nullopt, false, std::nullopt);
         }
 
-        auto dataQueryResult = co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
+        auto dataQueryResult = co_await AsExtractingAwaitable(ExecuteDataQueryInternal(sessionCopy, queryCopy, txControlCopy, paramsCopy, settingsCopy, fromCache));
 
         if (!dataQueryResult.IsSuccess()) {
-            co_await tx.ProcessFailure();
+            co_await txControlCopy.Tx_->ProcessFailure();
 
             co_return std::move(dataQueryResult);
         }

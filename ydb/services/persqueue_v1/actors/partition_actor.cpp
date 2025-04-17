@@ -1210,7 +1210,6 @@ bool TPartitionActor::SendNextRestorePublishRequest() {
 void TPartitionActor::OnDirectReadsRestored() {
     Y_ABORT_UNLESS(DirectReadsToRestore.empty() && DirectReadsToPublish.empty() && DirectReadsToForget.empty());
     DirectReadRestoreStage = EDirectReadRestoreStage::None;
-    Y_ABORT_UNLESS(!DirectReadId || RestoredDirectReadId < DirectReadId);
 
     const auto& ctx = ActorContext();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition

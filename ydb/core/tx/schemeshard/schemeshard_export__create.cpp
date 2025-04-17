@@ -557,6 +557,7 @@ private:
     void PrepareAutoDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
         PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx){
             exportInfo->PendingDropItems.push_back(itemIdx);
+            AllocateTxId(exportInfo);
         });
     }
 

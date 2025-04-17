@@ -311,6 +311,8 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
         ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoDate>()) {
         ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
+    } else if (value.Maybe<TCoDatetime>()) {
+        ssaValue->MutableConstant()->SetTimestamp(FromString<ui32>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }

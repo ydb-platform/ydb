@@ -985,7 +985,9 @@ private:
             Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
             const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-            buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
+            if (buildInfo.KMeans.Level == 2) {
+                buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
+            }
             LOG_D("FillPrefixedVectorIndex NextLevel " << buildInfo.DebugString());
 
             PersistKMeansState(txc, buildInfo);

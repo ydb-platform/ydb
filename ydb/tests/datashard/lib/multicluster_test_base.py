@@ -83,7 +83,7 @@ class MulticlusterTestBase():
         self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
         self.hash_short = self.hash[:8]
 
-    def query(self, text,
+    def query(self, text, pool, driver,
               tx: ydb.QueryTxContext | None = None,
               stats: bool | None = None,
               parameters: Optional[dict] = None,
@@ -91,7 +91,7 @@ class MulticlusterTestBase():
         results = []
         if tx is None:
             if not stats:
-                result_sets = self.clusters[0]["pool"].execute_with_retries(
+                result_sets = pool.execute_with_retries(
                     text, parameters=parameters, retry_settings=retry_settings)
                 for result_set in result_sets:
                     results.extend(result_set.rows)
@@ -99,10 +99,10 @@ class MulticlusterTestBase():
                 settings = ydb.ScanQuerySettings()
                 settings = settings.with_collect_stats(
                     ydb.QueryStatsCollectionMode.FULL)
-                for response in self.clusters[0]["driver"].table_client.scan_query(text,
-                                                                                   settings=settings,
-                                                                                   parameters=parameters,
-                                                                                   retry_settings=retry_settings):
+                for response in driver.table_client.scan_query(text,
+                                                               settings=settings,
+                                                               parameters=parameters,
+                                                               retry_settings=retry_settings):
                     last_response = response
                     for row in response.result_set.rows:
                         results.append(row)
@@ -115,34 +115,36 @@ class MulticlusterTestBase():
 
         return results
 
-    def query_async(self, text,
-                    tx: ydb.QueryTxContext | None = None,
-                    stats: bool | None = None,
-                    parameters: Optional[dict] = None,
-                    retry_settings=None) -> List[Any]:
-        results = []
-        if tx is None:
-            if not stats:
-                result_sets = self.clusters[1]["pool"].execute_with_retries(
-                    text, parameters=parameters, retry_settings=retry_settings)
-                for result_set in result_sets:
-                    results.extend(result_set.rows)
+    def create_query(pool, driver):
+        def query(self, text,
+                  tx: ydb.QueryTxContext | None = None,
+                  stats: bool | None = None,
+                  parameters: Optional[dict] = None,
+                  retry_settings=None) -> List[Any]:
+            results = []
+            if tx is None:
+                if not stats:
+                    result_sets = pool.execute_with_retries(
+                        text, parameters=parameters, retry_settings=retry_settings)
+                    for result_set in result_sets:
+                        results.extend(result_set.rows)
+                else:
+                    settings = ydb.ScanQuerySettings()
+                    settings = settings.with_collect_stats(
+                        ydb.QueryStatsCollectionMode.FULL)
+                    for response in driver.table_client.scan_query(text,
+                                                                   settings=settings,
+                                                                   parameters=parameters,
+                                                                   retry_settings=retry_settings):
+                        last_response = response
+                        for row in response.result_set.rows:
+                            results.append(row)
+
+                    return (results, last_response.query_stats)
             else:
-                settings = ydb.ScanQuerySettings()
-                settings = settings.with_collect_stats(
-                    ydb.QueryStatsCollectionMode.FULL)
-                for response in self.clusters[1]["driver"].table_client.scan_query(text,
-                                                                                   settings=settings,
-                                                                                   parameters=parameters,
-                                                                                   retry_settings=retry_settings):
-                    last_response = response
-                    for row in response.result_set.rows:
-                        results.append(row)
+                with tx.execute(text) as result_sets:
+                    for result_set in result_sets:
+                        results.extend(result_set.rows)
 
-                return (results, last_response.query_stats)
-        else:
-            with tx.execute(text) as result_sets:
-                for result_set in result_sets:
-                    results.extend(result_set.rows)
-
-        return results
+            return results
+        return query

@@ -43,42 +43,49 @@ class TestAsyncReplication(MulticlusterTestBase, DML):
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        self.create_table(table_name, pk_types, all_types,
-                          index, ttl, unique, sync, self.query)
-        self.insert(table_name, all_types, pk_types, index, ttl, self.query)
-        self.query_async(f"""
+        dml_claster_1 = DML(self.create_query(
+            self.clusters[0]["pool"], self.clusters[0]["driver"]))
+        dml_claster_2 = DML(self.create_query(
+            self.clusters[1]["pool"], self.clusters[1]["driver"]))
+
+        dml_claster_1.create_table(table_name, pk_types, all_types,
+                                   index, ttl, unique, sync)
+        dml_claster_1.insert(table_name, all_types, pk_types, index, ttl)
+        self.query(f"""
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
                         WITH (
                         CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0]["cluster"])}/?database={self.get_database()}'
                             )
-                         """)
+                         """, self.clusters[1]["pool"], self.clusters[1]["driver"])
         for _ in range(100):
             try:
-                rows = self.query_async(
-                    "select count(*) as count from {table_name}")
+                rows = self.query(
+                    f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
                 break
             except Exception:
                 time.sleep(1)
-        self.select_after_insert(
-            table_name, all_types, pk_types, index, ttl, self.query_async)
-        self.query(f"delete from {table_name}")
-        rows = self.query_async(f"select count(*) as count from {table_name}")
+        dml_claster_2.select_after_insert(
+            table_name, all_types, pk_types, index, ttl)
+        self.query(f"delete from {table_name}",
+                   self.clusters[0]["pool"], self.clusters[0]["driver"])
+        rows = self.query(
+            f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
         for i in range(100):
-            rows = self.query_async(
-                f"select count(*) as count from {table_name}")
+            rows = self.query(
+                f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
             if len(rows) == 1 and rows[0].count == 0:
                 break
             time.sleep(1)
 
         assert len(
             rows) == 1 and rows[0].count == 0, "Expected zero rows after delete"
-        self.insert(table_name, all_types, pk_types, index, ttl, self.query)
+        dml_claster_1.insert(table_name, all_types, pk_types, index, ttl)
         for i in range(100):
-            rows = self.query_async(
-                f"select count(*) as count from {table_name}")
+            rows = self.query(
+                f"select count(*) as count from {table_name}", self.clusters[1]["pool"], self.clusters[1]["driver"])
             if len(rows) == 1 and rows[0].count != 0:
                 break
             time.sleep(1)
-        self.select_after_insert(
-            table_name, all_types, pk_types, index, ttl, self.query_async)
+        dml_claster_2.select_after_insert(
+            table_name, all_types, pk_types, index, ttl)

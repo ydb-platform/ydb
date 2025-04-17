@@ -6,7 +6,7 @@ from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, i
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
 
-class TestDML(TestBase, DML):
+class TestDML(TestBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
@@ -43,11 +43,12 @@ class TestDML(TestBase, DML):
         ]
     )
     def test_dml(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        self.create_table(table_name, pk_types, all_types,
-                          index, ttl, unique, sync, self.query)
-        self.insert(table_name, all_types, pk_types, index, ttl, self.query)
-        self.select_all_type(table_name, all_types, pk_types, index, ttl, self.query)
-        self.select_after_insert(table_name, all_types, pk_types, index, ttl, self.query)
-        self.update(table_name, all_types, pk_types, index, ttl, unique, self.query)
-        self.upsert(table_name, all_types, pk_types, index, ttl, self.query)
-        self.delete(table_name, all_types, pk_types, index, ttl, self.query)
+        dml = DML(self.query)
+        dml.create_table(table_name, pk_types, all_types,
+                         index, ttl, unique, sync)
+        dml.insert(table_name, all_types, pk_types, index, ttl)
+        dml.select_all_type(table_name, all_types, pk_types, index, ttl)
+        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        dml.update(table_name, all_types, pk_types, index, ttl, unique)
+        dml.upsert(table_name, all_types, pk_types, index, ttl)
+        dml.delete(table_name, all_types, pk_types, index, ttl)

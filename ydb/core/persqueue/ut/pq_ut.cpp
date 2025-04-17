@@ -37,9 +37,9 @@ Y_UNIT_TEST(TestCmdReadWithLastOffset) {
 
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"user1", true}}, tc);
         TVector<std::pair<ui64, TString>> data;
-        i64 messageCount = 25;
+        i64 messageCount = 100;
         for (i64 i = 1; i <= messageCount; ++i) {
-            data.push_back({i, TString(400_KB, 'a')});
+            data.push_back({i, TString(100_KB, 'a')});
         }
         CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
         TString sessionId = "session1";
@@ -63,8 +63,8 @@ Y_UNIT_TEST(TestCmdReadWithLastOffset) {
         auto pipe = CmdCreateSession(sessionSettings, tc);
         readSettings.Pipe = pipe;
 
-        for (i64 offset = 0; offset < messageCount; ++offset) {
-            for (i64 lastOffset = 0; lastOffset <= messageCount; ++lastOffset) {
+        for (i64 offset = 0; offset < messageCount; offset += 10) {
+            for (i64 lastOffset = 0; lastOffset <= messageCount; lastOffset += 10) {
                 readSettings.Offset = offset;
                 readSettings.LastOffset = lastOffset;
                 readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);

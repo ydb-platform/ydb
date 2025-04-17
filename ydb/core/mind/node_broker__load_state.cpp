@@ -28,8 +28,8 @@ public:
         while (now > Self->Dirty.Epoch.End) {
             TStateDiff diff;
             Self->Dirty.ComputeNextEpochDiff(diff);
-            Self->Dirty.DbApplyStateDiff(diff, txc);
             Self->Dirty.ApplyStateDiff(diff);
+            Self->Dirty.DbApplyStateDiff(diff, txc);
         }
 
         return true;
@@ -44,6 +44,7 @@ public:
         Self->SubscribeForConfigUpdates(ctx);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
+        Self->PrepareUpdateNodesLog();
         Self->SignalTabletActive(ctx);
     }
 

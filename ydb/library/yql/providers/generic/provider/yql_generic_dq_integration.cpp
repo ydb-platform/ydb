@@ -44,6 +44,8 @@ namespace NYql {
                     return "RedisGeneric";
                 case NYql::EGenericDataSourceKind::PROMETHEUS:
                     return "PrometheusGeneric";
+                case NYql::EGenericDataSourceKind::MONGO_DB:
+                    return "MongoDBGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -285,6 +287,9 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::ICEBERG:
                             properties["SourceType"] = "Iceberg";
+                            break;
+                        case NYql::EGenericDataSourceKind::MONGO_DB:
+                            properties["SourceType"] = "MongoDB";
                             break;
                         case NYql::EGenericDataSourceKind::REDIS:
                             properties["SourceType"] = "Redis";

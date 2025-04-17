@@ -142,3 +142,28 @@ class TestCompatibility(object):
         ]
 
         yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+
+        s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, 
+                                   aws_access_key_id=s3_access_key,
+                                   aws_secret_access_key=s3_secret_key)
+        
+        bucket = s3_resource.Bucket(s3_bucket)
+        objects = list(bucket.objects.all())
+        print(bucket)
+        print(s3_resource)
+        print(objects)
+        metadata_found = False
+        data_found = False
+        scheme_found = False
+        for obj in objects:
+            key = obj.key
+            if key.endswith('metadata.json'):
+                metadata_found = True
+            elif key.endswith('data_00.csv'):
+                data_found = True
+            elif key.endswith('scheme.pb'):
+                scheme_found = True
+                
+        assert metadata_found, "Export metadata file was not found in S3"
+        assert data_found, "Export data file was not found in S3"
+        assert scheme_found, "Export scheme file was not found in S3"

@@ -97,7 +97,6 @@ public:
 
         if (DbChanges.Finalized) {
             Self->Committed = Self->Dirty;
-            Self->SentVersion = Self->Committed.Epoch.Version;
             Self->Become(&TNodeBroker::StateWork);
             Self->SubscribeForConfigUpdates(ctx);
             Self->ScheduleEpochUpdate(ctx);

@@ -219,7 +219,6 @@ public:
             return;
         }
 
-        SOURCE_LOG_D("HandlePointsCountBatch");
         auto& metric = batch.Metric;
         auto& pointsCount = batch.Response.Result.PointsCount;
         ParsePointsCount(metric, pointsCount);
@@ -245,7 +244,6 @@ public:
         MetricsData.insert(MetricsData.end(), batch.Response.Result.Timeseries.begin(), batch.Response.Result.Timeseries.end());
         CompletedMetricsCount++;
 
-        SOURCE_LOG_D("HandleNewDataBatch");
         if (!MetricsWithTimeRange.empty()) {
             TryRequestData();
         } else if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {

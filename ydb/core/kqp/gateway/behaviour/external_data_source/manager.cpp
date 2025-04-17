@@ -88,15 +88,11 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "service_name", // oracle
         "folder_id", // logging
         "use_ssl", // solomon
-<<<<<<< Updated upstream
-        "grpc_port", // solomon
         "reading_mode", // mongodb
         "unexpected_type_display_mode", // mongodb
         "unsupported_type_display_mode", // mongodb
-=======
         "grpc_location", // solomon
         "cloud_id" // solomon
->>>>>>> Stashed changes
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

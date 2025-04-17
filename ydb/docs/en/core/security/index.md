@@ -30,7 +30,7 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
         Regardless of an authentication mode, after passing [authentication](./authentication.md), a user gets a [SID](./authorization.md#sid) and an authentication token.
 
-        - {{ ydb-short-name }} cluster uses a [SID](./authorization.md#sid) for user identification. For example, a SID for an internal user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md) describing the security configuration.
+        - {{ ydb-short-name }} cluster uses a [SID](./authorization.md#sid) for user identification. For example, a SID for an internal user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md#auth) describing the security configuration.
 
         - The authentication token is used by {{ydb-short-name }} nodes to authorize user access before processing user requests.
 
@@ -40,26 +40,8 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
 - **Audit logs**. {{ ydb-short-name }} provides [audit logs](./audit-log.md) that include data about all operations that attempted to change the {{ ydb-short-name }} objects, such as changing access rights, creating or deleting scheme objects, whether successful or not. Audit logs are intended for people responsible for information security.
 
-- **Encryption**. As {{ ydb-short-name }} is a distributed system typically running on a cluster, often spanning multiple datacenters or availability zones, user data is routinely transferred over the network. {{ ydb-short-name }} uses
+- **Encryption**. {{ ydb-short-name }} is a distributed system typically running on a cluster, often spanning multiple datacenters. To protect user data, {{ ydb-short-name }} provides the following technologies:
 
     - [encryption in transit](./encryption/data-in-transit.md) to secure data transmitted between a client and {{ ydb-short-name }}, and between nodes of the {{ ydb-short-name }} cluster.
 
     - [data encryption at rest](./encryption/data-at-rest.md).
-
-
-
-Main resources:
-
-- [{#T}](authentication.md)
-- [{#T}](authorization.md)
-- [{#T}](builtin-security.md)
-- [{#T}](audit-log.md)
-- Encryption:
-
-  - [{#T}](encryption/data-at-rest.md)
-  - [{#T}](encryption/data-in-transit.md)
-
-- [{#T}](short-access-control-notation.md)
-- Concepts:
-
-  - [{#T}](../concepts/connect.md)

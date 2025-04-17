@@ -75,13 +75,9 @@ class BaseTestSet:
         ydb_database = get_external_param('ydb-db', "").lstrip('/')
         cls._ydb_instance = YdbClusterInstance(ydb_endpoint, ydb_database, cls._get_cluster_config())
         YdbCluster.reset(cls._ydb_instance.endpoint(), cls._ydb_instance.database(), cls._ydb_instance.mon_port(), cls._ydb_instance.dyn_nodes_count())
-        if not external_param_is_true('reuse-tables'):
-            ScenarioTestHelper(None).remove_path(cls.get_suite_name())
 
     @classmethod
     def teardown_class(cls):
-        if not external_param_is_true('keep-tables'):
-            ScenarioTestHelper(None).remove_path(cls.get_suite_name())
         cls._ydb_instance.stop()
 
     def test_multi(self, ctx: TestContext):
@@ -108,7 +104,7 @@ class BaseTestSet:
         test_path = ctx.test
         print('test_suffix, num {}, table path {} start_time {}'.format(num, test_path, start_time), file=sys.stderr)
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
-        print('Path removed', file=sys.stderr)
+        print('Path {} removed'.format(test_path), file=sys.stderr)
         try:
             ctx.executable(self, ctx)
             ResultsProcessor.upload_results(
@@ -137,6 +133,7 @@ class BaseTestSet:
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
         ScenarioTestHelper(None).remove_path(ctx.test, ctx.suite)
+        print('Path {} removed'.format(ctx.test), file=sys.stderr)
         exit_codes[num] = 0
 
     @classmethod

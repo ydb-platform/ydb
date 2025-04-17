@@ -13,12 +13,67 @@
 
 #include <ydb/library/actors/core/log.h>
 
-using namespace NYql::NDq::NInternal;
+namespace NYql::NDq::NInternal {
+
+namespace {
+
+TInstant TrimToMillis(TInstant instant) {
+    return TInstant::MilliSeconds(instant.MilliSeconds());
+}
+
+TInstant InitStartingMessageTimestamp(const FederatedQuery::StreamingDisposition& streamingDisposition) {
+    switch (streamingDisposition.GetDispositionCase()) {
+        case FederatedQuery::StreamingDisposition::kOldest:
+            [[fallthrough]];
+        case FederatedQuery::StreamingDisposition::kFresh:
+            return TrimToMillis(TInstant::Now());
+        case FederatedQuery::StreamingDisposition::kFromTime: {
+            const auto& disposition = streamingDisposition.from_time();
+            TInstant timestamp = timeval{
+                .tv_sec = disposition.timestamp().seconds(),
+                .tv_usec = disposition.timestamp().nanos() / 1'000,
+            };
+            return TrimToMillis(timestamp);
+        }
+        case FederatedQuery::StreamingDisposition::kTimeAgo: {
+            const auto& disposition = streamingDisposition.time_ago();
+            TDuration duration = timeval{
+                .tv_sec = disposition.duration().seconds(),
+                .tv_usec = disposition.duration().nanos() / 1'000,
+            };
+            return TrimToMillis(TInstant::Now() - duration);
+        }
+        case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
+            return TrimToMillis(TInstant::Now());
+        case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
+            Y_ABORT("Unknown streaming disposition");
+    }
+}
+
+} // anonymous namespace
 
 constexpr ui32 StateVersion = 1;
 
 #define SRC_LOG_D(s) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+
+TDqPqReadActorBase::TDqPqReadActorBase(
+    ui64 inputIndex,
+    ui64 taskId,
+    NActors::TActorId selfId,
+    const TTxId& txId,
+    NPq::NProto::TDqPqTopicSource&& sourceParams,
+    NPq::NProto::TDqReadTaskParams&& readParams,
+    const NActors::TActorId& computeActorId)
+    : InputIndex(inputIndex)
+    , TxId(txId)
+    , SourceParams(std::move(sourceParams))
+    , StartingMessageTimestamp(InitStartingMessageTimestamp(SourceParams.GetDisposition()))
+    , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
+    , ReadParams(std::move(readParams))
+    , ComputeActorId(computeActorId)
+    , TaskId(taskId) {
+    }
 
 void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
     NPq::NProto::TDqPqTopicSourceState stateProto;
@@ -91,3 +146,5 @@ ui64 TDqPqReadActorBase::GetInputIndex() const {
 const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
+
+} // namespace NYql::NDq::NInternal

@@ -3,6 +3,8 @@ option cc_enable_arenas = true;
 
 package NYql.NPq.NProto;
 
+import "ydb/public/api/protos/draft/fq.proto";
+
 message TToken {
     string Name = 1; // Key in secure params.
     // TODO: token type (oauth, tvm, iam etc).
@@ -50,6 +52,7 @@ message TDqPqTopicSource {
     string Format = 19;
     string RowType = 20; // Final row type with metadata columns
     repeated TDqPqFederatedCluster FederatedClusters = 21;
+    FederatedQuery.StreamingDisposition Disposition = 22;
 }
 
 message TDqPqTopicSink {

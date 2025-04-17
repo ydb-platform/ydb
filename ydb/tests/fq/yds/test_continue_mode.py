@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import datetime
 import logging
 import os
 import pytest
@@ -7,7 +8,8 @@ import time
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
+from ydb.tests.tools.fq_runner.fq_client import CONTROL_PLANE_REQUEST_TIMEOUT, FederatedQueryClient, StreamingDisposition
+from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
@@ -177,6 +179,103 @@ class TestContinueMode(TestYdsBase):
         assert restored_metric >= 1
 
         assert_has_saved_checkpoints()
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_disposition_from_time(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
+        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
+
+        self.init_topics("disposition_from_time")
+
+        partition_key = "trololo"
+        query_name = "disposition-from-time-query"
+        sql = Rf'''
+            PRAGMA dq.MaxTasksPerStage="1";
+
+            INSERT INTO yds.`{self.output_topic}`
+            SELECT Data FROM yds.`{self.input_topic}`;
+        '''
+        from_time = datetime.datetime.now()
+
+        data = ["1", "2"]
+        write_stream(self.input_topic, data, partition_key=partition_key)
+
+        result: fq.CreateBindingResult = client.create_query(
+            name=query_name,
+            text=sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            streaming_disposition=StreamingDisposition.from_time(from_time.timestamp()),
+        ).result
+        query_id = result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        assert read_stream(self.output_topic, len(data), consumer_name=self.consumer_name) == data
+
+        client.abort_query(query_id)
+        client.wait_query(query_id)
+
+        data = ["3", "4"]
+        write_stream(self.input_topic, data, partition_key=partition_key)
+
+        client.modify_query(
+            query_id=query_id,
+            name=query_name,
+            text=sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            streaming_disposition=StreamingDisposition.from_time(from_time.timestamp()),
+        )
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        data = ["1", "2", "3", "4"]
+        assert read_stream(self.output_topic, len(data), consumer_name=self.consumer_name) == data
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_disposition_time_ago(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
+        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
+
+        self.init_topics("disposition_time_ago")
+
+        query_name = "disposition-time-ago-query"
+        sql = Rf'''
+            PRAGMA dq.MaxTasksPerStage="1";
+
+            INSERT INTO yds.`{self.output_topic}`
+            SELECT Data FROM yds.`{self.input_topic}`;
+        '''
+
+        from_time = datetime.datetime.now()
+        data = ["1", "2"]
+        write_stream(self.input_topic, data)
+
+        result: fq.CreateBindingResult = client.create_query(
+            name=query_name,
+            text=sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            streaming_disposition=StreamingDisposition.time_ago((datetime.datetime.now() - from_time).total_seconds() + CONTROL_PLANE_REQUEST_TIMEOUT),
+        ).result
+        query_id = result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        assert read_stream(self.output_topic, len(data), consumer_name=self.consumer_name) == data
+
+        client.abort_query(query_id)
+        client.wait_query(query_id)
+
+        data = ["3", "4"]
+        write_stream(self.input_topic, data)
+
+        client.modify_query(
+            query_id=query_id,
+            name=query_name,
+            text=sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            streaming_disposition=StreamingDisposition.time_ago((datetime.datetime.now() - from_time).total_seconds() + CONTROL_PLANE_REQUEST_TIMEOUT),
+        )
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        data = ["1", "2", "3", "4"]
+        assert read_stream(self.output_topic, len(data), consumer_name=self.consumer_name) == data
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)

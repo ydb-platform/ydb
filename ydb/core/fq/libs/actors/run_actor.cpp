@@ -1548,8 +1548,8 @@ private:
         dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
         bool enableCheckpointCoordinator =
-            Params.QueryType == FederatedQuery::QueryContent::STREAMING && 
-            Params.Config.GetCheckpointCoordinator().GetEnabled() && 
+            Params.QueryType == FederatedQuery::QueryContent::STREAMING &&
+            Params.Config.GetCheckpointCoordinator().GetEnabled() &&
             !dqConfiguration->DisableCheckpoints.Get().GetOrElse(false);
 
         ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), enableCheckpointCoordinator));
@@ -1995,7 +1995,7 @@ private:
         {
             auto pqGateway = Params.PqGatewayFactory->CreatePqGateway();
             pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, Params.StreamingDisposition));
         }
 
         {

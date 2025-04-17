@@ -6,7 +6,7 @@
 
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
-* [Право доступа](../concepts/glossary.md#access-right)
+* [Права доступа](../concepts/glossary.md#access-right)
 * [Список доступов](../concepts/glossary.md#access-acl)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
@@ -70,7 +70,7 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Право {#right}
+## Права доступа {#right}
 
 [Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 

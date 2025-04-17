@@ -61,7 +61,15 @@ public:
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source;
                 source.SetHttpEndpoint(clusterDesc->GetCluster());
-                source.SetGrpcEndpoint(clusterDesc->GetCluster());
+                for (const auto& attr : clusterDesc->settings()) {
+                    if (attr.name() == "grpc_location"sv) {
+                        source.SetGrpcEndpoint(attr.value());
+                    }
+                }
+        
+                if (source.GetGrpcEndpoint().empty()) {
+                    source.SetGrpcEndpoint(clusterDesc->GetCluster());
+                }
                 source.SetProject(soReadObject.Object().Project().StringValue());
                 source.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
                 source.SetUseSsl(clusterDesc->GetUseSsl());

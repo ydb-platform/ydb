@@ -6,7 +6,7 @@ from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, i
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
 
-class TestAsyncReplication(MulticlusterTestBase, DML):
+class TestAsyncReplication(MulticlusterTestBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [

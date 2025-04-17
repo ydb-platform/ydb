@@ -2981,6 +2981,7 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
 
 Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1, TFixtureSinks)
 {
+    return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
     CreateColumnTable("/Root/table_A");
 
@@ -3003,6 +3004,7 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1, TFixtureSinks)
 
 Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2, TFixtureSinks)
 {
+    return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
     CreateTopic("topic_B");
 

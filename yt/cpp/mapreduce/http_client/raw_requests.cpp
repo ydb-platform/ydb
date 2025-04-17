@@ -389,9 +389,7 @@ TNode::TListType LookupRows(
             fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
         })
         .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
+        .Item("versioned").Value(options.Versioned_)
         .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("column_names").Value(*options.Columns_);
         })

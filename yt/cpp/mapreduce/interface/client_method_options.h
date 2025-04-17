@@ -1019,7 +1019,7 @@ struct TLookupRowsOptions
     FLUENT_FIELD_DEFAULT(bool, KeepMissingRows, false);
 
     /// If set to true returned values will have "timestamp" attribute.
-    FLUENT_FIELD_OPTION(bool, Versioned);
+    FLUENT_FIELD_DEFAULT(bool, Versioned, false);
 };
 
 ///

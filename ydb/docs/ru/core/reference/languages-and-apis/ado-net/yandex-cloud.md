@@ -23,7 +23,7 @@ dotnet add package Ydb.Sdk.Yc.Auth
     );
     ```
 
-- `Ydb.Sdk.Yc.MetadataProvider`. Аутентификация в [сервисе метаданных](https://yandex.cloud/ru/docs/compute/operations/vm-connect/auth-inside-vm), работает внутри облачных виртуальных машин Яндекса и облачных функций. Пример использования:
+- `Ydb.Sdk.Yc.MetadataProvider` — аутентификация через [сервис метаданных](https://yandex.cloud/ru/docs/compute/operations/vm-connect/auth-inside-vm); используется внутри облачных виртуальных машин Яндекса и облачных функций. Пример использования:
     
     ```c#
     var metadataProvider = new MetadataProvider(loggerFactory: loggerFactory);

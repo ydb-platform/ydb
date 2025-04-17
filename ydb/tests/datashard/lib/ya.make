@@ -6,7 +6,7 @@ PY_SRCS(
     dml.py
     create_table.py
     types_of_variables.py
-    base_async_replication.py
+    multicluster_test_base.py
 )
 
 PEERDIR(

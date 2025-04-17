@@ -24,8 +24,11 @@ class MulticlusterTestBase():
         cls.ydb_cli_path = yatest.common.build_path("ydb/apps/ydb/ydb")
 
         cls.database = "/Root"
+        cls.clusters = [cls.build_cluster(), cls.build_cluster()]
 
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
+    @classmethod
+    def build_cluster(self):
+        cluster = KiKiMR(KikimrConfigGenerator(erasure=self.get_cluster_configuration(),
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
                                                                         "enable_tiering_in_column_shard"],
@@ -38,39 +41,20 @@ class MulticlusterTestBase():
         },
             additional_log_configs={
                                                        'TX_TIERING': LogLevels.DEBUG}))
-        cls.cluster.start()
-        cls.driver = ydb.Driver(
+        cluster.start()
+        driver = ydb.Driver(
             ydb.DriverConfig(
-                database=cls.get_database(),
-                endpoint=cls.get_endpoint()
+                database=self.get_database(),
+                endpoint=self.get_endpoint(cluster)
             )
         )
-
-        cls.cluster_async = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
-                                                         extra_feature_flags=["enable_resource_pools",
-                                                                              "enable_external_data_sources",
-                                                                              "enable_tiering_in_column_shard"],
-                                                         column_shard_config={
-            'disabled_on_scheme_shard': False,
-            'lag_for_compaction_before_tierings_ms': 0,
-            'compaction_actualization_lag_ms': 0,
-            'optimizer_freshness_check_duration_ms': 0,
-            'small_portion_detect_size_limit': 0,
-        },
-            additional_log_configs={
-            'TX_TIERING': LogLevels.DEBUG}))
-        cls.cluster_async.start()
-        cls.driver_async = ydb.Driver(
-            ydb.DriverConfig(
-                database=cls.get_database(),
-                endpoint=cls.get_endpoint_async()
-            )
-        )
-
-        cls.driver.wait()
-        cls.driver_async.wait()
-        cls.pool = ydb.QuerySessionPool(cls.driver)
-        cls.pool_async = ydb.QuerySessionPool(cls.driver_async)
+        driver.wait()
+        pool = ydb.QuerySessionPool(driver)
+        return{
+            "pool": pool,
+            "driver": driver,
+            "cluster": cluster
+        }
 
     @classmethod
     def get_cluster_configuration(self):
@@ -81,25 +65,17 @@ class MulticlusterTestBase():
         return self.database
 
     @classmethod
-    def get_endpoint(self):
+    def get_endpoint(self, cluster):
         return "%s:%s" % (
-            self.cluster.nodes[1].host, self.cluster.nodes[1].port
+            cluster.nodes[1].host, cluster.nodes[1].port
         )
 
-    @classmethod
-    def get_endpoint_async(self):
-        return "%s:%s" % (
-            self.cluster_async.nodes[1].host, self.cluster_async.nodes[1].port
-        )
 
     @classmethod
     def teardown_class(cls):
-        cls.pool.stop()
-        cls.driver.stop()
-        cls.cluster.stop()
-        cls.pool_async.stop()
-        cls.driver_async.stop()
-        cls.cluster_async.stop()
+        for cluster in cls.clusters:
+            for element in cluster.values():
+                element.stop() 
 
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
@@ -107,6 +83,7 @@ class MulticlusterTestBase():
             current_test_full_name.replace("::", ".").removesuffix(" (setup)")
         self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
         self.hash_short = self.hash[:8]
+
 
     def query(self, text,
               tx: ydb.QueryTxContext | None = None,
@@ -116,7 +93,7 @@ class MulticlusterTestBase():
         results = []
         if tx is None:
             if not stats:
-                result_sets = self.pool.execute_with_retries(
+                result_sets = self.clusters[0]["pool"].execute_with_retries(
                     text, parameters=parameters, retry_settings=retry_settings)
                 for result_set in result_sets:
                     results.extend(result_set.rows)
@@ -124,7 +101,7 @@ class MulticlusterTestBase():
                 settings = ydb.ScanQuerySettings()
                 settings = settings.with_collect_stats(
                     ydb.QueryStatsCollectionMode.FULL)
-                for response in self.driver.table_client.scan_query(text,
+                for response in self.clusters[0]["driver"].table_client.scan_query(text,
                                                                     settings=settings,
                                                                     parameters=parameters,
                                                                     retry_settings=retry_settings):
@@ -148,7 +125,7 @@ class MulticlusterTestBase():
         results = []
         if tx is None:
             if not stats:
-                result_sets = self.pool_async.execute_with_retries(
+                result_sets = self.clusters[1]["pool"].execute_with_retries(
                     text, parameters=parameters, retry_settings=retry_settings)
                 for result_set in result_sets:
                     results.extend(result_set.rows)
@@ -156,7 +133,7 @@ class MulticlusterTestBase():
                 settings = ydb.ScanQuerySettings()
                 settings = settings.with_collect_stats(
                     ydb.QueryStatsCollectionMode.FULL)
-                for response in self.driver_async.table_client.scan_query(text,
+                for response in self.clusters[1]["driver"].table_client.scan_query(text,
                                                                           settings=settings,
                                                                           parameters=parameters,
                                                                           retry_settings=retry_settings):
@@ -171,3 +148,4 @@ class MulticlusterTestBase():
                     results.extend(result_set.rows)
 
         return results
+

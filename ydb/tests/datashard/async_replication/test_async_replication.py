@@ -2,7 +2,7 @@ import pytest
 import time
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
 from ydb.tests.datashard.lib.dml import DML
-from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, \
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
 
@@ -50,7 +50,7 @@ class TestAsyncReplication(MulticlusterTestBase, DML):
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
                         WITH (
-                        CONNECTION_STRING = 'grpc://{self.get_endpoint()}/?database={self.get_database()}'
+                        CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0]["cluster"])}/?database={self.get_database()}'
                             )
                          """)
         self.select_after_insert(
@@ -66,7 +66,12 @@ class TestAsyncReplication(MulticlusterTestBase, DML):
 
         assert len(
             rows) == 1 and rows[0].count == 0, "Expected zero rows after delete"
-        self.insert(table_name, all_types, pk_types, index, ttl)
+        self.insert(table_name, all_types, pk_types, index, ttl, self.query)
+        for i in range(10):
+            rows = self.query_async(
+                f"select count(*) as count from {table_name}")
+            if len(rows) == 1 and rows[0].count != 0:
+                break
+            time.sleep(1)
         self.select_after_insert(
             table_name, all_types, pk_types, index, ttl, self.query_async)
-        

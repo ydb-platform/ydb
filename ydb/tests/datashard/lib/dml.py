@@ -4,8 +4,6 @@ from datetime import datetime, timedelta
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, ttl_types
 
-# ussing with from ydb.tests.sql.lib.test_base import TestBase
-
 
 class DML():
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str, query):
@@ -252,7 +250,7 @@ class DML():
 
         if ttl != "":
             self.create_delete(number_of_columns,
-                               "ttl_", ttl, ttl_types[ttl], table_name)
+                               "ttl_", ttl, ttl_types[ttl], table_name, query)
             number_of_columns += 1
 
         for type_name in pk_types.keys():
@@ -261,7 +259,7 @@ class DML():
                     number_of_columns, "pk_", type_name, pk_types[type_name], table_name, query)
             else:
                 self.create_delete(
-                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
+                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name, query)
             number_of_columns += 1
 
         for type_name in all_types.keys():
@@ -270,7 +268,7 @@ class DML():
                     number_of_columns, "col_", type_name, all_types[type_name], table_name, query)
             else:
                 self.create_delete(
-                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
+                    number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name, query)
             number_of_columns += 1
 
         for type_name in index.keys():

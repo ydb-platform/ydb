@@ -321,6 +321,23 @@ Y_UNIT_TEST_SUITE(Donor) {
        // env.Sim(TDuration::Seconds(10));
     }
 
+    void CheckHasDonor(TEnvironmentSetup& env, const TActorId& vdiskActorId, const TVDiskID& vdiskId) {
+        auto baseConfig = env.FetchBaseConfig();
+        bool found = false;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.DonorsSize()) {
+                UNIT_ASSERT(!found);
+                UNIT_ASSERT_VALUES_EQUAL(slot.DonorsSize(), 1);
+                const auto& donor = slot.GetDonors(0);
+                const auto& id = donor.GetVSlotId();
+                UNIT_ASSERT_VALUES_EQUAL(vdiskActorId, MakeBlobStorageVDiskID(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()));
+                UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(donor.GetVDiskId()), vdiskId);
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
     TVector<NKikimrBlobStorage::TBaseConfig_TVSlot_TDonorDisk> GetDonors(TEnvironmentSetup& env, const TVDiskID& vdiskId) {
         TVector<NKikimrBlobStorage::TBaseConfig_TVSlot_TDonorDisk> result;
         const auto& baseConfig = env.FetchBaseConfig();
@@ -336,12 +353,10 @@ Y_UNIT_TEST_SUITE(Donor) {
     }
 
     Y_UNIT_TEST(CheckOnlineReadRequestToDonor) {
-        TEnvironmentSetup env{{
+        TEnvironmentSetup env{TEnvironmentSetup::TSettings{
             .NodeCount = 8,
             .VDiskReplPausedAtStart = true,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .ReplMaxQuantumBytes = 1 << 20,
-            .ReplMaxDonorNotReadyCount = 2
         }};
         auto& runtime = env.Runtime;
 

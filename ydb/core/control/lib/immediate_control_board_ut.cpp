@@ -1,5 +1,7 @@
 #include "immediate_control_board_impl.h"
 #include "immediate_control_board_wrapper.h"
+#include "dynamic_control_board_impl.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne64.h>
 #include <util/random/entropy.h>
@@ -88,31 +90,49 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
-    Y_UNIT_TEST(TestRegisterLocalControl) {
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+    template <typename TControlBoard, typename TControlId>
+    void TestLocalControlRegistrationImpl(const TControlId& localControlId) {
+        TIntrusivePtr<TControlBoard> controlBoard(new TControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control2(2, 2, 2);
-        UNIT_ASSERT(Icb->RegisterLocalControl(control1, "localControl"));
-        UNIT_ASSERT(!Icb->RegisterLocalControl(control2, "localControl"));
+        UNIT_ASSERT(controlBoard->RegisterLocalControl(control1, localControlId));
+        UNIT_ASSERT(!controlBoard->RegisterLocalControl(control2, localControlId));
         UNIT_ASSERT_EQUAL(1, 1);
     }
 
-    Y_UNIT_TEST(TestRegisterSharedControl) {
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+    Y_UNIT_TEST(TestRegisterLocalControl) {
+        TestLocalControlRegistrationImpl<TDynamicControlBoard, TString>("localControl");
+    }
+
+    Y_UNIT_TEST(TestRegisterLocalControlInStaticControlBoard) {
+        TestLocalControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
+    }
+
+    template <typename TControlBoard, typename TControlId>
+    void TestSharedControlRegistrationImpl(const TControlId& sharedControlId) {
+        TIntrusivePtr<TControlBoard> controlBoard(new TControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control1_origin(control1);
         TControlWrapper control2(2, 2, 2);
         TControlWrapper control2_origin(control2);
-        Icb->RegisterSharedControl(control1, "sharedControl");
+        controlBoard->RegisterSharedControl(control1, sharedControlId);
         UNIT_ASSERT(control1.IsTheSame(control1_origin));
-        Icb->RegisterSharedControl(control2, "sharedControl");
+        controlBoard->RegisterSharedControl(control2, sharedControlId);
         UNIT_ASSERT(control2.IsTheSame(control1_origin));
+    }
+
+    Y_UNIT_TEST(TestRegisterSharedControl) {
+        TestSharedControlRegistrationImpl<TDynamicControlBoard, TString>("sharedControl");
+    }
+
+    Y_UNIT_TEST(TestRegisterSharedControlInStaticControlBoard) {
+        TestSharedControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
     }
 
     Y_UNIT_TEST(TestParallelRegisterSharedControl) {
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
             for (ui64 i = 0; i < 10000; ++i) {
-                TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
+                TDynamicControlBoard *Icb = reinterpret_cast<TDynamicControlBoard *>(controlBoard);
                 TControlWrapper control1(1, 1, 1);
                 Icb->RegisterSharedControl(control1, "sharedControl");
                 // Useless because running this test with --sanitize=thread cannot reveal
@@ -124,7 +144,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
             }
             return nullptr;
         };
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+        TIntrusivePtr<TDynamicControlBoard> Icb(new TDynamicControlBoard);
         TVector<THolder<TThread>> threads;
         threads.reserve(TEST_THREADS_CNT);
         for (ui64 i = 0; i < TEST_THREADS_CNT; ++i) {

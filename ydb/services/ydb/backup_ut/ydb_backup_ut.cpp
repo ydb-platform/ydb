@@ -1278,7 +1278,7 @@ std::string_view GetSampleValue(Ydb::Type::PrimitiveTypeId type) {
         case Ydb::Type_PrimitiveTypeId_YSON: return TYPE_CONSTRUCTOR(Yson, "{ foo = bar }");
         case Ydb::Type_PrimitiveTypeId_JSON: return TYPE_CONSTRUCTOR(Json, "{ \"foo\": \"bar\" }");
         case Ydb::Type_PrimitiveTypeId_UUID: return "RandomUuid(1)";
-        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return TYPE_CONSTRUCTOR(JsonDocument, "{ \"foo\": \"bar\" }");
+        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return TYPE_CONSTRUCTOR(JsonDocument, R"({"foo": "bar"})");
         case Ydb::Type_PrimitiveTypeId_DYNUMBER: return TYPE_CONSTRUCTOR(DyNumber, "1");
         case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -1333,11 +1333,7 @@ bool CanBePrimaryKey(Ydb::Type::PrimitiveTypeId type) {
 bool DontTestThisType(Ydb::Type::PrimitiveTypeId type) {
     switch (type) {
         case Ydb::Type_PrimitiveTypeId_TZ_DATE:
-            // CREATE TABLE with a column of this type is not supported by storage
-            return true;
         case Ydb::Type_PrimitiveTypeId_TZ_DATETIME:
-            // CREATE TABLE with a column of this type is not supported by storage
-            return true;
         case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP:
             // CREATE TABLE with a column of this type is not supported by storage
             return true;

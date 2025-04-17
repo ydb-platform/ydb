@@ -1000,7 +1000,6 @@ private:
             Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
             const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-            buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
             LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};

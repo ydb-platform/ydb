@@ -7,7 +7,7 @@ items:
   href: basic-usage.md
 - name: Параметры подключения
   href: connection-parameters.md
-- name: Маппинг типов
+- name: Соответствие типов
   href: type-mapping.md
 - name: Подключение к Yandex Cloud
   href: yandex-cloud.md

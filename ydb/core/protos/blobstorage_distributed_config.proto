@@ -33,6 +33,7 @@ message TStorageConfig { // contents of storage metadata
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 16;
 }
 
 message TPDiskMetadataRecord {
@@ -189,6 +190,10 @@ message TEvNodeConfigInvokeOnRoot {
         bool SchemeBoard = 5;
     }
 
+    message TReconfigStateStorage {
+        NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 1;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -223,6 +228,7 @@ message TEvNodeConfigInvokeOnRoot {
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
+        TReconfigStateStorage ReconfigStateStorage = 11;
     }
 }
 

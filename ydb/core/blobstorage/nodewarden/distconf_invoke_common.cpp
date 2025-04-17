@@ -126,6 +126,9 @@ namespace NKikimr::NStorage {
 
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
+            
+            case TQuery::kReconfigStateStorage:
+                return ReconfigStateStorage(record.GetReconfigStateStorage());
         }
 
         FinishWithError(TResult::ERROR, "unhandled request");

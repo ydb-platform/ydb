@@ -4,6 +4,66 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
+    void TInvokeRequestHandlerActor::ReconfigStateStorage(const TQuery::TReconfigStateStorage& cmd) {
+        if (!RunCommonChecks()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "CommonChecks are not passed");
+            return;
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        if (!config.HasStateStorageConfig()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage configuration is not filled in");
+            return;
+        }
+
+        const auto &stateStorageConfig = config.GetStateStorageConfig();
+        const auto &proposalNewStateStorageConfig = cmd.GetNewStateStorageConfig();
+        const auto ssRing = stateStorageConfig.GetRing();
+        const auto propRing = proposalNewStateStorageConfig.GetRing();
+
+        if(config.GetNewStateStorageConfig().GetRing().RingSize() && propRing.RingSize()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage previous reconfiguration is not completed.");
+            return;           
+        }
+        if(!propRing.RingSize()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Ring is not specified");
+            return;
+            //TODO: implement finish reconfiguration 
+        }
+        if (!ssRing.RingSize() || ssRing.NodeSize()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage incorrect configuration:"
+                " Ring field is not set. Node field is not supported.");
+            return;
+            //TODO: support ring->Node config
+        }
+
+        THashSet<ui32> nodes;
+        const size_t numRings = ssRing.RingSize();
+        for (size_t i = 0; i < numRings; ++i) {
+            const auto& r = ssRing.GetRing(i);
+            const size_t numNodes = r.NodeSize();
+            for (size_t k = 0; k < numNodes; ++k) {
+                nodes.emplace(r.GetNode(k));
+            }
+        }
+
+        const size_t numProposalRings = propRing.RingSize();
+        for (size_t i = 0; i < numProposalRings; ++i) {
+            const auto& r = propRing.GetRing(i);
+            const size_t numNodes = r.NodeSize();
+            for (size_t k = 0; k < numNodes; ++k) {
+                if(nodes.find(r.GetNode(k)) != nodes.end()) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << "Reconfig StateStorage incorrect configuration: "
+                    << r.GetNode(k) << " node is used in active configuration. Use free from StateStorage nodes.");
+                    return;
+                }
+            }
+        }
+        config.MutableNewStateStorageConfig()->CopyFrom(proposalNewStateStorageConfig);
+        config.SetGeneration(config.GetGeneration() + 1);
+        StartProposition(&config);
+    }
+
     void TInvokeRequestHandlerActor::ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd) {
         if (!RunCommonChecks()) {
             return;

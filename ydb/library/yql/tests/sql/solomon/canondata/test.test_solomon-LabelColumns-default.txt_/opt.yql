@@ -5,7 +5,7 @@
 (let $4 (DataType 'String))
 (let $5 '"downsampling.fill")
 (let $6 '"downsampling.gridMillis")
-(let $7 (StructType '($3 $4) '($5 $4) '($6 $4) '('"project" $4) '('"ts" (DataType 'Datetime)) '('type $4) '('"value" (DataType 'Double))))
+(let $7 (StructType '($3 $4) '($5 $4) '($6 $4) '('"project" $4) '('"ts" (DataType 'Datetime)) '('type $4) '('"value" (OptionalType (DataType 'Double)))))
 (let $8 '('"value" '"ts" 'type))
 (let $9 '($3 $5 '"project" $6))
 (let $10 (SoSourceSettings world '"my_project" (SecureParam '"cluster:default_local_solomon") $7 $8 $9 '"2023-12-08T14:40:39Z" '"2023-12-08T14:45:39Z" '"" '"{}" (Bool '"false") '"AVG" '"PREVIOUS" (Uint32 '"15") '()))

@@ -274,9 +274,10 @@ private:
 
     void Fetch() {
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+        std::map<TString, TString> selectors(ReadParams.Source.GetSelectors().begin(), ReadParams.Source.GetSelectors().end());
         ListingFuture = 
             SolomonClient
-                ->ListMetrics(ReadParams.Source.GetSelectors(), PageSize, CurrentPage++)
+                ->ListMetrics(selectors, PageSize, CurrentPage++)
                 .Subscribe([actorSystem, selfId = SelfId()](
                                 NThreading::TFuture<NSo::TListMetricsResponse> future) -> void {
                     try {

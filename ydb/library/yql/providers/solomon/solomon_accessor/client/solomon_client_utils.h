@@ -52,7 +52,7 @@ struct TListMetricsResult {
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
 
 struct TGetPointsCountResult {
-    std::vector<ui64> PointsCount;
+    ui64 PointsCount;
 };
 using TGetPointsCountResponse = TSolomonClientResponse<TGetPointsCountResult>;
 

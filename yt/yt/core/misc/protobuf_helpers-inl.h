@@ -479,6 +479,17 @@ void ToProto(
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap)
+{
+    serializedMap->clear();
+    for (const auto& [key, value] : originalMap) {
+        serializedMap->insert(std::pair(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value)));
+    }
+}
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -511,6 +522,19 @@ void CheckedHashSetFromProto(
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet)
 {
     NYT::NDetail::CheckedFromProtoArrayImpl(originalHashSet, serializedHashSet);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap)
+{
+    originalMap->clear();
+    for (const auto& [serializedKey, serializedValue] : serializedMap) {
+        EmplaceOrCrash(*originalMap, FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

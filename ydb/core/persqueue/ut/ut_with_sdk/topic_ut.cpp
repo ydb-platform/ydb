@@ -445,6 +445,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         };
 
         {
+            bool committed = false;
+
             auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
                 for (auto & m: x.GetMessages()) {
                     if (x.GetPartitionSession()->GetPartitionId() == 0 && m.GetOffset() == 1) {
@@ -456,12 +458,15 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                         setup.Write("message-1-2", 1);
                     } else if (x.GetPartitionSession()->GetPartitionId() == 1 && m.GetOffset() == 0) {
                         m.Commit();
+                        committed = true;
                         return false;
                     }
                 }
 
                 return true;
             });
+
+            UNIT_ASSERT(committed);
 
             Sleep(TDuration::Seconds(3));
 

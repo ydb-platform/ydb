@@ -66,6 +66,7 @@ target_sources(formats-arrow-program PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/assign_const.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/assign_internal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/custom_registry.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/reserve.cpp
 )
 
 

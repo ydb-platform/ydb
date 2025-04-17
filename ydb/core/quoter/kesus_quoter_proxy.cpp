@@ -1119,7 +1119,6 @@ public:
 
     NTabletPipe::TClientConfig GetPipeConnectionOptions(bool reconnection) {
         NTabletPipe::TClientConfig cfg;
-        cfg.CheckAliveness = true;
         cfg.RetryPolicy = {
             .RetryLimitCount = 3u,
             .DoFirstRetryInstantly = !reconnection

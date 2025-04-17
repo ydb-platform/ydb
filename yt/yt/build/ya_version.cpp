@@ -101,60 +101,48 @@ TString GetYaBuildDate()
     return GetProgramBuildDate();
 }
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString BuildRpcUserAgent() noexcept
-{
-    // Fill user agent from build information.
-    // For trunk:
-    // - yt-cpp/r<revision>
-    // For YT release branch.
-    // - yt-cpp/<YT version string>
-    // For arbitrary branch different from trunk:
-    // - yt-cpp/<branch>~<commit>
-    // For local build from detached head or arc sync'ed state:
-    // - yt-cpp/local~<commit>
-
-    TString branch(GetBranch());
-    TStringStream out;
-
-    out << "yt-cpp/";
-
-    if (branch == "trunk") {
-        int svnRevision = GetProgramSvnRevision();
-        out << "trunk~r" << svnRevision;
-    } else if (branch.StartsWith("releases/yt")) {
-        // Simply re-use YT version string. It looks like the following:
-        // 20.3.7547269-stable-ya~bb57c034bfb47caa.
-        TString ytVersion(GetVersion());
-        out << ytVersion;
-    } else {
-        auto commit = GetCommitHash();
-        auto truncatedCommit = TruncateCommitHash(commit);
-
-        // In detached head arc state branch seems to coincide with commit hash.
-        // Let's use that in order to distinguish detached head from regular branch state.
-        if (branch == commit) {
-            branch = "local";
-        }
-
-        out << branch << "~" << truncatedCommit;
-    }
-
-    return out.Str();
-}
-
-const TString CachedUserAgent = BuildRpcUserAgent();
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
-
 const TString& GetRpcUserAgent()
 {
-    return CachedUserAgent;
+    static const auto result = [&] {
+        // Fill user agent from build information.
+        // For trunk:
+        // - yt-cpp/r<revision>
+        // For YT release branch.
+        // - yt-cpp/<YT version string>
+        // For arbitrary branch different from trunk:
+        // - yt-cpp/<branch>~<commit>
+        // For local build from detached head or arc sync'ed state:
+        // - yt-cpp/local~<commit>
+
+        TString branch(GetBranch());
+        TStringStream out;
+
+        out << "yt-cpp/";
+
+        if (branch == "trunk") {
+            int svnRevision = GetProgramSvnRevision();
+            out << "trunk~r" << svnRevision;
+        } else if (branch.StartsWith("releases/yt")) {
+            // Simply re-use YT version string. It looks like the following:
+            // 20.3.7547269-stable-ya~bb57c034bfb47caa.
+            TString ytVersion(GetVersion());
+            out << ytVersion;
+        } else {
+            auto commit = GetCommitHash();
+            auto truncatedCommit = TruncateCommitHash(commit);
+
+            // In detached head arc state branch seems to coincide with commit hash.
+            // Let's use that in order to distinguish detached head from regular branch state.
+            if (branch == commit) {
+                branch = "local";
+            }
+
+            out << branch << "~" << truncatedCommit;
+        }
+
+        return out.Str();
+    }();
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

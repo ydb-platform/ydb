@@ -1358,8 +1358,8 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
     CacheCounters = ev->Get()->Counters;
     SetCacheCounters(CacheCounters);
 
-    PQ_LOG_D("topic '" << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")
-        << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
+    PQ_LOG_D("Topic '" << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")
+        << "' counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
 }
 
 bool TPersQueue::AllOriginalPartitionsInited() const
@@ -3203,7 +3203,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
 
     for (auto& operation : txBody.GetOperations()) {
         auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
-            return !o.HasBegin();
+            return !o.HasCommitOffsetsBegin();
         };
 
         if (isWrite(operation)) {
@@ -3926,7 +3926,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 {
     auto hasWriteOperation = [](const auto& txBody) {
         for (const auto& o : txBody.GetOperations()) {
-            if (!o.HasBegin()) {
+            if (!o.HasCommitOffsetsBegin()) {
                 return true;
             }
         }
@@ -3978,10 +3978,14 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        if (operation.HasBegin()) {
+        if (operation.HasCommitOffsetsBegin()) {
             event->AddOperation(operation.GetConsumer(),
-                                operation.GetBegin(),
-                                operation.GetEnd());
+                                operation.GetCommitOffsetsBegin(),
+                                operation.GetCommitOffsetsEnd(),
+                                operation.HasForceCommit() ? operation.GetForceCommit() : false,
+                                operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
+                                operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
+                                operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
         }
     }
 

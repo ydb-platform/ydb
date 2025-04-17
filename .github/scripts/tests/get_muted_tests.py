@@ -187,7 +187,7 @@ def mute_applier(args):
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
-            test['branch'] = 'main'
+            test['branch'] = args.branch
             test['is_muted'] = int(mute_check(testsuite, testcase))
 
         upload_muted_tests(all_tests)

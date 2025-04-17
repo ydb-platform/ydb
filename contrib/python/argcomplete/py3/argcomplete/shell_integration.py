@@ -166,7 +166,8 @@ def shellcode(executables, use_defaults=True, shell="bash", complete_arguments=N
         executables_list = " ".join(quoted_executables)
         script = argcomplete_script
         if script:
-            function_suffix = "_" + script
+            # If the script path contain a space, this would generate an invalid function name.
+            function_suffix = "_" + script.replace(" ", "_SPACE_")
         else:
             script = ""
             function_suffix = ""

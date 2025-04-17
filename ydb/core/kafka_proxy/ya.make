@@ -18,6 +18,7 @@ SRCS(
     actors/kafka_create_topics_actor.cpp
     actors/kafka_create_partitions_actor.cpp
     actors/kafka_alter_configs_actor.cpp
+    actors/kafka_describe_configs_actor.cpp
     actors/kafka_balance_actor_sql.cpp
     actors/kafka_balancer_actor.cpp
     kafka_connection.cpp
@@ -40,6 +41,7 @@ SRCS(
     kafka_consumer_groups_metadata_initializers.cpp
     kafka_consumer_members_metadata_initializers.cpp
     kafka_transactional_producers_initializers.cpp
+    kafka_transactions_coordinator.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)

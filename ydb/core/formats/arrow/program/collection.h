@@ -43,6 +43,7 @@ private:
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
     std::optional<ui32> RecordsCountActual;
+    const std::optional<ui32> RecordsCountOriginal;
     THashSet<i64> Markers;
 
 public:
@@ -58,12 +59,19 @@ public:
         AFL_VERIFY(Markers.erase(marker));
     }
 
-    bool IsEmptyFiltered() const {
+    bool IsEmptyFilter() const {
         return Filter->IsTotalDenyFilter();
     }
 
-    bool HasAccessors() const {
-        return Accessors.size();
+    bool HasData() const {
+        return Accessors.size() || !!RecordsCountActual;
+    }
+
+    bool HasDataAndResultIsEmpty() const {
+        if (!HasData()) {
+            return false;
+        }
+        return !GetRecordsCountActualVerified() || IsEmptyFilter();
     }
 
     std::optional<ui32> GetRecordsCountActualOptional() const {
@@ -75,9 +83,21 @@ public:
         return *RecordsCountActual;
     }
 
+    ui32 GetRecordsCountRobustVerified() const {
+        if (UseFilter) {
+            AFL_VERIFY(!!RecordsCountActual);
+            return *RecordsCountActual;
+        } else {
+            AFL_VERIFY(!!RecordsCountOriginal);
+            return *RecordsCountOriginal;
+        }
+    }
+
     TAccessorsCollection() = default;
     TAccessorsCollection(const ui32 baseRecordsCount)
-        : RecordsCountActual(baseRecordsCount) {
+        : RecordsCountActual(baseRecordsCount)
+        , RecordsCountOriginal(baseRecordsCount)
+    {
     }
 
     std::optional<TAccessorsCollection> SelectOptional(const std::vector<ui32>& indexes, const bool withFilters) const;
@@ -149,6 +169,7 @@ public:
     void AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
+    void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
 
     void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(columnId);
@@ -359,15 +380,14 @@ public:
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
-        const ui32 recordsCountImpl = Filter->GetFilteredCount().value_or(recordsCount);
-        if (recordsCountImpl < limit) {
+        if (recordsCount < limit) {
             return;
         }
         if (UseFilter) {
-            auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCountImpl, limit, reverse);
+            auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCount, limit, reverse);
             AddFilter(filter);
         } else {
-            *Filter = Filter->Cut(recordsCountImpl, limit, reverse);
+            *Filter = Filter->Cut(recordsCount, limit, reverse);
         }
     }
 

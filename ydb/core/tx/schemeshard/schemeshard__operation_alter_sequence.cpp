@@ -488,7 +488,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+                sequenceInfo->Description, sequenceAlter, *typeRegistry, AppData()->FeatureFlags.GetEnableTablePgTypes(), errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);

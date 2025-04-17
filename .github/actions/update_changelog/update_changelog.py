@@ -57,7 +57,7 @@ def to_file(changelog_path, changelog):
             for category, items in changelog[UNRELEASED].items():
                 if(len(changelog[UNRELEASED][category]) == 0):
                     continue
-                file.write(f"{CATEGORY_PREFIX}{category}\n")
+                file.write(f"{CATEGORY_PREFIX}{category}\n\n")
                 for id, body in items.items():
                     file.write(f"{ITEM_PREFIX}{id}:{body.strip()}\n")
                 file.write("\n")
@@ -69,7 +69,7 @@ def to_file(changelog_path, changelog):
             for category, items in categories.items():
                 if(len(changelog[version][category]) == 0):
                     continue
-                file.write(f"{CATEGORY_PREFIX}{category}\n")
+                file.write(f"{CATEGORY_PREFIX}{category}\n\n")
                 for id, body in items.items():
                     file.write(f"{ITEM_PREFIX}{id}:{body.strip()}\n")
                 file.write("\n")
@@ -83,7 +83,7 @@ def extract_changelog_category(description):
     return None
 
 def extract_pr_number(changelog_entry):
-    match = re.search(r"#(\d+)", changelog_entry)
+    match = re.search(r"\* (\d+)", changelog_entry)
     if match:
         return int(match.group(1))
     return None
@@ -136,14 +136,17 @@ def update_changelog(changelog_path, pr_data):
     to_file(changelog_path, changelog)
 
 def run_command(command):
+    print(f"Executing command: {command}")
     try:
         result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = result.stdout.decode().strip()
+        print(f"Command output: {output}")
+        return output
     except subprocess.CalledProcessError as e:
         print(f"::error::Command failed with exit code {e.returncode}: {e.stderr.decode()}")
         print(f"::error::Command: {e.cmd}")
         print(f"::error::Output: {e.stdout.decode()}")
         sys.exit(1)
-    return result.stdout.decode().strip()
 
 def branch_exists(branch_name):
     result = subprocess.run(["git", "ls-remote", "--heads", "origin", branch_name], capture_output=True, text=True)
@@ -169,7 +172,7 @@ def fetch_user_details(username):
     response.raise_for_status()
     return response.json()
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) != 5:
         print("Usage: update_changelog.py <pr_data_file> <changelog_path> <base_branch> <suffix>")
         sys.exit(1)
@@ -178,6 +181,13 @@ if __name__ == "__main__":
     changelog_path = sys.argv[2]
     base_branch = sys.argv[3]
     suffix = sys.argv[4]
+
+    # Fetch latest changes
+    run_command("git fetch origin")
+    # Check out existing branch
+    run_command(f"git checkout {base_branch}")
+    # Make sure it's up to date
+    run_command(f"git pull origin {base_branch}")
    
     try:
         with open(pr_data_file, 'r') as file:
@@ -187,6 +197,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     pr_data = []
+    if not pr_ids:
+        print("::notice::No PR IDs found in the provided file.")
+        return 
+    
     for pr in pr_ids:
         try:
             pr_details = fetch_pr_details(pr["id"])
@@ -203,7 +217,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"::error::Failed to fetch PR details for PR #{pr['id']}: {e}")
             sys.exit(1)
-
+   
     update_changelog(changelog_path, pr_data)
 
     base_branch_name = f"changelog/{base_branch}-{suffix}"
@@ -212,13 +226,18 @@ if __name__ == "__main__":
     while branch_exists(branch_name):
         branch_name = f"{base_branch_name}-{index}"
         index += 1
+
     run_command(f"git checkout -b {branch_name}")
     run_command(f"git add {changelog_path}")
     run_command(f"git commit -m \"Update CHANGELOG.md for {suffix}\"")
     run_command(f"git push origin {branch_name}")
 
-    pr_title = f"Update CHANGELOG.md for {suffix}"
+    pr_title = f"Update CHANGELOG.md for {base_branch}:{suffix}"
     pr_body = f"This PR updates the CHANGELOG.md file for {suffix}."
     pr_create_command = f"gh pr create --title \"{pr_title}\" --body \"{pr_body}\" --base {base_branch} --head {branch_name}"
     pr_url = run_command(pr_create_command)
     # run_command(f"gh pr edit {pr_url} --add-assignee galnat") # TODO: Make assignee customizable
+
+
+if __name__ == "__main__":
+    main()

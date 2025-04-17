@@ -67,9 +67,12 @@ def test(case):
 
     in_tables = yql_utils.get_input_tables(None, cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 
-    udfs_dir = yql_utils.get_udfs_path([
-        yatest.common.build_path(os.path.join(yatest.common.context.project_path, ".."))
-    ])
+    udfs_list = [yatest.common.build_path(os.path.join(yatest.common.context.project_path, ".."))]
+    env_udfs_list = yql_utils.get_param("EXTRA_UDF_DIRS")
+    if env_udfs_list:
+        for udf_path in env_udfs_list.strip().split(":"):
+            udfs_list.append(yatest.common.build_path(udf_path))
+    udfs_dir = yql_utils.get_udfs_path(udfs_list)
 
     xfail = yql_utils.is_xfail(cfg)
     if yql_utils.get_param('TARGET_PLATFORM') and xfail:

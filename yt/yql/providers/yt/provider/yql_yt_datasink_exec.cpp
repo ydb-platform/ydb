@@ -606,11 +606,15 @@ private:
         );
     }
 
-    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
         Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
+
+        if (AssignRuntimeCluster(op, output, ctx)) {
+            return SyncRepeatWithRestart();
+        }
 
         if (!input->HasResult()) {
             if (!tmpTable.Name().Value().empty()) {

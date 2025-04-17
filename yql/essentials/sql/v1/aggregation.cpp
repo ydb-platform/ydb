@@ -52,7 +52,7 @@ public:
             BuildBind(Pos, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr),
         Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
     {
-        if (aggMode != EAggregateMode::OverWindow && !func.empty() && AggApplyFuncs.contains(func)) {
+        if (aggMode != EAggregateMode::OverWindow && aggMode != EAggregateMode::OverWindowDistinct && !func.empty() && AggApplyFuncs.contains(func)) {
             AggApplyName = func.substr(0, func.size() - 15);
         }
 
@@ -112,7 +112,7 @@ protected:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -156,7 +156,7 @@ protected:
                 if (!x->Init(ctx, src)) {
                     return false;
                 }
-                if (x->IsAggregated() && !x->IsAggregationKey() && !IsOverWindow()) {
+                if (x->IsAggregated() && !x->IsAggregationKey() && !IsOverWindow() && !IsOverWindowDistinct()) {
                     ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
                     return false;
                 }
@@ -172,7 +172,7 @@ protected:
         if (!Expr->Init(ctx, src)) {
             return false;
         }
-        if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow()) {
+        if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow() && !IsOverWindowDistinct()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
@@ -196,7 +196,7 @@ protected:
                     DistinctKey = DotJoin(*sourcePtr, DistinctKey);
                 }
             }
-            if (src->IsGroupByColumn(DistinctKey)) {
+            if (!ctx.DistinctOverKeys && src->IsGroupByColumn(DistinctKey)) {
                 ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey);
                 return false;
             }
@@ -292,7 +292,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -393,7 +393,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -480,7 +480,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -516,7 +516,7 @@ private:
             return false;
         }
 
-        if ((One->IsAggregated() || Two->IsAggregated()) && !IsOverWindow()) {
+        if ((One->IsAggregated() || Two->IsAggregated()) && !IsOverWindow() && !IsOverWindowDistinct()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
@@ -1014,7 +1014,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -1130,7 +1130,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }
@@ -1205,7 +1205,7 @@ private:
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
-            if (IsOverWindow()) {
+            if (IsOverWindow() || IsOverWindowDistinct()) {
                 src->AddTmpWindowColumn(Name);
             }
         }

@@ -345,7 +345,7 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
         }
         composite = MakeHolder<TQueryResultScanner>();
         composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
-        return composite->Scan(it);
+        return composite->Scan(it, benchmarkSettings.PlanFileName);
     }, benchmarkSettings.RetrySettings);
     return ConstructResultByStatus(resStatus, composite, benchmarkSettings);
 }

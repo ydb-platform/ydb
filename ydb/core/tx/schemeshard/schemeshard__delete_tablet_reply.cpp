@@ -180,7 +180,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
-            if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            if (Self->EnableDataErasure && Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
                 Self->Execute(Self->CreateTxCancelDataErasureShards({ShardIdx}));
             }
         }

@@ -52,7 +52,7 @@ private:
     TNormalizationContext NormContext;
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
+    virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         for (auto&& chunkInfo : Chunks) {
             const auto& blobRange = chunkInfo.GetBlobRange();
 
@@ -73,7 +73,6 @@ protected:
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
         TActorContext::AsActorContext().Send(
             NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
-        return TConclusionStatus::Success();
     }
 
 public:

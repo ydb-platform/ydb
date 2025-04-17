@@ -45,11 +45,14 @@ struct TPartitionActorInfo {
     TSet<ui64> NextCommits;
     TDisjointIntervalTree<ui64> NextRanges;
     ui64 Offset;
+    bool ConsumerHasAnyCommits;
 
     TInstant AssignTimestamp;
 
     ui64 Generation;
     ui64 NodeId;
+    bool ReadingFinished;
+    ui64 EndOffset;
 
 
     struct TDirectReadInfo {
@@ -83,8 +86,13 @@ struct TPartitionActorInfo {
         , AssignTimestamp(timestamp)
         , Generation(0)
         , NodeId(0)
+        , ReadingFinished(false)
     {
         Y_ABORT_UNLESS(partition.DiscoveryConverter != nullptr);
+    }
+
+    bool IsLastOffsetCommitted() const {
+        return ReadingFinished && EndOffset == Offset;
     }
 };
 
@@ -347,6 +355,8 @@ private:
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
 
+    void NotifyChildren(const TPartitionActorInfo& partition, const TActorContext& ctx);
+
 private:
     std::unique_ptr</* type alias */ TEvStreamReadRequest> Request;
     const TString ClientDC;
@@ -419,6 +429,7 @@ private:
     TMap<TPartitionId, TControlMessages> PartitionToControlMessages;
 
     std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
+    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 
     ui64 Cookie;
 

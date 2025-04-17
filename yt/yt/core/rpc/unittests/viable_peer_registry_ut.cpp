@@ -351,7 +351,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
         Not(Contains(retrievedPeer))));
 
     {
-        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});;
+        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         EXPECT_NE(channel->GetEndpointDescription(), retrievedPeer);
         EXPECT_THAT(channelFactory->GetChannelRegistry(), Contains(channel->GetEndpointDescription()));
     }

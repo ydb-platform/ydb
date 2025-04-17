@@ -28,6 +28,6 @@ select c_last_name
     group by store_sales.ss_ticket_number,store_sales.ss_customer_sk) dj cross join {{customer}} as customer
     where ss_customer_sk = c_customer_sk
       and cnt between 1 and 5
-    order by cnt desc, c_last_name asc;
+    order by cnt desc, c_last_name asc, ss_ticket_number asc;
 
 -- end query 1 in stream 0 using template query73.tpl

@@ -1084,7 +1084,7 @@ bool FillUsedFilesImpl(
     return childrenOk;
 }
 
-static void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
+void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
     auto separator = string.find(":");
     const auto p0 = string.substr(0, separator);
     if (p0 == "api") {

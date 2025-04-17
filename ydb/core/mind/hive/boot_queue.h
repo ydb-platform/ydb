@@ -52,18 +52,30 @@ struct TBootQueue {
 
     static_assert(sizeof(TBootQueueRecord) <= 24);
 
-    std::priority_queue<TBootQueueRecord, std::vector<TBootQueueRecord>> BootQueue;
-    std::deque<TBootQueueRecord> WaitQueue; // tablets from BootQueue waiting for new nodes
+    using TQueue = TPriorityQueue<TBootQueueRecord>;
 
+    TQueue BootQueue;
+    TQueue WaitQueue; // tablets from BootQueue waiting for new nodes
+private:
+    bool ProcessWaitQueue = false;
+    bool NextFromWaitQueue = false;
+
+public:
     void AddToBootQueue(TBootQueueRecord record);
     TBootQueueRecord PopFromBootQueue();
     void AddToWaitQueue(TBootQueueRecord record);
-    void MoveFromWaitQueueToBootQueue();
+    void IncludeWaitQueue();
+    void ExcludeWaitQueue();
+    bool Empty() const;
+    size_t Size() const;
 
     template<typename... Args>
     void EmplaceToBootQueue(Args&&... args) {
         BootQueue.emplace(args...);
     }
+
+private:
+    TQueue& GetCurrentQueue();
 };
 
 }

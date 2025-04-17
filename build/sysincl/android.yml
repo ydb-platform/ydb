@@ -5,6 +5,7 @@
   - android/asset_manager_jni.h
   - android/bitmap.h
   - android/dlext.h
+  - android/hardware_buffer.h
   - android/log.h
   - android/native_window.h
   - android/native_window_jni.h
@@ -14,6 +15,8 @@
   - jni.h
   - EGL/egl.h
   - EGL/eglext.h
+  - GLES/gl.h
+  - GLES/glext.h
   - GLES2/gl2.h
   - GLES2/gl2ext.h
   - GLES3/gl31.h

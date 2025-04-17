@@ -85,6 +85,19 @@ public:
         void Finalize(const TString& clusterName);
 
         template<typename T>
+        T FilterTablesToDeleteAtFinalize(const T& range) {
+            T filteredRange;
+            with_lock(Lock_) {
+                for (const auto& i : range) {
+                    if (TablesToDeleteAtFinalize.contains(i)) {
+                        filteredRange.insert(filteredRange.end(), i);
+                    }
+                }
+            }
+            return filteredRange;
+        }
+
+        template<typename T>
         T CancelDeleteAtFinalize(const T& range) {
             T filteredRange;
             with_lock(Lock_) {

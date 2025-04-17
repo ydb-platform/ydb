@@ -1,6 +1,6 @@
 # Basic Usage with ADO.NET
 
-This article covers core ADO.NET usage scenarios for YDB, including database connections, query execution, and result processing. For other details, see the main [documentation](index.md).
+This article covers core [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) usage scenarios for {{ ydb-short-name }}, including database connections, query execution, and result processing. See the main [documentation](index.md) for additional details.
 
 ## Connections
 

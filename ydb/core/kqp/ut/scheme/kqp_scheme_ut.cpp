@@ -26,6 +26,7 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NReplication;
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
@@ -8351,6 +8352,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_fi`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "%s",
+                    FLUSH_INTERVAL = Interval('PT1S')
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(CreateTransfer_QueryService) {
@@ -8588,6 +8604,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                   WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer_fi`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "%s",
+                    FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
 

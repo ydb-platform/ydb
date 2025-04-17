@@ -173,45 +173,41 @@ struct TKiExploreTxResults {
         }
     }
 
-    void AddWriteOpToQueryBlock(const TExprBase& effect, TKikimrTableMetadataPtr tableMeta, bool needMainTableRead) {
-        YQL_ENSURE(tableMeta, "Empty table metadata");
-
+    void AddWriteOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes, bool needMainTableRead) {
         THashMap<TString, TPrimitiveYdbOperations> ops;
         if (needMainTableRead) {
-            ops[tableMeta->Name] |= TPrimitiveYdbOperation::Read;
+            ops[name] |= TPrimitiveYdbOperation::Read;
         }
-        ops[tableMeta->Name] |= TPrimitiveYdbOperation::Write;
+        ops[name] |= TPrimitiveYdbOperation::Write;
 
-        for (const auto& index : tableMeta->Indexes) {
+        for (const auto& index : indexes) {
             if (!index.ItUsedForWrite()) {
                 continue;
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
             const auto indexTable = indexTables[0];
 
-            ops[tableMeta->Name] |= TPrimitiveYdbOperation::Read;
+            ops[name] |= TPrimitiveYdbOperation::Read;
             ops[indexTable] = TPrimitiveYdbOperation::Write;
         }
 
         AddEffect(effect, ops);
     }
 
-    void AddUpdateOpToQueryBlock(const TExprBase& effect, TKikimrTableMetadataPtr tableMeta,
+    void AddUpdateOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes,
         const THashSet<std::string_view>& updateColumns) {
-        YQL_ENSURE(tableMeta, "Empty table metadata");
-
         THashMap<TString, TPrimitiveYdbOperations> ops;
         // read and upsert rows into main table
-        ops[tableMeta->Name] = TPrimitiveYdbOperation::Read | TPrimitiveYdbOperation::Write;
+        ops[name] = TPrimitiveYdbOperation::Read | TPrimitiveYdbOperation::Write;
 
-        for (const auto& index : tableMeta->Indexes) {
+        for (const auto& index : indexes) {
             if (!index.ItUsedForWrite()) {
                 continue;
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index);
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
             const auto indexTable = indexTables[0];
 
@@ -436,8 +432,6 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         auto tableOp = GetTableOp(write);
 
         YQL_ENSURE(tablesData);
-        const auto& tableData = tablesData->ExistingTable(cluster, table);
-        YQL_ENSURE(tableData.Metadata);
 
         if (!write.ReturningColumns().Empty()) {
             txRes.PrepareForResult();
@@ -451,9 +445,17 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             for (const auto& column : inputColumns) {
                 updateColumns.emplace(column);
             }
-            txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
+
+            const auto& tableData = tablesData->ExistingTable(cluster, table);
+            YQL_ENSURE(tableData.Metadata);
+            txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, updateColumns);
+        } else if (tableOp == TYdbOperation::FillTable) {
+            // FillTable is used for CTAS.
+            txRes.AddWriteOpToQueryBlock(node, TString(table), {}, tableOp & KikimrReadOps());
         } else {
-            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
+            const auto& tableData = tablesData->ExistingTable(cluster, table);
+            YQL_ENSURE(tableData.Metadata);
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps());
         }
 
         if (!write.ReturningColumns().Empty()) {
@@ -506,7 +508,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
+        txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, updateColumns);
         if (!update.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, update.Pos())
@@ -544,7 +546,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps());
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, del.Pos())
@@ -880,6 +882,9 @@ TString GetShowCreateType(const TExprNode& settings) {
     if (HasSetting(settings, "showCreateTable")) {
         return "showCreateTable";
     }
+    if (HasSetting(settings, "showCreateView")) {
+        return "showCreateView";
+    }
     return "";
 }
 
@@ -967,7 +972,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
                 auto name = setting.Name().Value();
-                if (name == "showCreateTable") {
+                if (name == "showCreateTable" || name == "showCreateView") {
                     showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
@@ -1043,7 +1048,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable") {
+                            } else if (name == "showCreateTable" || name == "showCreateView") {
                                 isShowCreate = true;
                             }
                         }
@@ -1070,6 +1075,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     }
                     if (name == "showCreateTable") {
                         pathType = "Table";
+                    }
+                    if (name == "showCreateView") {
+                        pathType = "View";
                     }
                 }
             }
@@ -1354,6 +1362,8 @@ TYdbOperation GetTableOp(const TKiWriteTable& write) {
         return TYdbOperation::DeleteOn;
     } else if (mode == "update_on") {
         return TYdbOperation::UpdateOn;
+    } else if (mode == "fill_table") {
+        return TYdbOperation::FillTable;
     }
 
     YQL_ENSURE(false, "Unexpected TKiWriteTable mode: " << mode);

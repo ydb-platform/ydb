@@ -49,7 +49,6 @@ NNodes::TCoLambda FallbackLambdaInput(NNodes::TCoLambda lambda, TExprContext& ct
 
 NNodes::TCoLambda FallbackLambdaOutput(NNodes::TCoLambda lambda, TExprContext& ctx);
 
-NNodes::TYtDSink GetDataSink(NNodes::TExprBase input, TExprContext& ctx);
 NNodes::TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 

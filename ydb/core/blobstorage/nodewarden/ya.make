@@ -5,6 +5,8 @@ SRCS(
     group_stat_aggregator.h
     distconf.cpp
     distconf.h
+    distconf_audit.h
+    distconf_audit.cpp
     distconf_binding.cpp
     distconf_console.cpp
     distconf_dynamic.cpp

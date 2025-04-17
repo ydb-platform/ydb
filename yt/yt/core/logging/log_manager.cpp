@@ -26,7 +26,6 @@
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
-#include <yt/yt/core/misc/signal_registry.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/heap.h>
 
@@ -39,6 +38,8 @@
 
 #include <yt/yt/library/profiling/producer.h>
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/variant.h>
@@ -79,6 +80,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NFS;
 using namespace NProfiling;
+using namespace NSignals;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////

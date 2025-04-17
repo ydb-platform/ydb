@@ -60,7 +60,6 @@ struct TJoinOptions {
 
     bool Flatten = false;
     bool StrictKeys = false;
-    bool Compact = false;
 };
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
@@ -178,5 +177,7 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields);
 
+bool IsCachedJoinOption(TStringBuf name);
+bool IsCachedJoinLinkOption(TStringBuf name);
 
 }

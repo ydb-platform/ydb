@@ -2006,6 +2006,7 @@ message TReqAlterTableReplica
     optional EAtomicity atomicity = 5;
     optional bool enable_replicated_table_tracker = 6;
     optional bytes replica_path = 7; // YPath
+    optional bool force = 8;
 
     optional TMutatingOptions mutating_options = 100;
 }
@@ -2478,6 +2479,8 @@ message TReqListJobs
     optional string continuation_token = 24;
 
     optional bool with_interruption_info = 26;
+
+    optional NYT.NYTree.NProto.TAttributeFilter attributes = 27;
 
     optional TMasterReadOptions master_read_options = 102;
 }
@@ -3063,6 +3066,20 @@ message TRspGetFlowView
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+message TReqFlowExecute
+{
+    required bytes pipeline_path = 1; // YPath
+    optional string command = 2;
+    optional bytes argument = 3; // YSON
+}
+
+message TRspFlowExecute
+{
+    optional bytes result = 1; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // RESULTS
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3216,6 +3233,8 @@ message TJob
     optional string operation_incarnation = 31;
     optional NYT.NProto.TGuid allocation_id = 32;
     optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
+    optional bytes events = 34; // YSON
+    optional bytes statistics = 35; // YSON
 }
 
 message TListJobsStatistics

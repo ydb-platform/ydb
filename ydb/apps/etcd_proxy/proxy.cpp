@@ -61,7 +61,7 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
         if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
             Stuff->Revision.store(NYdb::TValueParser(result.GetValue(0)).GetInt64());
         } else {
@@ -129,7 +129,7 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
         std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
         return 0;
     } else {
@@ -210,7 +210,13 @@ int TProxy::ImportDatabase() {
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NTable::TTableClient(driver);
 
-    if (const auto res = client.BulkUpsert(Database + "/content", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
+    if (const auto res = client.BulkUpsert(Database + Folder + "/current", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
+    if (const auto res = Stuff->Client->ExecuteQuery("insert into `history` select * from `current` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
@@ -235,6 +241,7 @@ TProxy::TProxy(int argc, char** argv)
 
     opts.AddLongOption("database", "YDB etcd databse").Required().RequiredArgument("DATABASE").StoreResult(&Database);
     opts.AddLongOption("endpoint", "YDB endpoint to connect").Required().RequiredArgument("ENDPOINT").StoreResult(&Endpoint);
+    opts.AddLongOption("folder", "YDB etcd root folder").Optional().RequiredArgument("FOLDER").StoreResult(&Folder);
     opts.AddLongOption("token", "YDB token for connection").Optional().RequiredArgument("TOKEN").StoreResult(&Token);
     opts.AddLongOption("ydbca", "YDB CA for connection").Optional().RequiredArgument("CA").StoreResult(&CA);
 
@@ -254,6 +261,12 @@ TProxy::TProxy(int argc, char** argv)
 
     if (mlock) {
         LockAllMemory(LockCurrentMemory);
+    }
+
+    if (!Folder.empty()) {
+        std::ostringstream prefix;
+        prefix << "pragma TablePathPrefix = '" << Database << Folder << "';" << std::endl;
+        Stuff->TablePrefix = prefix.str();
     }
 
     THolder<NActors::TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup();

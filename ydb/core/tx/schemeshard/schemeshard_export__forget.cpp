@@ -77,23 +77,8 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             LOG_D("TExport::TTxForget, dropping export tables"
                 << ", info: " << exportInfo->ToString()
             );
-            exportInfo->WaitTxId = InvalidTxId;
-            exportInfo->State = TExportInfo::EState::Dropping;
-            Self->PersistExportState(db, exportInfo);
-
-            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                auto& item = exportInfo->Items.at(itemIdx);
-
-                item.WaitTxId = InvalidTxId;
-                item.State = TExportInfo::EState::Dropped;
-
-                const TPath itemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
-                if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
-                    item.State = TExportInfo::EState::Dropping;
-                }
-
-                Self->PersistExportItemState(db, exportInfo, itemIdx);
-            }
+            
+            PrepareDropping(Self, exportInfo, db);
 
             Progress = true;
         }

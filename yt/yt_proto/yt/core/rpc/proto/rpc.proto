@@ -142,7 +142,7 @@ message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
 
-    // May be blank.
+    // NB: In some cases we deliberately omit setting these fields.
     optional string service = 7;
     optional string method = 8;
 

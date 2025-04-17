@@ -266,6 +266,12 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
         : TYPathMaybeRef(ypathExt.target_path());
 }
 
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return ypathExt.additional_paths();
+}
+
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);

@@ -1878,6 +1878,48 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(HashJoinWithAsTable) {
+        TKikimrRunner kikimr;
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE test_table (
+                    test_column Int32,
+                    PRIMARY key (test_column)
+                ))";
+
+                const auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString joinQuery = R"(
+            PRAGMA ydb.HashJoinMode = "grace";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            $as_table = SELECT * FROM AS_TABLE([<|test_column: 42|>]);
+
+            SELECT
+                as_table.test_column
+            FROM $as_table AS as_table
+            LEFT JOIN test_table
+                ON test_table.test_column = as_table.test_column
+        )";
+
+        const auto result = client.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        const auto& resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt32(), 42);
+    }
 }
 
 } // namespace NKqp

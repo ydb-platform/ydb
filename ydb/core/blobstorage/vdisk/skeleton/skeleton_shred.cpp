@@ -166,7 +166,7 @@ namespace NKikimr {
                     const TDiskPart *outbound = seg.GetOutbound();
                     typename TLevelSegment<TKey, TMemRec>::TMemIterator memIt(&seg);
                     for (memIt.SeekToFirst(); memIt.Valid(); memIt.Next()) {
-                        scanHuge(memIt->MemRec, outbound);
+                        scanHuge(memIt.GetMemRec(), outbound);
                     }
                 }
             }

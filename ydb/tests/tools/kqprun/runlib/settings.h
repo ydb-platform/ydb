@@ -2,6 +2,13 @@
 
 #include <util/generic/string.h>
 
+#include <ydb/core/protos/config.pb.h>
+
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+
+#include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+
 namespace NKikimrRun {
 
 struct TAsyncQueriesSettings {
@@ -15,6 +22,7 @@ struct TAsyncQueriesSettings {
 };
 
 struct TServerSettings {
+    ui32 NodeCount = 1;
     TString DomainName = "Root";
 
     bool MonitoringEnabled = false;
@@ -24,6 +32,12 @@ struct TServerSettings {
     ui16 FirstGrpcPort = 0;
 
     TString LogOutputFile;
+
+    TString YqlToken;
+    NKikimrConfig::TAppConfig AppConfig;
+    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
+    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
+    TIntrusivePtr<NYql::IYtGateway> YtGateway;
 };
 
 enum class EResultOutputFormat {

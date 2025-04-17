@@ -308,6 +308,7 @@ private:
     using TBase = IDataSource;
     TCommittedBlob CommittedBlob;
     bool ReadStarted = false;
+    bool AssembledFlag = false;
 
     virtual void DoAbort() override {
     }

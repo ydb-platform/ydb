@@ -5,6 +5,8 @@
 * YDB CLI help message improvements. Different display for detailed help and brief help.
 * Support coordination nodes in `ydb scheme rmdir --recursive`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
+* Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
+* Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
 
 ## 2.20.0 ##
 

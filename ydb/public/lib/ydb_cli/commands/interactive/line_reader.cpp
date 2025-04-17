@@ -59,13 +59,20 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , YQLCompleter(MakeYQLCompleter())
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco()))
     , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();
 
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
         return YQLCompleter->Apply(prefix, contextLen);
+    });
+    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+        replxx::Replxx::hints_t hints;
+        for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
+            hints.emplace_back(std::move(candidate.text()));
+        }
+        return hints;
     });
     Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
         YQLHighlighter->Apply(text, colors);

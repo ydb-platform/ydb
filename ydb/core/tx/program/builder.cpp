@@ -17,8 +17,17 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
-    const TColumnInfo& name, const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::vector<TColumnChainInfo>& arguments) const {
+TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const TColumnInfo& name,
+    const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<NArrow::NSSA::IKernelLogic>& kernelLogic,
+    std::vector<TColumnChainInfo>& arguments) const {
+    if (func.GetKernelName()) {
+        kernelLogic.reset(IKernelLogic::TFactory::Construct(func.GetKernelName()));
+    } else if (func.HasYqlOperationId()) {
+        kernelLogic = std::make_shared<TSimpleKernelLogic>(func.GetYqlOperationId());
+    } else {
+        kernelLogic = std::make_shared<TSimpleKernelLogic>();
+    }
+
     using TId = NKikimrSSA::TProgram::TAssignment;
 
     arguments.clear();
@@ -27,6 +36,15 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
     }
 
     if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) {
+        if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
+            kernelLogic = std::make_shared<TLogicEquals>(false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
+            kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, false);
+        }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {
             return TConclusionStatus::Fail(
@@ -59,6 +77,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
 
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
+            kernelLogic = std::make_shared<TLogicEquals>(true);
             return std::make_shared<TSimpleFunction>(EOperation::Equal);
         case TId::FUNC_CMP_NOT_EQUAL:
             return std::make_shared<TSimpleFunction>(EOperation::NotEqual);
@@ -76,6 +95,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
             return std::make_shared<TSimpleFunction>(EOperation::BinaryLength);
         case TId::FUNC_STR_MATCH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
@@ -88,30 +108,35 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
         }
         case TId::FUNC_STR_STARTS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_MATCH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
         }
         case TId::FUNC_STR_STARTS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;
@@ -276,18 +301,14 @@ TConclusionStatus TProgramBuilder::ReadAssign(
     switch (assign.GetExpressionCase()) {
         case TId::kFunction: {
             std::shared_ptr<IKernelLogic> kernelLogic;
-            if (assign.GetFunction().GetKernelName()) {
-                kernelLogic.reset(IKernelLogic::TFactory::Construct(assign.GetFunction().GetKernelName()));
-            }
-
             std::vector<TColumnChainInfo> arguments;
-            auto function = MakeFunction(columnName, assign.GetFunction(), arguments);
+            auto function = MakeFunction(columnName, assign.GetFunction(), kernelLogic, arguments);
             if (function.IsFail()) {
                 return function;
             }
 
-            if (assign.GetFunction().HasYqlOperationId() && assign.GetFunction().GetYqlOperationId() ==
-                (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
+            if (assign.GetFunction().HasYqlOperationId() &&
+                assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
                 auto processor =
                     std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::And);
                 Builder.Add(processor);
@@ -300,9 +321,6 @@ TConclusionStatus TProgramBuilder::ReadAssign(
                 auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
                 if (processor.IsFail()) {
                     return processor;
-                }
-                if (assign.GetFunction().HasYqlOperationId()) {
-                    processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
                 }
                 Builder.Add(processor.DetachResult());
             }
@@ -399,7 +417,7 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
             }
             auto aggrType = GetAggregationType(agg.GetFunction());
             auto argColumnIds = extractColumnIds(agg.GetFunction().GetArguments());
-            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), nullptr);
+            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), std::make_shared<TSimpleKernelLogic>());
             if (status.IsFail()) {
                 return status;
             }

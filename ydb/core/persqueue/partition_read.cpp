@@ -124,10 +124,10 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
         ui32 partitionId = Partition.OriginalPartitionId;
 
         auto* node = PartitionGraph.GetPartition(partitionId);
-        for (auto* child : node->Children) {
+        for (auto* child : node->DirectChildren) {
             res->Record.AddChildPartitionIds(child->Id);
 
-            for (auto* p : child->Parents) {
+            for (auto* p : child->DirectParents) {
                 if (p->Id != partitionId) {
                     res->Record.AddAdjacentPartitionIds(p->Id);
                 }
@@ -252,7 +252,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         }
         if (!userInfo) {
             userInfo = &UsersInfoStorage->Create(
-                    ctx, consumer.GetName(), 0, true, "", 0, 0, 0, 0, 0, TInstant::Zero(), {}
+                    ctx, consumer.GetName(), 0, true, "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
         if (userInfo->Offset < (i64)StartOffset)
@@ -281,15 +281,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
     if (!ev->Get()->ClientId.empty()) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);
         if (userInfo) {
-            i64 offset = Max<i64>(userInfo->Offset, 0);
+            auto snapshot = CreateSnapshot(*userInfo);
             result.SetClientOffset(userInfo->Offset);
-            TInstant tmp = userInfo->GetWriteTimestamp(EndOffset) ? userInfo->GetWriteTimestamp(EndOffset) : GetWriteTimeEstimate(offset);
-            result.SetWriteTimestampMS(tmp.MilliSeconds());
-            result.SetCreateTimestampMS(userInfo->GetCreateTimestamp(EndOffset).MilliSeconds());
+            result.SetWriteTimestampMS(snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds());
+            result.SetCreateTimestampMS(snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds());
             result.SetClientReadOffset(userInfo->GetReadOffset());
-            tmp = userInfo->GetReadWriteTimestamp(EndOffset) ? userInfo->GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo->GetReadOffset());
-            result.SetReadWriteTimestampMS(tmp.MilliSeconds());
-            result.SetReadCreateTimestampMS(userInfo->GetReadCreateTimestamp(EndOffset).MilliSeconds());
+            result.SetReadWriteTimestampMS(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
+            result.SetReadCreateTimestampMS(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
         }
     }
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));
@@ -314,7 +312,7 @@ void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext
     ui64 offset = Max<i64>(userInfo.Offset, 0);
     auto ts = GetTime(userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
-    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo.Offset, ts.first, ts.second);
+    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo.Offset, ts.first, ts.second, userInfo.AnyCommits);
 }
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
@@ -776,7 +774,6 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-
     if (!read->SessionId.empty() && !userInfo.NoConsumer) {
         if (userInfo.Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
@@ -1065,13 +1062,12 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         return;
     }
 
-    const TString user = info.User;
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     PQ_LOG_D("Reading cookie " << cookie << ". Send blob request.");
     Y_ABORT_UNLESS(res);
 
-    THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition,
-                                                                     std::move(blobs)));
+    auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,
+                                                     std::move(blobs));
 
     ctx.Send(BlobCache, request.Release());
 }

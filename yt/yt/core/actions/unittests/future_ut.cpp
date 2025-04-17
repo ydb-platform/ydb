@@ -5,6 +5,7 @@
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -32,15 +33,6 @@ struct TNonAssignable
 {
     const int Value = 0;
 };
-
-// void Foo()
-// {
-//     auto a = NYT::MakeFuture<std::string>({})
-//     .ApplyUnique(BIND([](std::string&&) {
-//         return NYT::MakeFuture(std::make_unique<int>(42));
-//     }))
-//     .GetUnique();
-// }
 
 TEST_F(TFutureTest, NoncopyableGet)
 {

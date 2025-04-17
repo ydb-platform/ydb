@@ -7,7 +7,8 @@ import yatest.common
 
 from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
     get_gateway_cfg_suffix, normalize_result, stable_result_file, stable_table_file, \
-    dump_table_yson, normalize_source_code_path, is_sorted_table, is_unordered_result
+    dump_table_yson, normalize_source_code_path, is_sorted_table, is_unordered_result, \
+    get_table_clusters
 
 from test_utils import get_config
 from test_file_common import run_file, run_file_no_cache
@@ -16,15 +17,27 @@ ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('yt/yql/tests/sql/suites')
 
+def add_table_clusters(suite, config):
+    clusters = get_table_clusters(suite, config, DATA_PATH)
+    if not clusters:
+        return None
+    def patch(cfg_message):
+        for c in sorted(clusters):
+            mapping = cfg_message.Yt.ClusterMapping.add()
+            mapping.Name = c
+    return patch
+
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if get_gateway_cfg_suffix() != '' and what != 'Results':
         pytest.skip('non-trivial gateways.conf')
 
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
+    cfg_postprocess = add_table_clusters(suite, config)
     xfail = is_xfail(config)
 
-    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--no-force-dq"], data_path=DATA_PATH)
+    (res, tables_res) = run_file('hybrid', suite, case, cfg, config, yql_http_file_server, DQRUN_PATH, extra_args=["--emulate-yt", "--no-force-dq"],
+                                 data_path=DATA_PATH, cfg_postprocess=cfg_postprocess)
 
     if what == 'Results':
         if not xfail:
@@ -33,7 +46,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                 sql_query = program_file_descr.read()
 
             # yqlrun run
-            yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, data_path=DATA_PATH)
+            yqlrun_res, yqlrun_tables_res = run_file_no_cache('yt', suite, case, cfg, config, yql_http_file_server, data_path=DATA_PATH,
+                                                              cfg_postprocess=cfg_postprocess)
             hybrid_result_name = 'HYBRIDFILE'
             yqlrun_result_name = 'YQLRUN'
 

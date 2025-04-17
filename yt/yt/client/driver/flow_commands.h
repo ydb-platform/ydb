@@ -201,4 +201,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFlowExecuteCommand
+    : public TTypedCommand<NApi::TFlowExecuteOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TFlowExecuteCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    TString Command;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

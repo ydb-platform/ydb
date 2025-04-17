@@ -68,6 +68,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverWindow", &TContext::DistinctOverWindow},
     {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
+    {"DistinctOverKeys", &TContext::DistinctOverKeys},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -656,6 +657,18 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
+}
+
+void EnumerateSqlFlags(std::function<void(std::string_view)> callback) {
+    for (const auto& x : CTX_PRAGMA_FIELDS) {
+        callback(x.first);
+        callback(TString("Disable") + x.first);
+    }
+
+    for (const auto& x : CTX_PRAGMA_MAYBE_FIELDS) {
+        callback(x.first);
+        callback(TString("Disable") + x.first);
+    }
 }
 
 } // namespace NSQLTranslationV1

@@ -23,7 +23,7 @@ public:
     // IClientBase methods
     DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
 
-    DELEGATE_METHOD(std::optional<std::string>, GetClusterName,
+    DELEGATE_METHOD(TFuture<std::optional<std::string>>, GetClusterName,
         (bool fetchIfNull),
         (fetchIfNull))
 
@@ -255,6 +255,11 @@ public:
         NTransactionClient::TTransactionId transactionId,
         const TTransactionAttachOptions& options),
         (transactionId, options))
+
+    DELEGATE_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (prerequisiteId, options))
 
     // Tables
     DELEGATE_METHOD(TFuture<void>, MountTable, (
@@ -865,6 +870,13 @@ public:
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
         (pipelinePath, viewPath, options))
+
+    DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}),
+        (pipelinePath, command, argument, options))
 
     // Distributed client
     DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (

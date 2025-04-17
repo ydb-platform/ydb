@@ -167,14 +167,13 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpa
 }
 
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
-    const TInstant writeTimestamp, const TInstant createTimestamp) {
-    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp).Release());
+    const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits) {
+    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits).Release());
 }
 
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i) {
     return NKikimrClient::TKeyValueRequest::EStorageChannel(NKikimrClient::TKeyValueRequest::MAIN + i);
 }
-
 
 void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
     for (ui32 i = 0; i < numChannels; ++i) {
@@ -429,7 +428,6 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
-    const auto hasLifetime = !hasStorageLimit || (partConfig.HasLifetimeSeconds() && partConfig.GetLifetimeSeconds() > 0);
     const auto now = ctx.Now();
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
@@ -447,11 +445,15 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         }
 
         auto& firstKey = DataKeysBody.front();
-
-        auto expiredByLifetime = hasLifetime && now >= firstKey.Timestamp + lifetimeLimit;
-        auto expiredByStorageLimit = hasStorageLimit && BodySize > firstKey.Size && (BodySize - firstKey.Size) >= partConfig.GetStorageLimitBytes();
-        if (!expiredByLifetime && !expiredByStorageLimit) {
-            break;
+        if (hasStorageLimit) {
+            const auto bodySize = BodySize - firstKey.Size;
+            if (bodySize < partConfig.GetStorageLimitBytes()) {
+                break;
+            }
+        } else {
+            if (now < firstKey.Timestamp + lifetimeLimit) {
+                break;
+            }
         }
 
         BodySize -= firstKey.Size;
@@ -495,24 +497,32 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 {
     // Reply to all outstanding requests in order to destroy corresponding actors
 
+    NPersQueue::NErrorCode::EErrorCode errorCode;
     TStringBuilder ss;
-    ss << "Tablet is restarting, topic '" << TopicName() << "'";
+
+    if (IsSupportive()) {
+        errorCode = NPersQueue::NErrorCode::ERROR;
+        ss << "The transaction is completed";
+    } else {
+        errorCode = NPersQueue::NErrorCode::INITIALIZING;
+        ss << "Tablet is restarting, topic '" << TopicName() << "'";
+    }
 
     for (const auto& ev : WaitToChangeOwner) {
-        ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, ev->Cookie, errorCode, ss);
     }
 
     for (auto& w : PendingRequests) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, ss);
+        ReplyError(ctx, w.GetCookie(), errorCode, ss);
         w.Span.EndError(static_cast<const TString&>(ss));
     }
 
     for (const auto& w : Responses) {
-        ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::INITIALIZING, TStringBuilder() << ss << " (WriteResponses)");
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
     }
 
     for (const auto& ri : ReadInfo) {
-        ReplyError(ctx, ri.second.Destination, NPersQueue::NErrorCode::INITIALIZING,
+        ReplyError(ctx, ri.second.Destination, errorCode,
             TStringBuilder() << ss << " (ReadInfo) cookie " << ri.first);
     }
 
@@ -648,6 +658,54 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 
 }
 
+TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
+    auto now = TAppData::TimeProvider->Now();
+
+    userInfo.UpdateReadingTimeAndState(EndOffset, now);
+
+    TConsumerSnapshot result;
+    result.Now = now;
+
+    if (userInfo.Offset >= static_cast<i64>(EndOffset)) {
+        result.LastCommittedMessage.CreateTimestamp = now;
+        result.LastCommittedMessage.WriteTimestamp = now;
+    } else if (userInfo.ActualTimestamps) {
+        result.LastCommittedMessage.CreateTimestamp = userInfo.CreateTimestamp;
+        result.LastCommittedMessage.WriteTimestamp = userInfo.WriteTimestamp;
+    } else {
+        auto timestamp = GetWriteTimeEstimate(userInfo.Offset);
+        result.LastCommittedMessage.CreateTimestamp = timestamp;
+        result.LastCommittedMessage.WriteTimestamp = timestamp;
+    }
+
+    auto readOffset = userInfo.GetReadOffset();
+
+    result.ReadOffset = readOffset;
+    result.LastReadTimestamp = userInfo.ReadTimestamp;
+
+    if (readOffset >= static_cast<i64>(EndOffset)) {
+        result.LastReadMessage.CreateTimestamp = now;
+        result.LastReadMessage.WriteTimestamp = now;
+    } else if (userInfo.ReadOffset == -1) {
+        result.LastReadMessage = result.LastCommittedMessage;
+    } else if (userInfo.ReadWriteTimestamp) {
+        result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
+        result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
+    } else {
+        auto timestamp = GetWriteTimeEstimate(readOffset);
+        result.LastCommittedMessage.CreateTimestamp = timestamp;
+        result.LastCommittedMessage.WriteTimestamp = timestamp;
+    }
+
+    if (readOffset < (i64)EndOffset) {
+        result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
+    }
+    result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
+    result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
+
+    return result;
+}
+
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     const auto now = ctx.Now();
 
@@ -694,7 +752,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     bool filterConsumers = !ev->Get()->Consumers.empty();
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        const auto& userInfo = userInfoPair.second;
+        auto& userInfo = userInfoPair.second;
         auto& clientId = ev->Get()->ClientId;
         bool consumerShouldBeProcessed = filterConsumers
             ? requiredConsumers.contains(userInfo.User)
@@ -717,46 +775,32 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             continue;
         }
 
-        auto estimateWriteTimestamp = [&]() {
-            auto timestamp = userInfo.GetWriteTimestamp(EndOffset);
-            if (!timestamp) {
-                timestamp = GetWriteTimeEstimate(userInfo.Offset);
-            }
-            return timestamp;
-        };
-
-        auto estimateReadWriteTimestamp = [&]() {
-            auto timestamp = userInfo.GetReadWriteTimestamp(EndOffset);
-            if (!timestamp) {
-                timestamp = GetWriteTimeEstimate(userInfo.GetReadOffset());
-            };
-            return timestamp;
-        };
-
         if (clientId == userInfo.User) { //fill lags
             NKikimrPQ::TClientInfo* clientInfo = result.MutableLagsInfo();
             clientInfo->SetClientId(userInfo.User);
 
+            auto snapshot = CreateSnapshot(userInfo);
+
             auto write = clientInfo->MutableWritePosition();
             write->SetOffset(userInfo.Offset);
-            write->SetWriteTimestamp(estimateWriteTimestamp().MilliSeconds());
-            write->SetCreateTimestamp(userInfo.GetCreateTimestamp(EndOffset).MilliSeconds());
+            write->SetWriteTimestamp(snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds());
+            write->SetCreateTimestamp(snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds());
             write->SetSize(GetSizeLag(userInfo.Offset));
 
-            auto read = clientInfo->MutableReadPosition();
-            read->SetOffset(userInfo.GetReadOffset());
-            read->SetWriteTimestamp(estimateReadWriteTimestamp().MilliSeconds());
-            read->SetCreateTimestamp(userInfo.GetReadCreateTimestamp(EndOffset).MilliSeconds());
-            read->SetSize(GetSizeLag(userInfo.GetReadOffset()));
+            auto readOffset = userInfo.GetReadOffset();
 
-            clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
-            if (IsActive() || userInfo.GetReadOffset() < (i64)EndOffset) {
-                clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
-                                            ? (userInfo.GetReadTimestamp() - TInstant::MilliSeconds(read->GetWriteTimestamp())).MilliSeconds()
-                                            : 0);
+            auto read = clientInfo->MutableReadPosition();
+            read->SetOffset(readOffset);
+            read->SetWriteTimestamp(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
+            read->SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
+            read->SetSize(GetSizeLag(readOffset));
+
+            clientInfo->SetLastReadTimestampMs(snapshot.LastReadTimestamp.MilliSeconds());
+            clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
+            if (IsActive() || readOffset < (i64)EndOffset) {
+                clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
-                ui64 totalLag = clientInfo->GetReadLagMs() + userInfo.GetWriteLagMs() + (now - userInfo.GetReadTimestamp()).MilliSeconds();
-                clientInfo->SetTotalLagMs(totalLag);
+                clientInfo->SetTotalLagMs(snapshot.TotalLag.MilliSeconds());
             } else {
                 clientInfo->SetReadLagMs(0);
                 clientInfo->SetWriteLagMs(0);
@@ -765,14 +809,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
 
         if (ev->Get()->GetStatForAllConsumers) { //fill lags
+            auto snapshot = CreateSnapshot(userInfo);
+
             auto* clientInfo = result.AddConsumerResult();
             clientInfo->SetConsumer(userInfo.User);
             clientInfo->SetLastReadTimestampMs(userInfo.GetReadTimestamp().MilliSeconds());
+            clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
 
-            if (IsActive() || userInfo.GetReadOffset() < (i64)EndOffset) {
-                clientInfo->SetReadLagMs(userInfo.GetReadOffset() < (i64)EndOffset
-                                            ? (userInfo.GetReadTimestamp() - estimateReadWriteTimestamp()).MilliSeconds()
-                                            : 0);
+            auto readOffset = userInfo.GetReadOffset();
+            if (IsActive() || readOffset < (i64)EndOffset) {
+                clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
             } else {
                 clientInfo->SetReadLagMs(0);
@@ -838,7 +884,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
     }
-    result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus :NKikimrPQ::EScaleStatus::NORMAL);
+    result.SetScaleStatus(SplitMergeEnabled(TabletConfig) ? ScaleStatus : NKikimrPQ::EScaleStatus::NORMAL);
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
 
@@ -860,20 +906,22 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     result.SetEndOffset(EndOffset);
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
     for (auto& pr : UsersInfoStorage->GetAll()) {
+        auto snapshot = CreateSnapshot(pr.second);
+
         TUserInfo& userInfo(pr.second);
         NKikimrPQ::TClientInfo& clientInfo = *result.AddClientInfo();
         clientInfo.SetClientId(pr.first);
 
         auto& write = *clientInfo.MutableWritePosition();
         write.SetOffset(userInfo.Offset);
-        write.SetWriteTimestamp((userInfo.GetWriteTimestamp(EndOffset) ? userInfo.GetWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.Offset)).MilliSeconds());
-        write.SetCreateTimestamp(userInfo.GetCreateTimestamp(EndOffset).MilliSeconds());
+        write.SetWriteTimestamp(snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds());
+        write.SetCreateTimestamp(snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds());
         write.SetSize(GetSizeLag(userInfo.Offset));
 
         auto& read = *clientInfo.MutableReadPosition();
         read.SetOffset(userInfo.GetReadOffset());
-        read.SetWriteTimestamp((userInfo.GetReadWriteTimestamp(EndOffset) ? userInfo.GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds());
-        read.SetCreateTimestamp(userInfo.GetReadCreateTimestamp(EndOffset).MilliSeconds());
+        read.SetWriteTimestamp(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
+        read.SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
         read.SetSize(GetSizeLag(userInfo.GetReadOffset()));
     }
     ctx.Send(ev->Get()->Sender, response.Release(), 0, ev->Cookie);
@@ -1526,37 +1574,31 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !userInfo.Important)
             continue;
         bool haveChanges = false;
-        userInfo.UpdateReadingTimeAndState(EndOffset, now);
-        ui64 ts = userInfo.GetWriteTimestamp(EndOffset).MilliSeconds();
+        auto snapshot = CreateSnapshot(userInfo);
+        auto ts = snapshot.LastCommittedMessage.WriteTimestamp.MilliSeconds();
         if (ts < MIN_TIMESTAMP_MS) ts = Max<i64>();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Set(ts);
         }
-        ts = userInfo.GetCreateTimestamp(EndOffset).MilliSeconds();
+        ts = snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds();
         if (ts < MIN_TIMESTAMP_MS) ts = Max<i64>();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Set(ts);
         }
-        ts = userInfo.GetReadWriteTimestamp(EndOffset).MilliSeconds();
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Get() != ts) {
+        auto readWriteTimestamp = snapshot.LastReadMessage.WriteTimestamp;
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Get() != readWriteTimestamp.MilliSeconds()) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Set(ts);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Set(readWriteTimestamp.MilliSeconds());
         }
 
-        i64 off = userInfo.GetReadOffset(); //we want to track first not-readed offset
-        TInstant wts = userInfo.GetReadWriteTimestamp(EndOffset) ? userInfo.GetReadWriteTimestamp(EndOffset) : GetWriteTimeEstimate(userInfo.GetReadOffset());
-        TInstant readTimestamp = userInfo.GetReadTimestamp();
-        ui64 readTimeLag = off >= (i64)EndOffset ? 0 : (readTimestamp - wts).MilliSeconds();
-        ui64 totalLag = userInfo.GetWriteLagMs() + readTimeLag + (now - readTimestamp).MilliSeconds();
-
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Get() != totalLag) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Get() != snapshot.TotalLag.MilliSeconds()) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(totalLag);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(snapshot.TotalLag.MilliSeconds());
         }
 
-        ts = readTimestamp.MilliSeconds();
+        ts = snapshot.LastReadTimestamp.MilliSeconds();
         if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);
@@ -1568,9 +1610,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Set(timeLag);
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != readTimeLag) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != snapshot.ReadLag.MilliSeconds()) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(readTimeLag);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
         }
 
         if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != EndOffset - userInfo.Offset) {
@@ -1578,10 +1620,10 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(EndOffset - userInfo.Offset);
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != EndOffset - off) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != EndOffset - snapshot.ReadOffset) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(EndOffset - off);
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_MESSAGE_LAG].Set(EndOffset - off);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(EndOffset - snapshot.ReadOffset);
+            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_MESSAGE_LAG].Set(EndOffset - snapshot.ReadOffset);
         }
 
         ui64 sizeLag = GetSizeLag(userInfo.Offset);
@@ -1974,23 +2016,23 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
             msg->WaitPreviousWriteSpan.End();
         }
         switch (std::visit(visitor, front.Event)) {
-        case EProcessResult::Continue:
-            MoveUserActOrTxToCommitState();
-            FirstEvent = false;
-            break;
-        case EProcessResult::ContinueDrop:
-            UserActionAndTransactionEvents.pop_front();
-            break;
-        case EProcessResult::Break:
-            MoveUserActOrTxToCommitState();
-            BatchingState = ETxBatchingState::Finishing;
-            FirstEvent = false;
-            break;
-        case EProcessResult::Blocked:
-            BatchingState = ETxBatchingState::Executing;
-            return;
-        case EProcessResult::NotReady:
-            return;
+            case EProcessResult::Continue:
+                MoveUserActOrTxToCommitState();
+                FirstEvent = false;
+                break;
+            case EProcessResult::ContinueDrop:
+                UserActionAndTransactionEvents.pop_front();
+                break;
+            case EProcessResult::Break:
+                MoveUserActOrTxToCommitState();
+                BatchingState = ETxBatchingState::Finishing;
+                FirstEvent = false;
+                break;
+            case EProcessResult::Blocked:
+                BatchingState = ETxBatchingState::Executing;
+                return;
+            case EProcessResult::NotReady:
+                return;
         }
         CurrentBatchSize += 1;
     }
@@ -2301,15 +2343,15 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
 {
     if (tx.ForcePredicateFalse) {
-        predicate = false;
+        predicateOut = false;
         return EProcessResult::Continue;
     }
 
     THashSet<TString> consumers;
-    bool ok = true;
+    bool result = true;
     for (auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
         if (TxAffectedConsumers.contains(consumer)) {
@@ -2322,55 +2364,69 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
             PQ_LOG_D("Partition " << Partition <<
                     " Consumer '" << consumer << "' has been removed");
-            ok = false;
+            result = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
             PQ_LOG_D("Partition " << Partition <<
                         " Unknown consumer '" << consumer << "'");
-            ok = false;
+            result = false;
             break;
         }
 
         bool isAffectedConsumer = AffectedUsers.contains(consumer);
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (operation.GetBegin() > operation.GetEnd()) {
+        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
             PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (invalid range) " <<
-                        " Begin " << operation.GetBegin() <<
-                        " End " << operation.GetEnd());
-            ok = false;
-        } else if (userInfo.Offset != (i64)operation.GetBegin()) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (gap) " <<
-                        " Offset " << userInfo.Offset <<
-                        " Begin " << operation.GetBegin());
-            ok = false;
-        } else if (operation.GetEnd() > EndOffset) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (behind the last offset) " <<
-                        " EndOffset " << EndOffset <<
-                        " End " << operation.GetEnd());
-            ok = false;
-        }
-
-        if (!ok) {
-            if (!isAffectedConsumer) {
-                AffectedUsers.erase(consumer);
+                " Consumer '" << consumer << "'" <<
+                " Bad request (session already dead) " <<
+                " RequestSessionId '" << operation.GetReadSessionId() <<
+                " CurrentSessionId '" << userInfo.Session <<
+                "'");
+            result = false;
+        } else if (operation.GetOnlyCheckCommitedToFinish()) {
+            if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
+               result = false;
             }
-            break;
+        } else {
+            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (invalid range) " <<
+                            " Begin " << operation.GetCommitOffsetsBegin() <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                result = false;
+            } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (gap) " <<
+                            " Offset " << userInfo.Offset <<
+                            " Begin " << operation.GetCommitOffsetsBegin());
+                result = false;
+            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (behind the last offset) " <<
+                            " EndOffset " << EndOffset <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                result = false;
+            }
+
+            if (!result) {
+                if (!isAffectedConsumer) {
+                    AffectedUsers.erase(consumer);
+                }
+                break;
+            }
+            consumers.insert(consumer);
         }
-        consumers.insert(consumer);
     }
-    if (ok) {
+    if (result) {
         TxAffectedConsumers.insert(consumers.begin(), consumers.end());
     }
-    predicate = ok;
+    predicateOut = result;
     return EProcessResult::Continue;
 }
 
@@ -2530,12 +2586,40 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
         for (auto& operation : t->Tx->Operations) {
+            if (operation.GetOnlyCheckCommitedToFinish()) {
+                continue;
+            }
+
             TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
-            Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetBegin());
+            if (!operation.GetForceCommit()) {
+                Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin());
+            }
 
-            userInfo.Offset = operation.GetEnd();
+            if ((i64)operation.GetCommitOffsetsEnd() < userInfo.Offset && !operation.GetReadSessionId().empty()) {
+                continue; // this is stale request, answer ok for it
+            }
+
+            if (operation.GetCommitOffsetsEnd() <= StartOffset) {
+                userInfo.AnyCommits = false;
+                userInfo.Offset = StartOffset;
+            } else if (operation.GetCommitOffsetsEnd() > EndOffset) {
+                userInfo.AnyCommits = true;
+                userInfo.Offset = EndOffset;
+            } else {
+                userInfo.AnyCommits = true;
+                userInfo.Offset = operation.GetCommitOffsetsEnd();
+            }
+
+            if (operation.GetKillReadSession()) {
+                userInfo.Session = "";
+                userInfo.PartitionSessionId = 0;
+                userInfo.Generation = 0;
+                userInfo.Step = 0;
+                userInfo.PipeClient = {};
+            }
         }
+
         CommitWriteOperations(*t);
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
         ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId);
@@ -2657,6 +2741,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
+            if (userInfo.Offset <= (i64)StartOffset) {
+                userInfo.AnyCommits = false;
+            }
             userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
             userInfo.ReadFromTimestamp = actual->ReadFromTimestamp;
             userInfo.HasReadRule = true;
@@ -2801,12 +2888,12 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
     Y_ABORT_UNLESS(tx.HasData());
     THashSet<TString> consumers;
     for (auto& operation : tx.GetData().GetOperations()) {
-        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
-        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetCommitOffsetsBegin());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetCommitOffsetsEnd());
 
         const TString& user = operation.GetConsumer();
         if (TxAffectedConsumers.contains(user)) {
@@ -2819,7 +2906,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "the consumer has been deleted");
             return EProcessResult::ContinueDrop;
         }
-        if (operation.GetBegin() > operation.GetEnd()) {
+        if (operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2850,12 +2937,12 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
-        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
-        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetCommitOffsetsBegin());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetCommitOffsetsEnd());
 
         const TString& user = operation.GetConsumer();
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
@@ -2865,9 +2952,9 @@ void TPartition::ExecImmediateTx(TTransaction& t)
                                  "the consumer has been deleted");
             return;
         }
-        TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
+        TUserInfoBase& pendingUserInfo = GetOrCreatePendingUser(user);
 
-        if (operation.GetBegin() > operation.GetEnd()) {
+        if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2875,7 +2962,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (userInfo.Offset != (i64)operation.GetBegin()) {
+        if (!operation.GetForceCommit() && pendingUserInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2883,14 +2970,14 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (operation.GetEnd() > EndOffset) {
+        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (commit to the future)");
             return;
         }
-        userInfo.Offset = operation.GetEnd();
+        pendingUserInfo.Offset = operation.GetCommitOffsetsEnd();
     }
     CommitWriteOperations(t);
 
@@ -3026,7 +3113,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         userInfo.PipeClient = act.PipeClient;
         ScheduleReplyGetClientOffsetOk(act.Cookie,
                                        userInfo.Offset,
-                                       ts.first, ts.second);
+                                       ts.first, ts.second, ui->AnyCommits);
 
         return;
     }
@@ -3122,15 +3209,16 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     ui32 step = act.Step;
     const ui64 readRuleGeneration = act.ReadRuleGeneration;
 
-    bool setSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
+    bool createSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
     bool dropSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
-    bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.SessionId.empty());
+    bool commitNotFromReadSession = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.SessionId.empty());
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         userInfo.ReadRuleGeneration = 0;
         userInfo.Session = "";
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
+        userInfo.AnyCommits = false;
 
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
@@ -3146,30 +3234,31 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.PartitionSessionId = 0;
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
+        userInfo.AnyCommits = false;
 
         if (userInfo.Important) {
             userInfo.Offset = StartOffset;
         }
     } else {
-        if (setSession || dropSession) {
+        if (createSession || dropSession) {
             offset = userInfo.Offset;
             auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
             auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
             ScheduleReplyGetClientOffsetOk(act.Cookie,
                                            offset,
-                                           ts.first, ts.second);
+                                           ts.first, ts.second, ui ? ui->AnyCommits : false);
         } else {
             ScheduleReplyOk(act.Cookie);
         }
 
-        if (setSession) {
+        if (createSession) {
             userInfo.Session = session;
             userInfo.Generation = generation;
             userInfo.Step = step;
             userInfo.PipeClient = act.PipeClient;
             userInfo.PartitionSessionId = act.PartitionSessionId;
-        } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || strictCommitOffset) {
+        } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || commitNotFromReadSession) {
             userInfo.Session = "";
             userInfo.PartitionSessionId = 0;
             userInfo.Generation = 0;
@@ -3179,17 +3268,20 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
-                    << (setSession || dropSession ? " session" : " offset")
+                    << (createSession || dropSession ? " session" : " offset")
                     << " is set to " << offset << " (startOffset " << StartOffset << ") session " << session
         );
 
         userInfo.Offset = offset;
+        if (userInfo.Offset <= (i64)StartOffset) {
+            userInfo.AnyCommits = false;
+        }
 
         if (LastOffsetHasBeenCommited(userInfo)) {
             SendReadingFinished(user);
         }
 
-        auto counter = setSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
+        auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
     }
 }
@@ -3202,12 +3294,16 @@ void TPartition::ScheduleReplyOk(const ui64 dst)
 
 void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 const i64 offset,
-                                                const TInstant writeTimestamp, const TInstant createTimestamp)
+                                                const TInstant writeTimestamp,
+                                                const TInstant createTimestamp,
+                                                bool consumerHasAnyCommits)
 {
     Replies.emplace_back(Tablet,
                          MakeReplyGetClientOffsetOk(dst,
                                                     offset,
-                                                    writeTimestamp, createTimestamp).Release());
+                                                    writeTimestamp,
+                                                    createTimestamp,
+                                                    consumerHasAnyCommits).Release());
 
 }
 
@@ -3282,7 +3378,8 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                              const TKeyPrefix& ikey, const TKeyPrefix& ikeyDeprecated,
                              ui64 offset, ui32 gen, ui32 step, const TString& session,
                              ui64 readOffsetRewindSum,
-                             ui64 readRuleGeneration)
+                             ui64 readRuleGeneration,
+                             bool anyCommits)
 {
     TBuffer idata;
     {
@@ -3293,6 +3390,7 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
         userData.SetSession(session);
         userData.SetOffsetRewindSum(readOffsetRewindSum);
         userData.SetReadRuleGeneration(readRuleGeneration);
+        userData.SetAnyCommits(anyCommits);
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
@@ -3353,7 +3451,8 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
                         userInfo->Offset, userInfo->Generation, userInfo->Step,
                         userInfo->Session,
                         ui ? ui->ReadOffsetRewindSum : 0,
-                        userInfo->ReadRuleGeneration);
+                        userInfo->ReadRuleGeneration,
+                        userInfo->AnyCommits);
         } else {
             AddCmdDeleteRange(request,
                               ikey, ikeyDeprecated);
@@ -3382,27 +3481,27 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
                                                   TMaybe<ui64> readRuleGeneration)
 {
     TUserInfoBase* userInfo = nullptr;
-    auto i = PendingUsersInfo.find(user);
-    if (i == PendingUsersInfo.end()) {
-        auto ui = UsersInfoStorage->GetIfExists(user);
-        auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
+    auto pendingUserIt = PendingUsersInfo.find(user);
+    if (pendingUserIt == PendingUsersInfo.end()) {
+        auto userIt = UsersInfoStorage->GetIfExists(user);
+        auto [newPendingUserIt, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
-        if (ui) {
-            p->second.Session = ui->Session;
-            p->second.PartitionSessionId = ui->PartitionSessionId;
-            p->second.PipeClient = ui->PipeClient;
+        if (userIt) {
+            newPendingUserIt->second.Session = userIt->Session;
+            newPendingUserIt->second.PartitionSessionId = userIt->PartitionSessionId;
+            newPendingUserIt->second.PipeClient = userIt->PipeClient;
 
-            p->second.Generation = ui->Generation;
-            p->second.Step = ui->Step;
-            p->second.Offset = ui->Offset;
-            p->second.ReadRuleGeneration = ui->ReadRuleGeneration;
-            p->second.Important = ui->Important;
-            p->second.ReadFromTimestamp = ui->ReadFromTimestamp;
+            newPendingUserIt->second.Generation = userIt->Generation;
+            newPendingUserIt->second.Step = userIt->Step;
+            newPendingUserIt->second.Offset = userIt->Offset;
+            newPendingUserIt->second.ReadRuleGeneration = userIt->ReadRuleGeneration;
+            newPendingUserIt->second.Important = userIt->Important;
+            newPendingUserIt->second.ReadFromTimestamp = userIt->ReadFromTimestamp;
         }
 
-        userInfo = &p->second;
+        userInfo = &newPendingUserIt->second;
     } else {
-        userInfo = &i->second;
+        userInfo = &pendingUserIt->second;
     }
     AffectedUsers.insert(user);
 
@@ -3432,7 +3531,8 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
 THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui64 dst,
                                                                         const i64 offset,
                                                                         const TInstant writeTimestamp,
-                                                                        const TInstant createTimestamp)
+                                                                        const TInstant createTimestamp,
+                                                                        bool consumerHasAnyCommits)
 {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -3456,10 +3556,9 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     } else {
         user->SetSizeLag(0);
     }
-
+    user->SetClientHasAnyCommits(consumerHasAnyCommits);
     return response;
 }
-
 THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
                                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                                     const TString& error)
@@ -3555,7 +3654,13 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
         TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
     }
 
-    RequestBlobQuota();
+    if (NeedDeletePartition) {
+        // deferred TEvPQ::TEvDeletePartition
+        DeletePartitionState = DELETION_INITED;
+    } else {
+        RequestBlobQuota();
+    }
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -3658,6 +3763,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 
     Y_ABORT_UNLESS(IsSupportive());
     Y_ABORT_UNLESS(DeletePartitionState == DELETION_NOT_INITED);
+
+    NeedDeletePartition = true;
+
+    if (TopicQuotaRequestCookie != 0) {
+        // wait for TEvPQ::TEvApproveWriteQuota
+        return;
+    }
 
     DeletePartitionState = DELETION_INITED;
 

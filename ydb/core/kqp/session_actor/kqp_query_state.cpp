@@ -373,6 +373,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:
@@ -390,6 +391,14 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
+    }
+
+    if (GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+        // Splitted Expr can be used only for CTAS statement.
+        // CTAS consists of 3 exprs: CREATE TABLE, REPLACE, ALTER TABLE RENAME.
+        // For explain we need only REPLACE, because explain doesn't support for DDL statements.
+        AFL_ENSURE(SplittedExprs.size() == 3);
+        NextSplittedExpr = 1;
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
@@ -429,7 +438,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
 void TKqpQueryState::AddOffsetsToTransaction() {
     YQL_ENSURE(HasTopicOperations());
 
-    const auto& operations = GetTopicOperations();
+    const auto& operations = GetTopicOperationsFromRequest();
 
     TMaybe<TString> consumer;
     if (operations.HasConsumer()) {
@@ -442,7 +451,6 @@ void TKqpQueryState::AddOffsetsToTransaction() {
     }
 
     TopicOperations = NTopic::TTopicOperations();
-
     for (auto& topic : operations.GetTopics()) {
         auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), topic.path()));
 
@@ -452,8 +460,7 @@ void TKqpQueryState::AddOffsetsToTransaction() {
             } else {
                 for (auto& range : partition.partition_offsets()) {
                     YQL_ENSURE(consumer.Defined());
-
-                    TopicOperations.AddOperation(path, partition.partition_id(), *consumer, range);
+                    TopicOperations.AddOperation(path, partition.partition_id(), *consumer, range, partition.force_commit(), partition.kill_read_session(), partition.only_check_commited_to_finish(), partition.read_session_id());
                 }
             }
         }
@@ -474,7 +481,7 @@ std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeC
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = CanonizePath(GetDatabase());
 
-    const auto& operations = GetTopicOperations();
+    const auto& operations = GetTopicOperationsFromRequest();
     TMaybe<TString> consumer;
     if (operations.HasConsumer())
         consumer = operations.GetConsumer();

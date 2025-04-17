@@ -827,7 +827,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     auto shuffleRightSideBestJoin = PickBestJoin(left, right, edge, false, true, maybeCardHint, maybeAlgoHint);
     if (mapJoinStatistics.Cost < shuffleRightSideBestJoin.Stats.Cost) {
-        tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, right->LogicalOrderings);
+        tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
         tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
     } else {
         if (!shuffleRightSideBestJoin.IsReversed) {

@@ -8,66 +8,16 @@
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-
+#include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
-
-#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 using namespace NKikimrRun;
 
 namespace NKqpRun {
 
 namespace {
-
-class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
-public:
-    TStaticCredentialsProvider(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::string GetAuthInfo() const override {
-        return YqlToken_;
-    }
-
-    bool IsValid() const override {
-        return true;
-    }
-
-private:
-    std::string YqlToken_;
-};
-
-class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
-public:
-    TStaticCredentialsProviderFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
-class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
 
 class TSessionState {
 public:
@@ -136,7 +86,8 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 //// TYdbSetup::TImpl
 
-class TYdbSetup::TImpl {
+class TYdbSetup::TImpl : public TKikimrSetupBase {
+    using TBase = TKikimrSetupBase;
     using EVerbose = TYdbSetupSettings::EVerbose;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
@@ -160,35 +111,6 @@ class TYdbSetup::TImpl {
     };
 
 private:
-    TAutoPtr<TLogBackend> CreateLogBackend() const {
-        if (Settings_.LogOutputFile) {
-            return NActors::CreateFileBackend(Settings_.LogOutputFile);
-        } else {
-            return NActors::CreateStderrBackend();
-        }
-    }
-
-    void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
-        auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
-            InitLogSettings(Settings_.AppConfig.GetLogConfig(), runtime);
-            runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
-        };
-
-        serverSettings.SetLoggerInitializer(loggerInitializer);
-    }
-
-    void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
-        if (!Settings_.FunctionRegistry) {
-            return;
-        }
-
-        auto functionRegistryFactory = [this](const NKikimr::NScheme::TTypeRegistry&) {
-            return Settings_.FunctionRegistry.Get();
-        };
-
-        serverSettings.SetFrFactory(functionRegistryFactory);
-    }
-
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) {
         TFsPath diskPath;
         if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
@@ -249,47 +171,15 @@ private:
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
-        serverSettings.SetStorageGeneration(StorageMeta_.GetStorageGeneration());
+
+        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
+        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        const ui32 msgBusPort = PortManager_.GetPort();
+        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
 
-        NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
-        serverSettings.SetNodeCount(Settings_.NodeCount);
-
-        serverSettings.SetDomainName(TString(NKikimr::ExtractDomain(NKikimr::CanonizePath(Settings_.DomainName))));
-        serverSettings.SetAppConfig(Settings_.AppConfig);
-        serverSettings.SetFeatureFlags(Settings_.AppConfig.GetFeatureFlags());
-        serverSettings.SetControls(Settings_.AppConfig.GetImmediateControlsConfig());
-        serverSettings.SetCompactionConfig(Settings_.AppConfig.GetCompactionConfig());
-        serverSettings.PQClusterDiscoveryConfig = Settings_.AppConfig.GetPQClusterDiscoveryConfig();
-        serverSettings.NetClassifierConfig = Settings_.AppConfig.GetNetClassifierConfig();
-
-        const auto& kqpSettings = Settings_.AppConfig.GetKQPConfig().GetSettings();
-        serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
-
-        serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings_.YqlToken));
-        serverSettings.SetComputationFactory(Settings_.ComputationFactory);
-        serverSettings.SetYtGateway(Settings_.YtGateway);
-        serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-        serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
-        serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.SetVerbose(Settings_.VerboseLevel >= EVerbose::InitLogs);
-
-        SetLoggerSettings(serverSettings);
-        SetFunctionRegistry(serverSettings);
         SetStorageSettings(serverSettings);
-
-        if (Settings_.MonitoringEnabled) {
-            serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.FirstMonitoringPort, true);
-            serverSettings.SetNeedStatsCollectors(true);
-        }
-
-        if (Settings_.GrpcEnabled) {
-            serverSettings.SetGrpcPort(grpcPort);
-        }
 
         for (const auto& [tenantPath, tenantInfo] : StorageMeta_.GetTenants()) {
             Settings_.Tenants.emplace(tenantPath, tenantInfo);
@@ -406,7 +296,7 @@ private:
     }
 
     void InitializeServer() {
-        TPortGenerator grpcPortGen(PortManager_, Settings_.FirstGrpcPort);
+        TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         const ui32 domainGrpcPort = grpcPortGen.GetPort();
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
@@ -610,7 +500,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend());
+        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings_));
     }
 
     static void StopTraceOpt() {
@@ -734,7 +624,6 @@ private:
     NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
-    TPortManager PortManager_;
 
     std::unordered_map<TString, TString> ServerlessToShared_;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId_;

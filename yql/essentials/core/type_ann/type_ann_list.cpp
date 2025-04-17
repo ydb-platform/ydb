@@ -2760,6 +2760,7 @@ namespace {
     }
 
     IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        const bool checkHashes = input->IsCallable("Union");
         switch (input->ChildrenSize()) {
             case 0U:
                 output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
@@ -2855,6 +2856,16 @@ namespace {
 
         for (auto structType : structTypes) {
             addResultItems(structType);
+        }
+
+        if (checkHashes) {
+            for (const auto& r : resultItems) {
+                if (!r->GetItemType()->IsHashable() || !r->GetItemType()->IsEquatable()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected hashable and equatable type for column: " <<
+                        r->GetName() << ", but got: " << *r->GetItemType()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         auto structType = ctx.Expr.MakeType<TStructExprType>(resultItems);

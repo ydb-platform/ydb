@@ -152,6 +152,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
+        CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzTimestamp);
@@ -1474,8 +1475,12 @@ void BackupCluster(const TDriver& driver, TFsPath folderPath) {
 
         BackupClusterRoot(driver, folderPath);
         auto databases = ListDatabases(driver);
+        TDriverConfig dbDriverCfg = driver.GetConfig();
         for (const auto& database : databases.GetPaths()) {
-            BackupDatabaseImpl(driver, TString(database), folderPath.Child("." + database), {
+            dbDriverCfg.SetDatabase(database);
+            TDriver dbDriver(dbDriverCfg);
+
+            BackupDatabaseImpl(dbDriver, TString(database), folderPath.Child("." + database), {
                 .WithRegularUsers = false,
                 .WithContent = false,
             });

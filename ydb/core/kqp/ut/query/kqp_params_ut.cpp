@@ -82,7 +82,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -92,7 +93,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 .Uint64(42)
                 .Build()
             .Build();
-
         auto result = session.ExecuteDataQuery(Q_(R"(
             --!syntax_v1
 

@@ -47,7 +47,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             settings.DeduplicationEnabled(false);
             auto session = client.CreateSimpleBlockingWriteSession(settings);
 
-            TWriteMessage msg(TStringBuilder() << "message_" << seqNo);
+            TString msgTxt = TStringBuilder() << "message_" << seqNo;
+            TWriteMessage msg(msgTxt);
             msg.CreateTimestamp(TInstant::Now() - TDuration::Seconds(10 - seqNo));
             UNIT_ASSERT(session->Write(std::move(msg)));
 

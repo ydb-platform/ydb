@@ -1278,7 +1278,7 @@ std::string_view GetSampleValue(Ydb::Type::PrimitiveTypeId type) {
         case Ydb::Type_PrimitiveTypeId_YSON: return TYPE_CONSTRUCTOR(Yson, "{ foo = bar }");
         case Ydb::Type_PrimitiveTypeId_JSON: return TYPE_CONSTRUCTOR(Json, "{ \"foo\": \"bar\" }");
         case Ydb::Type_PrimitiveTypeId_UUID: return "RandomUuid(1)";
-        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return TYPE_CONSTRUCTOR(JsonDocument, R"({"foo": "bar"})");
+        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return TYPE_CONSTRUCTOR(JsonDocument, "{ \"foo\": \"bar\" }");
         case Ydb::Type_PrimitiveTypeId_DYNUMBER: return TYPE_CONSTRUCTOR(DyNumber, "1");
         case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -1286,6 +1286,7 @@ std::string_view GetSampleValue(Ydb::Type::PrimitiveTypeId type) {
             UNIT_FAIL("Unimplemented");
             return "";
     }
+    #undef TYPE_CAST
     #undef TYPE_CONSTRUCTOR
 }
 

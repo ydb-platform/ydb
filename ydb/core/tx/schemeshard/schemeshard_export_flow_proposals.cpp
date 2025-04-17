@@ -362,6 +362,5 @@ void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNi
     PrepareDropping(ss, exportInfo, db, TExportInfo::EState::Dropping, [](ui64){});
 }
 
-
 } // NSchemeShard
 } // NKikimr

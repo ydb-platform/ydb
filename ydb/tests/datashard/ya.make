@@ -3,5 +3,6 @@ RECURSE(
     dml
     dump_restore
     lib
+    select
     split_merge
 )

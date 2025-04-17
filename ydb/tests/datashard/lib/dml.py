@@ -5,7 +5,7 @@ from ydb.tests.datashard.lib.create_table import create_table_sql_request, creat
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, ttl_types
 
 
-class DML():
+class DMLOperations():
     def __init__(self, query):
         self.query = query
 

@@ -10,6 +10,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.sql.lib.test_query import Query
 
 logger = logging.getLogger(__name__)
 
@@ -42,19 +43,7 @@ class MulticlusterTestBase():
             additional_log_configs={
             'TX_TIERING': LogLevels.DEBUG}))
         cluster.start()
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.get_database(),
-                endpoint=self.get_endpoint(cluster)
-            )
-        )
-        driver.wait()
-        pool = ydb.QuerySessionPool(driver)
-        return {
-            "pool": pool,
-            "driver": driver,
-            "cluster": cluster
-        }
+        return cluster
 
     @classmethod
     def get_cluster_configuration(self):
@@ -73,8 +62,7 @@ class MulticlusterTestBase():
     @classmethod
     def teardown_class(cls):
         for cluster in cls.clusters:
-            for element in cluster.values():
-                element.stop()
+                cluster.stop()
 
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
@@ -83,68 +71,7 @@ class MulticlusterTestBase():
         self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
         self.hash_short = self.hash[:8]
 
-    def query(self, text, pool, driver,
-              tx: ydb.QueryTxContext | None = None,
-              stats: bool | None = None,
-              parameters: Optional[dict] = None,
-              retry_settings=None) -> List[Any]:
-        results = []
-        if tx is None:
-            if not stats:
-                result_sets = pool.execute_with_retries(
-                    text, parameters=parameters, retry_settings=retry_settings)
-                for result_set in result_sets:
-                    results.extend(result_set.rows)
-            else:
-                settings = ydb.ScanQuerySettings()
-                settings = settings.with_collect_stats(
-                    ydb.QueryStatsCollectionMode.FULL)
-                for response in driver.table_client.scan_query(text,
-                                                               settings=settings,
-                                                               parameters=parameters,
-                                                               retry_settings=retry_settings):
-                    last_response = response
-                    for row in response.result_set.rows:
-                        results.append(row)
-
-                return (results, last_response.query_stats)
-        else:
-            with tx.execute(text) as result_sets:
-                for result_set in result_sets:
-                    results.extend(result_set.rows)
-
-        return results
-
-    def create_query(pool, driver):
-        def query(self, text,
-                  tx: ydb.QueryTxContext | None = None,
-                  stats: bool | None = None,
-                  parameters: Optional[dict] = None,
-                  retry_settings=None) -> List[Any]:
-            results = []
-            if tx is None:
-                if not stats:
-                    result_sets = pool.execute_with_retries(
-                        text, parameters=parameters, retry_settings=retry_settings)
-                    for result_set in result_sets:
-                        results.extend(result_set.rows)
-                else:
-                    settings = ydb.ScanQuerySettings()
-                    settings = settings.with_collect_stats(
-                        ydb.QueryStatsCollectionMode.FULL)
-                    for response in driver.table_client.scan_query(text,
-                                                                   settings=settings,
-                                                                   parameters=parameters,
-                                                                   retry_settings=retry_settings):
-                        last_response = response
-                        for row in response.result_set.rows:
-                            results.append(row)
-
-                    return (results, last_response.query_stats)
-            else:
-                with tx.execute(text) as result_sets:
-                    for result_set in result_sets:
-                        results.extend(result_set.rows)
-
-            return results
-        return query
+    def create_query(self, cluster):
+        query = Query.create(self.get_database(), self.get_endpoint(cluster))
+        return query.query
+    

@@ -11,6 +11,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/sql/lib
 )
 
 END()

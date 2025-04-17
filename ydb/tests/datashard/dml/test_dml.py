@@ -44,10 +44,10 @@ class TestDML(TestBase, DML):
     )
     def test_dml(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.create_table(table_name, pk_types, all_types,
-                          index, ttl, unique, sync)
-        self.insert(table_name, all_types, pk_types, index, ttl)
-        self.select_all_type(table_name, all_types, pk_types, index, ttl)
-        self.select_after_insert(table_name, all_types, pk_types, index, ttl)
-        self.update(table_name, all_types, pk_types, index, ttl, unique)
-        self.upsert(table_name, all_types, pk_types, index, ttl)
-        self.delete(table_name, all_types, pk_types, index, ttl)
+                          index, ttl, unique, sync, self.query)
+        self.insert(table_name, all_types, pk_types, index, ttl, self.query)
+        self.select_all_type(table_name, all_types, pk_types, index, ttl, self.query)
+        self.select_after_insert(table_name, all_types, pk_types, index, ttl, self.query)
+        self.update(table_name, all_types, pk_types, index, ttl, unique, self.query)
+        self.upsert(table_name, all_types, pk_types, index, ttl, self.query)
+        self.delete(table_name, all_types, pk_types, index, ttl, self.query)

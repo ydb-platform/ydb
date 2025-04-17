@@ -14,7 +14,7 @@ from ydb.tests.library.harness.util import LogLevels
 logger = logging.getLogger(__name__)
 
 
-class TestBase():
+class MulticlusterTestBase():
     def setup_class(cls):
         ydb_path = yatest.common.build_path(os.environ.get(
             "YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))

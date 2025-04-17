@@ -1,8 +1,8 @@
-# Начало работы ADO.NET
+# Начало работы с ADO.NET
 
-Лучший способ использовать `Ydb.Sdk` - это установить его [NuGet пакет](https://www.nuget.org/packages/Ydb.Sdk).
+Лучший способ использовать `Ydb.Sdk` — установить его [NuGet-пакет](https://www.nuget.org/packages/Ydb.Sdk).
 
-`Ydb.Sdk.Ado` стремиться быть полностью совместимым с ADO.NET; его API должен быть практически идентичен другим драйверам баз дынных .NET.
+`Ydb.Sdk.Ado` стремится быть полностью совместимым с ADO.NET; его API должен быть практически идентичен другим драйверам баз данных .NET.
 
 Вот базовый фрагмент кода, который поможет вам начать:
 
@@ -34,4 +34,4 @@ while (await ydbDataReader.ReadAsync())
 }
 ```
 
-Вы можете найти более подробную информацию о ADO.NET API в документации [MSDN](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/ado-net-overview?redirectedfrom=MSDN) или во многих других руководствах в интернете.
+Вы можете найти более подробную информацию о ADO.NET API в документации [MSDN](https://learn.microsoft.com/ru-ru/dotnet/framework/data/adonet/ado-net-overview?redirectedfrom=MSDN) или во многих других руководствах в интернете.

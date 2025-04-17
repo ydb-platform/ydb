@@ -1,12 +1,12 @@
 # ADO.NET Supported Types and Their Mappings
 
-The following lists the built-in mappings when reading and writing CLR types to YDB types.
+The following lists the built-in mappings for reading and writing CLR types to YDB types.
 
 ## Type Mapping Table for Reading
 
 The following shows the mappings used when reading values.
 
-The return type when using  `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` and similar methods.
+These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
 
 | {{ ydb-short-name }} type     | .NET type  |
 |-------------------------------|------------|

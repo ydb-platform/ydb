@@ -1,10 +1,10 @@
-# ADO.NET Connection parameters {#connection-parameters}
+# ADO.NET Connection Parameters {#connection-parameters}
 
 To connect to a database, the application provides a connection string that specifies parameters such as the host, user, password, and so on. Connection strings have the form `keyword1=value; keyword2=value;`. For more information, [see the official doc page on connection strings](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/connection-strings).
 
 All available connection parameters are defined as properties in the `YdbConnectionStringBuilder`.
 
-Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
+Below are the connection string parameters that `Ydb.Sdk.Ado` supports.
 
 ## Basic Connection
 

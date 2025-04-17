@@ -1,12 +1,12 @@
-# Basic Usage ADO.NET
+# Basic Usage with ADO.NET
 
-This article covers core ADO.NET usage scenarios for YDB, including database connections, query execution, and result processing. For other details, see the main [documentation](index.md).
+This article covers core [ADO.NET](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/) usage scenarios for {{ ydb-short-name }}, including database connections, query execution, and result processing. See the main [documentation](index.md) for additional details.
 
 ## Connections
 
 A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
-1. **Using the empty connection**:
+1. **Using an empty connection**:
 
    The following code creates a connection with the default settings:
 
@@ -49,7 +49,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 ## Pooling
 
-Opening and closing logical connection to {{ ydb-short-name }} is an expensive and time-consuming process. Therefore, connections to {{ ydb-short-name }} are pooled. Closing or disposing of a connection does not close the underlying logical connection; rather, it returns it to a pool managed by Ydb.Sdk.Ado. When a connection is needed again, the pooled connection will be returned. This makes opening and closing operations extremely fast. Do not hesitate to open and close connections often if necessary, rather than keeping a connection open unnecessarily for a long period of time.
+Opening and closing a logical connection to {{ ydb-short-name }} is an expensive and time-consuming process. Therefore, connections to {{ ydb-short-name }} are pooled. Closing or disposing of a connection does not close the underlying logical connection; rather, it returns it to a pool managed by `Ydb.Sdk.Ado`. When a connection is needed again, a pooled connection is returned. This makes opening and closing operations extremely fast. Do not hesitate to open and close connections often if necessary, rather than keeping a connection open unnecessarily for a long period of time.
 
 #### ClearPool
 
@@ -107,9 +107,9 @@ while (await reader.ReadAsync())
 
 ## Other Execution Methods
 
-Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync). There are various ways to execute a command, based on what results you expect from it:
+Above, SQL is executed via [ExecuteReaderAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executereaderasync). There are various ways to execute a command, depending on the results you expect from it:
 
-1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL which doesn't return any results, typically `INSERT`, `UPDATE`, or `DELETE` statements.
+1. [ExecuteNonQueryAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executenonqueryasync): executes SQL that doesn't return any results, typically `INSERT`, `UPDATE`, or `DELETE` statements.
 
    {% note warning %}
 
@@ -117,10 +117,10 @@ Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-r
 
    {% endnote %}
 
-2. [ExecuteScalarAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executescalarasync): executes SQL which returns a single, scalar value.
-3. [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync): executes SQL which returns a full resultset. Returns an `YdbDataReader` which can be used to access the resultset (as in the above example).
+2. [ExecuteScalarAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executescalarasync): executes SQL that returns a single scalar value.
+3. [ExecuteReaderAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executereaderasync): executes SQL that returns a full result set. Returns a `YdbDataReader`, which can be used to access the result set (as in the example above).
 
-For example, to execute a simple SQL `INSERT` which does not return anything, you can use ExecuteNonQueryAsync as follows:
+For example, to execute a simple SQL `INSERT` that does not return anything, you can use `ExecuteNonQueryAsync` as follows:
 
 ```c#
 await using var command = dataSource.CreateCommand("INSERT INTO some_table (some_field) VALUES ('Hello YDB!'u)");
@@ -129,7 +129,7 @@ await command.ExecuteNonQueryAsync();
 
 ## Parameters
 
-When sending data values to the database, always consider using parameters rather than including the values in the SQL as follows:
+When sending data values to the database, always consider using parameters rather than including the values in the SQL, as shown in the following example:
 
 ```c#
 await using var connection = new YdbConnection(_cmdOptions.SimpleConnectionString);

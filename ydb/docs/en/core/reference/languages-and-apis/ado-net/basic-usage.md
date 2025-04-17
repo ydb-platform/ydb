@@ -6,7 +6,7 @@ This article covers core ADO.NET usage scenarios for YDB, including database con
 
 A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
-1. **Using the empty connection**:
+1. **Using an empty connection**:
 
    The following code creates a connection with the default settings:
 

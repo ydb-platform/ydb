@@ -3,7 +3,6 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr {
 

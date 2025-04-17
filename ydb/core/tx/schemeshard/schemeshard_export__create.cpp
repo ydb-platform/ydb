@@ -554,6 +554,12 @@ private:
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo->Id);
     }
 
+    void PrepareAutoDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
+        PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx){
+            exportInfo->PendingDropItems.push_back(itemIdx);
+        });
+    }
+
     void SubscribeTx(TTxId txId) {
         Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
@@ -805,7 +811,6 @@ private:
                     if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
                         continue;
                     }
-
                     if (item.WaitTxId == InvalidTxId) {
                         exportInfo->PendingDropItems.push_back(itemIdx);
                         AllocateTxId(exportInfo, itemIdx);
@@ -1146,8 +1151,7 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareDropping(Self, exportInfo, db, true);
-                AllocateTxId(exportInfo);
+                PrepareAutoDropping(Self, exportInfo, db);
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1347,8 +1351,7 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareDropping(Self, exportInfo, db, true);
-                AllocateTxId(exportInfo);
+                PrepareAutoDropping(Self, exportInfo, db);
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);
@@ -1365,7 +1368,7 @@ private:
                 item.WaitTxId = InvalidTxId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                if (exportInfo->AllItemsAreDropped() || exportInfo->State == EState::AutoDropping) {
+                if (exportInfo->AllItemsAreDropped()) {
                     AllocateTxId(exportInfo);
                 }
             } else {

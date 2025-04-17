@@ -16,6 +16,8 @@ ENDIF()
 SRCS(
     acceleration.cpp
     assimilation.cpp
+    binary_serialization_perf.cpp
+    binary_serialization_test.cpp
     block_race.cpp
     counting_events.cpp
     deadlines.cpp
@@ -30,6 +32,7 @@ SRCS(
     get.cpp
     get_block.cpp
     group_reconfiguration.cpp
+    huge.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -37,6 +40,7 @@ SRCS(
     mirror3of4.cpp
     monitoring.cpp
     multiget.cpp
+    osiris.cpp
     patch.cpp
     recovery.cpp
     sanitize_groups.cpp

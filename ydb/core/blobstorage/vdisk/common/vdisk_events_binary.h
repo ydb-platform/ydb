@@ -40,6 +40,28 @@ namespace NKikimr {
 
         TEvVPutBinary() = default;
 
+        // Новый конструктор для создания напрямую без использования TEvVPut
+        TEvVPutBinary(
+            const TLogoBlobID& blobId,
+            const TString& buffer,
+            const TVDiskID& vdiskId,
+            bool ignoreBlock = false,
+            ui64* cookie = nullptr,
+            TInstant deadline = TInstant::Max(),
+            NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog
+        ) {
+            BlobId = blobId;
+            Buffer = buffer;
+            VDiskId = vdiskId;
+            IgnoreBlock = ignoreBlock;
+            HasCookie = cookie != nullptr;
+            if (HasCookie) {
+                Cookie = *cookie;
+            }
+            Deadline = deadline;
+            HandleClass = handleClass;
+        }
+
         TEvVPutBinary(const TEvVPut& original) {
             BlobId = LogoBlobIDFromLogoBlobID(original.Record.GetBlobID());
             VDiskId = VDiskIDFromVDiskID(original.Record.GetVDiskID());
@@ -61,16 +83,13 @@ namespace NKikimr {
             }
         }
 
-        // Преобразование обратно в TEvVPut
         TEvVPut* ToOriginal() const {
             auto result = new TEvVPut();
             
-            // Инициализируем основные поля
             LogoBlobIDFromLogoBlobID(BlobId, result->Record.MutableBlobID());
             result->Record.SetFullDataSize(BlobId.BlobSize());
             VDiskIDFromVDiskID(VDiskId, result->Record.MutableVDiskID());
             
-            // Устанавливаем флаги и опциональные поля
             if (IgnoreBlock) {
                 result->Record.SetIgnoreBlock(IgnoreBlock);
             }
@@ -86,30 +105,24 @@ namespace NKikimr {
             result->Record.SetHandleClass(HandleClass);
             result->Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(HandleClass));
             
-            // Копируем ExtraBlockChecks
             for (const auto& check : ExtraBlockChecks) {
                 auto* checkProto = result->Record.AddExtraBlockChecks();
                 checkProto->SetTabletId(check.first);
                 checkProto->SetGeneration(check.second);
             }
             
-            // Устанавливаем данные
             result->Record.SetBuffer(Buffer);
             
             return result;
         }
 
-        // Функция сохранения для актерной системы
         void Save(TEventSerializedData* data) const {
-            // Сериализуем в строку
             TString serialized;
             Serialize(*this, serialized);
             
-            // Добавляем в данные
             data->Append(serialized);
         }
         
-        // Функция загрузки для актерной системы
         static IEventBase* Load(TEventSerializedData* data) {
             if (data->GetSize() == 0) {
                 return nullptr;
@@ -119,18 +132,14 @@ namespace NKikimr {
             return Deserialize(serialized);
         }
         
-        // Сериализация в строку
         static void Serialize(const TEvVPutBinary& msg, TString& out) {
-            // Определяем размер сериализованных данных
             ui64 size = EstimateSerializeSize(msg);
             out.resize(size);
             TMemoryOutput mo(out.begin(), size);
             
-            // Пишем заголовок формата
             WriteToStream(mo, HostToLittle(MAGIC_NUMBER));
             WriteToStream(mo, VERSION);
             
-            // Сериализуем LogoBlobId
             const TLogoBlobID& blobId = msg.BlobId;
             WriteToStream(mo, HostToLittle(blobId.TabletID()));
             WriteToStream(mo, HostToLittle(blobId.Channel()));
@@ -139,7 +148,6 @@ namespace NKikimr {
             WriteToStream(mo, HostToLittle(blobId.BlobSize()));
             WriteToStream(mo, HostToLittle(blobId.PartId()));
             
-            // Сериализуем TVDiskId
             const TVDiskID& vdiskId = msg.VDiskId;
             WriteToStream(mo, HostToLittle(vdiskId.GroupID.GetRawId()));
             WriteToStream(mo, HostToLittle(vdiskId.GroupGeneration));
@@ -147,7 +155,6 @@ namespace NKikimr {
             WriteToStream(mo, HostToLittle(vdiskId.FailDomain));
             WriteToStream(mo, HostToLittle(vdiskId.VDisk));
             
-            // Запишем флаги в один байт для компактности
             ui8 flags = 0;
             if (msg.IgnoreBlock) flags |= 1;
             if (msg.HasCookie) flags |= 2;
@@ -156,7 +163,6 @@ namespace NKikimr {
             if (msg.Deadline != TInstant::Max()) flags |= 16;
             WriteToStream(mo, flags);
             
-            // Сериализуем остальные поля только если нужно (на основе флагов)
             if (msg.HasCookie) {
                 WriteToStream(mo, HostToLittle(msg.Cookie));
             }
@@ -165,29 +171,24 @@ namespace NKikimr {
                 WriteToStream(mo, HostToLittle((ui64)msg.Deadline.MilliSeconds()));
             }
             
-            // Класс обработки
             WriteToStream(mo, HostToLittle((ui32)msg.HandleClass));
             
-            // ExtraBlockChecks
             WriteToStream(mo, HostToLittle((ui32)msg.ExtraBlockChecks.size()));
             for (const auto& check : msg.ExtraBlockChecks) {
                 WriteToStream(mo, HostToLittle(check.first));  // TabletId
                 WriteToStream(mo, HostToLittle(check.second)); // Generation
             }
             
-            // Данные
             WriteToStream(mo, HostToLittle((ui64)msg.Buffer.size()));
             if (!msg.Buffer.empty()) {
                 mo.Write(msg.Buffer.data(), msg.Buffer.size());
             }
         }
         
-        // Десериализация из строки
         static TEvVPutBinary* Deserialize(TStringBuf data) {
             try {
                 TMemoryInput mi(data.data(), data.size());
                 
-                // Проверка заголовка
                 ui32 magic;
                 ReadFromStream(mi, magic);
                 magic = LittleToHost(magic);
@@ -201,10 +202,8 @@ namespace NKikimr {
                     return nullptr;
                 }
                 
-                // Создаем новый объект
                 THolder<TEvVPutBinary> result = MakeHolder<TEvVPutBinary>();
                 
-                // Десериализуем LogoBlobId
                 ui64 tabletId;
                 ui32 channel;
                 ui32 generation;
@@ -228,7 +227,6 @@ namespace NKikimr {
                     LittleToHost(partId)
                 );
                 
-                // Десериализуем TVDiskId
                 ui32 groupId;
                 ui32 groupGeneration;
                 ui8 failRealm;
@@ -241,7 +239,6 @@ namespace NKikimr {
                 ReadFromStream(mi, failDomain);
                 ReadFromStream(mi, vDisk);
                 
-                // Создаем TVDiskID с правильными параметрами
                 result->VDiskId = TVDiskID(
                     TGroupId::FromValue(LittleToHost(groupId)),
                     LittleToHost(groupGeneration),
@@ -250,7 +247,6 @@ namespace NKikimr {
                     LittleToHost(vDisk)
                 );
                 
-                // Читаем флаги
                 ui8 flags;
                 ReadFromStream(mi, flags);
                 
@@ -260,7 +256,6 @@ namespace NKikimr {
                 result->IsInternal = (flags & 8) != 0;
                 bool hasDeadline = (flags & 16) != 0;
                 
-                // Читаем опциональные поля
                 if (result->HasCookie) {
                     ui64 cookie;
                     ReadFromStream(mi, cookie);
@@ -273,12 +268,10 @@ namespace NKikimr {
                     result->Deadline = TInstant::MilliSeconds(LittleToHost(deadline));
                 }
                 
-                // Класс обработки
                 ui32 handleClass;
                 ReadFromStream(mi, handleClass);
                 result->HandleClass = static_cast<NKikimrBlobStorage::EPutHandleClass>(LittleToHost(handleClass));
                 
-                // ExtraBlockChecks
                 ui32 extraChecksCount;
                 ReadFromStream(mi, extraChecksCount);
                 extraChecksCount = LittleToHost(extraChecksCount);
@@ -294,7 +287,6 @@ namespace NKikimr {
                     result->ExtraBlockChecks.emplace_back(LittleToHost(tabletId), LittleToHost(generation));
                 }
                 
-                // Данные
                 ui64 bufferSize;
                 ReadFromStream(mi, bufferSize);
                 bufferSize = LittleToHost(bufferSize);
@@ -312,11 +304,10 @@ namespace NKikimr {
             }
         }
         
-        // Вспомогательные методы для сериализации/десериализации
         static ui64 EstimateSerializeSize(const TEvVPutBinary& msg) {
             ui64 size = 0;
             
-            // Заголовок (Magic + Version)
+            // Header (Magic + Version)
             size += sizeof(ui32) + sizeof(ui8);
             
             // TLogoBlobID
@@ -328,7 +319,7 @@ namespace NKikimr {
             // Флаги
             size += sizeof(ui8);
             
-            // Опциональные поля
+            // Optional fields
             if (msg.HasCookie) {
                 size += sizeof(ui64);
             }
@@ -337,21 +328,21 @@ namespace NKikimr {
                 size += sizeof(ui64);
             }
             
-            // Класс обработки
+            // Handle class
             size += sizeof(ui32);
             
             // ExtraBlockChecks
-            size += sizeof(ui32); // Размер массива
+            size += sizeof(ui32); // Array size
             size += (sizeof(ui64) + sizeof(ui32)) * msg.ExtraBlockChecks.size();
             
-            // Данные
-            size += sizeof(ui64); // Размер буфера
+            // Buffer size
+            size += sizeof(ui64);
             size += msg.Buffer.size();
             
             return size;
         }
         
-        // Шаблонные функции для сериализации/десериализации примитивных типов
+        // Template functions for primitive types serialization/deserialization
         template<typename T>
         static void WriteToStream(IOutputStream& output, const T& value) {
             output.Write(&value, sizeof(T));
@@ -390,9 +381,20 @@ namespace NKikimr {
             return str.Str();
         }
 
+        TString ToStringHeader() const override {
+            return TStringBuilder() << "TEvVPutBinary: " << BlobId.ToString() << " to " << VDiskId.ToString();
+        }
+
+        bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
+            TString serialized;
+            Serialize(*this, serialized);
+            serializer->WriteAliasedRaw(serialized.data(), serialized.size());
+            return true;
+        }
+
         bool IsSerializable() const override {
             return true;
         }
     };
 
-} // namespace NKikimr 
+} // namespace NKikimr

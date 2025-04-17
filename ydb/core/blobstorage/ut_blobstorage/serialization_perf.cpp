@@ -291,13 +291,13 @@ Y_UNIT_TEST_SUITE(SerializationPerformance) {
 
     Y_UNIT_TEST(TEvVPutSerializationPerformance) {
         Cerr << "\n\n=== TESTING TEvVPut ACTOR SERIALIZATION ===" << Endl;
-        MeasureActorSerializationPerformance(32, DEFAULT_ITERATIONS);      // Small size
-        MeasureActorSerializationPerformance(128, DEFAULT_ITERATIONS);     // Medium size
-        MeasureActorSerializationPerformance(4096, DEFAULT_ITERATIONS);    // Large size
+        MeasureActorSerializationPerformance(32, DEFAULT_ITERATIONS); 
+        MeasureActorSerializationPerformance(128, DEFAULT_ITERATIONS);   
+        MeasureActorSerializationPerformance(4096, DEFAULT_ITERATIONS);
         
         Cerr << "\n\n=== TESTING PURE PROTOBUF SERIALIZATION ===" << Endl;
-        MeasureProtobufSerializationPerformance(32, DEFAULT_ITERATIONS);      // Small size
-        MeasureProtobufSerializationPerformance(128, DEFAULT_ITERATIONS);     // Medium size
-        MeasureProtobufSerializationPerformance(4096, DEFAULT_ITERATIONS);    // Large size
+        MeasureProtobufSerializationPerformance(32, DEFAULT_ITERATIONS);
+        MeasureProtobufSerializationPerformance(128, DEFAULT_ITERATIONS);
+        MeasureProtobufSerializationPerformance(4096, DEFAULT_ITERATIONS);
     }
-} 
+}

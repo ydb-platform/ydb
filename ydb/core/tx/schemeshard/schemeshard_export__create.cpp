@@ -812,6 +812,7 @@ private:
                     if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
                         continue;
                     }
+
                     if (item.WaitTxId == InvalidTxId) {
                         exportInfo->PendingDropItems.push_back(itemIdx);
                         AllocateTxId(exportInfo, itemIdx);

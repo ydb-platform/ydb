@@ -88,22 +88,33 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto params = db.GetParamsBuilder()
-            .AddParam("$_amount")
-                .Uint64(42)
-                .Build()
-            .Build();
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            --!syntax_v1
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$_amount")
+                    .Uint64(42)
+                    .Build()
+                .Build();
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                --!syntax_v1
 
-            DECLARE $_amount AS Uint64;
-            DECLARE $_comment AS String?;
+                DECLARE $_amount AS Uint64;
+                DECLARE $_comment AS String?;
 
-            UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES
-                (1u, "test", $_amount, $_comment);
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+                UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES
+                    (1u, "test", $_amount, $_comment);
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "test";
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([[[42u];#;[1u];["test"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(BadParameterType) {

@@ -823,6 +823,14 @@ private:
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
     }
 
+    bool FillLocalKMeans(TIndexBuildInfo& buildInfo) {
+        if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
+            AddAllShards(buildInfo);
+        }
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansLocalRequest(shardIdx, buildInfo); }) &&
+               buildInfo.DoneShards.size() == buildInfo.Shards.size();
+    }
+
     bool InitSingleKMeans(TIndexBuildInfo& buildInfo) {
         if (!buildInfo.DoneShards.empty() || !buildInfo.InProgressShards.empty() || !buildInfo.ToUploadShards.empty()) {
             return false;
@@ -934,42 +942,69 @@ private:
         );
     }
 
+    // TODO: extract FillPrefixedVectorIndex
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1) {
-            LOG_D("FillIndex::Prefixed::Level1::Start " << buildInfo.KMeansTreeToDebugStr());
+            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
             if (!FillTable(buildInfo)) {
                 return false;
             }
-            const ui64 doneShards = buildInfo.DoneShards.size();
+            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
 
+            const ui64 doneShards = buildInfo.DoneShards.size();
             ClearDoneShards(txc, buildInfo);
             // it's approximate but upper bound, so it's ok
             buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
             buildInfo.KMeans.PrefixIndexDone(doneShards);
+            LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
-            LOG_D("FillIndex::Prefixed::Level1::Done " << buildInfo.KMeansTreeToDebugStr());
             ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
         }
 
         if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 2) {
-            LOG_D("FillIndex::Prefixed::Level2::Start " << buildInfo.KMeansTreeToDebugStr());
+            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
             if (!FillPrefixKMeans(buildInfo)) {
                 return false;
             }
+            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
 
             ClearDoneShards(txc, buildInfo);
             Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
             const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
             buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
+            LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
-            LOG_D("FillIndex::Prefixed::Level2::Done " << buildInfo.KMeansTreeToDebugStr());
+            if (!needsAnotherLevel) {
+                return true;
+            }
+            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+            Progress(BuildId);
+            return false;
+        }
+
+        if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level >= 3) {
+            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
+            if (!FillLocalKMeans(buildInfo)) {
+                return false;
+            }
+            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
+
+            ClearDoneShards(txc, buildInfo);
+            Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
+            const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
+            buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
+            LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
+            PersistKMeansState(txc, buildInfo);
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexUploadReset(db, buildInfo);
             if (!needsAnotherLevel) {
                 return true;
             }
@@ -1317,15 +1352,16 @@ public:
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
-        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
-            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
-            buildInfo.AddParent(shardRange, x.ShardIdx);
+            if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
+                LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+                buildInfo.AddParent(shardRange, x.ShardIdx);
+            }
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
             Y_ASSERT(emplaced);
             shardRange.From = std::move(bound);

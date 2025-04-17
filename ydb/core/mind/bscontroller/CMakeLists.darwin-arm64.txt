@@ -41,6 +41,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
 
 target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc_audit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_box.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_drive_status.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/cmds_host_config.cpp
@@ -79,6 +80,7 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/update_seen_operational.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/virtual_group.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc_audit.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/config.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/console_interaction.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/defs.h

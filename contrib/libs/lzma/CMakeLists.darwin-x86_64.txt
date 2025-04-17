@@ -46,9 +46,7 @@ target_sources(contrib-libs-lzma PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/common/tuklib_physmem.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/check.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/crc32_fast.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/crc32_table.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/crc64_fast.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/crc64_table.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/check/sha256.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/common/alone_decoder.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/lzma/liblzma/common/alone_encoder.c

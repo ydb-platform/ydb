@@ -21,6 +21,7 @@ target_link_libraries(essentials-sql-settings PUBLIC
   cpp-deprecated-split
   library-cpp-json
   essentials-public-issue
+  essentials-public-langver
   essentials-core-issue
   essentials-core-pg_settings
   core-issue-protos

@@ -12,9 +12,15 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(issue)
-add_subdirectory(types)
-add_subdirectory(udf)
-add_subdirectory(decimal)
-add_subdirectory(langver)
-add_subdirectory(result_format)
+add_library(essentials-public-langver)
+
+
+target_link_libraries(essentials-public-langver PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+)
+
+target_sources(essentials-public-langver PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/public/langver/yql_langver.cpp
+)
+

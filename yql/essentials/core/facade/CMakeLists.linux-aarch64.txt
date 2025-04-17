@@ -48,6 +48,8 @@ target_link_libraries(essentials-core-facade PUBLIC
   essentials-utils-log
   yql-essentials-core
   essentials-core-type_ann
+  essentials-core-langver
+  essentials-public-langver
   providers-common-config
   providers-common-proto
   providers-common-provider

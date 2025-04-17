@@ -61,6 +61,8 @@ target_link_libraries(essentials-tools-yql_facade_run PUBLIC
   v1-proto_parser-antlr4_ansi
   essentials-sql-v1
   yql-essentials-sql
+  essentials-public-langver
+  essentials-core-langver
   library-cpp-resource
   library-cpp-getopt
   cpp-yson-node

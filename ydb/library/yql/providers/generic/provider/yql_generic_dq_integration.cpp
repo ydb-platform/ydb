@@ -102,6 +102,7 @@ namespace NYql {
                                 .Build()
                             .Columns(std::move(columns))
                             .FilterPredicate(genReadTable.FilterPredicate())
+                            .Listify(genReadTable.Listify())
                             .Build()
                         .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
                         .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
@@ -340,18 +341,23 @@ namespace NYql {
                 const auto& tableName = settings.Table().StringValue();
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
+                bool isListify = false;
+                if (settings.Listify().Maybe<TCoAtom>()) {
+                    isListify = true;
+                }
 
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
                     << ", table: " << tableName
-                    << ", endpoint: " << endpoint.ShortDebugString();
+                    << ", endpoint: " << endpoint.ShortDebugString()
+                    << ", listify: " << isListify
+                    ;
 
                 auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
                 if (issues) {
                     throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
-
                 Generic::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
@@ -371,6 +377,9 @@ namespace NYql {
                 // preserve source description for read actor
                 protoSettings.PackFrom(source);
                 sourceType = GetSourceType(source.data_source_instance());
+                if (isListify) {
+                    sourceType = "Listified-" + sourceType;
+                }
             }
 
         private:

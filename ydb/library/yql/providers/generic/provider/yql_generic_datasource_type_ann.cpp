@@ -64,7 +64,7 @@ namespace NYql {
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 6, ctx)) {
+            if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
                 return TStatus::Error;
             }
 
@@ -120,6 +120,19 @@ namespace NYql {
             const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
                 return filterAnnotationStatus;
+            }
+
+            //bool isListify = false;
+            if (input->ChildrenSize() > TGenSourceSettings::idx_Listify) {
+                auto listify = input->Child(TGenSourceSettings::idx_Listify);
+                if (listify->IsAtom({"listify"sv})) {
+                    //isListify = true;
+                } else if (listify->IsCallable(TCoVoid::CallableName())) {
+                } else {
+                    Cerr << "Not recognized " << listify->Dump() << Endl;
+                    // TODO
+                    return TStatus::Error;
+                }
             }
 
             blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(

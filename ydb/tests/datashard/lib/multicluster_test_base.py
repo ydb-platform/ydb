@@ -29,18 +29,18 @@ class MulticlusterTestBase():
     @classmethod
     def build_cluster(self):
         cluster = KiKiMR(KikimrConfigGenerator(erasure=self.get_cluster_configuration(),
-                                                   extra_feature_flags=["enable_resource_pools",
-                                                                        "enable_external_data_sources",
-                                                                        "enable_tiering_in_column_shard"],
-                                                   column_shard_config={
-                                                       'disabled_on_scheme_shard': False,
-                                                       'lag_for_compaction_before_tierings_ms': 0,
-                                                       'compaction_actualization_lag_ms': 0,
-                                                       'optimizer_freshness_check_duration_ms': 0,
-                                                       'small_portion_detect_size_limit': 0,
+                                               extra_feature_flags=["enable_resource_pools",
+                                                                    "enable_external_data_sources",
+                                                                    "enable_tiering_in_column_shard"],
+                                               column_shard_config={
+            'disabled_on_scheme_shard': False,
+            'lag_for_compaction_before_tierings_ms': 0,
+            'compaction_actualization_lag_ms': 0,
+            'optimizer_freshness_check_duration_ms': 0,
+            'small_portion_detect_size_limit': 0,
         },
             additional_log_configs={
-                                                       'TX_TIERING': LogLevels.DEBUG}))
+            'TX_TIERING': LogLevels.DEBUG}))
         cluster.start()
         driver = ydb.Driver(
             ydb.DriverConfig(
@@ -50,7 +50,7 @@ class MulticlusterTestBase():
         )
         driver.wait()
         pool = ydb.QuerySessionPool(driver)
-        return{
+        return {
             "pool": pool,
             "driver": driver,
             "cluster": cluster
@@ -70,12 +70,11 @@ class MulticlusterTestBase():
             cluster.nodes[1].host, cluster.nodes[1].port
         )
 
-
     @classmethod
     def teardown_class(cls):
         for cluster in cls.clusters:
             for element in cluster.values():
-                element.stop() 
+                element.stop()
 
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
@@ -83,7 +82,6 @@ class MulticlusterTestBase():
             current_test_full_name.replace("::", ".").removesuffix(" (setup)")
         self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
         self.hash_short = self.hash[:8]
-
 
     def query(self, text,
               tx: ydb.QueryTxContext | None = None,
@@ -102,9 +100,9 @@ class MulticlusterTestBase():
                 settings = settings.with_collect_stats(
                     ydb.QueryStatsCollectionMode.FULL)
                 for response in self.clusters[0]["driver"].table_client.scan_query(text,
-                                                                    settings=settings,
-                                                                    parameters=parameters,
-                                                                    retry_settings=retry_settings):
+                                                                                   settings=settings,
+                                                                                   parameters=parameters,
+                                                                                   retry_settings=retry_settings):
                     last_response = response
                     for row in response.result_set.rows:
                         results.append(row)
@@ -134,9 +132,9 @@ class MulticlusterTestBase():
                 settings = settings.with_collect_stats(
                     ydb.QueryStatsCollectionMode.FULL)
                 for response in self.clusters[1]["driver"].table_client.scan_query(text,
-                                                                          settings=settings,
-                                                                          parameters=parameters,
-                                                                          retry_settings=retry_settings):
+                                                                                   settings=settings,
+                                                                                   parameters=parameters,
+                                                                                   retry_settings=retry_settings):
                     last_response = response
                     for row in response.result_set.rows:
                         results.append(row)
@@ -148,4 +146,3 @@ class MulticlusterTestBase():
                     results.extend(result_set.rows)
 
         return results
-

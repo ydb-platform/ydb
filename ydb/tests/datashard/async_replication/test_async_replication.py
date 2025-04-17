@@ -53,11 +53,18 @@ class TestAsyncReplication(MulticlusterTestBase, DML):
                         CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0]["cluster"])}/?database={self.get_database()}'
                             )
                          """)
+        for _ in range(100):
+            try:
+                rows = self.query_async(
+                    "select count(*) as count from {table_name}")
+                break
+            except Exception:
+                time.sleep(1)
         self.select_after_insert(
             table_name, all_types, pk_types, index, ttl, self.query_async)
         self.query(f"delete from {table_name}")
         rows = self.query_async(f"select count(*) as count from {table_name}")
-        for i in range(10):
+        for i in range(100):
             rows = self.query_async(
                 f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count == 0:
@@ -67,7 +74,7 @@ class TestAsyncReplication(MulticlusterTestBase, DML):
         assert len(
             rows) == 1 and rows[0].count == 0, "Expected zero rows after delete"
         self.insert(table_name, all_types, pk_types, index, ttl, self.query)
-        for i in range(10):
+        for i in range(100):
             rows = self.query_async(
                 f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count != 0:

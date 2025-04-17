@@ -10,6 +10,7 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
+#include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -39,6 +40,7 @@
 
 #include <util/stream/file.h>
 #include <util/stream/null.h>
+#include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
 #include <util/generic/guid.h>
@@ -56,6 +58,7 @@ const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
 const TString FacadeComponent = "Facade";
 const TString SourceCodeLabel = "SourceCode";
+const TString LangVerLabel = "LangVer";
 const TString GatewaysLabel = "Gateways";
 const TString ParametersLabel = "Parameters";
 const TString TranslationLabel = "Translation";
@@ -166,6 +169,14 @@ void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
 
+void TProgramFactory::SetLanguageVersion(TLangVersion version) {
+    LangVer_ = version;
+}
+
+void TProgramFactory::SetMaxLanguageVersion(TLangVersion version) {
+    MaxLangVer_ = version;
+}
+
 void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
     for (const auto& p : userDataTable) {
         if (!UserDataTable_.emplace(p).second) {
@@ -242,7 +253,7 @@ TProgramPtr TProgramFactory::Create(
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+        LangVer_, MaxLangVer_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
         qContext, gatewaysForMerge);
@@ -257,6 +268,8 @@ TProgram::TProgram(
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
+        TLangVersion langVer,
+        TLangVersion maxLangVer,
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
@@ -284,6 +297,8 @@ TProgram::TProgram(
     , AstRoot_(nullptr)
     , Modules_(modules)
     , DataProvidersInit_(dataProvidersInit)
+    , LangVer_(langVer)
+    , MaxLangVer_(maxLangVer)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
     , UdfResolver_(udfResolver)
@@ -587,6 +602,14 @@ TString TProgram::GetSessionId() const {
     }
 }
 
+void TProgram::SetLanguageVersion(TLangVersion version) {
+    LangVer_ = version;
+}
+
+void TProgram::SetMaxLanguageVersion(TLangVersion version) {
+    MaxLangVer_ = version;
+}
+
 void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
 
@@ -740,8 +763,41 @@ bool TProgram::CheckParameters() {
     return true;
 }
 
+bool TProgram::ValidateLangVersion() {
+    if (QContext_.CanRead()) {
+        auto loaded = QContext_.GetReader()->Get({FacadeComponent, LangVerLabel}).GetValueSync();
+        if (loaded.Defined()) {
+            LangVer_ = FromString<TLangVersion>(loaded->Value);
+        } else {
+            LangVer_ = UnknownLangVersion;
+        }
+
+        return true;
+    }
+
+    if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({FacadeComponent, LangVerLabel}, ToString(LangVer_)).GetValueSync();
+    }
+
+    TMaybe<TIssue> issue;
+    auto ret = CheckLangVersion(LangVer_, MaxLangVer_, issue);
+    if (issue) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*issue);
+    }
+
+    return ret;
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
+    if (!ValidateLangVersion()) {
+        return false;
+    }
+
     if (!CheckParameters()) {
         return false;
     }
@@ -769,6 +825,10 @@ bool TProgram::ParseSql() {
 bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_PROFILE_FUNC(TRACE);
+    if (!ValidateLangVersion()) {
+        return false;
+    }
+
     if (!CheckParameters()) {
         return false;
     }
@@ -788,6 +848,8 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     }
 
     currentSettings->EmitReadsForExists = true;
+    currentSettings->LangVer = LangVer_;
+
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
@@ -1912,6 +1974,7 @@ TString TProgram::ResultsAsString() const {
 TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
+    typeAnnotationContext->LangVer = LangVer_;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;

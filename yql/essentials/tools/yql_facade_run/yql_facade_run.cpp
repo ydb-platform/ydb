@@ -441,6 +441,20 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
 
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([this](const TString& str) {
+            if (!ParseLangVersion(str, LangVer)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
+    opts.AddLongOption("max-langver", "Set maximum language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([this](const TString& str) {
+            if (!ParseLangVersion(str, MaxLangVer)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
     opts.SetFreeArgsMax(0);
 
     for (auto& ext: OptExtenders_) {
@@ -697,6 +711,8 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    program->SetLanguageVersion(RunOptions_.LangVer);
+    program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {
         program->SetParametersYson(RunOptions_.Params);
     }

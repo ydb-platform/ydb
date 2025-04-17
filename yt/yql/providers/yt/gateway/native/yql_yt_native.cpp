@@ -3624,6 +3624,7 @@ private:
         return execCtx->Session_->Queue_->Async([execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
@@ -3690,6 +3691,7 @@ private:
         return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
@@ -3762,6 +3764,7 @@ private:
                           inputType, extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -3990,6 +3993,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -4208,6 +4212,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
 
@@ -4458,6 +4463,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -4791,6 +4797,7 @@ private:
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([lambda, extraUsage, tmpTable, execCtx, testRun] (const auto& f) mutable {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -5417,6 +5424,7 @@ private:
 
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         {
+            execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());

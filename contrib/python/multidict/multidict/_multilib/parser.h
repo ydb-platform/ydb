@@ -22,7 +22,6 @@ static int raise_missing_posarg(const char *fname, const char* argname)
 }
 
 
-
 /* Parse FASTCALL|METH_KEYWORDS arguments as two args,
 the first arg is mandatory and the second one is optional.
 If the second arg is not passed it remains NULL pointer.

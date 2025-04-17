@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: multidict
-Version: 6.3.0
+Version: 6.4.3
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
@@ -137,7 +137,12 @@ e.g.:
 Please note, the pure Python (uncompiled) version is about 20-50 times slower depending on
 the usage scenario!!!
 
+For extension development, set the ``MULTIDICT_DEBUG_BUILD`` environment variable to compile
+the extensions in debug mode:
 
+.. code-block:: console
+
+   $ MULTIDICT_DEBUG_BUILD=1 pip install multidict
 
 Changelog
 ---------

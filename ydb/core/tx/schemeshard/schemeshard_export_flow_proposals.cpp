@@ -328,8 +328,13 @@ TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
 }
 
-void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db,
-    TExportInfo::EState droppingState, std::function<void(ui64)> func) {
+void PrepareDropping(
+        TSchemeShard* ss,
+        TExportInfo::TPtr exportInfo,
+        NIceDb::TNiceDb& db,
+        TExportInfo::EState droppingState,
+        std::function<void(ui64)> func)
+{
     Y_ABORT_UNLESS(IsIn({TExportInfo::EState::AutoDropping, TExportInfo::EState::Dropping}, droppingState));
 
     exportInfo->WaitTxId = InvalidTxId;

@@ -374,12 +374,14 @@ TExprNode::TPtr ToOutTable(TYtOutput output, TExprContext& ctx) {
         .Done().Ptr();
 }
 
-TString DeriveClusterFromSection(const NNodes::TYtSection& section, ERuntimeClusterSelectionMode mode) {
+TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERuntimeClusterSelectionMode mode) {
     TString result;
     for (const auto& path : section.Paths()) {
         auto info = TYtTableBaseInfo::Parse(path.Table());
         YQL_ENSURE(info->Cluster, "Unexpected TYtOutTable in input section");
-        YQL_ENSURE(UpdateUsedCluster(result, info->Cluster, mode));
+        if (!UpdateUsedCluster(result, info->Cluster, mode)) {
+            return {};
+        }
     }
     return result;
 }
@@ -387,22 +389,32 @@ TString DeriveClusterFromSection(const NNodes::TYtSection& section, ERuntimeClus
 } // unnamed
 
 TString GetClusterFromSection(const NNodes::TYtSection& section) {
-    return DeriveClusterFromSection(section, ERuntimeClusterSelectionMode::Auto);
+    auto result = DeriveClusterFromSection(section, ERuntimeClusterSelectionMode::Auto);
+    YQL_ENSURE(result);
+    return *result;
 }
 
 TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList) {
-    return DeriveClusterFromSectionList(sectionList, ERuntimeClusterSelectionMode::Auto);
+    auto result = DeriveClusterFromSectionList(sectionList, ERuntimeClusterSelectionMode::Auto);
+    YQL_ENSURE(result);
+    return *result;
 }
 
-TString DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode) {
+TMaybe<TString> DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode) {
     TString result;
     for (const auto& section : sectionList) {
-        YQL_ENSURE(UpdateUsedCluster(result, DeriveClusterFromSection(section, mode), mode));
+        auto sectionCluster = DeriveClusterFromSection(section, mode);
+        if (!sectionCluster.Defined()) {
+            return {};
+        }
+        if (!UpdateUsedCluster(result, *sectionCluster, mode)) {
+            return {};
+        }
     }
     return result;
 }
 
-TString DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode) {
+TMaybe<TString> DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode) {
     if (auto read = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
         return DeriveClusterFromSectionList(read.Cast().Input(), mode);
     } else if (auto output = input.Maybe<TYtOutput>()) {

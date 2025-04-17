@@ -82,10 +82,12 @@ namespace NKikimr {
                 }
 
                 TInstant now = TAppData::TimeProvider->Now();
+                auto handleClass = Event->Get()->Record.GetHandleClass();
+                const NVDiskMon::TLtcHistoPtr &histoPtr = VCtx->Histograms.GetHistogram(handleClass);
                 const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes();
                 auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie,
                     now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr,
-                    nullptr, bufferSizeBytes, IncarnationGuid, TString());
+                    histoPtr, bufferSizeBytes, IncarnationGuid, TString());
 
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     TItem &result = Items[idx];

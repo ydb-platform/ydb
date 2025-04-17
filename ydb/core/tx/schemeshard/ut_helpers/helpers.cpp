@@ -2114,7 +2114,7 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {
+    void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(database);
@@ -2122,12 +2122,33 @@ namespace NSchemeShardUT_Private {
 
         auto alterUser = transaction->MutableAlterLogin()->MutableModifyUser();
 
-        alterUser->SetUser(user);
-        alterUser->SetCanLogin(isEnabled);
+        initiator(alterUser);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TAutoPtr<IEventHandle> handle;
-        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()
+        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()        
+    }
+
+    void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {
+        ModifyUser(runtime, txId, database, [user, isEnabled](auto* alterUser) {
+            alterUser->SetUser(std::move(user));
+            alterUser->SetCanLogin(isEnabled);
+        });
+    }
+
+    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password) {
+        ModifyUser(runtime, txId, database, [user, password](auto* alterUser) {
+            alterUser->SetUser(std::move(user));
+            alterUser->SetPassword(std::move(password));
+        });
+    }
+
+    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hash) {
+        ModifyUser(runtime, txId, database, [user, hash](auto* alterUser) {
+            alterUser->SetUser(std::move(user));
+            alterUser->SetPassword(std::move(hash));
+            alterUser->SetIsHashedPassword(true);
+        });
     }
 
     // class TFakeDataReq {

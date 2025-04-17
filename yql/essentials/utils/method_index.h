@@ -15,11 +15,4 @@ inline size_t GetMethodIndex(Method method) {
     return GetMethodPtrIndex(ptr);
 }
 
-template<typename Method>
-inline uintptr_t GetMethodPtr(Method method) {
-    uintptr_t ptr;
-    std::memcpy(&ptr, &method, sizeof(uintptr_t));
-    return ptr;
-}
-
 }

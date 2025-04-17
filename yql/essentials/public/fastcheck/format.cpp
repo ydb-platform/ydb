@@ -4,6 +4,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <util/charset/utf8.h>
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -18,6 +20,21 @@ TString NormalizeEOL(TStringBuf input) {
     TStringBuf tok;
     while (input.ReadLine(tok)) {
         res << tok << '\n';
+    }
+
+    return res;
+}
+
+TString ReplaceHidden(TStringBuf input) {
+    TStringBuilder res;
+    for (const auto c : input) {
+        if (c == ' ') {
+            res << "\xe2\x80\xa2";
+        } else if (c == '\t') {
+            res << "\xe2\x86\x92";
+        } else {
+            res << c;
+        }
     }
 
     return res;
@@ -76,7 +93,7 @@ private:
         auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString formattedQuery;
         res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
-        if (res.Success && formattedQuery != NormalizeEOL(request.Program)) {
+        if (res.Success && NormalizeEOL(formattedQuery) != NormalizeEOL(request.Program)) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);
             TTextWalker origWalker(origPos, true);
@@ -87,7 +104,7 @@ private:
                     continue;
                 }
 
-                while (i > 0 && TTextWalker::IsUtf8Intermediate(request.Program[i])) {
+                while (i > 0 && IsUTF8ContinuationByte(request.Program[i])) {
                     --i;
                 }
 
@@ -95,17 +112,19 @@ private:
             }
 
             TString formattedSample = formattedQuery.substr(i, FormatContextLimit);
-            while (!formattedSample.empty() && TTextWalker::IsUtf8Intermediate(formattedQuery.back())) {
+            while (!formattedSample.empty() && IsUTF8ContinuationByte(formattedQuery.back())) {
                 formattedSample.erase(formattedSample.size() - 1);
             }
 
             TString origSample = request.Program.substr(i, FormatContextLimit);
-            while (!origSample.empty() && TTextWalker::IsUtf8Intermediate(origSample.back())) {
+            while (!origSample.empty() && IsUTF8ContinuationByte(origSample.back())) {
                 origSample.erase(origSample.size() - 1);
             }
 
-            res.Issues.AddIssue(TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample));
+            auto issue = TIssue(origPos, TStringBuilder() <<
+                "Format mismatch, expected:\n" << ReplaceHidden(formattedSample) << "\nbut got:\n" << ReplaceHidden(origSample) << "\n");
+            issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
+            res.Issues.AddIssue(issue);
         }
 
         return res;

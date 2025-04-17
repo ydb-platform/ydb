@@ -352,4 +352,22 @@ void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TFlowExecuteCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("flow_command", &TThis::Command)
+        .Default();
+}
+
+void TFlowExecuteCommand::DoExecute(ICommandContextPtr context)
+{
+    auto argument = context->ConsumeInputValue();
+    auto client = context->GetClient();
+    auto result = WaitFor(client->FlowExecute(PipelinePath, Command, argument, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(result.Result);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

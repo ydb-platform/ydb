@@ -170,6 +170,8 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
+        bool ThrowOnOptsParseError = false;
+
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)

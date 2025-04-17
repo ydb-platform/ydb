@@ -51,12 +51,37 @@ inputs:
   vars:
     type: string
     default: ""
+  custom_branch_name:
+    description: "Custom branch name required when workflow branch != checkout branch"
+    type: string
+    required: false
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Prepare folder prefix
+      id: prepare_prefix
+      shell: bash
+      run: |
+        # Check if custom_branch_name is set and not empty
+        if [ -n "${{ inputs.custom_branch_name }}" ]; then
+          # Extract and sanitize custom_branch_name
+          CUSTOM_BRANCH_NAME="${{ inputs.custom_branch_name }}"
+          # Replace all unsupported characters with hyphens
+          SANITIZED_NAME="${CUSTOM_BRANCH_NAME//[^a-zA-Z0-9-]/-}"
+          # Optionally limit the length to, say, 50 characters
+          SANITIZED_NAME="${SANITIZED_NAME:0:50}"
+          # Assign the sanitized name to the folder_prefix
+          FOLDER_PREFIX="ya-${SANITIZED_NAME}-"
+        else
+          # If the branch name is not provided, use a default prefix
+          FOLDER_PREFIX='ya-'
+        fi
+        # Output the folder_prefix for use in subsequent steps
+        echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -64,7 +89,7 @@ runs:
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
-        folder_prefix: ya-
+        folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
 
     - name: Run build and tests
@@ -88,3 +113,4 @@ runs:
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         test_retry_count: ${{ inputs.test_retry_count }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}

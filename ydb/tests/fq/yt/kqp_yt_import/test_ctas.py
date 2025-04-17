@@ -10,7 +10,8 @@ class TestYtCtas:
             CREATE TABLE from_yt (
                 PRIMARY KEY (key)
             ) WITH (
-                STORE = COLUMN
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             )
             AS SELECT UNWRAP(key) AS key, subkey, value FROM plato.input
         """)

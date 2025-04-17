@@ -889,12 +889,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 pathId = 0;
         ui64 shardId = 0;
-        ui64 planStep = 0;
+        NTxUT::TPlanStep planStep;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = self.GetCreateStep();
+            planStep =  NTxUT::TPlanStep{self.GetCreateStep()};
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -904,7 +904,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 3, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
-        UNIT_ASSERT(planStep);
+        UNIT_ASSERT(planStep.Val());
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
@@ -929,11 +929,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 std::vector<ui64> writeIds;
                 ++txId;
                 NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             // emulate timeout
             runtime.UpdateCurrentTime(TInstant::Now());
@@ -942,8 +942,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             std::vector<ui64> writeIds;
             ++txId;
             NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, { txId });
+            planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
@@ -1068,12 +1068,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 pathId = 0;
         ui64 shardId = 0;
-        ui64 planStep = 0;
+        NTxUT::TPlanStep planStep;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = self.GetCreateStep();
+            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -1083,7 +1083,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 4, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
-        UNIT_ASSERT(planStep);
+        UNIT_ASSERT(planStep.Val());
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
@@ -1108,11 +1108,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 std::vector<ui64> writeIds;
                 ++txId;
                 NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             WaitTableStats(runtime, shardId);
             CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
@@ -1157,9 +1157,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         ++txId;
         bool delResult = NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Delete, txId);
         Y_UNUSED(delResult);
-        NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
         txIds.insert(txId);
-        NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(60));

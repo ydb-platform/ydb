@@ -109,7 +109,7 @@ class PnpmPackageManager(BasePackageManager):
             json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
 
     @timeit
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, bundle=True):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False):
         """
         Creates node_modules directory according to the lockfile.
         """
@@ -137,7 +137,7 @@ class PnpmPackageManager(BasePackageManager):
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
         self._replace_internal_lockfile_with_original(virtual_store_dir)
 
-        if not local_cli and bundle:
+        if not local_cli and nm_bundle:
             bundle_node_modules(
                 build_root=self.build_root,
                 node_modules_path=self._nm_path(),
@@ -189,19 +189,19 @@ class PnpmPackageManager(BasePackageManager):
         return ins, outs, resources
 
     @timeit
-    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
+    def calc_node_modules_inouts(self, nm_bundle: bool) -> tuple[list[str], list[str]]:
         """
-        Returns input and output paths for command that creates `node_modules` bundle.
+        Returns input and optionally output paths for command that creates `node_modules` bundle.
         It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
             - source package.json
         Outputs:
-            - created node_modules bundle
+            - node_modules bundle if `nm_bundle` is True else empty list
         """
         ins = [s_rooted(build_pj_path(self.module_path))]
         outs = []
 
-        if not local_cli and has_deps:
+        if nm_bundle:
             outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs

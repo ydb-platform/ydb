@@ -37,6 +37,7 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/fetch
     yql/essentials/core/issue
+    yql/essentials/core/sql_types
     yql/essentials/core/url_lister/interface
     yql/essentials/parser/pg_catalog
 )

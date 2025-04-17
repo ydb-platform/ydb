@@ -9,26 +9,26 @@
             "writes": [
                 {
                     "columns": [
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
+                },
+                {
+                    "type": "MultiErase"
+                },
+                {
+                    "type": "MultiErase"
+                },
+                {
+                    "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpsert"
-                },
-                {
-                    "columns": [
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "MultiUpsert"
-                },
-                {
-                    "type": "MultiErase"
-                },
-                {
-                    "type": "MultiErase"
+                    "type": "MultiReplace"
                 }
             ]
         }

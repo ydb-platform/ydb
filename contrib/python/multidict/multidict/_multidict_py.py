@@ -1,5 +1,7 @@
 import enum
+import reprlib
 import sys
+from abc import abstractmethod
 from array import array
 from collections.abc import (
     Callable,
@@ -12,8 +14,10 @@ from collections.abc import (
 )
 from typing import (
     TYPE_CHECKING,
+    Any,
     Generic,
     NoReturn,
+    Optional,
     TypeVar,
     Union,
     cast,
@@ -32,6 +36,7 @@ class istr(str):
     """Case insensitive str."""
 
     __is_istr__ = True
+    __istr_title__: Optional[str] = None
 
 
 _V = TypeVar("_V")
@@ -51,7 +56,6 @@ class _Impl(Generic[_V]):
         self.incr_version()
 
     def incr_version(self) -> None:
-        global _version
         v = _version
         v[0] += 1
         self._version = v[0]
@@ -80,8 +84,15 @@ class _Iter(Generic[_T]):
 
 
 class _ViewBase(Generic[_V]):
-    def __init__(self, impl: _Impl[_V]):
+    def __init__(
+        self,
+        impl: _Impl[_V],
+        identfunc: Callable[[str], str],
+        keyfunc: Callable[[str], str],
+    ):
         self._impl = impl
+        self._identfunc = identfunc
+        self._keyfunc = keyfunc
 
     def __len__(self) -> int:
         return len(self._impl._items)
@@ -91,8 +102,13 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
     def __contains__(self, item: object) -> bool:
         if not isinstance(item, (tuple, list)) or len(item) != 2:
             return False
+        key, value = item
+        try:
+            ident = self._identfunc(key)
+        except TypeError:
+            return False
         for i, k, v in self._impl._items:
-            if item[0] == k and item[1] == v:
+            if ident == i and value == v:
                 return True
         return False
 
@@ -103,20 +119,164 @@ class _ItemsView(_ViewBase[_V], ItemsView[str, _V]):
         for i, k, v in self._impl._items:
             if version != self._impl._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield k, v
+            yield self._keyfunc(k), v
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
-        for item in self._impl._items:
-            lst.append("{!r}: {!r}".format(item[1], item[2]))
+        for i, k, v in self._impl._items:
+            lst.append(f"'{k}': {v!r}")
         body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
+        return f"<{self.__class__.__name__}({body})>"
+
+    def _parse_item(
+        self, arg: Union[tuple[str, _V], _T]
+    ) -> Optional[tuple[str, str, _V]]:
+        if not isinstance(arg, tuple):
+            return None
+        if len(arg) != 2:
+            return None
+        try:
+            return (self._identfunc(arg[0]), arg[0], arg[1])
+        except TypeError:
+            return None
+
+    def _tmp_set(self, it: Iterable[_T]) -> set[tuple[str, _V]]:
+        tmp = set()
+        for arg in it:
+            item = self._parse_item(arg)
+            if item is None:
+                continue
+            else:
+                tmp.add((item[0], item[2]))
+        return tmp
+
+    def __and__(self, other: Iterable[Any]) -> set[tuple[str, _V]]:
+        ret = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for arg in it:
+            item = self._parse_item(arg)
+            if item is None:
+                continue
+            identity, key, value = item
+            for i, k, v in self._impl._items:
+                if i == identity and v == value:
+                    ret.add((k, v))
+        return ret
+
+    def __rand__(self, other: Iterable[_T]) -> set[_T]:
+        ret = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for arg in it:
+            item = self._parse_item(arg)
+            if item is None:
+                continue
+            identity, key, value = item
+            for i, k, v in self._impl._items:
+                if i == identity and v == value:
+                    ret.add(arg)
+                    break
+        return ret
+
+    def __or__(self, other: Iterable[_T]) -> set[Union[tuple[str, _V], _T]]:
+        ret: set[Union[tuple[str, _V], _T]] = set(self)
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for arg in it:
+            item: Optional[tuple[str, str, _V]] = self._parse_item(arg)
+            if item is None:
+                ret.add(arg)
+                continue
+            identity, key, value = item
+            for i, k, v in self._impl._items:
+                if i == identity and v == value:
+                    break
+            else:
+                ret.add(arg)
+        return ret
+
+    def __ror__(self, other: Iterable[_T]) -> set[Union[tuple[str, _V], _T]]:
+        try:
+            ret: set[Union[tuple[str, _V], _T]] = set(other)
+        except TypeError:
+            return NotImplemented
+        tmp = self._tmp_set(ret)
+
+        for i, k, v in self._impl._items:
+            if (i, v) not in tmp:
+                ret.add((k, v))
+        return ret
+
+    def __sub__(self, other: Iterable[_T]) -> set[Union[tuple[str, _V], _T]]:
+        ret: set[Union[tuple[str, _V], _T]] = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        tmp = self._tmp_set(it)
+
+        for i, k, v in self._impl._items:
+            if (i, v) not in tmp:
+                ret.add((k, v))
+
+        return ret
+
+    def __rsub__(self, other: Iterable[_T]) -> set[_T]:
+        ret: set[_T] = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for arg in it:
+            item = self._parse_item(arg)
+            if item is None:
+                ret.add(arg)
+                continue
+
+            identity, key, value = item
+            for i, k, v in self._impl._items:
+                if i == identity and v == value:
+                    break
+            else:
+                ret.add(arg)
+        return ret
+
+    def __xor__(self, other: Iterable[_T]) -> set[Union[tuple[str, _V], _T]]:
+        try:
+            rgt = set(other)
+        except TypeError:
+            return NotImplemented
+        ret: set[Union[tuple[str, _V], _T]] = self - rgt
+        ret |= rgt - self
+        return ret
+
+    __rxor__ = __xor__
+
+    def isdisjoint(self, other: Iterable[tuple[str, _V]]) -> bool:
+        for arg in other:
+            item = self._parse_item(arg)
+            if item is None:
+                continue
+
+            identity, key, value = item
+            for i, k, v in self._impl._items:
+                if i == identity and v == value:
+                    return False
+        return True
 
 
 class _ValuesView(_ViewBase[_V], ValuesView[_V]):
     def __contains__(self, value: object) -> bool:
-        for item in self._impl._items:
-            if item[2] == value:
+        for i, k, v in self._impl._items:
+            if v == value:
                 return True
         return False
 
@@ -124,23 +284,27 @@ class _ValuesView(_ViewBase[_V], ValuesView[_V]):
         return _Iter(len(self), self._iter(self._impl._version))
 
     def _iter(self, version: int) -> Iterator[_V]:
-        for item in self._impl._items:
+        for i, k, v in self._impl._items:
             if version != self._impl._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield item[2]
+            yield v
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
         lst = []
-        for item in self._impl._items:
-            lst.append("{!r}".format(item[2]))
+        for i, k, v in self._impl._items:
+            lst.append(repr(v))
         body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
+        return f"<{self.__class__.__name__}({body})>"
 
 
 class _KeysView(_ViewBase[_V], KeysView[str]):
     def __contains__(self, key: object) -> bool:
-        for item in self._impl._items:
-            if item[1] == key:
+        if not isinstance(key, str):
+            return False
+        identity = self._identfunc(key)
+        for i, k, v in self._impl._items:
+            if i == identity:
                 return True
         return False
 
@@ -148,24 +312,179 @@ class _KeysView(_ViewBase[_V], KeysView[str]):
         return _Iter(len(self), self._iter(self._impl._version))
 
     def _iter(self, version: int) -> Iterator[str]:
-        for item in self._impl._items:
+        for i, k, v in self._impl._items:
             if version != self._impl._version:
                 raise RuntimeError("Dictionary changed during iteration")
-            yield item[1]
+            yield self._keyfunc(k)
 
     def __repr__(self) -> str:
         lst = []
-        for item in self._impl._items:
-            lst.append("{!r}".format(item[1]))
+        for i, k, v in self._impl._items:
+            lst.append(f"'{k}'")
         body = ", ".join(lst)
-        return "{}({})".format(self.__class__.__name__, body)
+        return f"<{self.__class__.__name__}({body})>"
+
+    def __and__(self, other: Iterable[object]) -> set[str]:
+        ret = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for key in it:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    ret.add(k)
+        return ret
+
+    def __rand__(self, other: Iterable[_T]) -> set[_T]:
+        ret = set()
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for key in it:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    ret.add(key)
+        return cast(set[_T], ret)
+
+    def __or__(self, other: Iterable[_T]) -> set[Union[str, _T]]:
+        ret: set[Union[str, _T]] = set(self)
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for key in it:
+            if not isinstance(key, str):
+                ret.add(key)
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    break
+            else:
+                ret.add(key)
+        return ret
+
+    def __ror__(self, other: Iterable[_T]) -> set[Union[str, _T]]:
+        try:
+            ret: set[Union[str, _T]] = set(other)
+        except TypeError:
+            return NotImplemented
+
+        tmp = set()
+        for key in ret:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            tmp.add(identity)
+
+        for i, k, v in self._impl._items:
+            if i not in tmp:
+                ret.add(k)
+        return ret
+
+    def __sub__(self, other: Iterable[object]) -> set[str]:
+        ret = set(self)
+        try:
+            it = iter(other)
+        except TypeError:
+            return NotImplemented
+        for key in it:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    ret.discard(k)
+                    break
+        return ret
+
+    def __rsub__(self, other: Iterable[_T]) -> set[_T]:
+        try:
+            ret: set[_T] = set(other)
+        except TypeError:
+            return NotImplemented
+        for key in other:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    ret.discard(key)  # type: ignore[arg-type]
+                    break
+        return ret
+
+    def __xor__(self, other: Iterable[_T]) -> set[Union[str, _T]]:
+        try:
+            rgt = set(other)
+        except TypeError:
+            return NotImplemented
+        ret: set[Union[str, _T]] = self - rgt  # type: ignore[assignment]
+        ret |= rgt - self
+        return ret
+
+    __rxor__ = __xor__
+
+    def isdisjoint(self, other: Iterable[object]) -> bool:
+        for key in other:
+            if not isinstance(key, str):
+                continue
+            identity = self._identfunc(key)
+            for i, k, v in self._impl._items:
+                if i == identity:
+                    return False
+        return True
+
+
+class _CSMixin:
+    def _key(self, key: str) -> str:
+        return key
+
+    def _title(self, key: str) -> str:
+        if isinstance(key, str):
+            return key
+        else:
+            raise TypeError("MultiDict keys should be either str or subclasses of str")
+
+
+class _CIMixin:
+    _ci: bool = True
+
+    def _key(self, key: str) -> str:
+        if type(key) is istr:
+            return key
+        else:
+            return istr(key)
+
+    def _title(self, key: str) -> str:
+        if isinstance(key, istr):
+            ret = key.__istr_title__
+            if ret is None:
+                ret = key.title()
+                key.__istr_title__ = ret
+            return ret
+        if isinstance(key, str):
+            return key.title()
+        else:
+            raise TypeError("MultiDict keys should be either str or subclasses of str")
 
 
 class _Base(MultiMapping[_V]):
     _impl: _Impl[_V]
+    _ci: bool = False
 
-    def _title(self, key: str) -> str:
-        return key
+    @abstractmethod
+    def _key(self, key: str) -> str: ...
+
+    @abstractmethod
+    def _title(self, key: str) -> str: ...
 
     @overload
     def getall(self, key: str) -> list[_V]: ...
@@ -226,15 +545,15 @@ class _Base(MultiMapping[_V]):
 
     def keys(self) -> KeysView[str]:
         """Return a new view of the dictionary's keys."""
-        return _KeysView(self._impl)
+        return _KeysView(self._impl, self._title, self._key)
 
     def items(self) -> ItemsView[str, _V]:
         """Return a new view of the dictionary's items *(key, value) pairs)."""
-        return _ItemsView(self._impl)
+        return _ItemsView(self._impl, self._title, self._key)
 
     def values(self) -> _ValuesView[_V]:
         """Return a new view of the dictionary's values."""
-        return _ValuesView(self._impl)
+        return _ValuesView(self._impl, self._title, self._key)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Mapping):
@@ -265,12 +584,13 @@ class _Base(MultiMapping[_V]):
                 return True
         return False
 
+    @reprlib.recursive_repr()
     def __repr__(self) -> str:
-        body = ", ".join("'{}': {!r}".format(k, v) for k, v in self.items())
-        return "<{}({})>".format(self.__class__.__name__, body)
+        body = ", ".join(f"'{k}': {v!r}" for i, k, v in self._impl._items)
+        return f"<{self.__class__.__name__}({body})>"
 
 
-class MultiDict(_Base[_V], MutableMultiMapping[_V]):
+class MultiDict(_CSMixin, _Base[_V], MutableMultiMapping[_V]):
     """Dictionary with the support for duplicate keys."""
 
     def __init__(self, arg: MDArg[_V] = None, /, **kwargs: _V):
@@ -286,18 +606,9 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
     def __reduce__(self) -> tuple[type[Self], tuple[list[tuple[str, _V]]]]:
         return (self.__class__, (list(self.items()),))
 
-    def _title(self, key: str) -> str:
-        return key
-
-    def _key(self, key: str) -> str:
-        if isinstance(key, str):
-            return key
-        else:
-            raise TypeError("MultiDict keys should be either str or subclasses of str")
-
     def add(self, key: str, value: _V) -> None:
         identity = self._title(key)
-        self._impl._items.append((identity, self._key(key), value))
+        self._impl._items.append((identity, key, value))
         self._impl.incr_version()
 
     def copy(self) -> Self:
@@ -322,8 +633,16 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
         method: Callable[[list[tuple[str, str, _V]]], None],
     ) -> None:
         if arg:
-            if isinstance(arg, (MultiDict, MultiDictProxy)) and not kwargs:
-                items = arg._impl._items
+            if isinstance(arg, (MultiDict, MultiDictProxy)):
+                if self._ci is not arg._ci:
+                    items = [(self._title(k), k, v) for _, k, v in arg._impl._items]
+                else:
+                    items = arg._impl._items
+                    if kwargs:
+                        items = items.copy()
+                if kwargs:
+                    for key, value in kwargs.items():
+                        items.append((self._title(key), key, value))
             else:
                 if hasattr(arg, "keys"):
                     arg = cast(SupportsKeys[_V], arg)
@@ -332,26 +651,22 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
                     arg = list(arg)
                     arg.extend(list(kwargs.items()))
                 items = []
-                for item in arg:
+                for pos, item in enumerate(arg):
                     if not len(item) == 2:
-                        raise TypeError(
-                            "{} takes either dict or list of (key, value) "
-                            "tuples".format(name)
+                        raise ValueError(
+                            f"multidict update sequence element #{pos}"
+                            f"has length {len(item)}; 2 is required"
                         )
-                    items.append((self._title(item[0]), self._key(item[0]), item[1]))
+                    items.append((self._title(item[0]), item[0], item[1]))
 
             method(items)
         else:
-            method(
-                [
-                    (self._title(key), self._key(key), value)
-                    for key, value in kwargs.items()
-                ]
-            )
+            method([(self._title(key), key, value) for key, value in kwargs.items()])
 
     def _extend_items(self, items: Iterable[tuple[str, str, _V]]) -> None:
         for identity, key, value in items:
-            self.add(key, value)
+            self._impl._items.append((identity, key, value))
+        self._impl.incr_version()
 
     def clear(self) -> None:
         """Remove all items from MultiDict."""
@@ -456,9 +771,9 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
     def popitem(self) -> tuple[str, _V]:
         """Remove and return an arbitrary (key, value) pair."""
         if self._impl._items:
-            i = self._impl._items.pop(0)
+            i, k, v = self._impl._items.pop()
             self._impl.incr_version()
-            return i[1], i[2]
+            return self._key(k), v
         else:
             raise KeyError("empty multidict")
 
@@ -499,7 +814,6 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
         self._impl.incr_version()
 
     def _replace(self, key: str, value: _V) -> None:
-        key = self._key(key)
         identity = self._title(key)
         items = self._impl._items
 
@@ -527,47 +841,41 @@ class MultiDict(_Base[_V], MutableMultiMapping[_V]):
                 i += 1
 
 
-class CIMultiDict(MultiDict[_V]):
+class CIMultiDict(_CIMixin, MultiDict[_V]):
     """Dictionary with the support for duplicate case-insensitive keys."""
 
-    def _title(self, key: str) -> str:
-        return key.title()
 
-
-class MultiDictProxy(_Base[_V]):
+class MultiDictProxy(_CSMixin, _Base[_V]):
     """Read-only proxy for MultiDict instance."""
 
     def __init__(self, arg: Union[MultiDict[_V], "MultiDictProxy[_V]"]):
         if not isinstance(arg, (MultiDict, MultiDictProxy)):
             raise TypeError(
                 "ctor requires MultiDict or MultiDictProxy instance"
-                ", not {}".format(type(arg))
+                f", not {type(arg)}"
             )
 
         self._impl = arg._impl
 
     def __reduce__(self) -> NoReturn:
-        raise TypeError("can't pickle {} objects".format(self.__class__.__name__))
+        raise TypeError(f"can't pickle {self.__class__.__name__} objects")
 
     def copy(self) -> MultiDict[_V]:
         """Return a copy of itself."""
         return MultiDict(self.items())
 
 
-class CIMultiDictProxy(MultiDictProxy[_V]):
+class CIMultiDictProxy(_CIMixin, MultiDictProxy[_V]):
     """Read-only proxy for CIMultiDict instance."""
 
     def __init__(self, arg: Union[MultiDict[_V], MultiDictProxy[_V]]):
         if not isinstance(arg, (CIMultiDict, CIMultiDictProxy)):
             raise TypeError(
                 "ctor requires CIMultiDict or CIMultiDictProxy instance"
-                ", not {}".format(type(arg))
+                f", not {type(arg)}"
             )
 
         self._impl = arg._impl
-
-    def _title(self, key: str) -> str:
-        return key.title()
 
     def copy(self) -> CIMultiDict[_V]:
         """Return a copy of itself."""

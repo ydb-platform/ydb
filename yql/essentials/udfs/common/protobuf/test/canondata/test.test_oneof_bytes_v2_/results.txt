@@ -1,0 +1,101 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "TestField";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "StructType";
+                                        [
+                                            [
+                                                "str";
+                                                [
+                                                    "OptionalType";
+                                                    [
+                                                        "DataType";
+                                                        "String"
+                                                    ]
+                                                ]
+                                            ];
+                                            [
+                                                "test";
+                                                [
+                                                    "OptionalType";
+                                                    [
+                                                        "DataType";
+                                                        "String"
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "{\"str\":\"string value\"}"
+                        ];
+                        [
+                            [
+                                [
+                                    "string value"
+                                ];
+                                #
+                            ]
+                        ];
+                        [
+                            "{\n  \"str\":\"string value\"\n}"
+                        ]
+                    ];
+                    [
+                        [
+                            "{\"test\":{\"str\":\"string value\"}}"
+                        ];
+                        [
+                            [
+                                #;
+                                [
+                                    "\x12\x0Cstring value"
+                                ]
+                            ]
+                        ];
+                        [
+                            "{\n  \"test\":\n    {\n      \"str\":\"string value\"\n    }\n}"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

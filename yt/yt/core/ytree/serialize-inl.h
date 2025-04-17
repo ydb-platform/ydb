@@ -485,13 +485,20 @@ void SerializeProtobufMessage(
     const NYson::TProtobufMessageType* type,
     NYson::IYsonConsumer* consumer);
 
-template <class T>
+template <CProtobufMessageAsYson T>
 void Serialize(
     const T& message,
-    NYson::IYsonConsumer* consumer,
-    typename std::enable_if<std::is_convertible<T*, ::google::protobuf::Message*>::value, void>::type*)
+    NYson::IYsonConsumer* consumer)
 {
     SerializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), consumer);
+}
+
+template <CProtobufMessageAsString T>
+void Serialize(
+    const T& message,
+    NYson::IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(message.SerializeAsStringOrThrow());
 }
 
 template <class T, class TTag>
@@ -699,8 +706,7 @@ void DeserializeProtobufMessage(
     const INodePtr& node,
     const NYson::TProtobufWriterOptions& options = {});
 
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <CProtobufMessageAsYson T>
 void Deserialize(
     T& message,
     const INodePtr& node)
@@ -709,6 +715,16 @@ void Deserialize(
     options.UnknownYsonFieldModeResolver = NYson::TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
         NYson::EUnknownYsonFieldsMode::Keep);
     DeserializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), node, options);
+}
+
+template <CProtobufMessageAsString T>
+void Deserialize(
+    T& message,
+    const INodePtr& node)
+{
+    TString string;
+    Deserialize(string, node);
+    message.ParseFromStringOrThrow(string);
 }
 
 template <class T, class TTag>

@@ -65,7 +65,7 @@ public:
 class TPortionMeta: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;
-    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;   // first and last PK rows
+    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);

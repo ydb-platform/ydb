@@ -1,6 +1,6 @@
 {#- empty string #}
-val baseBuildDir = "{{ export_root }}/gradle.build/"
-buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+val baseBuildDir = "{{ export_root }}/gradle.build"
+buildDir = file(baseBuildDir + "/" + project.path.replace(":", "/"))
 subprojects {
-    buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+    buildDir = file(baseBuildDir + "/" + project.path.replace(":", "/"))
 }

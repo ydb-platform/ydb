@@ -528,7 +528,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
 
     for (auto& partition : partitions.Partitions) {
         if (partition.Cookie) {
-            context->GetDriver()->GetSignatureGenerator()->Sign(partition.Cookie.Underlying());
+            context->GetDriver()->GetSignatureGenerator()->Resign(partition.Cookie.Underlying());
         }
     }
 
@@ -1666,6 +1666,13 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
         "replica_path",
         [] (TThis* command) -> auto& {
             return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
         })
         .Optional(/*init*/ false);
 

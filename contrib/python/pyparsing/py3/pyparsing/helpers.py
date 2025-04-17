@@ -208,11 +208,9 @@ def one_of(
     if caseless:
         is_equal = lambda a, b: a.upper() == b.upper()
         masks = lambda a, b: b.upper().startswith(a.upper())
-        parse_element_class = CaselessKeyword if asKeyword else CaselessLiteral
     else:
         is_equal = operator.eq
         masks = lambda a, b: b.startswith(a)
-        parse_element_class = Keyword if asKeyword else Literal
 
     symbols: list[str]
     if isinstance(strs, str_type):
@@ -255,7 +253,8 @@ def one_of(
             if asKeyword:
                 patt = rf"\b(?:{patt})\b"
 
-            ret = Regex(patt, flags=re_flags).set_name(" | ".join(symbols))
+            ret = Regex(patt, flags=re_flags)
+            ret.set_name(" | ".join(re.escape(s) for s in symbols))
 
             if caseless:
                 # add parse action to return symbols as specified, not in random
@@ -270,13 +269,21 @@ def one_of(
                 "Exception creating Regex for one_of, building MatchFirst", stacklevel=2
             )
 
-    # last resort, just use MatchFirst
+    # last resort, just use MatchFirst of Token class corresponding to caseless
+    # and asKeyword settings
+    CASELESS = KEYWORD = True
+    parse_element_class = {
+        (CASELESS, KEYWORD): CaselessKeyword,
+        (CASELESS, not KEYWORD): CaselessLiteral,
+        (not CASELESS, KEYWORD): Keyword,
+        (not CASELESS, not KEYWORD): Literal,
+    }[(caseless, asKeyword)]
     return MatchFirst(parse_element_class(sym) for sym in symbols).set_name(
         " | ".join(symbols)
     )
 
 
-def dict_of(key: ParserElement, value: ParserElement) -> ParserElement:
+def dict_of(key: ParserElement, value: ParserElement) -> Dict:
     """Helper to easily and clearly define a dictionary by specifying
     the respective patterns for the key and value.  Takes care of
     defining the :class:`Dict`, :class:`ZeroOrMore`, and
@@ -411,13 +418,18 @@ def locatedExpr(expr: ParserElement) -> ParserElement:
     )
 
 
+# define special default value to permit None as a significant value for
+# ignore_expr
+_NO_IGNORE_EXPR_GIVEN = NoMatch()
+
+
 def nested_expr(
     opener: Union[str, ParserElement] = "(",
     closer: Union[str, ParserElement] = ")",
     content: typing.Optional[ParserElement] = None,
-    ignore_expr: ParserElement = quoted_string(),
+    ignore_expr: ParserElement = _NO_IGNORE_EXPR_GIVEN,
     *,
-    ignoreExpr: ParserElement = quoted_string(),
+    ignoreExpr: ParserElement = _NO_IGNORE_EXPR_GIVEN,
 ) -> ParserElement:
     """Helper method for defining nested lists enclosed in opening and
     closing delimiters (``"("`` and ``")"`` are the default).
@@ -487,9 +499,14 @@ def nested_expr(
         dec_to_hex (int) args: [['char', 'hchar']]
     """
     if ignoreExpr != ignore_expr:
-        ignoreExpr = ignore_expr if ignoreExpr == quoted_string() else ignoreExpr
+        ignoreExpr = ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr
+
+    if ignoreExpr is _NO_IGNORE_EXPR_GIVEN:
+        ignoreExpr = quoted_string()
+
     if opener == closer:
         raise ValueError("opening and closing strings cannot be the same")
+
     if content is None:
         if isinstance(opener, str_type) and isinstance(closer, str_type):
             opener = typing.cast(str, opener)
@@ -504,11 +521,14 @@ def nested_expr(
                                 exact=1,
                             )
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
                 else:
-                    content = empty.copy() + CharsNotIn(
-                        opener + closer + ParserElement.DEFAULT_WHITE_CHARS
-                    ).set_parse_action(lambda t: t[0].strip())
+                    content = Combine(
+                        Empty()
+                        + CharsNotIn(
+                            opener + closer + ParserElement.DEFAULT_WHITE_CHARS
+                        )
+                    )
             else:
                 if ignoreExpr is not None:
                     content = Combine(
@@ -518,7 +538,7 @@ def nested_expr(
                             + ~Literal(closer)
                             + CharsNotIn(ParserElement.DEFAULT_WHITE_CHARS, exact=1)
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
                 else:
                     content = Combine(
                         OneOrMore(
@@ -526,11 +546,18 @@ def nested_expr(
                             + ~Literal(closer)
                             + CharsNotIn(ParserElement.DEFAULT_WHITE_CHARS, exact=1)
                         )
-                    ).set_parse_action(lambda t: t[0].strip())
+                    )
         else:
             raise ValueError(
                 "opening and closing arguments must be strings if no content expression is given"
             )
+
+        # for these internally-created context expressions, simulate whitespace-skipping
+        if ParserElement.DEFAULT_WHITE_CHARS:
+            content.set_parse_action(
+                lambda t: t[0].strip(ParserElement.DEFAULT_WHITE_CHARS)
+            )
+
     ret = Forward()
     if ignoreExpr is not None:
         ret <<= Group(
@@ -538,7 +565,9 @@ def nested_expr(
         )
     else:
         ret <<= Group(Suppress(opener) + ZeroOrMore(ret | content) + Suppress(closer))
+
     ret.set_name(f"nested {opener}{closer} expression")
+
     # don't override error message from content expressions
     ret.errmsg = None
     return ret
@@ -603,7 +632,7 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
 
 
 def make_html_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for HTML,
     given a tag name. Matches tags in either upper or lower case,
@@ -630,7 +659,7 @@ def make_html_tags(
 
 
 def make_xml_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for XML,
     given a tag name. Matches tags only in the given upper/lower case.
@@ -691,7 +720,7 @@ def infix_notation(
     op_list: list[InfixNotationOperatorSpec],
     lpar: Union[str, ParserElement] = Suppress("("),
     rpar: Union[str, ParserElement] = Suppress(")"),
-) -> ParserElement:
+) -> Forward:
     """Helper method for constructing grammars of expressions made up of
     operators working in a precedence hierarchy.  Operators may be unary
     or binary, left- or right-associative.  Parse actions can also be

@@ -353,8 +353,8 @@ private:
 
 class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
 public:
-    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[])
-        : ThrowOnParseError(options->HasLongOption("throw-on-parse-error")) {
+    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[], bool throwOnParseError = false)
+        : ThrowOnParseError(throwOnParseError) {
         Init(options, argc, argv);
     }
 
@@ -377,7 +377,7 @@ public:
     using TConnectionParamsLogger = std::function<void(const TString& /*paramName*/, const TString& /*value*/, const TString& /*sourceText*/)>;
 
 public:
-    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv);
+    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError = false);
 
     // Parses from profile and env. Returns erros if they occur during parsing
     std::vector<TString> ParseFromProfilesAndEnv(std::shared_ptr<IProfile> explicitProfile, std::shared_ptr<IProfile> activeProfile);

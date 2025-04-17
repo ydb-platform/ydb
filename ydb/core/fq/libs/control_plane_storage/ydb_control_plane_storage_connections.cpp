@@ -43,6 +43,8 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         break;
     case FederatedQuery::ConnectionSetting::kLogging:
         break;
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        break;
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;
     }
@@ -217,6 +219,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         });
 }
 
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -245,8 +251,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListConnectionsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
@@ -352,6 +357,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         });
 }
 
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -379,8 +388,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "DescribeConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token)<< " "

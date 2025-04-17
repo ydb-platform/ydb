@@ -28,7 +28,7 @@ public:
         virtual TConclusionStatus DoExecuteImpl() = 0;
 
     protected:
-        virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;
+        virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;
         virtual void DoOnCannotExecute(const TString& reason) override;
 
     public:

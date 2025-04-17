@@ -165,7 +165,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
         transaction->GetConnection()->GetLoggingTag());
 }
 
-TFuture<void> TTransaction::Ping(const NApi::TTransactionPingOptions& /*options*/)
+TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
 {
     return SendPing();
 }
@@ -489,7 +489,7 @@ void TTransaction::ModifyRows(
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
-                    YT_UNUSED_FUTURE(Abort());
+                    YT_UNUSED_FUTURE(ITransaction::Abort());
                 }
             }));
 

@@ -273,7 +273,7 @@ private:
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
-                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total"; 
+                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total";
                 *group->GetCounter(name) = v.Sum;
                 if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
@@ -516,7 +516,7 @@ public:
         }
 
         for (const auto& [taskId, stageId] : Stages) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", 
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner",
                 {{"Task", ToString(taskId)}, {"Stage", ToString(stageId)}}, "CpuTimeUs"), 0);
         }
 
@@ -564,7 +564,7 @@ private:
                 }
             }
 
-            YQL_CLOG(DEBUG, ProviderDq) << task.GetId() << " " << ev->Record.ShortDebugString();
+            YQL_CLOG(TRACE, ProviderDq) << task.GetId() << " " << ev->Record.ShortDebugString();
 
             Send(actorId, ev.Release());
         }

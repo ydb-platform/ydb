@@ -1593,9 +1593,12 @@ private:
     }
 
     TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
-        ythrow yexception() << "GetClusterConnection should not be called for file gateway";
+        return TClusterConnectionResult();
     }
 
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
+        return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
+    }
 
 private:
     TYtFileServices::TPtr Services_;

@@ -116,6 +116,7 @@ public:
 
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 private:
+    TAtomic SyncSectionFlag = 1;
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -161,6 +162,22 @@ protected:
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+    void StartAsyncSection() {
+        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
+    }
+
+    void CheckAsyncSection() {
+        AFL_VERIFY(AtomicGet(SyncSectionFlag) == 0);
+    }
+
+    void StartSyncSection() {
+        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 1, 0));
+    }
+
+    bool IsSyncSection() const {
+        return AtomicGet(SyncSectionFlag) == 1;
+    }
+
     void AddEvent(const TString& evDescription) {
         AFL_VERIFY(!!Events);
         Events->AddEvent(evDescription);
@@ -272,6 +289,10 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    void ResetSourceFinishedFlag() {
+        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
     }
 
     void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {

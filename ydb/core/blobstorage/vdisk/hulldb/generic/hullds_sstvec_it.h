@@ -127,14 +127,6 @@ namespace NKikimr {
             return CurSegIt.GetSstPtr();
         }
 
-        const TRec &operator*() const {
-            return CurSegIt.operator*();
-        }
-
-        const TRec *operator->() const {
-            return CurSegIt.operator->();
-        }
-
         bool operator ==(const TReadIterator &it) const {
             return CrossSegIt == it.CrossSegIt && CurSegIt == it.CurSegIt;
         }

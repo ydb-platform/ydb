@@ -10,8 +10,10 @@
 
 namespace NSQLComplete {
 
+    // std::vector is used to prevent copying a C3 output
     struct TSuggestedToken {
         TTokenId Number;
+        std::vector<TTokenId> Following;
     };
 
     struct TMatchedRule {

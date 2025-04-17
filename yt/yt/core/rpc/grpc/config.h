@@ -117,10 +117,9 @@ DEFINE_REFCOUNTED_TYPE(TChannelCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelConfigTemplate
+struct TChannelConfigTemplate
     : public NYTree::TYsonStruct
 {
-public:
     TChannelCredentialsConfigPtr Credentials;
     THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 

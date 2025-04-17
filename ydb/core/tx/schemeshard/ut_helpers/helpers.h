@@ -551,9 +551,17 @@ namespace NSchemeShardUT_Private {
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
 
+    void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator);
+
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, bool isEnabled);
 
+    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& password);
+
+    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& hash);
+    
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
     public:

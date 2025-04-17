@@ -49,7 +49,7 @@ A connection to {{ ydb-short-name }} is established using `YdbConnection`.
 
 ## Pooling
 
-Opening and closing logical connection to {{ ydb-short-name }} is an expensive and time-consuming process. Therefore, connections to {{ ydb-short-name }} are pooled. Closing or disposing of a connection does not close the underlying logical connection; rather, it returns it to a pool managed by Ydb.Sdk.Ado. When a connection is needed again, the pooled connection will be returned. This makes opening and closing operations extremely fast. Do not hesitate to open and close connections often if necessary, rather than keeping a connection open unnecessarily for a long period of time.
+Opening and closing a logical connection to {{ ydb-short-name }} is an expensive and time-consuming process. Therefore, connections to {{ ydb-short-name }} are pooled. Closing or disposing of a connection does not close the underlying logical connection; rather, it returns it to a pool managed by `Ydb.Sdk.Ado`. When a connection is needed again, a pooled connection is returned. This makes opening and closing operations extremely fast. Do not hesitate to open and close connections often if necessary, rather than keeping a connection open unnecessarily for a long period of time.
 
 #### ClearPool
 

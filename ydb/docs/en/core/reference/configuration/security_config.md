@@ -87,6 +87,29 @@ Default value: empty.
     ||
 |#
 
+The following diagram displays the relationship between authentication mode parameters described above:
+
+```mermaid
+flowchart TD
+    request --> check-auth-token{check auth token}
+
+        check-auth-token --> |provided| validate{validate auth token}
+            validate{validate auth token} --> |valid| Processed
+            validate{validate auth token} --> |invalid| invalid_enforce(enforce_user_token_requirement)
+                invalid_enforce --> |true| r[Rejected]
+                invalid_enforce --> |false| invalid_check_requirement(enforce_user_token_check_requirement)
+                    invalid_check_requirement --> |true| Rejected
+                    invalid_check_requirement --> |false| anonym[Processed in
+                    anonymous mode]
+
+        check-auth-token --> |missing| missing_default(default_user_sids)
+            missing_default --> |specified| default_specified_enforce(Processed)
+            missing_default --> |empty| default_empty_enforce(enforce_user_token_requirement)
+                default_empty_enforce --> |true| default_empty_enforce_true[Rejected]
+                default_empty_enforce --> |false| default_empty_enforce_false[Processed in
+                anonymous mode]
+```
+
 ## Bootstrapping security {#security-bootstrap}
 
 The `default_users`, `default_groups`, and `default_access` parameters affect the initial {{ ydb-short-name }} cluster configuration that occurs when {{ ydb-short-name }} starts for the first time. During subsequent runs, the initial configuration is not repeated, and these parameters are ignored.

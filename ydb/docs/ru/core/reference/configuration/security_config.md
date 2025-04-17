@@ -87,6 +87,29 @@ security_config:
     ||
 |#
 
+Следующая диаграмма показывает как взаимодействуют параметры настройки режима аутентификации:
+
+```mermaid
+flowchart TD
+    request --> check-auth-token{check auth token}
+
+        check-auth-token --> |provided| validate{validate auth token}
+            validate{validate auth token} --> |valid| Processed
+            validate{validate auth token} --> |invalid| invalid_enforce(enforce_user_token_requirement)
+                invalid_enforce --> |true| r[Rejected]
+                invalid_enforce --> |false| invalid_check_requirement(enforce_user_token_check_requirement)
+                    invalid_check_requirement --> |true| Rejected
+                    invalid_check_requirement --> |false| anonym[Processed in
+                    anonymous mode]
+
+        check-auth-token --> |missing| missing_default(default_user_sids)
+            missing_default --> |specified| default_specified_enforce(Processed)
+            missing_default --> |empty| default_empty_enforce(enforce_user_token_requirement)
+                default_empty_enforce --> |true| default_empty_enforce_true[Rejected]
+                default_empty_enforce --> |false| default_empty_enforce_false[Processed in
+                anonymous mode]
+```
+
 ## Первичные настройки безопасности {#security-bootstrap}
 
 Параметры `default_users`, `default_groups`, `default_access` влияют на настройку кластера, осуществляемую при первом старте {{ ydb-short-name }}. При последующих запусках первичная настройка не выполняется, эти параметры игнорируются.

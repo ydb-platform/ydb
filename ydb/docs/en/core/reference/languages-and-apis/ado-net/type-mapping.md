@@ -6,7 +6,7 @@ The following lists the built-in mappings for reading and writing CLR types to Y
 
 The following shows the mappings used when reading values.
 
-The return type when using  `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` and similar methods.
+These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
 
 | {{ ydb-short-name }} type     | .NET type  |
 |-------------------------------|------------|

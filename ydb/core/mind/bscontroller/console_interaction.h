@@ -49,6 +49,7 @@ namespace NKikimr::NBsController {
         bool CommitInProgress = false;
         std::optional<bool> SwitchEnableConfigV2;
         TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr PendingReplaceRequest;
+        std::optional<TAuditLogInfo> AuditLogInfo;
 
         std::optional<TString> PendingYamlConfig;
         bool AllowUnknownFields = false;
@@ -62,5 +63,4 @@ namespace NKikimr::NBsController {
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,
             std::optional<TString> errorReason = std::nullopt, bool disabledConfigV2 = false);
     };
-
 }

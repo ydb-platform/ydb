@@ -1,7 +1,7 @@
 import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.dml import DMLOperations
+from ydb.tests.datashard.lib.DMLOperations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 

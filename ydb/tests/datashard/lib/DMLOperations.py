@@ -7,7 +7,7 @@ from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format
 
 class DMLOperations():
     def __init__(self, query):
-        self.query = query
+        self.exec_query_fn = query
 
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
@@ -24,11 +24,11 @@ class DMLOperations():
         }
         sql_create_table = create_table_sql_request(
             table_name, columns, pk_columns, index_columns, unique, sync)
-        self.query(sql_create_table)
+        self.exec_query_fn(sql_create_table)
         if ttl != "":
             sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
                                              "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
-            self.query(sql_ttl)
+            self.exec_query_fn(sql_ttl)
 
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -54,7 +54,7 @@ class DMLOperations():
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
-        self.query(insert_sql)
+        self.exec_query_fn(insert_sql)
 
     def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
 
@@ -78,11 +78,11 @@ class DMLOperations():
                 {" and ".join(create_all_type)}
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" else ""}
                 """
-            rows = self.query(sql_select)
+            rows = self.exec_query_fn(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
 
-        rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
+        rows = self.exec_query_fn(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
 
@@ -119,7 +119,7 @@ class DMLOperations():
             number_of_columns += 1
 
         if ttl != "":
-            rows = self.query(
+            rows = self.exec_query_fn(
                 f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={format_sql_value(ttl_types[ttl](count_assert), ttl)}")
             assert len(
                 rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in ttl_{cleanup_type_name(ttl)}, table {table_name}"
@@ -127,14 +127,14 @@ class DMLOperations():
 
         for type_name in all_types.keys():
             if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                rows = self.query(
+                rows = self.exec_query_fn(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count_assert), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
         if unique == "":
             for type_name in index.keys():
-                rows = self.query(
+                rows = self.exec_query_fn(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count_assert), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
@@ -144,7 +144,7 @@ class DMLOperations():
             if ttl != "":
                 number_of_columns += 1
             for type_name in index.keys():
-                rows = self.query(
+                rows = self.exec_query_fn(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns), type_name)}")
                 assert len(
                     rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
@@ -152,7 +152,7 @@ class DMLOperations():
 
     def create_update(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
         update_sql = f""" UPDATE `{table_name}` SET {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)} """
-        self.query(update_sql)
+        self.exec_query_fn(update_sql)
 
     def create_update_unique(self, value: int, search: int, index: dict[str, str], table_name: str):
         update_sql = f""" UPDATE `{table_name}` SET 
@@ -160,7 +160,7 @@ class DMLOperations():
             WHERE
             {" and ".join(f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](search), type_name)}" for type_name in index.keys())}
         """
-        self.query(update_sql)
+        self.exec_query_fn(update_sql)
 
     def upsert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -190,7 +190,7 @@ class DMLOperations():
                 {" and ".join(create_all_type)}
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
                 """
-            rows = self.query(sql_select)
+            rows = self.exec_query_fn(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
 
@@ -219,10 +219,10 @@ class DMLOperations():
                 {" and ".join(create_all_type)}
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
                 """
-            rows = self.query(sql_select)
+            rows = self.exec_query_fn(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
-        rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
+        rows = self.exec_query_fn(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == 2*number_of_columns, f"Expected {2*number_of_columns} rows, after select all line"
 
@@ -243,7 +243,7 @@ class DMLOperations():
                     )
                     ;
                 """
-        self.query(upsert_sql)
+        self.exec_query_fn(upsert_sql)
 
     def delete(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         number_of_columns = len(pk_types) + len(all_types) + len(index) + 1
@@ -303,7 +303,7 @@ class DMLOperations():
                 {" and ".join(create_all_type)}
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
                 """
-            rows = self.query(sql_select)
+            rows = self.exec_query_fn(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
 
@@ -322,10 +322,10 @@ class DMLOperations():
                 {" and ".join(create_all_type)}
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
                 """
-            rows = self.query(sql_select)
+            rows = self.exec_query_fn(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 0, f"Expected one rows, faild in {count} value, table {table_name}"
-        rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
+        rows = self.exec_query_fn(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
 
@@ -333,7 +333,7 @@ class DMLOperations():
         delete_sql = f"""
             DELETE FROM {table_name} WHERE {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)};
         """
-        self.query(delete_sql)
+        self.exec_query_fn(delete_sql)
 
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = []
@@ -350,7 +350,7 @@ class DMLOperations():
         if ttl != "":
             statements.append(f"ttl_{cleanup_type_name(ttl)}")
 
-        rows = self.query(f"select {", ".join(statements)} from {table_name}")
+        rows = self.exec_query_fn(f"select {", ".join(statements)} from {table_name}")
         count = 0
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':

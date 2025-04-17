@@ -1,11 +1,9 @@
-import ydb
 import os
 import yatest.common
 import logging
 import hashlib
 
 
-from typing import Any, List, Optional
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -16,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class MulticlusterTestBase():
+    @classmethod
     def setup_class(cls):
         ydb_path = yatest.common.build_path(os.environ.get(
             "YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
@@ -28,8 +27,8 @@ class MulticlusterTestBase():
         cls.clusters = [cls.build_cluster(), cls.build_cluster()]
 
     @classmethod
-    def build_cluster(self):
-        cluster = KiKiMR(KikimrConfigGenerator(erasure=self.get_cluster_configuration(),
+    def build_cluster(cls):
+        cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                extra_feature_flags=["enable_resource_pools",
                                                                     "enable_external_data_sources",
                                                                     "enable_tiering_in_column_shard"],
@@ -45,16 +44,16 @@ class MulticlusterTestBase():
         cluster.start()
         return cluster
 
-    @classmethod
-    def get_cluster_configuration(self):
+    @staticmethod
+    def get_cluster_configuration():
         return Erasure.NONE
 
     @classmethod
-    def get_database(self):
-        return self.database
+    def get_database(cls):
+        return cls.database
 
-    @classmethod
-    def get_endpoint(self, cluster):
+    @staticmethod
+    def get_endpoint(cluster):
         return "%s:%s" % (
             cluster.nodes[1].host, cluster.nodes[1].port
         )
@@ -62,7 +61,7 @@ class MulticlusterTestBase():
     @classmethod
     def teardown_class(cls):
         for cluster in cls.clusters:
-                cluster.stop()
+            cluster.stop()
 
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")
@@ -74,4 +73,3 @@ class MulticlusterTestBase():
     def create_query(self, cluster):
         query = Query.create(self.get_database(), self.get_endpoint(cluster))
         return query.query
-    

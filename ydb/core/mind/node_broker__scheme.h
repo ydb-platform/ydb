@@ -79,14 +79,14 @@ struct Schema : NIceDb::Schema {
 
     enum EParamKey : ui32 {
         ParamKeyConfigSubscription = 1,
-        ParamKeyCurrentEpochId,
-        ParamKeyCurrentEpochVersion,
-        ParamKeyCurrentEpochStart,
-        ParamKeyCurrentEpochEnd,
-        ParamKeyNextEpochEnd,
-        ParamKeyApproximateEpochStartId,
-        ParamKeyApproximateEpochStartVersion,
-        ParamKeyMainNodesTable,
+        ParamKeyCurrentEpochId = 2,
+        ParamKeyCurrentEpochVersion = 3,
+        ParamKeyCurrentEpochStart = 4,
+        ParamKeyCurrentEpochEnd = 5,
+        ParamKeyNextEpochEnd = 6,
+        ParamKeyApproximateEpochStartId = 7,
+        ParamKeyApproximateEpochStartVersion = 8,
+        ParamKeyMainNodesTable = 9,
     };
 
     struct Params : Table<3> {

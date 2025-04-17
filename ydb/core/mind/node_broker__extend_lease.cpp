@@ -59,10 +59,10 @@ public:
 
         auto &node = it->second;
         if (node.Expire < Self->Dirty.Epoch.NextEnd) {
-            Self->Dirty.UpdateEpochVersion();
-            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Self->Dirty.ExtendLease(node);
             Self->Dirty.DbAddNode(node, txc);
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Update = true;
         }
 
@@ -83,9 +83,9 @@ public:
         ctx.Send(Event->Sender, Response.Release());
 
         if (Update) {
-            Self->Committed.UpdateEpochVersion();
             auto& node = Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId());
             Self->Committed.ExtendLease(node);
+            Self->Committed.UpdateEpochVersion();
             Self->AddNodeToEpochCache(node);
         }
     }

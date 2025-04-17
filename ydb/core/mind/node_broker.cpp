@@ -66,6 +66,17 @@ bool IsReady(T &t, Ts &...args)
 
 std::atomic<INodeBrokerHooks*> NodeBrokerHooks{ nullptr };
 
+struct TVersionedNodeID {
+    struct TCmpByVersion {
+        bool operator()(TVersionedNodeID a, TVersionedNodeID b) const {
+            return a.Version < b.Version;
+        }
+    };
+
+    ui32 NodeId;
+    ui64 Version;
+};
+
 } // anonymous namespace
 
 void INodeBrokerHooks::OnActivateExecutor(ui64 tabletId) {
@@ -222,7 +233,7 @@ void TNodeBroker::TState::ClearState()
 
 void TNodeBroker::TState::UpdateLocation(TNodeInfo &node, const TNodeLocation &location)
 {
-    node.Version = Epoch.Version;
+    node.Version = Epoch.Version + 1;
     node.Location = location;
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -294,7 +305,7 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
 
 void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 {
-    node.Version = Epoch.Version;
+    node.Version = Epoch.Version + 1;
     ++node.Lease;
     node.Expire = Epoch.NextEnd;
 
@@ -305,7 +316,7 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 
 void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
 {
-    node.Version = Epoch.Version;
+    node.Version = Epoch.Version + 1;
     ++node.Lease;
     node.Expire = TInstant::Max();
 
@@ -385,16 +396,16 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
             // We may be able to only send added or updated nodes in the same epoch when
             // all deltas are cached up to the current epoch inclusive.
             ui64 neededFirstVersion = msg->Record.GetCachedVersion() + 1;
-            if (!EpochDeltasByVersion.empty()
+            if (!EpochDeltasVersions.empty()
                 && neededFirstVersion > Committed.ApproxEpochStart.Version
                 && neededFirstVersion <= Committed.Epoch.Version)
             {
-                auto it = EpochDeltasByVersion.lower_bound(neededFirstVersion);
-                if (it != EpochDeltasByVersion.begin()) {
+                auto it = std::lower_bound(EpochDeltasVersions.begin(), EpochDeltasVersions.end(), neededFirstVersion);
+                if (it != EpochDeltasVersions.begin()) {
                     // Note: usually there is a small number of nodes added
                     // between subsequent requests, so this substr should be
                     // very cheap.
-                    resp->PreSerializedData = EpochDeltasCache.substr(std::prev(it)->second);
+                    resp->PreSerializedData = EpochDeltasCache.substr(std::prev(it)->CacheEndOffset);
                 } else {
                     resp->PreSerializedData = EpochDeltasCache;
                 }
@@ -538,8 +549,8 @@ void TNodeBroker::TState::UpdateEpochVersion()
 void TNodeBroker::PrepareEpochCache()
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Preparing nodes list cache for epoch #" << Committed.Epoch.ToString()
-                << ", approximate epoch start #" << Committed.ApproxEpochStart.ToString()
+                "Preparing nodes list cache for epoch " << Committed.Epoch.ToString()
+                << ", approximate epoch start " << Committed.ApproxEpochStart.ToString()
                 << " nodes=" << Committed.Nodes.size() << " expired=" << Committed.ExpiredNodes.size());
 
     NKikimrNodeBroker::TNodesInfo info;
@@ -552,26 +563,25 @@ void TNodeBroker::PrepareEpochCache()
     TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
     EpochDeltasCache.clear();
-    EpochDeltasByVersion.clear();
+    EpochDeltasVersions.clear();
 
-    TMultiMap<ui64, ui64> nodeIdsSortedByVersion;
+    TVector<TVersionedNodeID> updatedAfterEpochStart;
     for (auto &entry : Committed.Nodes) {
-        nodeIdsSortedByVersion.emplace(entry.second.Version, entry.second.NodeId);
+        if (entry.second.Version > Committed.ApproxEpochStart.Version) {
+            updatedAfterEpochStart.emplace_back(entry.second.NodeId, entry.second.Version);
+        }
     }
+    std::sort(updatedAfterEpochStart.begin(), updatedAfterEpochStart.end(), TVersionedNodeID::TCmpByVersion());
 
     NKikimrNodeBroker::TNodesInfo deltaInfo;
     TString delta;
-    for (const auto &[v, id] : nodeIdsSortedByVersion) {
-        if (v > Committed.ApproxEpochStart.Version) {
-            FillNodeInfo(Committed.Nodes.at(id), *deltaInfo.AddNodes());
+    for (const auto &[id, v] : updatedAfterEpochStart) {
+        FillNodeInfo(Committed.Nodes.at(id), *deltaInfo.AddNodes());
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD deltaInfo.SerializeToString(&delta);
+        Y_PROTOBUF_SUPPRESS_NODISCARD deltaInfo.SerializeToString(&delta);
+        AddDeltaToEpochDeltasCache(delta, v);
 
-            EpochDeltasCache += delta;
-            EpochDeltasByVersion.emplace(v, EpochDeltasCache.size());
-
-            deltaInfo.ClearNodes();
-        }
+        deltaInfo.ClearNodes();
     }
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
@@ -590,8 +600,18 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     EpochCache += delta;
     TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
-    EpochDeltasCache += delta;
-    EpochDeltasByVersion.emplace(node.Version, EpochDeltasCache.size());
+    AddDeltaToEpochDeltasCache(delta, node.Version);
+}
+
+void TNodeBroker::AddDeltaToEpochDeltasCache(const TString &delta, ui64 version) {
+    Y_ENSURE(EpochDeltasVersions.empty() || EpochDeltasVersions.back().Version <= version);
+    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back().Version == version) {
+        EpochDeltasCache += delta;
+        EpochDeltasVersions.back().CacheEndOffset = EpochDeltasCache.size();
+    } else {
+        EpochDeltasCache += delta;
+        EpochDeltasVersions.emplace_back(version, EpochDeltasCache.size());
+    }
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
@@ -728,14 +748,13 @@ void TNodeBroker::TDirtyState::DbFixNodeId(const TNodeInfo &node,
         .Update<Schema::Nodes::Expire>(TInstant::Max().GetValue());
 }
 
-bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
+TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
                               const TActorContext &ctx)
 {
     NIceDb::TNiceDb db(txc.DB);
-    TDbChanges dbChanges;
 
     if (!db.Precharge<Schema>())
-        return false;
+        return { .Ready = false };
 
     auto configRow = db.Table<Schema::Config>()
         .Key(Schema::ConfigKeyConfig).Select<Schema::Config::Value>();
@@ -767,7 +786,7 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
                  currentEpochEndRow, nextEpochEndRow, approxEpochStartIdRow,
                  approxEpochStartVersionRow, mainNodesTableRow, nodesRowset,
                  nodesV2Rowset))
-        return false;
+        return { .Ready = false };
 
     ClearState();
 
@@ -793,6 +812,7 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
                     DbLogPrefix() << " Loaded config subscription: " << ConfigSubscriptionId);
     }
 
+    TDbChanges dbChanges;
     if (currentEpochIdRow.IsValid()) {
         Y_ABORT_UNLESS(currentEpochVersionRow.IsValid());
         Y_ABORT_UNLESS(currentEpochStartRow.IsValid());
@@ -822,9 +842,7 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
         dbChanges.UpdateEpoch = true;
     }
 
-    if (approxEpochStartIdRow.IsValid()) {
-        Y_ABORT_UNLESS(approxEpochStartVersionRow.IsValid());
-
+    if (approxEpochStartIdRow.IsValid() && approxEpochStartVersionRow.IsValid()) {
         ApproxEpochStart.Id = approxEpochStartIdRow.GetValue<Schema::Params::Value>();
         ApproxEpochStart.Version = approxEpochStartVersionRow.GetValue<Schema::Params::Value>();
 
@@ -864,41 +882,29 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
 
     if (mainNodesTable == Schema::EMainNodesTable::Nodes) {
         if (dbChanges.Merge(DbLoadNodes(nodesRowset, ctx)); !dbChanges.Ready) {
-            return false;
+            return dbChanges;
         }
-        if (dbChanges.Merge(DbSyncNodesV2(nodesV2Rowset, ctx)); !dbChanges.Ready) {
-            return false;
+        if (dbChanges.Merge(DbMigrateNodes(nodesV2Rowset, ctx)); !dbChanges.Ready) {
+            return dbChanges;
         }
     } else if (mainNodesTable == Schema::EMainNodesTable::NodesV2) {
         if (dbChanges.Merge(DbLoadNodesV2(nodesV2Rowset, ctx)); !dbChanges.Ready) {
-            return false;
+            return dbChanges;
         }
-        if (dbChanges.Merge(DbSyncNodes()); !dbChanges.Ready) {
-            return false;
+        if (dbChanges.Merge(DbMigrateNodesV2()); !dbChanges.Ready) {
+            return dbChanges;
         }
     }
 
     if (!dbChanges.NewVersionUpdateNodes.empty()) {
         UpdateEpochVersion();
-        DbUpdateNodes(dbChanges.NewVersionUpdateNodes, txc);
-    }
-    if (!dbChanges.UpdateNodes.empty()) {
-        DbUpdateNodes(dbChanges.UpdateNodes, txc);
-    }
-    if (dbChanges.UpdateEpoch) {
-        DbUpdateEpoch(Epoch, txc);
-    }
-    if (dbChanges.UpdateApproxEpochStart) {
-        DbUpdateApproxEpochStart(ApproxEpochStart, txc);
-    }
-    if (dbChanges.UpdateMainNodesTable) {
-        DbUpdateMainNodesTable(txc);
+        dbChanges.UpdateEpoch = true;
     }
 
-    return true;
+    return dbChanges;
 }
 
-TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset, const TActorContext &ctx)
+TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto &nodesRowset, const TActorContext &ctx)
 {
     TVector<ui32> toRemove;
     while (!nodesRowset.EndOfSet()) {
@@ -955,12 +961,11 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbLoadNodes(auto 
 
     return {
         .Ready = true,
-        .UpdateEpoch = !toRemove.empty(),
         .NewVersionUpdateNodes = std::move(toRemove)
     };
 }
 
-TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbLoadNodesV2(auto &nodesV2Rowset, const TActorContext &ctx)
+TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbLoadNodesV2(auto &nodesV2Rowset, const TActorContext &ctx)
 {
     TVector<ui32> toRemove;
     while (!nodesV2Rowset.EndOfSet()) {
@@ -989,12 +994,11 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbLoadNodesV2(aut
 
     return {
         .Ready = true,
-        .UpdateEpoch = !toRemove.empty(),
         .NewVersionUpdateNodes = std::move(toRemove)
     };
 }
 
-TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodes() {
+TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodesV2() {
     // Assume that Nodes table is fully cleared by future version,
     // so just need to fill it with active & expired nodes
     TVector<ui32> updateNodes;
@@ -1010,7 +1014,7 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodes() {
     };
 }
 
-TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodesV2(auto &nodesV2Rowset, const TActorContext &ctx) {
+TNodeBroker::TDbChanges TNodeBroker::TDirtyState::DbMigrateNodes(auto &nodesV2Rowset, const TActorContext &ctx) {
     TVector<ui32> newVersionUpdateNodes;
     TVector<ui32> updateNodes;
 
@@ -1049,12 +1053,12 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodesV2(aut
             }
 
             LOG_NOTICE_S(ctx, NKikimrServices::NODE_BROKER,
-                         DbLogPrefix() << " Syncing changed nodeV2 " << node->ToString());
+                         DbLogPrefix() << " Migrating changed node " << node->ToString());
         } else if (nodeRemoved) {
             if (node != nullptr) {
-                // Remove was made by new version, syncing already in progress
+                // Remove was made by new version, migration already in progress
                 LOG_NOTICE_S(ctx, NKikimrServices::NODE_BROKER,
-                             DbLogPrefix() << " Syncing removed nodeV2 " << node->IdShortString());
+                             DbLogPrefix() << " Migrating removed node " << node->IdShortString());
             } else if (nodeV2.State != ENodeState::Removed) {
                 // Assume that old version removes nodes only with version bump. It is not always
                 // true, so it is possible that client never recieve this remove until the restart.
@@ -1065,16 +1069,16 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodesV2(aut
                 updateNodes.push_back(id);
 
                 LOG_NOTICE_S(ctx, NKikimrServices::NODE_BROKER,
-                             DbLogPrefix() << " Syncing removed nodeV2 " << removedNode.IdShortString());
+                             DbLogPrefix() << " Migrating removed node " << removedNode.IdShortString());
             } else {
                 AddNode(nodeV2);
                 LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                            DbLogPrefix() << " Removed nodeV2 " << nodeV2.IdShortString() << " is already synced");
+                            DbLogPrefix() << " Removed node " << nodeV2.IdShortString() << " is already migrated");
             }
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                        DbLogPrefix() << " NodeV2 " << nodeV2.IdShortString() << " is already synced");
             node->Version = nodeV2.Version;
+            LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                        DbLogPrefix() << " Node " << node->IdShortString() << " is already migrated");
         }
 
         if (!nodesV2Rowset.Next()) {
@@ -1088,7 +1092,7 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodesV2(aut
             newVersionUpdateNodes.push_back(id);
 
             LOG_NOTICE_S(ctx, NKikimrServices::NODE_BROKER,
-                         DbLogPrefix() << " Syncing new active nodeV2 " << node.ToString());
+                         DbLogPrefix() << " Migrating new active node " << node.ToString());
         }
     }
 
@@ -1098,13 +1102,12 @@ TNodeBroker::TDirtyState::TDbChanges TNodeBroker::TDirtyState::DbSyncNodesV2(aut
             updateNodes.push_back(id);
 
             LOG_NOTICE_S(ctx, NKikimrServices::NODE_BROKER,
-                         DbLogPrefix() << " Syncing new expired nodeV2 " << node.ToString());
+                         DbLogPrefix() << " Migrating new expired node " << node.ToString());
         }
     }
 
     return {
         .Ready = true,
-        .UpdateEpoch = !newVersionUpdateNodes.empty(),
         .NewVersionUpdateNodes = std::move(newVersionUpdateNodes),
         .UpdateNodes = std::move(updateNodes)
     };
@@ -1166,7 +1169,7 @@ void TNodeBroker::TDirtyState::DbUpdateApproxEpochStart(const TApproximateEpochS
                                     TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                DbLogPrefix() << " Update legacy epoch start in database: " << epochStart.ToString());
+                DbLogPrefix() << " Update approx epoch start in database: " << epochStart.ToString());
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(Schema::ParamKeyApproximateEpochStartId)
@@ -1574,7 +1577,7 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
     return serialized;
 }
 
-void TNodeBroker::TDirtyState::TDbChanges::Merge(const TDbChanges &other) {
+void TNodeBroker::TDbChanges::Merge(const TDbChanges &other) {
     Ready = Ready && other.Ready;
     UpdateEpoch = UpdateEpoch || other.UpdateEpoch;
     UpdateApproxEpochStart = UpdateApproxEpochStart || other.UpdateApproxEpochStart;
@@ -1582,6 +1585,10 @@ void TNodeBroker::TDirtyState::TDbChanges::Merge(const TDbChanges &other) {
     UpdateNodes.insert(UpdateNodes.end(), other.UpdateNodes.begin(), other.UpdateNodes.end());
     NewVersionUpdateNodes.insert(NewVersionUpdateNodes.end(), other.NewVersionUpdateNodes.begin(),
         other.NewVersionUpdateNodes.end());
+}
+
+bool TNodeBroker::TDbChanges::HasNodeUpdates() const {
+    return !UpdateNodes.empty() || !NewVersionUpdateNodes.empty();
 }
 
 TNodeBroker::TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)

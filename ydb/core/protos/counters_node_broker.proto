@@ -54,4 +54,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_CONFIG_SUBSCRIPTION = 5   [(TxTypeOpts) = {Name: "TTxUpdateConfigSubscription"}];
     TXTYPE_UPDATE_EPOCH = 6                 [(TxTypeOpts) = {Name: "TTxUpdateEpoch"}];
     TXTYPE_GRACESFUL_SHUTDOWN = 7           [(TxTypeOpts) = {Name: "TTxGracefulShutdown"}];
+    TXTYPE_MIGRATE_STATE = 8                [(TxTypeOpts) = {Name: "TTxMigrateState"}];
 }

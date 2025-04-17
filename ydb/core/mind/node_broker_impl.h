@@ -145,18 +145,31 @@ private:
         TApproximateEpochStartInfo NewApproxEpochStart;
     };
 
+    struct TCacheVersion {
+        ui64 Version;
+        ui64 CacheEndOffset;
+
+        bool operator<(ui64 version) const {
+            return Version < version;
+        }
+    };
+
     class TTxExtendLease;
     class TTxInitScheme;
     class TTxLoadState;
+    class TTxMigrateState;
     class TTxRegisterNode;
     class TTxGracefulShutdown;
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
 
+    struct TDbChanges;
+
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
+    ITransaction *CreateTxMigrateState(TDbChanges&& dbChanges);
     ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
     ITransaction *CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
@@ -239,6 +252,7 @@ private:
 
     void PrepareEpochCache();
     void AddNodeToEpochCache(const TNodeInfo &node);
+    void AddDeltaToEpochDeltasCache(const TString& delta, ui64 version);
 
     void SubscribeForConfigUpdates(const TActorContext &ctx);
 
@@ -277,9 +291,7 @@ private:
     TString EpochCache;
 
     TString EpochDeltasCache;
-    using TVersion = ui64;
-    using TCacheEndOffset = ui64;
-    TMap<TVersion, TCacheEndOffset> EpochDeltasByVersion;
+    TVector<TCacheVersion> EpochDeltasVersions;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
@@ -331,6 +343,19 @@ private:
         TNodeBroker* Self;
     };
 
+    struct TDbChanges {
+        bool Ready = true;
+        bool UpdateEpoch = false;
+        bool UpdateApproxEpochStart = false;
+        bool UpdateMainNodesTable = false;
+        TVector<ui32> NewVersionUpdateNodes;
+        TVector<ui32> UpdateNodes;
+        bool Finalized = false;
+
+        void Merge(const TDbChanges &other);
+        bool HasNodeUpdates() const;
+    };
+
     struct TDirtyState : public TState {
         TDirtyState(TNodeBroker* self);
 
@@ -343,8 +368,6 @@ private:
                     TTransactionContext &txc);
         void DbFixNodeId(const TNodeInfo &node,
                 TTransactionContext &txc);
-        bool DbLoadState(TTransactionContext &txc,
-                const TActorContext &ctx);
         void DbUpdateNodes(const TVector<ui32> &nodes, TTransactionContext &txc);
         void DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
                     TTransactionContext &txc);
@@ -365,21 +388,11 @@ private:
         void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                         TTransactionContext &txc);
 
-        struct TDbChanges {
-            bool Ready = true;
-            bool UpdateEpoch = false;
-            bool UpdateApproxEpochStart = false;
-            bool UpdateMainNodesTable = false;
-            TVector<ui32> NewVersionUpdateNodes;
-            TVector<ui32> UpdateNodes;
-
-            void Merge(const TDbChanges &other);
-        };
-
+        TDbChanges DbLoadState(TTransactionContext &txc, const TActorContext &ctx);
         TDbChanges DbLoadNodes(auto &nodesRowset, const TActorContext &ctx);
+        TDbChanges DbMigrateNodes(auto &nodesV2Rowset, const TActorContext &ctx);
         TDbChanges DbLoadNodesV2(auto &nodesV2Rowset, const TActorContext &ctx);
-        TDbChanges DbSyncNodes();
-        TDbChanges DbSyncNodesV2(auto &nodesV2Rowset, const TActorContext &ctx);
+        TDbChanges DbMigrateNodesV2();
 
     protected:
         TStringBuf LogPrefix() const override;

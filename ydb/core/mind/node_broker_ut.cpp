@@ -545,12 +545,12 @@ void CheckNodesListResponse(const NKikimrNodeBroker::TNodesInfo &rec,
 {
     UNIT_ASSERT_VALUES_EQUAL(rec.NodesSize(), ids.size());
     for (auto &node : rec.GetNodes()) {
-        UNIT_ASSERT(ids.contains(node.GetNodeId()));
+        UNIT_ASSERT_C(ids.contains(node.GetNodeId()), node.GetNodeId());
         ids.erase(ids.find(node.GetNodeId()));
     }
     UNIT_ASSERT_VALUES_EQUAL(rec.ExpiredNodesSize(), expiredIds.size());
     for (auto &node : rec.GetExpiredNodes()) {
-        UNIT_ASSERT(expiredIds.contains(node.GetNodeId()));
+        UNIT_ASSERT_C(expiredIds.contains(node.GetNodeId()), node.GetNodeId());
         expiredIds.erase(expiredIds.find(node.GetNodeId()));
     }
 }
@@ -968,6 +968,52 @@ public:
         return *this;
     }
 
+    TString BuildQuery() const {
+        TStringBuilder query;
+
+        if (Host) {
+            query << "'('Host (Utf8 '\"" << *Host << "\"))\n";
+        }
+
+        if (Port) {
+            query << "'('Port (Uint32 '" << *Port << "))\n";
+        }
+
+        if (ResolveHost) {
+            query << "'('ResolveHost (Utf8 '\"" << *ResolveHost << "\"))\n";
+        }
+
+        if (Address) {
+            query << "'('Address (Utf8 '\"" << *Address << "\"))\n";
+        }
+
+        if (Lease) {
+            query << "'('Lease (Uint32 '" << *Lease << "))\n";
+        }
+
+        if (Expire) {
+            query << "'('Expire (Uint64 '" << *Expire << "))\n";
+        }
+
+        if (Location) {
+            query << "'('Location (String '\"" << HexEscaped(Location->GetSerializedLocation()) << "\"))\n";
+        }
+
+        if (ServicedSubdomain) {
+            query << "'('ServicedSubDomain (String '\"" << HexEscaped(ServicedSubdomain->SerializeAsString()) << "\"))\n";
+        }
+
+        if (SlotIndex) {
+            query << "'('SlotIndex (Uint32 '" << *SlotIndex << "))\n";
+        }
+
+        if (AuthorizedByCertificate) {
+            query << "'('AuthorizedByCertificate (Bool '" << (*AuthorizedByCertificate ? "true" : "false") << "))\n";
+        }
+
+        return query;
+    }
+
     TMaybe<TString> Host;
     TMaybe<ui32> Port;
     TMaybe<TString> ResolveHost;
@@ -999,66 +1045,41 @@ void LocalMiniKQL(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, co
     UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
 }
 
-void UpdateNodeLocalDb(TTestBasicRuntime& runtime, TActorId sender, ui32 nodeId, const TUpdateNodeLocalDbBuilder& builder) {
+void UpdateNodesLocalDb(TTestBasicRuntime& runtime, TActorId sender, const THashMap<ui32, TUpdateNodeLocalDbBuilder>& nodes) {
     TStringBuilder query;
     query << "(";
-    query << "  (let key '('('ID (Uint32 '" << nodeId << "))))";
-    query << "  (let row '(\n";
-
-    if (builder.Host) {
-        query << "'('Host (Utf8 '\"" << *builder.Host << "\"))\n";
+    for (const auto& [id, n] : nodes) {
+        query << Sprintf("(let key%u '('('ID (Uint32 '%u))))", id, id);
+        query << Sprintf("(let row%u '(%s))", id, n.BuildQuery().data());
     }
-
-    if (builder.Port) {
-        query << "'('Port (Uint32 '" << *builder.Port << "))\n";
+    query << "  (return (AsList ";
+    for (const auto& [id, _] : nodes) {
+        query << Sprintf("(UpdateRow 'Nodes key%u row%u)", id, id);
     }
+    query << ")))";
+    LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), query);
+}
 
-    if (builder.ResolveHost) {
-        query << "'('ResolveHost (Utf8 '\"" << *builder.ResolveHost << "\"))\n";
+void UpdateNodeLocalDb(TTestBasicRuntime& runtime, TActorId sender, ui32 nodeId, TUpdateNodeLocalDbBuilder& node) {
+    UpdateNodesLocalDb(runtime, sender, {{ nodeId, node }});
+}
+
+void DeleteNodesLocalDb(TTestBasicRuntime& runtime, TActorId sender, const TVector<ui32> &nodeIds) {
+    TStringBuilder query;
+    query << "(";
+    for (auto id : nodeIds) {
+        query << Sprintf("(let key%u '('('ID (Uint32 '%u))))", id, id);
     }
-
-    if (builder.Address) {
-        query << "'('Address (Utf8 '\"" << *builder.Address << "\"))\n";
+    query << "(return (AsList";
+    for (auto id : nodeIds) {
+        query << Sprintf("(EraseRow 'Nodes key%u)", id);
     }
-
-    if (builder.Lease) {
-        query << "'('Lease (Uint32 '" << *builder.Lease << "))\n";
-    }
-
-    if (builder.Expire) {
-        query << "'('Expire (Uint64 '" << *builder.Expire << "))\n";
-    }
-
-    if (builder.Location) {
-        query << "'('Location (String '\"" << HexEscaped(builder.Location->GetSerializedLocation()) << "\"))\n";
-    }
-
-    if (builder.ServicedSubdomain) {
-        query << "'('ServicedSubDomain (String '\"" << HexEscaped(builder.ServicedSubdomain->SerializeAsString()) << "\"))\n";
-    }
-
-    if (builder.SlotIndex) {
-        query << "'('SlotIndex (Uint32 '" << *builder.SlotIndex << "))\n";
-    }
-
-    if (builder.AuthorizedByCertificate) {
-        query << "'('AuthorizedByCertificate (Bool '" << (*builder.AuthorizedByCertificate ? "true" : "false") << "))\n";
-    }
-
-    query << "))\n";
-    query << "  (return (AsList (UpdateRow 'Nodes key row)))";
-    query << ")";
-
+    query << ")))";
     LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), query);
 }
 
 void DeleteNodeLocalDb(TTestBasicRuntime& runtime, TActorId sender, ui32 nodeId) {
-    LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), Sprintf(R"(
-        (
-            (let key '('('ID (Uint32 '%u))))
-            (return (AsList (EraseRow 'Nodes key)))
-        )
-    )", nodeId));
+    DeleteNodesLocalDb(runtime, sender, { nodeId });
 }
 
 void UpdateParamsLocalDb(TTestBasicRuntime& runtime, TActorId sender, ui32 key, ui64 value) {
@@ -2293,7 +2314,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2AlreadySynced)
+    Y_UNIT_TEST(NodesAlreadyMigrated)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2308,10 +2329,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       0, 0, 0, 0, epoch.GetNextEnd());
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBrokerEnsureReadOnly(runtime);
 
-        // Already synced, so version remains the same
+        // Already migrated, so version remains the same
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
@@ -2328,10 +2349,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                         1, 2, 3, 4, epoch.GetNextEnd());
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBrokerEnsureReadOnly(runtime);
 
-        // Already synced, so version remains the same
+        // Already migrated, so version remains the same
         epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
@@ -2345,10 +2366,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBrokerEnsureReadOnly(runtime);
 
-        // Already synced, so version remains the same
+        // Already migrated, so version remains the same
         epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
@@ -2360,10 +2381,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBrokerEnsureReadOnly(runtime);
 
-        // Already synced, so version remains the same
+        // Already migrated, so version remains the same
         epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
@@ -2379,10 +2400,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                       1, 2, 3, 5, epoch.GetNextEnd());
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBrokerEnsureReadOnly(runtime);
 
-        // Already synced, so version remains the same
+        // Already migrated, so version remains the same
         epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
@@ -2391,7 +2412,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 5, epoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncExtendLease)
+    Y_UNIT_TEST(NodesMigrationExtendLease)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 2);
@@ -2420,10 +2441,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                 .SetLease(2)
                 .SetExpire(extendedExpire));
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // Lease extension is synced, so version is bumped
+        // Lease extension is migrated, so version is bumped
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1, NODE2}, {}, epochAfterRestart.GetId());
@@ -2434,7 +2455,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, extendedExpire);
     }
 
-    Y_UNIT_TEST(NodesV2SyncSetLocation)
+    Y_UNIT_TEST(NodesMigrationSetLocation)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2454,10 +2475,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                 .SetLocation(TNodeLocation("1", "2", "3", "4"))
         );
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // Set location is synced, so version is bumped
+        // Set location is migrated, so version is bumped
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
@@ -2466,7 +2487,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncNodeName)
+    Y_UNIT_TEST(NodesMigrationNodeName)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 2);
@@ -2484,10 +2505,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Simulate changing node name while NodeBroker is running on the old version
         UpdateNodeLocalDb(runtime, sender, NODE1, TUpdateNodeLocalDbBuilder().SetSlotIndex(1));
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // Node name change is synced, but version is not bumped
+        // Node name change is migrated, but version is not bumped
         // as node name is not included in DynamicNameserver cache
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
@@ -2501,7 +2522,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                           TStatus::OK, NODE2, epoch.GetNextEnd(), "slot-0");
     }
 
-    Y_UNIT_TEST(NodesV2SyncExpireActive)
+    Y_UNIT_TEST(NodesMigrationExpireActive)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2519,10 +2540,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         auto newEpoch = NextEpochObject(NextEpochObject(epoch));
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 expiration is synced, version was bumped only during epoch change
+        // NODE1 expiration is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2531,7 +2552,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncExpireRemoved)
+    Y_UNIT_TEST(NodesMigrationExpireRemoved)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2572,10 +2593,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         auto newEpoch = NextEpochObject(NextEpochObject(epoch));
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 expiration is synced, version was bumped only during epoch change
+        // NODE1 expiration is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2584,7 +2605,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncExpiredChanged)
+    Y_UNIT_TEST(NodesMigrationExpiredChanged)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2628,10 +2649,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         newEpoch = NextEpochObject(NextEpochObject(epoch));
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 expiration is synced, version was bumped only during epoch change
+        // NODE1 expiration is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2640,7 +2661,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncRemoveActive)
+    Y_UNIT_TEST(NodesMigrationRemoveActive)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2659,10 +2680,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UpdateEpochLocalDb(runtime, sender, newEpoch);
         DeleteNodeLocalDb(runtime, sender, NODE1);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 removal is synced, version was bumped only during epoch change
+        // NODE1 removal is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2671,7 +2692,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncRemoveExpired)
+    Y_UNIT_TEST(NodesMigrationRemoveExpired)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2696,10 +2717,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UpdateEpochLocalDb(runtime, sender, newEpoch);
         DeleteNodeLocalDb(runtime, sender, NODE1);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 removal is synced, version was bumped only during epoch change
+        // NODE1 removal is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2708,7 +2729,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncRemovedChanged)
+    Y_UNIT_TEST(NodesMigrationRemovedChanged)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2750,10 +2771,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UpdateEpochLocalDb(runtime, sender, newEpoch);
         DeleteNodeLocalDb(runtime, sender, NODE1);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 removal is synced, version was bumped only during epoch change
+        // NODE1 removal is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2762,7 +2783,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncReuseID)
+    Y_UNIT_TEST(NodesMigrationReuseID)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2797,10 +2818,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         newEpoch.SetVersion(newEpoch.GetVersion() + 1);
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 reuse is synced, version was bumped because of possible lease extension
+        // NODE1 reuse is migrated, version was bumped because of possible lease extension
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2810,7 +2831,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, newEpoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncReuseExpiredID)
+    Y_UNIT_TEST(NodesMigrationReuseExpiredID)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2851,10 +2872,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         newEpoch.SetVersion(newEpoch.GetVersion() + 1);
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 reuse is synced, version was bumped because of possible lease extension
+        // NODE1 reuse is migrated, version was bumped because of possible lease extension
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2864,7 +2885,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, newEpoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncReuseRemovedID)
+    Y_UNIT_TEST(NodesMigrationReuseRemovedID)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2901,10 +2922,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         epoch.SetVersion(epoch.GetVersion() + 1);
         UpdateEpochLocalDb(runtime, sender, epoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 reuse is synced, version was bumped because of possible lease extension
+        // NODE1 reuse is migrated, version was bumped because of possible lease extension
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
@@ -2914,7 +2935,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncExtendLeaseThenExpire)
+    Y_UNIT_TEST(NodesMigrationExtendLeaseThenExpire)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2940,10 +2961,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         newEpoch = NextEpochObject(NextEpochObject(newEpoch));
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 expiration is synced, version was bumped only during epoch change
+        // NODE1 expiration is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2952,7 +2973,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncExtendLeaseThenRemove)
+    Y_UNIT_TEST(NodesMigrationExtendLeaseThenRemove)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -2979,10 +3000,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UpdateEpochLocalDb(runtime, sender, newEpoch);
         DeleteNodeLocalDb(runtime, sender, NODE1);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 removal is synced, version was bumped only during epoch change
+        // NODE1 removal is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -2991,7 +3012,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesV2SyncReuseIDThenExtendLease)
+    Y_UNIT_TEST(NodesMigrationReuseIDThenExtendLease)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -3033,10 +3054,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                 .SetLease(2)
                 .SetExpire(extendedExpire));
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // NODE1 reuse is synced, version was bumped because of lease extension
+        // NODE1 reuse is migrated, version was bumped because of lease extension
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -3046,7 +3067,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, extendedExpire);
     }
 
-    Y_UNIT_TEST(NodesV2SyncNewActiveNode)
+    Y_UNIT_TEST(NodesMigrationNewActiveNode)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -3071,10 +3092,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         epoch.SetVersion(epoch.GetVersion() + 1);
         UpdateEpochLocalDb(runtime, sender, epoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // New NODE1 is synced, version was bumped because of possible lease extension
+        // New NODE1 is migrated, version was bumped because of possible lease extension
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
@@ -3084,7 +3105,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
 
-    Y_UNIT_TEST(NodesV2SyncNewExpiredNode)
+    Y_UNIT_TEST(NodesMigrationNewExpiredNode)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 1);
@@ -3113,10 +3134,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         auto newEpoch = NextEpochObject(NextEpochObject(epoch));
         UpdateEpochLocalDb(runtime, sender, newEpoch);
 
-        // Restart to trigger NodesV2 sync
+        // Restart to trigger Nodes migration
         RestartNodeBroker(runtime);
 
-        // New expired NODE1 reuse is synced, version was bumped only during epoch change
+        // New expired NODE1 reuse is migrated, version was bumped only during epoch change
         auto epochAfterRestart = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetVersion(), epochAfterRestart.GetVersion());
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
@@ -3513,10 +3534,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
 
-        // Check that both updates happen
+        // Check that both updates happen with one version bump
         auto epocAfterRegistration = GetEpoch(runtime, sender);
-        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 2, epocAfterRegistration.GetVersion());
-        CheckFilteredNodesList(runtime, sender, {NODE1, NODE1}, {}, 0, epoch.GetVersion());
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epocAfterRegistration.GetVersion());
+        CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
     }
 
     Y_UNIT_TEST(EpochCacheUpdate)
@@ -3566,7 +3587,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(actualIds, expectedIds);
     }
 
-    Y_UNIT_TEST(NodesBackMigration)
+    Y_UNIT_TEST(NodesV2BackMigration)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 3);
@@ -3636,7 +3657,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckNodeInfo(runtime, sender, NODE3, TStatus::WRONG_REQUEST);
     }
 
-    Y_UNIT_TEST(NodesBackMigrationShiftIdRange)
+    Y_UNIT_TEST(NodesV2BackMigrationShiftIdRange)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 3);
@@ -3713,6 +3734,194 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
         CheckNodeInfo(runtime, sender, NODE3, TStatus::WRONG_REQUEST);
+    }
+
+    void NodesMigrationNNodes(size_t dynamicNodesCount) {
+        TTestBasicRuntime runtime(8, false);
+
+        Setup(runtime, dynamicNodesCount);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+
+        // Register nodes that going to be expired
+        TSet<ui64> expiredNodesIds;
+        for (size_t i = 0; i < dynamicNodesCount / 2; ++i)  {
+            AsyncRegistration(runtime, sender, "host", 1001 + i, "host.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4);
+            expiredNodesIds.insert(NODE1 + i);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        CheckNodesList(runtime, sender, expiredNodesIds, {}, epoch.GetId());
+
+        // Simulate epoch update while NodeBroker is running on the old version
+        epoch = NextEpochObject(NextEpochObject(epoch));
+        UpdateEpochLocalDb(runtime, sender, epoch);
+
+        // Register new nodes while NodeBroker is running on the old version
+        TSet<ui64> activeNodeIds;
+        THashMap<ui32, TUpdateNodeLocalDbBuilder> activeNodes;
+        for (size_t i = dynamicNodesCount / 2; i < dynamicNodesCount; ++i)  {
+            auto node = TUpdateNodeLocalDbBuilder()
+                .SetHost("host")
+                .SetPort(1001 + i)
+                .SetResolveHost("host.yandex.net")
+                .SetAddress("1.2.3.4")
+                .SetLocation(TNodeLocation("1", "2", "3", "4"))
+                .SetLease(1)
+                .SetExpire(epoch.GetNextEnd())
+                .SetServicedSubdomain(TSubDomainKey(TTestTxConfig::SchemeShard, 1))
+                .SetSlotIndex(i);
+            activeNodes[NODE1 + i] = node;
+            epoch.SetVersion(epoch.GetVersion() + 1);
+            activeNodeIds.insert(NODE1 + i);
+        }
+        UpdateNodesLocalDb(runtime, sender, activeNodes);
+        UpdateEpochLocalDb(runtime, sender, epoch);
+
+        // Restart to trigger Nodes migration
+        RestartNodeBroker(runtime);
+
+        auto epochAfterRestart = GetEpoch(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
+        CheckNodesList(runtime, sender, activeNodeIds, expiredNodesIds, epochAfterRestart.GetId());
+        CheckFilteredNodesList(runtime, sender, {activeNodeIds.begin(), activeNodeIds.end()}, {}, 0, epoch.GetVersion());
+    }
+
+    Y_UNIT_TEST(NodesMigration999Nodes)
+    {
+        NodesMigrationNNodes(999);
+    }
+
+    Y_UNIT_TEST(NodesMigration1000Nodes)
+    {
+        NodesMigrationNNodes(1000);
+    }
+
+    Y_UNIT_TEST(NodesMigration1001Nodes)
+    {
+        NodesMigrationNNodes(1001);
+    }
+
+    Y_UNIT_TEST(NodesMigration2000Nodes)
+    {
+        NodesMigrationNNodes(2000);
+    }
+
+    Y_UNIT_TEST(NodesMigrationManyNodesInterrupted)
+    {
+        TTestBasicRuntime runtime(8, false);
+
+        constexpr size_t DYNAMIC_NODES_COUNT = 1500;
+
+        Setup(runtime, DYNAMIC_NODES_COUNT);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+
+        // Register nodes that going to be expired
+        TSet<ui64> expiredNodesIds;
+        for (size_t i = 0; i < DYNAMIC_NODES_COUNT / 2; ++i)  {
+            AsyncRegistration(runtime, sender, "host", 1001 + i, "host.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4);
+            expiredNodesIds.insert(NODE1 + i);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        CheckNodesList(runtime, sender, expiredNodesIds, {}, epoch.GetId());
+
+        // Simulate epoch update while NodeBroker is running on the old version
+        epoch = NextEpochObject(NextEpochObject(epoch));
+        UpdateEpochLocalDb(runtime, sender, epoch);
+
+        // Register new nodes while NodeBroker is running on the old version
+        TSet<ui64> activeNodeIds;
+        THashMap<ui32, TUpdateNodeLocalDbBuilder> activeNodes;
+        for (size_t i = DYNAMIC_NODES_COUNT / 2; i < DYNAMIC_NODES_COUNT; ++i)  {
+            auto node = TUpdateNodeLocalDbBuilder()
+                .SetHost("host")
+                .SetPort(1001 + i)
+                .SetResolveHost("host.yandex.net")
+                .SetAddress("1.2.3.4")
+                .SetLocation(TNodeLocation("1", "2", "3", "4"))
+                .SetLease(1)
+                .SetExpire(epoch.GetNextEnd())
+                .SetServicedSubdomain(TSubDomainKey(TTestTxConfig::SchemeShard, 1))
+                .SetSlotIndex(i);
+            activeNodes[NODE1 + i] = node;
+            epoch.SetVersion(epoch.GetVersion() + 1);
+            activeNodeIds.insert(NODE1 + i);
+        }
+        UpdateNodesLocalDb(runtime, sender, activeNodes);
+        UpdateEpochLocalDb(runtime, sender, epoch);
+
+        // Block commit result to restart during migration
+        TBlockEvents<TEvTablet::TEvCommitResult> block(runtime);
+
+        // Restart to trigger Nodes migration
+        runtime.Register(CreateTabletKiller(MakeNodeBrokerID()));
+
+        // Restart after first batch is committed
+        runtime.WaitFor("first batch is committed", [&]{ return block.size() >= 2; });
+        block.Stop();
+        RestartNodeBroker(runtime);
+
+        auto epochAfterRestart = GetEpoch(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 2, epochAfterRestart.GetVersion());
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
+        CheckNodesList(runtime, sender, activeNodeIds, expiredNodesIds, epochAfterRestart.GetId());
+        CheckFilteredNodesList(runtime, sender, {activeNodeIds.begin(), activeNodeIds.end()}, {}, 0, epoch.GetVersion());
+    }
+
+    Y_UNIT_TEST(NodesV2BackMigrationManyNodesInterrupted)
+    {
+        TTestBasicRuntime runtime(8, false);
+
+        constexpr size_t DYNAMIC_NODES_COUNT = 1500;
+
+        Setup(runtime, DYNAMIC_NODES_COUNT);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+
+        // Register nodes
+        TSet<ui64> activeNodeIds;
+        for (size_t i = 0; i < DYNAMIC_NODES_COUNT; ++i)  {
+            AsyncRegistration(runtime, sender, "host", 1001 + i, "host.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4);
+            activeNodeIds.insert(NODE1 + i);
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        CheckNodesList(runtime, sender, activeNodeIds, {}, epoch.GetId());
+
+        // Move epoch
+        epoch = WaitForEpochUpdate(runtime, sender);
+
+        // Clean Nodes table
+        DeleteNodesLocalDb(runtime, sender, {activeNodeIds.begin(), activeNodeIds.end()});
+
+        // Set NodesV2 as main table
+        UpdateParamsLocalDb(runtime, sender, Schema::ParamKeyMainNodesTable, static_cast<ui64>(Schema::EMainNodesTable::NodesV2));
+
+        // Block commit result to restart during migration
+        TBlockEvents<TEvTablet::TEvCommitResult> block(runtime);
+
+        // Restart to trigger Nodes back migration
+        runtime.Register(CreateTabletKiller(MakeNodeBrokerID()));
+
+        // Restart after first batch is committed
+        runtime.WaitFor("first batch is committed", [&]{ return block.size() >= 2; });
+        block.Stop();
+        RestartNodeBroker(runtime);
+
+        auto epochAfterRestart = GetEpoch(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
+        CheckNodesList(runtime, sender, activeNodeIds, {}, epochAfterRestart.GetId());
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
     }
 }
 

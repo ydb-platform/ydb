@@ -122,9 +122,6 @@ public:
                 || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
 
-        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            || tableServiceConfig.GetEnableKqpDataQueryStreamLookup());
-
         ReadOnlyTx = IsReadOnlyTx();
     }
 
@@ -1841,7 +1838,7 @@ private:
                     flags));
             }
 
-            NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(), 
+            NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(),
                 Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
             ResponseEv->Orbit.Fork(evData->Orbit);
@@ -1878,7 +1875,7 @@ private:
 
         auto traceId = ExecuterSpan.GetTraceId();
 
-        NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWriteTransaction->Record.GetLocks().ShortDebugString(), 
+        NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWriteTransaction->Record.GetLocks().ShortDebugString(),
             Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
         auto shardsToString = [](const auto& shards) {

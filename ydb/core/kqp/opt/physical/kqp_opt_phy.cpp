@@ -127,7 +127,7 @@ public:
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
 
-        
+
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
         AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
@@ -451,7 +451,7 @@ protected:
     {
         // TODO: Allow push to left stage for data queries.
         // It is now possible as we don't use datashard transactions for reads in data queries.
-        bool pushLeftStage = (KqpCtx.IsScanQuery() || KqpCtx.Config->EnableKqpDataQueryStreamLookup) && AllowFuseJoinInputs(node);
+        bool pushLeftStage = AllowFuseJoinInputs(node);
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->AllowMultiBroadcasts;
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,

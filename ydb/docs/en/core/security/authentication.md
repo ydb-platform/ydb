@@ -31,7 +31,7 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 
 ## Authenticating by username and password {#static-credentials}
 
-Authentication by username and password using the YDB server is available only to [internal users](../concepts/glossary.md#access-user). External users are either authenticated using a third-party server or come with an auth token.
+Authentication by username and password using the YDB server is available only to [internal users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
 
 This access type implies that each database user has a username and password.
 Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
@@ -52,7 +52,7 @@ To learn how to manage roles and users, see [{#T}](../security/authorization.md)
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }} can impose various requirements on password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will result in an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
+{{ ydb-short-name }} allows configuring requirements for password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will result in an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
 
 ### Password brute-force protection
 
@@ -64,7 +64,7 @@ If necessary, a {{ ydb-short-name }} cluster or database administrator can [unlo
 
 ### Manual user lockout
 
-{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
+{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command description.
 
 ## LDAP directory integration {#ldap-auth-provider}
 

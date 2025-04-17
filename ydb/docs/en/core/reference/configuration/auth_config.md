@@ -19,12 +19,17 @@ Default value: `true`
 Default value: `true`
     ||
 || domain_login_only
-| Determines the databases to which internal users are added.
+| Determines the scope of internal user access rights in a {{ ydb-short-name }} cluster.
 
 Valid values:
 
-- `true` – internal users are added only to the [root database](../../concepts/glossary.md#root-database).
-- `false` – internal users are added to the root and to [tenant databases](../../concepts/glossary.md#tenant-database).
+- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [tenant databases](../../concepts/glossary.md#tenant-database).
+
+    In this scenario, users are added only to the [root database](../../concepts/glossary.md#root-database).
+
+- `false` — internal users can exist either in a {{ ydb-short-name }} cluster or in tenant databases. The scope of access rights for internal users in tenant databases is limited to the database, in which they are created.
+
+    In this scenario, users are added either to the root database or to tenant databases.
 
 Default value: `true`
     ||
@@ -60,7 +65,9 @@ If `attempt_threshold = 0`, the number of attempts to enter the correct password
 Default value: `4`
     ||
 || attempt_reset_duration
-| Specifies the period that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt. If this parameter is set to the equivalent of `0s`, user accounts will be locked indefinitely.
+| Specifies the period that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt.
+
+If this parameter is set to the equivalent of `0s`, user accounts will be locked indefinitely. In this case you can unlock the account using the [ALTER USER ...  LOGIN](../../yql/reference/syntax/alter-user.md) command.
 
 Default value: `1h`
     ||

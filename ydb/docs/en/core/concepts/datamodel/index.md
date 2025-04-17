@@ -1,6 +1,6 @@
 # Cluster structure
 
-This section describes the {{ ydb-short-name }} entities.
+This section describes the {{ ydb-short-name }} cluster scheme entities.
 
 ## {{ ydb-short-name }} cluster scheme {#cluster-scheme}
 
@@ -8,7 +8,7 @@ This section describes the {{ ydb-short-name }} entities.
 
 ![cluster scheme diagram](_assets/cluster-scheme.png =500x)
 
-## Data model
+## {{ ydb-short-name }} scheme objects
 
 Scheme objects in {{ ydb-short-name }} databases:
 

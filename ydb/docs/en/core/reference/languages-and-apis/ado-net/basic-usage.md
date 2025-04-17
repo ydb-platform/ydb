@@ -120,7 +120,7 @@ Above, SQL is executed via [ExecuteReaderAsync](https://learn.microsoft.com/en-u
 2. [ExecuteScalarAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executescalarasync): executes SQL that returns a single scalar value.
 3. [ExecuteReaderAsync](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbcommand.executereaderasync): executes SQL that returns a full result set. Returns a `YdbDataReader`, which can be used to access the result set (as in the example above).
 
-For example, to execute a simple SQL `INSERT` which does not return anything, you can use ExecuteNonQueryAsync as follows:
+For example, to execute a simple SQL `INSERT` that does not return anything, you can use `ExecuteNonQueryAsync` as follows:
 
 ```c#
 await using var command = dataSource.CreateCommand("INSERT INTO some_table (some_field) VALUES ('Hello YDB!'u)");

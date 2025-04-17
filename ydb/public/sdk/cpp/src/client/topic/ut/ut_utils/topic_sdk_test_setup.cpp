@@ -98,7 +98,7 @@ void TTopicSdkTestSetup::Write(const std::string& message, ui32 partitionId, con
     session->Close(TDuration::Seconds(5));
 }
 
-std::shared_ptr<IReadSession> TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout) {
+TTopicSdkTestSetup::ReadResult TTopicSdkTestSetup::Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout) {
     TTopicClient client(MakeDriver());
 
     auto reader = client.CreateReadSession(
@@ -108,6 +108,9 @@ std::shared_ptr<IReadSession> TTopicSdkTestSetup::Read(const std::string& topic,
             .ConsumerName(consumer));
 
     TInstant deadlineTime = TInstant::Now() + timeout;
+
+    ReadResult result;
+    result.Reader = reader;
 
     bool continueFlag = true;
     while(continueFlag && deadlineTime > TInstant::Now()) {
@@ -121,6 +124,7 @@ std::shared_ptr<IReadSession> TTopicSdkTestSetup::Read(const std::string& topic,
             } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
                 Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
                 x->Confirm();
+                result.StartPartitionSessionEvents.push_back(*x);
             } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
                 Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
             } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
@@ -143,9 +147,9 @@ std::shared_ptr<IReadSession> TTopicSdkTestSetup::Read(const std::string& topic,
         Sleep(TDuration::MilliSeconds(250));
     }
 
-    UNIT_ASSERT_C(!continueFlag, "Unable to wait result");
+    result.Timeout = continueFlag;
 
-    return reader;
+    return result;
 }
 
 TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId) {

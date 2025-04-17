@@ -22,6 +22,8 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
     - {{ ydb-short-name }} uses [access levels](../concepts/glossary.md#access-level) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object). For more information about access levels, see [{#T}](../reference/configuration/security_config.md#security-access-levels).
 
+    Access rights and access levels can be granted to a user or a group. When a user is added to a group, the user gets the access rights and access levels that were granted to the group. When a user is removed from a group, the user loses the access rights and access levels of the group.
+
 - **[Authentication](./authentication.md) and [authorization](./authorization.md)**. The access control system in {{ ydb-short-name }} provides data protection in a {{ ydb-short-name }} cluster. Due to the access system, only authorized [access subjects](../concepts/glossary.md#access-subject) (users and groups) can work with data. Access to data can be restricted.
 
     - **Authentication**. When a [user](../concepts/glossary.md#access-user) connects to a {{ ydb-short-name }} cluster, {{ ydb-short-name }} first identifies the user's account. This process is called [authentication](./authentication.md). {{ ydb-short-name }} supports various authentication modes. For more information, see [Authentication](./authentication.md).

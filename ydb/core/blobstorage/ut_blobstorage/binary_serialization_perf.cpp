@@ -37,7 +37,6 @@ Y_UNIT_TEST_SUITE(BinarySerializationPerformance) {
         deserializationTimes.reserve(iterations);
         messageSizes.reserve(iterations);
         
-        // Прогрев кэша
         Cerr << "Warming up cache for binary format..." << Endl;
         for (size_t i = 0; i < 1000; ++i) {
             auto binaryMsg = MakeHolder<TEvBlobStorage::TEvVPutBinary>(
@@ -148,7 +147,7 @@ Y_UNIT_TEST_SUITE(BinarySerializationPerformance) {
         std::vector<size_t> testSizes = {32, 128, 512, 1024, 4096, 32768, 65536};
         
         Cerr << "===== Binary Serialization Size Metrics =====" << Endl;
-        Cerr << "Payload Size\tTotal Size\tOverhead\tOverhead %" << Endl;
+        Cerr << "Payload Size\tTotal Size\tOverhead\tOverhead %\tCompression Ratio" << Endl;
         
         for (size_t size : testSizes) {
             TString testData = GenerateTestData(size);
@@ -165,18 +164,21 @@ Y_UNIT_TEST_SUITE(BinarySerializationPerformance) {
             size_t binarySize = binaryData.size();
             size_t overhead = binarySize - size;
             double overheadPercent = 100.0 * overhead / binarySize;
+            double compressionRatio = (double)binarySize / size;
             
-            Cerr << size << "\t" << binarySize << "\t" << overhead << "\t" << overheadPercent << "%" << Endl;
+            Cerr << size << "\t" << binarySize << "\t" << overhead << "\t" 
+                 << overheadPercent << "%" << "\t" << compressionRatio << "x" << Endl;
         }
         
         Cerr << "=============================================================" << Endl;
     }
     
     Y_UNIT_TEST(TEvVPutBinarySerializationPerformance) {
+        Cerr << "\n\n=== TESTING BINARY SERIALIZATION SIZES ===" << Endl;
         MeasureBinarySizes();
         
-        // Тестируем производительность для нескольких размеров данных
-        std::vector<size_t> testSizes = {1024, 32768};
+        Cerr << "\n\n=== TESTING BINARY SERIALIZATION PERFORMANCE ===" << Endl;
+        std::vector<size_t> testSizes = {32, 128, 4096};
         
         for (size_t size : testSizes) {
             MeasureBinarySerializationPerformance(size, DEFAULT_ITERATIONS);

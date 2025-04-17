@@ -4,6 +4,7 @@ RECURSE(
     dump_restore
     copy_table
     lib
+    select
     split_merge
     s3
 )

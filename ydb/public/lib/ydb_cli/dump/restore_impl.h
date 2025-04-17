@@ -220,6 +220,7 @@ class TRestoreClient {
         ui32 dataFilesCount);
 
     TRestoreResult CheckSecretExistence(const TString& secretName);
+    TRestoreResult Drop(NScheme::ESchemeEntryType type, const TString& path, bool isAlreadyExisting, bool verifyExistence);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);

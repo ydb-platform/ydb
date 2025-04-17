@@ -496,6 +496,13 @@ def is_xfail(cfg):
     return False
 
 
+def get_langver(cfg):
+    for item in cfg:
+        if item[0] == 'langver':
+            return item[1]
+    return None
+
+
 def is_skip_forceblocks(cfg):
     for item in cfg:
         if item[0] == 'skip_forceblocks':

@@ -768,6 +768,7 @@ class TTestChunkWriteRead : public TBaseTest {
             Owner = LastResponse.Owner;
             OwnerRound = LastResponse.OwnerRound;
             BlockSize = LastResponse.AppendBlockSize;
+            Cerr << BlockSize << Endl;
 
             VERBOSE_COUT(" Sending TEvChunkReserve");
             ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));

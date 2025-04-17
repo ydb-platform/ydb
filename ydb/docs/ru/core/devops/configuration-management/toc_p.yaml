@@ -14,4 +14,3 @@ items:
   include:
     mode: link
     path: migration/toc_p.yaml
-  hidden: true

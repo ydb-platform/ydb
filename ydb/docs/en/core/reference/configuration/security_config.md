@@ -90,9 +90,9 @@ flowchart TD
 
         check-auth-token --> |provided| validate{validate auth token}
             validate{validate auth token} --> |valid| Processed
-            validate{validate auth token} --> |invalid| enforce_user_token_requirement
-                enforce_user_token_requirement --> |true| r[Rejected]
-                enforce_user_token_requirement --> |false| invalid_check_requirement(enforce_user_token_check_requirement)
+            validate{validate auth token} --> |invalid| invalid_enforce(enforce_user_token_requirement)
+                invalid_enforce --> |true| r[Rejected]
+                invalid_enforce --> |false| invalid_check_requirement(enforce_user_token_check_requirement)
                     invalid_check_requirement --> |true| Rejected
                     invalid_check_requirement --> |false| anonym[Processed in
                     anonymous mode]

@@ -341,7 +341,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         }
 
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, Event->Get()->ProgressStatsPeriod, QueryServiceConfig, Counters));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 

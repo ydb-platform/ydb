@@ -87,13 +87,14 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, TDuration progressStatsPeriod, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
         : ExecutionId(executionId)
         , Request(request)
         , Database(database)
         , LeaseGeneration(leaseGeneration)
         , LeaseDuration(leaseDuration)
         , ResultsTtl(resultsTtl)
+        , ProgressStatsPeriod(progressStatsPeriod)
         , QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
     {
@@ -174,7 +175,7 @@ private:
         ev->Record.MutableRequest()->SetSessionId(SessionId);
         ev->SetUserRequestContext(UserRequestContext);
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
+            ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
@@ -680,6 +681,7 @@ private:
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
+    const TDuration ProgressStatsPeriod;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
@@ -713,8 +715,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, std::move(queryServiceConfig), counters);
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, TDuration progressStatsPeriod, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
+    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, progressStatsPeriod, std::move(queryServiceConfig), counters);
 }
 
 } // namespace NKikimr::NKqp

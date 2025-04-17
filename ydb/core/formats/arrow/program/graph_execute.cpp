@@ -104,8 +104,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
-                } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const &&
-                           i.second->GetProcessor()->GetProcessorType() != EProcessorType::ReserveMemory) {
+                } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
                     AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
                     ResultRoot = i.second;
                 } else {

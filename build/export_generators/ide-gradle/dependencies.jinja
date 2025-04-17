@@ -2,11 +2,11 @@
 {%-     if annotation_processors|length -%}
 {%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
 {%-         for lombok in lomboks %}
-    {{ funcName }}(files("$project_root/{{ lombok }}"))
+    {{ funcName }}(files("$arcadia_root/{{ lombok }}"))
 {%-         endfor -%}
 {%-         set annotation_processors = annotation_processors|reject('in', lomboks) -%}
 {%-         for annotation_processor in annotation_processors %}
-    {{ funcName }}(files("$project_root/{{ annotation_processor }}"))
+    {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
@@ -22,15 +22,18 @@ dependencies {
 {%-     endif -%}
 
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
-    implementation(files("$project_root/{{ library.jar }}"))
+    implementation(files("$arcadia_root/{{ library.jar }}"))
 {%-     else -%}
 {%-         set classpath = library.classpath -%}
 {%-         if classpath|replace('"','') == classpath -%}
 {%-             set classpath = '"' + classpath + '"' -%}
 {%-         endif -%}
+{%-         include "[generator]/patch_classpath.jinja" -%}
 {%-         if library.type != "contrib" %}
-{%-             if library.testdep %}
-    implementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-             if library.testdep -%}
+{%-                 set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
+{%-                 include "[generator]/patch_classpath.jinja" %}
+    implementation(project(path = {{ classpath }}, configuration = "testArtifacts"))
 {%-             else %}
     implementation({{ classpath }})
 {%-             endif -%}
@@ -53,14 +56,17 @@ dependencies {
 {%- for extra_target in extra_targets -%}
 {%-     for library in extra_target.consumer if library.classpath -%}
 {%-         if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
-    testImplementation(files("$project_root/{{ library.jar }}"))
+    testImplementation(files("$arcadia_root/{{ library.jar }}"))
 {%-         else -%}
 {%-             set classpath = library.classpath -%}
 {%-             if classpath|replace('"','') == classpath -%}
 {%-                 set classpath = '"' + classpath + '"' -%}
 {%-             endif %}
-{%-             if library.type != "contrib" and library.testdep %}
-    testImplementation(project(path = ":{{ library.testdep | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-             include "[generator]/patch_classpath.jinja" -%}
+{%-             if library.type != "contrib" and library.testdep -%}
+{%-                 set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
+{%-                 include "[generator]/patch_classpath.jinja" %}
+    testImplementation(project(path = {{ classpath }}, configuration = "testArtifacts"))
 {%-             else %}
     testImplementation({{ classpath }})
 {%-             endif -%}

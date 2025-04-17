@@ -2,22 +2,28 @@
 {%-     if proto_template %}
 
 tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
-{%-     endif %}
+{%-     endif -%}
 
+{#-     Check main target codegen -#}
+{%-     if varprefix == "codegen" %}
 tasks.compileJava.configure {
     dependsOn({{ taskvar }})
 }
+{%-     endif %}
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
-{%-    if with_kotlin %}
+{%-     if with_kotlin -%}
+{#-         Check main target codegen -#}
+{%-         if varprefix == "codegen" %}
 tasks.compileKotlin.configure {
     dependsOn({{ taskvar }})
 }
+{%-         endif %}
 tasks.compileTestKotlin.configure {
     dependsOn({{ taskvar }})
 }
-{%     endif -%}
+{%      endif -%}
 {%- endmacro -%}
 
 {%- macro ObjDepends(obj) -%}
@@ -33,11 +39,13 @@ tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
 
 {%- if target is defined -%}
 {%-     set current_target = target -%}
+{#-     Main target codegen -#}
 {%-     set varprefix = "codegen" -%}
 {%-     include "[generator]/codegen_current_target.jinja" -%}
 {%- endif -%}
 {%- if extra_targets|length -%}
 {%-     for current_target in extra_targets -%}
+{#-         TestN target codegen -#}
 {%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
 {%-         include "[generator]/codegen_current_target.jinja" -%}
 {%-     endfor -%}

@@ -3153,7 +3153,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return ParentCount() * K;
         }
 
-        TString ToStr() const {
+        TString DebugString() const {
             return TStringBuilder()
                 << "{ K = " << K
                 << ", Level = " << Level << " / " << Levels
@@ -3274,9 +3274,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 }
                 return maxParent;
             }();
-            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << ToStr());
-            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << ToStr());
-            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << ToStr());
+            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
+            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
+            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
             return {parentFrom, parentTo};
         }
 
@@ -3465,14 +3465,20 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     };
     TSample Sample;
 
-    TString KMeansTreeToDebugStr() const {
-        return TStringBuilder()
-            << KMeans.ToStr() << ", "
-            << "{ Rows = " << Sample.Rows.size()
-            << ", Sample = " << Sample.State << " }, "
-            << "{ Done = " << DoneShards.size()
-            << ", ToUpload = " << ToUploadShards.size()
-            << ", InProgress = " << InProgressShards.size() << " }";
+    TString DebugString() const {
+        auto result = TStringBuilder() << BuildKind;
+
+        if (IsBuildVectorIndex()) {
+            result << " "
+                << KMeans.DebugString() << ", "
+                << "{ Rows = " << Sample.Rows.size()
+                << ", Sample = " << Sample.State << " }, "
+                << "{ Done = " << DoneShards.size()
+                << ", ToUpload = " << ToUploadShards.size()
+                << ", InProgress = " << InProgressShards.size() << " }";
+        }
+
+        return result;
     }
 
     struct TClusterShards {

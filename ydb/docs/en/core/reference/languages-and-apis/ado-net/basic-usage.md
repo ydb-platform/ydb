@@ -129,7 +129,7 @@ await command.ExecuteNonQueryAsync();
 
 ## Parameters
 
-When sending data values to the database, always consider using parameters rather than including the values in the SQL as follows:
+When sending data values to the database, always consider using parameters rather than including the values in the SQL, as shown in the following example:
 
 ```c#
 await using var connection = new YdbConnection(_cmdOptions.SimpleConnectionString);

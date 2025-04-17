@@ -39,7 +39,7 @@ var certs = Ydb.Sdk.Yc.YcCerts.GetYcServerCertificates();
 
 ## Как подключиться с ADO.NET
 
-Чтобы установить безопасное соединение с {{ ydb-short-name }} с помощью ADO.NET, с требуемыми параметрами аутентификации и TLS. Ниже приведен пример:
+Чтобы установить безопасное соединение с {{ ydb-short-name }} с помощью ADO.NET с требуемыми параметрами аутентификации и TLS, используйте следующий пример:
 
 ```c#
 var builder = new YdbConnectionStringBuilder

@@ -1,5 +1,9 @@
 #include "solomon_client_utils.h"
 
+#include <util/string/join.h>
+#include <util/string/strip.h>
+#include <util/string/split.h>
+
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NSo {

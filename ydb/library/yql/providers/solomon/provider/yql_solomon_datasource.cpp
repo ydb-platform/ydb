@@ -39,12 +39,20 @@ public:
         TSolomonClusterConfig cluster;
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
+        cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
         cluster.SetToken(token);
         cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
 
-        if (auto value = properties.Value("grpc_port", ""); !value.empty()) {
+        if (auto value = properties.Value("cloud_id", ""); !value.empty()) {
+            cluster.MutablePath()->SetProject(value);
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+        } else {
+            cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
+        }
+
+        if (auto value = properties.Value("grpc_location", ""); !value.empty()) {
             auto grpcPort = cluster.MutableSettings()->Add();
-            *grpcPort->MutableName() = "grpcPort";
+            *grpcPort->MutableName() = "grpc_location";
             *grpcPort->MutableValue() = value;
         }
 

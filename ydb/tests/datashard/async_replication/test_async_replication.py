@@ -43,15 +43,13 @@ class TestAsyncReplication(MulticlusterTestBase):
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        query_cluster_1 = self.create_query(self.clusters[0])
-        query_cluster_2 = self.create_query(self.clusters[1])
-        dml_cluster_1 = DMLOperations(query_cluster_1)
-        dml_cluster_2 = DMLOperations(query_cluster_2)
+        dml_cluster_1 = DMLOperations(self.create_query(self.clusters[0]))
+        dml_cluster_2 = DMLOperations(self.create_query(self.clusters[1]))
 
         dml_cluster_1.create_table(table_name, pk_types, all_types,
                                    index, ttl, unique, sync)
         dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
-        query_cluster_2(f"""
+        dml_cluster_2.query(f"""
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
                         WITH (
@@ -60,18 +58,18 @@ class TestAsyncReplication(MulticlusterTestBase):
                          """)
         for _ in range(100):
             try:
-                rows = self.query_cluster_2(
+                rows = dml_cluster_2.query(
                     f"select count(*) as count from {table_name}")
                 break
             except Exception:
                 time.sleep(1)
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
-        query_cluster_1(f"delete from {table_name}")
-        rows = query_cluster_2(
+        dml_cluster_1.query(f"delete from {table_name}")
+        rows = dml_cluster_2.query(
             f"select count(*) as count from {table_name}")
         for i in range(100):
-            rows = query_cluster_2(
+            rows = dml_cluster_2.query(
                 f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count == 0:
                 break
@@ -81,7 +79,7 @@ class TestAsyncReplication(MulticlusterTestBase):
             rows) == 1 and rows[0].count == 0, "Expected zero rows after delete"
         dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
         for i in range(100):
-            rows = query_cluster_2(
+            rows = dml_cluster_2.query(
                 f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count != 0:
                 break

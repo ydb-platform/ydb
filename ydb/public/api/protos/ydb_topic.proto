@@ -688,6 +688,10 @@ message StreamDirectReadMessage {
 
         // Messages data
         StreamReadMessage.ReadResponse.PartitionData partition_data = 3;
+
+        // Total size in bytes of this response as calculated by server.
+        // See ReadRequest comment above.
+        int64 bytes_size = 4;
     }
 }
 

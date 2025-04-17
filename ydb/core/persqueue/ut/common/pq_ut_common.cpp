@@ -1029,6 +1029,9 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     if (settings.PartitionSessionId > 0) {
         read->SetPartitionSessionId(settings.PartitionSessionId);
     }
+    if (settings.LastOffset > 0) {
+        read->SetLastOffset(settings.LastOffset);
+    }
     if (settings.Pipe) {
         ActorIdToProto(settings.Pipe, req->MutablePipeClient());
     }

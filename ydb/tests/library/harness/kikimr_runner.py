@@ -258,6 +258,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__port_allocator = self.__configurator.port_allocator
         self._nodes = {}
         self._slots = {}
+        self._selected_version_index = None
         self.__server = 'localhost'
         self.__storage_pool_id_allocator = itertools.count(1)
         if self.__configurator.separate_node_configs:
@@ -319,14 +320,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self):
+    def start(self,version_id=None):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run(version_id=version_id)
             return self
 
         except Exception:
@@ -334,7 +335,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.stop()
             raise
 
-    def prepare(self):
+    def prepare(self,version_id=None):
+        logger.debug(f"Version id: {str(version_id)}" ) 
         if self.__initialy_prepared:
             return
 
@@ -342,10 +344,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():
-            self.__register_node()
+            self.__register_node(version_id=version_id)
 
-    def __run(self):
-        self.prepare()
+    def __get_next_version_index(self, current_index):
+        next_index = (current_index + 1) % len(self._selected_version_index)
+        return next_index
+
+    
+    def __run(self, version_id=None):
+        self.prepare(version_id=version_id)
 
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
@@ -387,7 +394,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes[node_id].start()
         return self._nodes[node_id]
 
-    def __register_node(self):
+    def __register_node(self,version_id=None):
         node_index = next(self._node_index_allocator)
 
         if self.__configurator.separate_node_configs:
@@ -409,7 +416,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
-            binary_path=self.__configurator.get_binary_path(node_index),
+            binary_path=self.__configurator.get_binary_path( version_id-1 if version_id else node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
@@ -496,6 +503,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def restart_nodes(self):
         for node in self.nodes.values():
             node.stop()
+            node.start()
+            
+    def change_node_version(self,version_id):       
+        for node in self.nodes.values():
+            node.stop()
+        self.__initialy_prepared = False
+        self._node_index_allocator = itertools.count(1)
+        self.prepare(version_id=version_id)
+        for node in self.nodes.values():
             node.start()
 
     @property

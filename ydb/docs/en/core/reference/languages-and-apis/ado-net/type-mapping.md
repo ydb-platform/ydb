@@ -1,6 +1,6 @@
 # ADO.NET Supported Types and Their Mappings
 
-The following lists the built-in mappings when reading and writing CLR types to YDB types.
+The following lists the built-in mappings for reading and writing CLR types to YDB types.
 
 ## Type Mapping Table for Reading
 

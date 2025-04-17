@@ -7,7 +7,7 @@
 class TMinidumper {
 public:
     TMinidumper() {
-        if(const char* path = getenv("INTERNAL_BREAKPAD_MINIDUMPS_PATH")) {
+        if(const char* path = getenv("BREAKPAD_MINIDUMPS_PATH")) {
             using namespace google_breakpad;
             Handler = MakeHolder<ExceptionHandler>(MinidumpDescriptor(path), nullptr, DumpCallback, nullptr, true, -1, true);
         }
@@ -15,7 +15,7 @@ public:
 
 private:
     static bool DumpCallback(const google_breakpad::MinidumpDescriptor& descriptor, void* /*context*/, bool succeeded) {
-        if (char* script = getenv("INTERNAL_BREAKPAD_MINIDUMPS_SCRIPT")) {
+        if (char* script = getenv("BREAKPAD_MINIDUMPS_SCRIPT")) {
             if (auto pid = fork()) {
                 waitpid(pid, 0, 0);
             } else {

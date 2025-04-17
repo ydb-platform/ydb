@@ -465,6 +465,7 @@ void TTopicSession::CreateTopicSession() {
         // Use any sourceParams.
         const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second->Settings.GetSource();
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
+        StartingMessageTimestamp = GetMinStartingMessageTimestamp();
         SubscribeOnNextEvent();
     }
 

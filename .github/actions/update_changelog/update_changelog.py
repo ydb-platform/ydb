@@ -83,7 +83,7 @@ def extract_changelog_category(description):
     return None
 
 def extract_pr_number(changelog_entry):
-    match = re.search(r"#(\d+)", changelog_entry)
+    match = re.search(r"\* (\d+)", changelog_entry)
     if match:
         return int(match.group(1))
     return None

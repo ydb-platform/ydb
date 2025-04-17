@@ -578,9 +578,9 @@ public:
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
-            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
-            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+            .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
+            .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
+            .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

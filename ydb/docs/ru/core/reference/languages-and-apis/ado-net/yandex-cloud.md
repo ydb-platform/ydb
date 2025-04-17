@@ -31,7 +31,7 @@ dotnet add package Ydb.Sdk.Yc.Auth
 
 ## Сертификаты
 
-Библиотека включает в себя сертификаты Yandex Cloud, который необходимы для подключения к Dedicated YDB:
+Библиотека включает в себя сертификаты Yandex Cloud, которые необходимы для подключения к Dedicated {{ ydb-short-name }}:
 
 ```c#
 var certs = Ydb.Sdk.Yc.YcCerts.GetYcServerCertificates();

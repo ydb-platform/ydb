@@ -69,7 +69,7 @@ def to_file(changelog_path, changelog):
             for category, items in categories.items():
                 if(len(changelog[version][category]) == 0):
                     continue
-                file.write(f"{CATEGORY_PREFIX}{category}\n")
+                file.write(f"{CATEGORY_PREFIX}{category}\n\n")
                 for id, body in items.items():
                     file.write(f"{ITEM_PREFIX}{id}:{body.strip()}\n")
                 file.write("\n")

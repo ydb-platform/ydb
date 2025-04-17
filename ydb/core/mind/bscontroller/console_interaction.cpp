@@ -243,7 +243,6 @@ namespace NKikimr::NBsController {
 
         // audit log settings
         AuditLogInfo.emplace(record.GetPeerName(), NACLib::TUserToken{record.GetUserToken()});
-        Cerr << "AuditLogInfo: " << AuditLogInfo.has_value() << Endl;
 
         if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
             return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit,

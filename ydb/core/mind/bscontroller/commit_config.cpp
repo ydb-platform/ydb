@@ -71,9 +71,8 @@ namespace NKikimr::NBsController {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
                 Y_DEBUG_ABORT("Storage config changed");
             }
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_CONTROLLER, "pre AuditLogInfo: ");
+
             if (AuditLogInfo) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_CONTROLLER, "post AuditLogInfo: " << AuditLogInfo->PeerName);
                 TStringBuilder oldConfig;
                 if (Self->YamlConfig) {
                     oldConfig << GetSingleConfigYaml(*Self->YamlConfig);

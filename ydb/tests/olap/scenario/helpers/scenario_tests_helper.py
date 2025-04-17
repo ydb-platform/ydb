@@ -10,7 +10,6 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
-from ydb.tests.olap.lib.utils import get_external_param
 
 
 class TestContext:

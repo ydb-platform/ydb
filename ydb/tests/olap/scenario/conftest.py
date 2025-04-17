@@ -9,7 +9,6 @@ from threading import Thread
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import external_param_is_true
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.library.harness.kikimr_runner import KiKiMR

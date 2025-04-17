@@ -163,13 +163,58 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         }
     }
 
-    Y_UNIT_TEST(CommitWithWrongSessionId) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+    void PrepareFlatTopic(TTopicSdkTestSetup& setup) {
+        setup.CreateTopic();
 
         setup.Write("message-1");
         setup.Write("message-2");
         setup.Write("message-3");
+    }
+
+    void PrepareAutopartitionedTopic(TTopicSdkTestSetup& setup) {
+        setup.CreateTopicWithAutoscale();
+
+        // Creating partition hierarchy
+        // 0 ──┬──> 1 ──┬──> 3
+        //     │        └──> 4
+        //     └──> 2
+        //
+        // Each partition has 3 messages
+
+        setup.Write("message-0-1", 0);
+        setup.Write("message-0-2", 0);
+        setup.Write("message-0-3", 0);
+
+        {
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, 0, "a");
+        }
+
+        setup.Write("message-1-1", 1);
+        setup.Write("message-1-2", 1);
+        setup.Write("message-1-3", 1);
+
+        setup.Write("message-2-1", 2);
+        setup.Write("message-2-2", 2);
+        setup.Write("message-2-3", 2);
+
+        {
+            ui64 txId = 1007;
+            SplitPartition(setup, ++txId, 1, "0");
+        }
+
+        setup.Write("message-3-1", 3);
+        setup.Write("message-3-2", 3);
+        setup.Write("message-3-3", 3);
+
+        setup.Write("message-4-1", 4);
+        setup.Write("message-4-2", 4);
+        setup.Write("message-4-3", 4);
+    }
+
+    Y_UNIT_TEST(CommitWithWrongSessionId) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareFlatTopic(setup);
 
         {
             auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 1, "wrong-read-session-id");
@@ -182,11 +227,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(CommitToPastWithWrongSessionId) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
-
-        setup.Write("message-1");
-        setup.Write("message-2");
-        setup.Write("message-3");
+        PrepareFlatTopic(setup);
 
         {
             auto result = setup.Commit(TString(TEST_TOPIC), TEST_CONSUMER, 0, 2);
@@ -205,8 +246,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         }
     }
 
-    /* TODO Uncomment this test
-    Y_UNIT_TEST(CommitToParentPartitionWithWrongSessionId) {
+    Y_UNIT_TEST(Commit_ToParentPartitionWithWrongSessionId) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -248,7 +288,148 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         Cerr << ">>>>> END" << Endl << Flush;
 
     }
-    */
+
+    Y_UNIT_TEST(Commit_WithoutSession_ParentNotFinished) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto getCommittedOffset = [&](size_t partition) {
+            auto desc = setup.DescribeConsumer();
+            return desc.GetPartitions().at(partition).GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        {
+            // Commit parent partition to non end
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+
+        {
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+    }
+
+    Y_UNIT_TEST(Commit_WithoutSession_ToPastParentPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto getCommittedOffset = [&](size_t partition) {
+            auto desc = setup.DescribeConsumer();
+            return desc.GetPartitions().at(partition).GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        {
+            // Commit child partition to non end
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 3, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+
+        {
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+    }
+
+    Y_UNIT_TEST(Commit_WithSession_ParentNotFinished) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto getCommittedOffset = [&](size_t partition) {
+            auto desc = setup.DescribeConsumer();
+            return desc.GetPartitions().at(partition).GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        {
+            // Commit parent partition to non end
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+
+        {
+            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto&) {
+                return false;
+            });
+
+            // Commit parent to middle
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+    }
+
+    Y_UNIT_TEST(Commit_WithSession_ToPastParentPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto getCommittedOffset = [&](size_t partition) {
+            auto desc = setup.DescribeConsumer();
+            return desc.GetPartitions().at(partition).GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        {
+            // Commit parent partition to non end
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 3, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+
+        {
+            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto&) {
+                return false;
+            });
+
+            // Commit parent to middle
+            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(3, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+            UNIT_ASSERT_VALUES_EQUAL(1, getCommittedOffset(3));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
+        }
+    }
 }
 
 } // namespace NKikimr

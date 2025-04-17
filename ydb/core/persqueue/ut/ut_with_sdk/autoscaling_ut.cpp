@@ -1225,7 +1225,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                             UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), 8);
                         }
 
-                        /* TODO uncomment this 
                         {
                             // must be ignored, because wrong sessionid
                             auto status = commit("random session", 0);
@@ -1236,7 +1235,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                             auto stats = getConsumerState(0);
                             UNIT_ASSERT_VALUES_EQUAL(stats->GetCommittedOffset(), 8);
                         }
-                        */
                     } else {
                         UNIT_ASSERT(false);
                     }

@@ -4,7 +4,7 @@ To connect to a database, the application provides a connection string that spec
 
 All available connection parameters are defined as properties in the `YdbConnectionStringBuilder`.
 
-Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
+Below are the connection string parameters that `Ydb.Sdk.Ado` supports.
 
 ## Basic connection
 

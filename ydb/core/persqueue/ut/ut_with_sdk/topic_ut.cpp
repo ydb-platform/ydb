@@ -456,13 +456,16 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                         setup.Write("message-1-2", 1);
                     } else if (x.GetPartitionSession()->GetPartitionId() == 1 && m.GetOffset() == 0) {
                         m.Commit();
+                        return false;
                     }
                 }
-                return false;
+
+                return true;
             });
 
-            Sleep(TDuration::Seconds(2));
+            Sleep(TDuration::Seconds(3));
 
+            // Commit hasn`t applyed because messages from the parent partitions has`t been committed
             UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(0));
             UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(1));
             UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));

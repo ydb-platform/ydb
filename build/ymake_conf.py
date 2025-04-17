@@ -2040,7 +2040,6 @@ class MSVCCompiler(MSVC, Compiler):
                 # Issue a warning if certain overload is hidden due to inheritance
                 '-Woverloaded-virtual',
                 '-Wno-ambiguous-reversed-operator',
-                '-Wno-c++11-narrowing-const-reference',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-deprecated-anon-enum-enum-conversion',
                 '-Wno-deprecated-enum-enum-conversion',

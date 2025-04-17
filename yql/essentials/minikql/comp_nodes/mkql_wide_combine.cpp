@@ -248,8 +248,19 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), Hash(hash), Equal(equal) {
+    TState(
+        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal,
+        NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, bool allowOutOfMemory = true
+    )
+        : TBase(memInfo)
+        , KeyWidth(keyWidth)
+        , StateWidth(stateWidth)
+        , AllowOutOfMemory(allowOutOfMemory)
+        , Hash(hash)
+        , Equal(equal)
+        , Logger(logger)
+        , LogComponent(logComponent)
+    {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -295,7 +306,7 @@ public:
         try {
             States->CheckGrow();
         } catch (TMemoryLimitExceededException) {
-            YQL_LOG(INFO) << "State failed to grow";
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "State failed to grow");
             if (IsOutOfMemory || !AllowOutOfMemory) {
                 throw;
             } else {
@@ -373,6 +384,8 @@ private:
     std::unique_ptr<TStates> States;
     const THashFunc Hash;
     const TEqualsFunc Equal;
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
 };
 
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
@@ -421,10 +434,11 @@ public:
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
-        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
+        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx,
+        NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent
     )
         : TBase(memInfo)
-        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, allowSpilling && ctx.SpillerFactory)
+        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, logger, logComponent, allowSpilling && ctx.SpillerFactory)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
@@ -436,6 +450,8 @@ public:
         , Equal(equal)
         , AllowSpilling(allowSpilling)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
@@ -726,6 +742,10 @@ private:
     }
 
     void LogMemoryUsage() const {
+        const auto memoryUsageLogLevel = NUdf::ELogLevel::Info;
+        if (!Logger->IsActive(LogComponent, memoryUsageLogLevel)) {
+            return;
+        }
         const auto used = TlsAllocState->GetUsed();
         const auto limit = TlsAllocState->GetLimit();
         TStringBuilder logmsg;
@@ -735,7 +755,7 @@ private:
         }
         logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
 
-        YQL_LOG(INFO) << logmsg;
+        UDF_LOG(Logger, LogComponent, memoryUsageLogLevel, logmsg);
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -858,31 +878,32 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
-                YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to InMemory");
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
-                YQL_LOG(INFO) << "switching Memory mode to SplittingState";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to SplittingState");
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth,
+                            KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, Logger, LogComponent, false);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
-                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to Spilling");
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to ProcessSpilled");
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
@@ -940,6 +961,9 @@ private:
 
     TComputationContext& Ctx;
     NYql::NUdf::TCounter CounterOutputRows_;
+
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1402,12 +1426,18 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideCombine");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
+        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
+                TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes), logger, logComponent);
 #else
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
             ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+            logger, logComponent
         );
 #endif
         if (ctx.CountersProvider) {
@@ -1832,6 +1862,10 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideLastCombine");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
         state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),
@@ -1839,11 +1873,13 @@ private:
             TMyValueHasher(KeyTypes),
             TMyValueEqual(KeyTypes),
 #else
-           ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-           ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
 #endif
             AllowSpilling,
-            ctx
+            ctx,
+            logger,
+            logComponent
         );
     }
 
@@ -1996,7 +2032,6 @@ IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFa
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 

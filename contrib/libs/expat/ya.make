@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.7.0)
+VERSION(2.7.1)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_7_0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_7_1.tar.gz)
 
 ADDINCL(
     contrib/libs/expat

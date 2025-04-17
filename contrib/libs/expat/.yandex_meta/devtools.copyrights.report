@@ -29,18 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 007454c8100a75981ead0fc679fb038f
-BELONGS ya.make
-    License text:
-        Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
-        Copyright (c) 2001-2022 Expat maintainers
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        COPYING [1:2]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 05014a3c04ec6fa887b93f5ee617cd76
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -272,7 +260,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 581b53ae6f0fb8a0cc30c73b46bc3441
 BELONGS ya.make
     License text:
         Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
-        Copyright (c) 2001-2022 Expat maintainers
+        Copyright (c) 2001-2025 Expat maintainers
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -341,6 +329,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         expat.h [9:22]
+        lib/internal.h [28:36]
         lib/xmlparse.c [9:44]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 61052a80fd00eeac5fb41a5ab5fdeff7
@@ -402,6 +391,18 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/xmltok.c [9:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 868bf74335c8c4c3a6c576a3120e708c
+BELONGS ya.make
+    License text:
+        Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper
+        Copyright (c) 2001-2025 Expat maintainers
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8cba36e37749b7d96d8bc8a7b47d0f6f
 BELONGS ya.make
@@ -802,7 +803,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/internal.h [28:36]
         lib/xmltok.c [9:27]
         lib/xmltok.h [9:15]
 

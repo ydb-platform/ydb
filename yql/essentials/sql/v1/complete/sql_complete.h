@@ -20,8 +20,10 @@ namespace NSQLComplete {
 
     enum class ECandidateKind {
         Keyword,
+        PragmaName,
         TypeName,
         FunctionName,
+        HintName,
     };
 
     struct TCandidate {
@@ -49,9 +51,6 @@ namespace NSQLComplete {
     };
 
     using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
-
-    // FIXME(YQL-19747): unwanted dependency on a lexer implementation
-    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine();
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,

@@ -37,7 +37,7 @@ struct TExternalDataSource : public IExternalSource {
     }
 
     bool DataSourceMustHaveDataBaseName(const TProtoStringType& sourceType) const {
-        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse"}, sourceType);
+        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "MongoDB"}, sourceType);
     }
 
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {

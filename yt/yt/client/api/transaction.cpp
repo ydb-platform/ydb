@@ -4,6 +4,16 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFuture<void> ITransaction::Abort(const TPrerequisiteAbortOptions& options)
+{
+    TTransactionAbortOptions abortOptions = {};
+    static_cast<TPrerequisiteAbortOptions&>(abortOptions) = options;
+
+    return Abort(abortOptions);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TFuture<ITransactionPtr> StartAlienTransaction(
     const ITransactionPtr& localTransaction,
     const IClientPtr& alienClient,

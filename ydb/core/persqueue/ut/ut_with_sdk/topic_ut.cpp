@@ -430,6 +430,45 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(4));
         }
     }
+
+    Y_UNIT_TEST(Commit_ToNewChild_WithoutCommitToParent) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        setup.Write("message-0-0", 0);
+        setup.Write("message-0-1", 0);
+        setup.Write("message-0-2", 0);
+
+        auto getCommittedOffset = [&](size_t partition) {
+            auto desc = setup.DescribeConsumer();
+            return desc.GetPartitions().at(partition).GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        {
+            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+                for (auto & m: x.GetMessages()) {
+                    if (x.GetPartitionSession()->GetPartitionId() == 0 && m.GetOffset() == 1) {
+                        ui64 txId = 1006;
+                        SplitPartition(setup, ++txId, 0, "a");
+
+                        setup.Write("message-1-0", 1);
+                        setup.Write("message-1-1", 1);
+                        setup.Write("message-1-2", 1);
+                    } else if (x.GetPartitionSession()->GetPartitionId() == 1 && m.GetOffset() == 0) {
+                        m.Commit();
+                    }
+                }
+                return false;
+            });
+
+            Sleep(TDuration::Seconds(2));
+
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(0));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(1));
+            UNIT_ASSERT_VALUES_EQUAL(0, getCommittedOffset(2));
+        }
+    }
+
 }
 
 } // namespace NKikimr

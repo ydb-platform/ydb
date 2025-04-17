@@ -37,7 +37,7 @@ The library includes default Yandex Cloud server certificates, which are require
 var certs = Ydb.Sdk.Yc.YcCerts.GetYcServerCertificates();
 ```
 
-## How to connect with ADO.NET
+## How to Connect with ADO.NET
 
 To establish a secure connection to {{ ydb-short-name }} using ADO.NET, configure `YdbConnectionStringBuilder` with the required authentication and TLS settings. Below is a detailed example:
 

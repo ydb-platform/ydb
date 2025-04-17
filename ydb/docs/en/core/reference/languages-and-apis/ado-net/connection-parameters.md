@@ -6,7 +6,7 @@ All available connection parameters are defined as properties in the `YdbConnect
 
 Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
 
-## Basic connection
+## Basic Connection
 
 | Parameter         | Description                                                                                                | Default value |
 |-------------------|------------------------------------------------------------------------------------------------------------|---------------|
@@ -16,7 +16,7 @@ Below are the connection string parameters that `Ydb.Sdk.Ado` understands.
 | `User`            | Specifies the username                                                                                     | Not defined   |
 | `Password`        | Specifies the user password                                                                                | Not defined   |
 
-## Security and encryption
+## Security and Encryption
 
 | Parameter         | Description                                                                                                                            | Default value |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------|---------------|

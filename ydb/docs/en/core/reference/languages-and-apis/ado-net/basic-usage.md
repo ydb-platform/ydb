@@ -105,7 +105,7 @@ while (await reader.ReadAsync())
 }
 ```
 
-## Other execution methods
+## Other Execution Methods
 
 Above, we executed SQL via [ExecuteReaderAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executereaderasync). There are various ways to execute a command, based on what results you expect from it:
 
@@ -157,7 +157,7 @@ SQL query parameters can be set using the `YdbParameter` class.
 
 In this example, the parameters `$series_id`, `$season_id`, and `$limit_size` are declared within the SQL query and then added to the command using `YdbParameter` objects.
 
-## Alternative parameter style with `@` prefix
+## Alternative Parameter Style with `@` Prefix
 
 Parameters can also be specified using the `@` prefix. In this case, there is no need to declare variables within the query itself. The query will look like this:
 
@@ -176,7 +176,7 @@ ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 
 With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
 
-## Parameter types
+## Parameter Types
 
 {{ ydb-short-name }} has a strongly-typed type system: columns and parameters have a type, and types are usually not implicitly converted to other types. This means you have to think about which type you will be sending: trying to insert a string into an integer column (or vice versa) will fail.
 
@@ -213,7 +213,7 @@ await transaction.CommitAsync();
 
 {{ ydb-short-name }} does not support nested or concurrent transactions. At any given moment, only one transaction per connection can be in progress, and starting a new transaction while another is already running throws an exception. Therefore, there is no need to pass the `YdbTransaction` object returned by `BeginTransaction()` to commands you execute. When a transaction is started, all subsequent commands are automatically included until a commit or rollback is made. To ensure maximum portability, however, it is best to set the transaction scope for your commands explicitly.
 
-## Error handling
+## Error Handling
 
 All exceptions related to database operations are subclasses of `YdbException`.
 

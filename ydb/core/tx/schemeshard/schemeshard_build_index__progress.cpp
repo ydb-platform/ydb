@@ -807,7 +807,7 @@ private:
         }
     }
 
-    bool FillTable(TIndexBuildInfo& buildInfo) {
+    bool FillSecondaryIndex(TIndexBuildInfo& buildInfo) {
         if (buildInfo.DoneShards.empty() && buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.empty()) {
             AddAllShards(buildInfo);
         }
@@ -942,14 +942,15 @@ private:
         );
     }
 
-    // TODO: extract FillPrefixedVectorIndex
-    bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1) {
-            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
-            if (!FillTable(buildInfo)) {
+    bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {        
+        Y_ASSERT(buildInfo.IsBuildPrefixedVectorIndex());
+        LOG_D("FillPrefixedIndex::Level::Start " << buildInfo.KMeansTreeToDebugStr());
+
+        if (buildInfo.KMeans.Level == 1) {
+            if (!FillSecondaryIndex(buildInfo)) {
                 return false;
             }
-            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
+            LOG_D("FillPrefixedIndex::Level::Done " << buildInfo.KMeansTreeToDebugStr());
 
             const ui64 doneShards = buildInfo.DoneShards.size();
             ClearDoneShards(txc, buildInfo);
@@ -957,27 +958,29 @@ private:
             buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
             buildInfo.KMeans.PrefixIndexDone(doneShards);
             LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
+
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
             ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
-        }
-
-        if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 2) {
-            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
-            if (!FillPrefixKMeans(buildInfo)) {
+        } else {
+            bool filled = buildInfo.KMeans.Level == 2
+                ? FillPrefixKMeans(buildInfo)
+                : FillLocalKMeans(buildInfo);
+            if (!filled) {
                 return false;
             }
-            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
+            LOG_D("FillPrefixedIndex::Level::Done " << buildInfo.KMeansTreeToDebugStr());
 
             ClearDoneShards(txc, buildInfo);
             Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
             const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
             buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
-            LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
+            LOG_D("FillPrefixedIndex::NextLevel " << buildInfo.KMeansTreeToDebugStr());
+
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
@@ -988,30 +991,9 @@ private:
             Progress(BuildId);
             return false;
         }
+    }
 
-        if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level >= 3) {
-            LOG_D("FillIndex::Prefixed::Level::Start " << buildInfo.KMeansTreeToDebugStr());
-            if (!FillLocalKMeans(buildInfo)) {
-                return false;
-            }
-            LOG_D("FillIndex::Prefixed::Level::Done " << buildInfo.KMeansTreeToDebugStr());
-
-            ClearDoneShards(txc, buildInfo);
-            Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
-            const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
-            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-            LOG_D("FillIndex::Prefixed::NextLevel " << buildInfo.KMeansTreeToDebugStr());
-            PersistKMeansState(txc, buildInfo);
-            NIceDb::TNiceDb db{txc.DB};
-            Self->PersistBuildIndexUploadReset(db, buildInfo);
-            if (!needsAnotherLevel) {
-                return true;
-            }
-            ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
-            Progress(BuildId);
-            return false;
-        }
-
+    bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
             return false;
         }
@@ -1095,11 +1077,17 @@ private:
             NIceDb::TNiceDb db(txc.DB);
             InitiateShards(db, buildInfo);
         }
-        if (buildInfo.IsBuildVectorIndex()) {
-            return FillVectorIndex(txc, buildInfo);
-        } else {
-            Y_ASSERT(buildInfo.IsBuildSecondaryIndex() || buildInfo.IsBuildColumns());
-            return FillTable(buildInfo);
+        switch (buildInfo.BuildKind) {
+            case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
+            case TIndexBuildInfo::EBuildKind::BuildColumns:
+                return FillSecondaryIndex(buildInfo);
+            case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
+                return FillVectorIndex(txc, buildInfo);
+            case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
+                return FillPrefixedVectorIndex(txc, buildInfo);
+            default:
+                Y_ASSERT(false);
+                return true;
         }
     }
 

@@ -60,9 +60,13 @@ public:
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
-    bool supportRtmrMode,
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-    FederatedQuery::StreamingDisposition disposition
+    bool supportRtmrMode = false,
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
+    FederatedQuery::StreamingDisposition disposition = []() {
+        FederatedQuery::StreamingDisposition result;
+        *result.mutable_fresh() = result.fresh();
+        return result;
+    }()
 );
 
 } // namespace NYql

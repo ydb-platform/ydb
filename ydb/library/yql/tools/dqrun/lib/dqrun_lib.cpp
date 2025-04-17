@@ -285,9 +285,6 @@ TDqRunTool::TDqRunTool()
 
     AddProviderFactory([this]() -> NYql::TDataProviderInitializer {
         if (GetRunOptions().GatewaysConfig->HasPq() || !TopicMapping_.empty()) {
-            FederatedQuery::StreamingDisposition disposition;
-            disposition.Clear();
-            *disposition.mutable_fresh() = disposition.fresh();
             return GetPqDataProviderInitializer(GetPqGateway(), false, GetDbResolver());
         }
         return {};

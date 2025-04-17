@@ -135,7 +135,7 @@ namespace NSQLTranslationV1 {
                 R"(\bEOF\b)", R"($)"));
 
             rules.emplace_back(RegexRewriteRule(
-                R"('\\u000C' \|)", ""));
+                R"('\\u000C' \|)", R"('\\f' |)"));
         }
 
         void Finalize(TString& text) {

@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
+#include <util/digest/multi.h>
+
 #include <algorithm>
 #include <random>
 #include <string>
@@ -27,8 +29,7 @@ struct TStringHasher
 {
     ui64 operator()(const TString& node, ui64 index) const
     {
-        auto hashNode = ::THash<TStringBuf>()(node);
-        return (hashNode ^ (index << 3)) + hashNode << (index & 7);
+        return MultiHash(node, index);
     }
 };
 

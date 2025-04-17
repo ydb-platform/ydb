@@ -1994,7 +1994,6 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
-        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {

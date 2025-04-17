@@ -289,6 +289,10 @@ TUnboxedValue FillValueFromProto(
         } else if (fd->is_optional()) {
             if (r->HasField(proto, fd)) {
                 return CreateSingleField(valueBuilder, proto, fd, info, fInfo.Flags);
+            } else if (fInfo.Flags.HasFlag(EFieldFlag::RecursiveOptionalUnwrapped)) {
+                throw yexception() << "The recursive field"
+                                    << " '" << fd->full_name() << "' "
+                                    << "was attempted to be parsed as a string, but actually it has no value. Consider using the BytesV2 parsing mode to allow for optional recursive messages.";
             } else if (fd->has_default_value() || AvoidOptionalScalars(info.SyntaxAware, fd)) {
                 return CreateDefaultValue(valueBuilder, fd, info, fInfo.Flags);
             } else {

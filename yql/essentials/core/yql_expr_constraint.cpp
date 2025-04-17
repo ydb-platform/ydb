@@ -665,12 +665,18 @@ private:
         };
 
         const auto filterForUnique = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
-            return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+                return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            }
+            return false;
         };
 
         const auto filterForDistinct = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+            }
+            return false;
         };
 
         FilterFromHead<TSortedConstraintNode>(input, filter, ctx);

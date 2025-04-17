@@ -47,11 +47,10 @@ namespace NActors {
     }
 
     bool TProcStat::Fill(pid_t pid) {
-        try {
-            TString strPid(ToString(pid));
-            TString line;
-            TVector<TString> fields;
+        TString strPid(ToString(pid));
+        TString line;
 
+        try {
             TFileInput proc("/proc/" + strPid + "/status");
             while (proc.ReadLine(line)) {
                 if (ExtractVal(line, "VmRSS:", Rss))
@@ -63,8 +62,21 @@ namespace NActors {
             }
             ConvertFromKb(Rss);
 
-            float tickPerMillisec = TicksPerMillisec();
+        } catch (...) {
+        }
 
+        Vsize = 0;
+        Utime = 0;
+        Stime = 0;
+        MinFlt = 0;
+        MajFlt = 0;
+        SystemUptime = {};
+        Uptime = {};
+        NumThreads = 0;
+
+        float ticksPerMillisec = TicksPerMillisec();
+
+        try {
             TFileInput procStat("/proc/" + strPid + "/stat");
             if (procStat.ReadLine(line)) {
                 sscanf(line.data(),
@@ -74,14 +86,20 @@ namespace NActors {
                        &Pid, &State, &Ppid, &Pgrp, &Session, &TtyNr, &TPgid, &Flags, &MinFlt, &CMinFlt,
                        &MajFlt, &CMajFlt, &Utime, &Stime, &CUtime, &CStime, &Priority, &Nice, &NumThreads,
                        &ItRealValue, &StartTime, &Vsize, &RssPages, &RssLim);
-                Utime /= tickPerMillisec;
-                Stime /= tickPerMillisec;
-                CUtime /= tickPerMillisec;
-                CStime /= tickPerMillisec;
-                SystemUptime = ::Uptime();
-                Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec());
+                Utime /= ticksPerMillisec;
+                Stime /= ticksPerMillisec;
+                CUtime /= ticksPerMillisec;
+                CStime /= ticksPerMillisec;
             }
+            SystemUptime = ::Uptime();
+            Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / ticksPerMillisec);
+        } catch (...) {
+        }
 
+        FileRss = 0;
+        AnonRss = 0;
+
+        try {
             TFileInput statm("/proc/" + strPid + "/statm");
             if (statm.ReadLine(line)) {
                 TVector<TString> fields;
@@ -96,30 +114,58 @@ namespace NActors {
                     AnonRss = (resident - shared) * PageSize;
                 }
             }
+        } catch (...) {
+        }
+
+        CGroupMemLim = 0;
+
+        try {
+            bool isV2 = NFs::Exists("/sys/fs/cgroup/cgroup.controllers");
 
             TFileInput cgroup("/proc/" + strPid + "/cgroup");
             TString memoryCGroup;
             while (cgroup.ReadLine(line)) {
+                TVector<TString> fields;
                 StringSplitter(line).Split(':').Collect(&fields);
-                if (fields.size() > 2 && fields[1] == "memory") {
-                    memoryCGroup = fields[2];
-                    break;
+                if (fields.size() <= 2) {
+                    continue;
+                }
+                if (isV2) {
+                    if (fields[0] == "0") {
+                        memoryCGroup = fields[2];
+                        break;
+                    }
+                } else {
+                    if (fields[1] == "memory") {
+                        memoryCGroup = fields[2];
+                        break;
+                    }
                 }
             }
 
-            TString cgroupFileName = "/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes";
-            if (!NFs::Exists(cgroupFileName)) {
-                // fallback for mk8s
-                cgroupFileName = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
-            }
-            TFileInput limit(cgroupFileName);
-            if (limit.ReadLine(line) > 0) {
-                CGroupMemLim = FromString<ui64>(line);
-                if (CGroupMemLim > (1ULL << 40)) {
-                    CGroupMemLim = 0;
+            if (!memoryCGroup.empty() && memoryCGroup != "/") {
+                TString cgroupFileName;
+                if (isV2) {
+                    cgroupFileName = "/sys/fs/cgroup" + memoryCGroup + "/memory.max";
+                } else {
+                    cgroupFileName = "/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes";
+                    // fallback for mk8s
+                    if (!NFs::Exists(cgroupFileName)) {
+                        cgroupFileName = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
+                    }
+                }
+                TFileInput limit(cgroupFileName);
+                if (limit.ReadLine(line) && line != "max") {
+                    CGroupMemLim = FromString<ui64>(line);
+                    if (CGroupMemLim > (1ULL << 40)) {
+                        CGroupMemLim = 0;
+                    }
                 }
             }
+        } catch (...) {
+        }
 
+        try {
             TFileInput memInfo("/proc/meminfo");
             while (memInfo.ReadLine(line)) {
                 if (ExtractVal(line, "MemTotal:", MemTotal))
@@ -130,8 +176,8 @@ namespace NActors {
             ConvertFromKb(MemTotal);
             ConvertFromKb(MemAvailable);
         } catch (...) {
-            return false;
         }
+
         return true;
     }
 
@@ -233,7 +279,7 @@ namespace {
             *MajorPageFaults = procStat.MajFlt;
             *UptimeSeconds = procStat.Uptime.Seconds();
             *NumThreads = procStat.NumThreads;
-            *SystemUptimeSeconds = procStat.Uptime.Seconds();
+            *SystemUptimeSeconds = procStat.SystemUptime.Seconds();
         }
 
     private:

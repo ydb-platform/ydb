@@ -24,8 +24,8 @@ ydb admin cluster config replace --help
 Name | Description
 ---|---
 `-f`, `--filename` | Path to the file containing the configuration.
-`--allow-unknown-fields` | Allow unknown fields in the configuration (default: false).
-`--ignore-local-validation` | Ignore basic client-side configuration validation (default: false).
+`--allow-unknown-fields` | Allow unknown fields in the configuration (default value: `false`).
+`--ignore-local-validation` | Ignore basic client-side configuration validation (default value: `false`).
 
 ## Examples {#examples}
 

@@ -40,5 +40,5 @@ config:
 
 After generating the dynamic configuration, you can perform the following steps:
 
-1. Add dynamic configuration parameters to the configuration file.
+1. Add configuration parameters to the dynamic configuration file.
 2. Apply the dynamic configuration to the cluster using the [`admin cluster config replace`](replace.md) command.

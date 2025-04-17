@@ -12,10 +12,10 @@ ydb [global options] admin cluster config [command options] <subcommand>
 
 Where:
 
-- `ydb` – The command to run the YDB CLI from the operating system command line;
-- `[global options]` – Global options, common to all YDB CLI commands;
-- `admin cluster config` – The command for managing cluster configuration;
-- `[command options]` – Command options specific to each command and subcommand;
+- `ydb` – The command to run the YDB CLI from the operating system command line.
+- `[global options]` – Global options, common to all YDB CLI commands.
+- `admin cluster config` – The command for managing cluster configuration.
+- `[command options]` – Command options specific to each command and subcommand.
 - `<subcommand>` – The subcommand.
 
 ## Commands {#list}
@@ -24,6 +24,6 @@ The following is a list of available subcommands for managing cluster configurat
 
 Command / Subcommand | Brief Description
 --- | ---
-[admin cluster config fetch](./fetch.md) | Fetch the current dynamic configuration (aliases: get, dump)
+[admin cluster config fetch](./fetch.md) | Fetch the current dynamic configuration (aliases: `get`, `dump`)
 [admin cluster config generate](./generate.md) | Generate dynamic configuration from the static startup configuration
 [admin cluster config replace](./replace.md) | Replace the dynamic configuration

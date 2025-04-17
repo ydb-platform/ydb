@@ -10,12 +10,10 @@ General syntax for calling node configuration management commands:
 ydb [global options] admin node config [command options] <subcommand>
 ```
 
-Where:
-
-- `ydb` – The command to run the YDB CLI from the operating system command line;
-- `[global options]` – Global options, common to all YDB CLI commands;
-- `admin node config` – The command for managing node configuration;
-- `[command options]` – Command options specific to each command and subcommand;
+- `ydb` – The command to run the YDB CLI from the operating system command line.
+- `[global options]` – Global options, common to all YDB CLI commands.
+- `admin node config` – The command for managing node configuration.
+- `[command options]` – Command options specific to each command and subcommand.
 - `<subcommand>` – The subcommand.
 
 ## Commands {#list}

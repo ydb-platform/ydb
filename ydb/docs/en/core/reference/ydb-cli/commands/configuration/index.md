@@ -9,7 +9,7 @@ General command syntax:
 ```
 
 * `global options` — [Global parameters](../global-options.md).
-* `scope` — Configuration scope (cluster, node).
+* `scope` — Configuration scope (`cluster`, `node`).
 * `subcommands` — Subcommands for managing configuration.
 
 View the command description:

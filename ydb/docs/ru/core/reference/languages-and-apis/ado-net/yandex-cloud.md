@@ -2,7 +2,7 @@
 
 ## Установка
 
-Чтобы использовать аутентификацию [Yandex Cloud](https://yandex.cloud/ru) в вашем .NET приложении, установите `Ydb.Sdk.Yc.Auth` [NuGet пакет](https://www.nuget.org/packages/Ydb.Sdk.Yc.Auth/):
+Чтобы использовать аутентификацию [Yandex Cloud](https://yandex.cloud/ru) в вашем .NET-приложении, установите `Ydb.Sdk.Yc.Auth` [NuGet-пакет](https://www.nuget.org/packages/Ydb.Sdk.Yc.Auth/):
 
 ```bash
 dotnet add package Ydb.Sdk.Yc.Auth

@@ -105,3 +105,62 @@ Y_UNIT_TEST_SUITE(DonorMode) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(BasicTests) {
+
+    Y_UNIT_TEST(EvictBrokenDiskInDeadGroup) {
+        struct TTestCase {
+            ui32 NodeCount;
+            TBlobStorageGroupType::EErasureSpecies Erasure;
+        };
+        std::vector<TTestCase> testCases = {
+            {8, TBlobStorageGroupType::Erasure4Plus2Block},
+            {9, TBlobStorageGroupType::ErasureMirror3dc},
+        };
+
+        for (const auto& testCase : testCases) {
+            TEnvironmentSetup env({
+                .NodeCount = testCase.NodeCount,
+                .Erasure = testCase.Erasure
+            });
+    
+            env.UpdateSettings(false, false);
+            env.CreateBoxAndPool(2, 1);
+            env.Sim(TDuration::Seconds(30));
+    
+            // Making all vdisks bad, group is dead
+            const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            for (auto& pdisk : env.PDiskActors) {
+                env.Runtime->WrapInActorContext(sender, [&] () {
+                    env.Runtime->Send(new IEventHandle(EvBecomeError, 0, pdisk, sender, nullptr, 0));
+                });
+            }
+    
+            env.Sim(TDuration::Minutes(1));
+    
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableQueryBaseConfig();
+            auto response = env.Invoke(request);
+            UNIT_ASSERT(response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            auto& config = response.GetStatus(0).GetBaseConfig();
+    
+            {
+                const ui32 index = RandomNumber(config.VSlotSize());
+                const auto& vslot = config.GetVSlot(index);
+    
+                NKikimrBlobStorage::TConfigRequest request;
+                auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+                cmd->SetGroupId(vslot.GetGroupId());
+                cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+                cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+                cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+                cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+                auto response = env.Invoke(request);
+                UNIT_ASSERT(!response.GetSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Group may lose data");
+            }
+        }
+    }
+
+}

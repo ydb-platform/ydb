@@ -936,6 +936,8 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev) {
             // this message is received when huge blob is written by Skeleton
+            Y_VERIFY_S(HugeBlobsInFlight != 0, ReplCtx->VCtx->VDiskLogPrefix);
+            --HugeBlobsInFlight;
             const auto& record = ev->Get()->Record;
             TStorageStatusFlags flags(record.GetStatusFlags());
             switch (record.GetStatus()) {
@@ -947,8 +949,6 @@ namespace NKikimr {
                     break;
                 case NKikimrProto::OK:
                 default: {  // TODO: Handle other reply statuses
-                    Y_VERIFY_S(HugeBlobsInFlight != 0, ReplCtx->VCtx->VDiskLogPrefix);
-                    --HugeBlobsInFlight;
                     if (flags.Check(PostponeReplicationThreshold)) {
                         STLOG(PRI_ERROR, BS_REPL, BSVR41, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
                                 "Available space is running low, delaying replication"),

@@ -129,6 +129,9 @@ protected:
         if (AF == AF_INET6) {
             SetSockOpt(s, SOL_SOCKET, IPV6_V6ONLY, (int)false);
         }
+        SetSockOpt(s, SOL_SOCKET, SO_REUSEADDR, (int)true);
+        SetSockOpt(s, SOL_SOCKET, SO_REUSEPORT, (int)true);
+
         TSocketHolder sock(s);
         sock.Swap(*this);
     }

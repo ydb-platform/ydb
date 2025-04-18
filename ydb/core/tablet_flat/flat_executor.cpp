@@ -2880,9 +2880,11 @@ void TExecutor::Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorC
     return Broken();
 }
 
-void TExecutor::Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext&) {
+void TExecutor::Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext& ctx) {
     if (ev->Get()->Tag == ui64(EWakeTag::Memory)) {
         Memory->RunMemoryGC();
+    } else if (ev->Get()->Tag == ui64(EWakeTag::GCRetry)) {
+        GcLogic->RetryFailed(ctx);
     } else {
         Y_TABLET_ERROR("Unknown TExecutor module wakeup tag " << ev->Get()->Tag);
     }
@@ -3170,7 +3172,8 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    GcLogic->OnCollectGarbageResult(ev);
+    bool retryFailed = DataCleanupLogic->NeedGC();
+    GcLogic->OnCollectGarbageResult(ev, retryFailed, ActorContext());
     DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
 }
 

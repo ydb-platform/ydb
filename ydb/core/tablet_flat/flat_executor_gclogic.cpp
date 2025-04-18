@@ -1,9 +1,16 @@
 #include "flat_executor_gclogic.h"
+#include "flat_exec_broker.h"
 #include "flat_bio_eggs.h"
 #include <ydb/core/base/tablet.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
+
+namespace {
+    constexpr ui64 GCErrorInitialBackoffMs = 20;
+    constexpr ui64 GCErrorMaxBackoffMs = 10000;
+    constexpr ui64 GCMaxErrors = 20;
+}
 
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : TabletStorageInfo(std::move(info))
@@ -14,6 +21,10 @@ TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, 
     , PrevSnapshotStep(0)
     , ConfirmedOnSendStep(0)
     , AllowGarbageCollection(false)
+    , TryCounter(0)
+    , BackoffTimer(GCErrorInitialBackoffMs, GCErrorMaxBackoffMs)
+    , RetryIsScheduled(false)
+    , FailedChannelsCount(0)
 {
 }
 
@@ -118,13 +129,26 @@ void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActor
         SendCollectGarbage(ctx);
 }
 
-void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
+void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr, bool retryFailed, const TActorContext& ctx) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
     TChannelInfo& channel = ChannelInfo[ev->Channel];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
+        if (channel.LastGCFailed) {
+            if (--FailedChannelsCount == 0) {
+                TryCounter = 0;
+                BackoffTimer.Reset();
+            }
+        }
         channel.OnCollectGarbageSuccess();
     } else {
+        if (!channel.LastGCFailed) {
+            ++FailedChannelsCount;
+        }
         channel.OnCollectGarbageFailure();
+        if (retryFailed && !RetryIsScheduled && ++TryCounter < GCMaxErrors) {
+            ctx.Schedule(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()), new TEvents::TEvWakeup(ui64(EWakeTag::GCRetry)));
+            RetryIsScheduled = true;
+        }
     }
 }
 
@@ -186,6 +210,16 @@ bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
     return false;
 }
 
+void TExecutorGCLogic::RetryFailed(const TActorContext& ctx) {
+    RetryIsScheduled = false;
+    for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) {
+        auto& channel = it->second;
+        if (channel.LastGCFailed) {
+            channel.SendCollectGarbage(channel.MinUncollectedTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
+        }
+    }
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
@@ -204,6 +238,7 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
 TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
+    , LastGCFailed(false)
 {
 }
 
@@ -463,11 +498,13 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
 
     CollectSent.Clear();
     CommitedGcBarrier = KnownGcBarrier;
+    LastGCFailed = false;
 }
 
 void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
     CollectSent.Clear();
     --GcWaitFor;
+    LastGCFailed = true;
 }
 
 }

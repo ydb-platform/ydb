@@ -16,6 +16,7 @@ namespace NTabletFlatExecutor {
     enum class EWakeTag : ui64 {
         Default = 0,    /* Shouldn't be ever used   */
         Memory  = 1,    /* TMemory GC scheduler     */
+        GCRetry = 2,    /* Retry failed CollectGarbage */
     };
 
     struct TIdEmitter : public TSimpleRefCount<TIdEmitter> {

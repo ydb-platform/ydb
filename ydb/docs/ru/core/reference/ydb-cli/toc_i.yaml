@@ -71,20 +71,29 @@ items:
       href: topic-write.md
     - name: Конвейерная обработка сообщений
       href: topic-pipeline.md
-  - name: Выполнение YQL
+  - name: Выполнение SQL-запросов
     items:
     - name: Обзор
       href: yql-query-overview.md
-    - name: Выполнение скрипта (с поддержкой стриминга)
-      href: yql.md
-    - name: Выполнение скрипта
-      href: scripting-yql.md
-    - name: Выполнение запроса
-      href: table-query-execute.md
+    - name: Выполнение запросов
+      href: sql.md
     - name: Выполнение параметризованных запросов
-      href: parameterized-queries-cli.md
+      href: parameterized-query-execution.md
     - name: Интерактивный режим выполнения запросов
       href: interactive-cli.md
+# Справки по устаревшим командам:
+    - name: Выполнение скрипта (с поддержкой стриминга)
+      href: yql.md
+      hidden: true
+    - name: Выполнение скрипта
+      href: scripting-yql.md
+      hidden: true
+    - name: Выполнение запроса
+      href: table-query-execute.md
+      hidden: true
+    - name: Выполнение запросов с параметрами
+      href: parameterized-queries-cli.md
+      hidden: true
 #  - name: Утилиты
 #    items:
     # - name: Снятие бэкапа

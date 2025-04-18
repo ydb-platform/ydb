@@ -1,3 +1,10 @@
+
+{% note warning %}
+
+Данная страница устарела. Актуальная версия: [{#T}](parameterized-query-execution.md).
+
+{% endnote %}
+
 # Выполнение параметризованных YQL-запросов и скриптов
 
 ## Обзор
@@ -417,7 +424,7 @@ echo -e '{"a":10,"b":20}\n{"a":15,"b":25}\n{"a":35,"b":48}' | \
 Для демонстрации работы адаптивного пакетирования со срабатыванием ограничения по задержке обработки в первой строке команды ниже производится генерация 1000 строк с задержкой в 0.2 секунды в `stdout`, которые передаются на `stdin` команде исполнения YQL-запроса. Команда исполнения YQL-запроса, в свою очередь, отображает пакеты параметров в каждом следующем вызове YQL-запроса.
 
 ```bash
-for i in $(seq 1 1000);do echo "Line$i";sleep 0.2;done | \
+for i in $(seq 1 1000); do echo "Line$i"; sleep 0.2; done | \
 {{ ydb-cli }} -p quickstart table query execute \
   -q 'declare $x as List<Utf8>;
       select ListLength($x), $x' \
@@ -459,7 +466,7 @@ for i in $(seq 1 1000);do echo "Line$i";sleep 0.2;done | \
 В данном примере также показана возможность объединения параметров из разных источников, и формирование JSON на выходе.
 
 ```bash
-for i in $(seq 1 200);do echo "Line$i";done | \
+for i in $(seq 1 200); do echo "Line$i"; done | \
 {{ ydb-cli }} -p quickstart table query execute \
   -q 'declare $x as List<Utf8>;
       declare $p2 as Int64;
@@ -496,7 +503,7 @@ for i in $(seq 1 200);do echo "Line$i";done | \
 Занесем в неё 100000 записей:
 
 ```bash
-for i in $(seq 1 100000);do echo "$i";done | \
+for i in $(seq 1 100000); do echo "$i"; done | \
 {{ ydb-cli }} -p quickstart import file csv -p test_delete_1
 ```
 

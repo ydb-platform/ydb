@@ -357,7 +357,7 @@ private:
     }
 
     TStatus HandleSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx)) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -411,9 +411,27 @@ private:
 
 private:
     const TTypeAnnotationNode* AnnotateTargetBase(TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TExprContext& ctx) {
-        const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
+        const auto keysCount = keys.size();
+        if (State_->Configuration->UseBlocksSink.Get().GetOrElse(false)) {
+            if (keysCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), "Block sink is not supported for partitioned output"));
+                return nullptr;
+            }
+            if (format != "parquet") {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Block sink supported only for parquet output format"));
+                return nullptr;
+            }
 
-        auto keysCount = keys.size();
+            TTypeAnnotationNode::TListType items;
+            items.reserve(structType->GetSize() + 1);
+            for (const auto* item : structType->GetItems()) {
+                items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+            }
+            items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+            return ctx.MakeType<TMultiExprType>(items);
+        }
+
+        const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
         if (keysCount) {
             if (isSingleRowPerFileFormat) {
                 ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Partitioned isn't supported for " << (TStringBuf)format << " output format."));

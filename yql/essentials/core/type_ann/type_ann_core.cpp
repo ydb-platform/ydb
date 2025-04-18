@@ -486,7 +486,7 @@ namespace NTypeAnnImpl {
             imports.push_back(&x.second);
         }
 
-        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel)) {
+        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel, Types.UserDataStorage->GetHoldingFileStorage())) {
             return false;
         }
 

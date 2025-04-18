@@ -363,7 +363,7 @@ namespace NYql {
 
             for (auto& child: read.FreeArgs().Get(4).Ref().Children()) {
                 Cerr << "Child: " << child->Dump() << Endl;
-                if (child.Get()->Head().IsAtom("listify")) {
+                if (child.Get()->ChildrenSize() == 1 && child.Get()->Head().IsAtom("listify")) {
                    builder.Listify(child.Get()->HeadPtr());
                 }
             }

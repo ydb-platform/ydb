@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <google/protobuf/arena.h>
+
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -50,6 +52,7 @@
 #include <unistd.h>
 #endif
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -1076,6 +1079,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                 throw;
             }
         };
+
         UpsertTValueBuffer(dbPath, std::move(buildFunc))
             .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
                 jobInflightManager->ReleaseJob();
@@ -1221,7 +1225,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
                 auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
                     try {
-                        return parser.BuildList(buffer, filePath);
+                        return parser.BuildList(buffer, filePath, std::nullopt);
                     } catch (const std::exception& e) {
                         if (!Failed.exchange(true)) {
                             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));

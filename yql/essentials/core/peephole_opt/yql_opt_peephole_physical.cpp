@@ -8838,7 +8838,7 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
-    pipeline.AddCommonOptimization(issueCode);
+    pipeline.AddCommonOptimization(true, issueCode);
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return PeepHoleCommonStage(input, output, ctx, types,

@@ -416,7 +416,7 @@ auto NewLambdaFrom(TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& 
 }
 
 auto LevelLambdaFrom(
-    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces, 
+    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces,
     const TExprNode& fromArgs, const TExprBase& fromBody)
 {
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, fromArgs, fromBody);
@@ -478,13 +478,13 @@ void RemapIdToParent(TExprContext& ctx, TPositionHandle pos, TExprNodePtr& read)
             .Args({mapArg})
             .template Body<TCoAsStruct>().Add(mapMembers).Build()
         .Build()
-    .Done().Ptr();    
+    .Done().Ptr();
 }
 
 void VectorReadLevel(
-    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, const TKqpOptimizeContext& kqpCtx, 
+    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, const TKqpOptimizeContext& kqpCtx,
     const TExprNodePtr& lambda, const TCoTopBase& top,
-    const TKqpTable& levelTable, const TCoAtomList& levelColumns, 
+    const TKqpTable& levelTable, const TCoAtomList& levelColumns,
     TExprNodePtr& read)
 {
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
@@ -736,54 +736,32 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
         const bool needDataRead = CheckIndexCovering(lookupIndex, implTable);
 
         if (!needDataRead) {
-            if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
-                TKqpStreamLookupSettings settings;
-                settings.Strategy = EStreamLookupStrategyType::LookupRows;
-                return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                    .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-                    .LookupKeys(lookupIndex.LookupKeys())
-                    .Columns(lookupIndex.Columns())
-                    .Settings(settings.BuildNode(ctx, node.Pos()))
-                    .Done();
-            }
-
-            return Build<TKqlLookupTable>(ctx, node.Pos())
+            TKqpStreamLookupSettings settings;
+            settings.Strategy = EStreamLookupStrategyType::LookupRows;
+            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
                 .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
                 .Columns(lookupIndex.Columns())
+                .Settings(settings.BuildNode(ctx, node.Pos()))
                 .Done();
         }
 
         auto keyColumnsList = BuildKeyColumnsList(tableDesc, node.Pos(), ctx);
 
-        if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
-            TKqpStreamLookupSettings settings;
-            settings.Strategy = EStreamLookupStrategyType::LookupRows;
-            TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-                .LookupKeys(lookupIndex.LookupKeys())
-                .Columns(keyColumnsList)
-                .Settings(settings.BuildNode(ctx, node.Pos()))
-                .Done();
-
-            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(lookupIndex.Table())
-                .LookupKeys(lookupIndexTable.Ptr())
-                .Columns(lookupIndex.Columns())
-                .Settings(settings.BuildNode(ctx, node.Pos()))
-                .Done();
-        }
-
-        TExprBase lookupIndexTable = Build<TKqlLookupTable>(ctx, node.Pos())
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+        TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
             .LookupKeys(lookupIndex.LookupKeys())
             .Columns(keyColumnsList)
+            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
 
-        return Build<TKqlLookupTable>(ctx, node.Pos())
+        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(lookupIndex.Table())
             .LookupKeys(lookupIndexTable.Ptr())
             .Columns(lookupIndex.Columns())
+            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
     }
 
@@ -1037,7 +1015,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
     if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
         auto reject = [&] (std::string_view because) {
-            auto message = TStringBuilder{} << "Given predicate is not suitable for used index: " 
+            auto message = TStringBuilder{} << "Given predicate is not suitable for used index: "
                 << indexName << ", because " << because << ", node dump:\n" << node.Ref().Dump();
             TIssue issue{ctx.GetPosition(readTableIndex.Pos()), message};
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);

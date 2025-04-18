@@ -1030,7 +1030,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             );
         return {actor, actor};
     }
-    Cerr << "XXX IsWide " << isWide << Endl;
     auto actor = isWide ?
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
             args.Alloc,

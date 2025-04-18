@@ -437,7 +437,6 @@ bool IsSupportedForWide(const TDqConnection& conn) {
           conn.Maybe<TDqCnMerge>() ||
           conn.Maybe<TDqCnUnionAll>() ||
           conn.Maybe<TDqCnBroadcast>() ||
-          conn.Maybe<TDqCnStreamLookup>() ||
           conn.Maybe<TDqCnMap>()))
     {
         return false;

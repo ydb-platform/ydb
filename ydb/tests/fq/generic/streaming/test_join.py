@@ -798,7 +798,6 @@ class TestJoinStreaming(TestYdsBase):
         )
 
         sql, messages, *options = TESTCASES[testcase]
-        sql = 'pragma dq.UseWideChannels = "true";\n' + sql
         sql = sql.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,

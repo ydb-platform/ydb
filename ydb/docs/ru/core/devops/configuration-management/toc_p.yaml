@@ -14,3 +14,5 @@ items:
   include:
     mode: link
     path: migration/toc_p.yaml
+- name: Проверка версии конфигурации
+  href: check-config-version.md

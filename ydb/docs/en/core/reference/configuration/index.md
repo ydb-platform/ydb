@@ -636,20 +636,19 @@ auth_config:
       - "ldap-hostname-02.example.net"
       - "ldap-hostname-03.example.net"
     port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+    scheme: "ldap"
+    base_dn: "dc=mycompany,dc=net"
+    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
+    bind_password: "serviceAccauntPassword"
+    search_filter: "uid=$username"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+        enable_nested_groups_search: true
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
   #...
 ```

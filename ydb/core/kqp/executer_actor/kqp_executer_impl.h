@@ -333,6 +333,7 @@ protected:
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
+                streamEv->Record.SetFinished(channelData.GetFinished());
 
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
                 protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),

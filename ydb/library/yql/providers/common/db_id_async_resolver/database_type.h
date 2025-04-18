@@ -20,7 +20,9 @@ enum class EDatabaseType {
     Logging,
     Solomon,
     Iceberg,
-    Redis
+    Redis,
+    Prometheus,
+    MongoDB
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

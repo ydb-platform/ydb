@@ -4,7 +4,7 @@
 #include "remove_gc.h"
 #include "write.h"
 
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>

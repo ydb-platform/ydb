@@ -1956,8 +1956,8 @@
         "Hosts": "2",
         "LoadAverage": "not-zero-number",
         "MapDataCenters": {
-            "1": 1,
-            "value": 2
+            "": 2,
+            "1": 1
         },
         "MapNodeRoles": {
             "Bootstrapper": 1,
@@ -3277,32 +3277,22 @@
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
-                            "State": "Green",
-                            "Type": "Hive"
-                        },
-                        {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
                         {
                             "Count": 1,
-                            "State": "Green",
-                            "Type": "StatisticsAggregator"
-                        },
-                        {
-                            "Count": 2,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }
@@ -3478,7 +3468,7 @@
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
@@ -3488,12 +3478,12 @@
                             "Type": "Hive"
                         },
                         {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
@@ -3503,7 +3493,7 @@
                             "Type": "StatisticsAggregator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }

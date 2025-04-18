@@ -339,6 +339,8 @@ namespace NKikimr::NStorage {
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
                     record.SetExpectedStorageConfigVersion(ProposedStorageConfig.GetExpectedStorageYamlVersion());
+                    record.SetPeerName(replaceStorageConfig.GetPeerName());
+                    record.SetUserToken(replaceStorageConfig.GetUserToken());
                 }
                 break;
 

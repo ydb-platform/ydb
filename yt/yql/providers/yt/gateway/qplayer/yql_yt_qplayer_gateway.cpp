@@ -965,6 +965,10 @@ public:
         return Inner_->GetClusterConnection(std::move(options));
     }
 
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
+        return Inner_->GetTableFilePath(std::move(options));
+    }
+
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;

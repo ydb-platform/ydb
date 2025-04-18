@@ -9,6 +9,9 @@ IF (OS_LINUX)
     SRCS(
         GLOBAL minidumps.cpp
     )
+
+    RESOURCE(about.txt "internal_breakpad_about")
+
 ENDIF()
 
 END()

@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.34.4)
+VERSION(1.34.5)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.34.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/v1.34.5.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat

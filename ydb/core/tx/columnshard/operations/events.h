@@ -29,10 +29,36 @@ private:
     std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
     YDB_READONLY(bool, NoDataToWrite, false);
+    TString ErrorMessage;
+    std::optional<bool> IsInternalErrorFlag;
     std::shared_ptr<arrow::RecordBatch> PKBatch;
     ui32 RecordsCount;
 
 public:
+    TWriteResult& SetErrorMessage(const TString& value, const bool isInternal) {
+        AFL_VERIFY(!ErrorMessage);
+        IsInternalErrorFlag = isInternal;
+        ErrorMessage = value;
+        return *this;
+    }
+
+    bool IsInternalError() const {
+        AFL_VERIFY_DEBUG(!!IsInternalErrorFlag);
+        if (!IsInternalErrorFlag) {
+            return true;
+        }
+        return *IsInternalErrorFlag;
+    }
+
+    const TString& GetErrorMessage() const {
+        static TString undefinedMessage = "UNKNOWN_WRITE_RESULT_MESSAGE";
+        AFL_VERIFY_DEBUG(!!ErrorMessage);
+        if (!ErrorMessage) {
+            return undefinedMessage;
+        }
+        return ErrorMessage;
+    }
+
     const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
         AFL_VERIFY(PKBatch);
         return PKBatch;
@@ -91,11 +117,16 @@ namespace NKikimr::NColumnShard::NPrivateEvents::NWrite {
 class TEvWritePortionResult: public TEventLocal<TEvWritePortionResult, TEvPrivate::EvWritePortionResult> {
 private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
+    std::optional<std::shared_ptr<NOlap::IBlobsWritingAction>> WriteAction;
     bool Detached = false;
     TInsertedPortions InsertedData;
 
 public:
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& GetWriteAction() const {
+        AFL_VERIFY(!!WriteAction);
+        return *WriteAction;
+    }
+
     const TInsertedPortions& DetachInsertedData() {
         AFL_VERIFY(!Detached);
         Detached = true;

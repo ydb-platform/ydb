@@ -149,7 +149,13 @@ struct TSumData {
     }
 
     static void CheckResult(ETest test, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
-        AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        if (test == ETest::EMPTY) {
+            UNIT_ASSERT(!batch->HasData());
+            return;
+        } else {
+            AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        }
+
         auto aggXOriginal = batch->GetArrayVerified(3);
         auto aggYOriginal = batch->GetArrayVerified(4);
         auto colXOriginal = batch->GetArrayVerified(1);
@@ -588,7 +594,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
     }
 
     Y_UNIT_TEST(Projection) {

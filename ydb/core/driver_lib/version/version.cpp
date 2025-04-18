@@ -1,6 +1,7 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/resource/resource.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/viewer/json/json.h>
 #include "version.h"
@@ -729,6 +730,10 @@ TString TCompatibilityInfo::PrintHumanReadable(const NKikimrConfig::TCurrentComp
         str << "trunk";
     }
     str << "\n";
+
+    if (NResource::Has("internal_breakpad_about")) {
+        str << "    HasInternalBreakpad: true" << Endl;
+    }
 
     // print common rule
     if (current->HasVersion() && current->GetVersion().HasYear() && current->GetVersion().HasMajor()) {

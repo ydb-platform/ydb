@@ -1,0 +1,28 @@
+name: Weekly-Analytic
+on:
+  schedule:
+    - cron: "0 0 * * 6"  # Every Saturday at 00:00
+  workflow_dispatch:
+        
+defaults:
+  run:
+    shell: bash
+jobs:
+  main:
+    name: Run Weekly Python Script
+    runs-on: [ self-hosted ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] pandas  # Add any other required packages
+    - name: Execute weekly Python script
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_delete_table.py --table_path test_results/analytics/test_history_fast

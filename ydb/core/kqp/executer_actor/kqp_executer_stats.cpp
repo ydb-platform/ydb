@@ -488,6 +488,10 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
     CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
 
+    auto updateTimeMs = taskStats.GetUpdateTimeMs();
+    UpdateTimeMs = std::max(UpdateTimeMs, updateTimeMs);
+    baseTimeMs = NonZeroMin(baseTimeMs, updateTimeMs);
+
     SpillingComputeBytes.SetNonZero(index, taskStats.GetSpillingComputeWriteBytes());
     SpillingChannelBytes.SetNonZero(index, taskStats.GetSpillingChannelWriteBytes());
     SpillingComputeTimeUs.SetNonZero(index, taskStats.GetSpillingComputeReadTimeUs() + taskStats.GetSpillingComputeWriteTimeUs());
@@ -609,7 +613,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
     }
 
     for (auto stat : InputStages) {
-        if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsFinished()) {
+        if (stat->CurrentWaitOutputTimeUs.MinValue < deadline || stat->IsFinished()) {
             return false;
         }
     }
@@ -877,6 +881,10 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     UpdateAggr(stageStats->MutableDurationUs(), stats.GetDurationUs());
     UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
     UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
+
+    auto updateTimeMs = task.GetUpdateTimeMs();
+    stageStats->SetUpdateTimeMs(std::max(stageStats->GetUpdateTimeMs(), updateTimeMs));
+    BaseTimeMs = NonZeroMin(BaseTimeMs, updateTimeMs);
 
     UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
     UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
@@ -1518,6 +1526,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
             stageStat.WaitInputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitInputTimeUs());
             stageStat.WaitOutputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitOutputTimeUs());
+            stageStats.SetUpdateTimeMs(stageStat.UpdateTimeMs > BaseTimeMs ? stageStat.UpdateTimeMs - BaseTimeMs : 0);
 
             stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
             stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
@@ -1648,6 +1657,8 @@ void TQueryExecutionStats::AdjustBaseTime(NDqProto::TDqStageStats* stageStats) {
     for (auto& p : *stageStats->MutableEgress()) {
         AdjustAsyncBufferAggr(p.second);
     }
+    auto updateTimeMs = stageStats->GetUpdateTimeMs();
+    stageStats->SetUpdateTimeMs(updateTimeMs > BaseTimeMs ? updateTimeMs - BaseTimeMs : 0);
 }
 
 void TQueryExecutionStats::Finish() {

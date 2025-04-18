@@ -9,7 +9,7 @@
 
 namespace NYql::NFmr {
 
-struct TFmrTableDataServiceReaderSettings {
+struct TFmrReaderSettings {
     ui64 ReadAheadChunks = 1;
 };
 
@@ -24,7 +24,7 @@ public:
         const TString& tableId,
         const std::vector<TTableRange>& tableRanges,
         ITableDataService::TPtr tableDataService,
-        const TFmrTableDataServiceReaderSettings& settings = TFmrTableDataServiceReaderSettings{}
+        const TFmrReaderSettings& settings = TFmrReaderSettings{}
     );
 
     bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override;

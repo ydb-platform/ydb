@@ -1,5 +1,6 @@
 #include "accessor.h"
 #include "direct_builder.h"
+#include "signals.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
@@ -67,18 +68,26 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         proto.SetOtherStatsSize(0);
     }
     ui32 columnIdx = 0;
+    TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
         TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
+        TMonotonic next = TMonotonic::Now();
+        NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);
+        pred = next;
         ++columnIdx;
     }
 
     if (OthersData.GetRecords()->GetRecordsCount()) {
+        TMonotonic pred = TMonotonic::Now();
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
             blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            TMonotonic next = TMonotonic::Now();
+            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size(), next - pred);
+            pred = next;
             auto* cInfo = proto.AddOtherColumns();
             cInfo->SetSize(blobRanges.back().size());
         }

@@ -544,7 +544,7 @@ private:
     NOlap::TSnapshot LastCompletedTx;
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
+    virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
             NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
@@ -554,7 +554,6 @@ protected:
             }
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-        return TConclusionStatus::Success();
     }
 
 public:
@@ -1394,14 +1393,13 @@ private:
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
     std::vector<TPortionConstructorV2> Portions;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+    virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         std::vector<NOlap::TPortionDataAccessor> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {
             accessors.emplace_back(i.BuildAccessor());
         }
         FetchCallback->OnAccessorsFetched(std::move(accessors));
-        return TConclusionStatus::Success();
     }
     virtual void DoOnCannotExecute(const TString& reason) override {
         AFL_VERIFY(false)("cannot parse metadata", reason);

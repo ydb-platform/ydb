@@ -538,6 +538,10 @@ document.addEventListener("DOMContentLoaded", ready);
                             KEYVALUE_UP("Blobs read with error", "d.blobs_read_error", AsStats.BlobsReadError);
                             KEYVALUE_UP("Blobs put with OK", "d.blobs_put_ok", AsStats.BlobsPutOk);
                             KEYVALUE_UP("Blobs put with error", "d.blobs_put_error", AsStats.BlobsPutError);
+                            KEYVALUE_UP("CollectGarbage in flight", "d.collect_garbage_in_flight", AsStats.CollectGarbageInFlight);
+                            KEYVALUE_UP("CollectGarbage queue", "d.collect_garbage_queue", AsStats.CollectGarbageQueue);
+                            KEYVALUE_UP("CollectGarbage OK", "d.collect_garbage_ok", AsStats.CollectGarbageOK);
+                            KEYVALUE_UP("CollectGarbage error", "d.collect_garbage_error", AsStats.CollectGarbageError);
                         })
                     }
                 }

@@ -29,6 +29,14 @@ SELECT
     ListLength(Yql::PruneKeys(AsList(1, 1, 1, 3, 3, 3, 3), $mod2))
 ;
 
+SELECT
+    Yql::PruneAdjacentKeys(AsList(NULL, NULL, NULL, 1, 1, 2, 3, 3, 4, 5), $id)
+;
+
+SELECT
+    Yql::PruneKeys(AsList(1, NULL, 1, NULL, 1, NULL, 1), $id)
+;
+
 -- optimize tests
 $get_a = ($x) -> {
     RETURN <|a: $x.a|>;

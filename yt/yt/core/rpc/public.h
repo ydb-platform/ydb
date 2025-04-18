@@ -108,7 +108,7 @@ using TTypedServiceContext = TGenericTypedServiceContext<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(THistogramExponentialBounds)
+DECLARE_REFCOUNTED_STRUCT(THistogramExponentialBounds)
 DECLARE_REFCOUNTED_STRUCT(TTimeHistogramConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerConfig)
 DECLARE_REFCOUNTED_STRUCT(TServiceCommonConfig)
@@ -120,7 +120,7 @@ DECLARE_REFCOUNTED_STRUCT(TRetryingChannelConfig)
 DECLARE_REFCOUNTED_STRUCT(TViablePeerRegistryConfig)
 DECLARE_REFCOUNTED_STRUCT(TDynamicChannelPoolConfig)
 DECLARE_REFCOUNTED_STRUCT(TServiceDiscoveryEndpointsConfig)
-DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfig)
 DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelConfig)
 DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelDynamicConfig)

@@ -15,20 +15,12 @@ TColumnConstructionContext& TColumnConstructionContext::SetFilter(const std::sha
 
 std::optional<TColumnConstructionContext> TColumnConstructionContext::Slice(const ui32 offset, const ui32 count) const {
     std::optional<TColumnConstructionContext> result;
-    if (StartIndex && RecordsCount) {
-        const ui32 start = std::max<ui32>(offset, *StartIndex);
-        const ui32 finish = std::min<ui32>(offset + count, *StartIndex + *RecordsCount);
-        if (finish <= start) {
-            result = std::nullopt;
-        } else {
-            result = TColumnConstructionContext().SetStartIndex(start - offset).SetRecordsCount(finish - start, count);
-        }
-    } else if (StartIndex && !RecordsCount) {
-        result = TColumnConstructionContext().SetStartIndex(std::max<ui32>(offset, *StartIndex) - offset);
-    } else if (!StartIndex && RecordsCount) {
-        result = TColumnConstructionContext().SetRecordsCount(std::min<ui32>(count, *RecordsCount), count);
+    const ui32 start = std::max<ui32>(offset, StartIndex.value_or(0));
+    const ui32 finish = std::min<ui32>(offset + count, StartIndex.value_or(0) + RecordsCount.value_or(offset + count));
+    if (finish <= start) {
+        result = std::nullopt;
     } else {
-        result = TColumnConstructionContext();
+        result = TColumnConstructionContext().SetStartIndex(start - offset).SetRecordsCount(finish - start, count);
     }
     if (result && Filter) {
         result->SetFilter(std::make_shared<TColumnFilter>(Filter->Slice(offset, count)));

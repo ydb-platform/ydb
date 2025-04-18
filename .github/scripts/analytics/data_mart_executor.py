@@ -145,7 +145,7 @@ def main():
         ]
 
     table_path = args.table_path
-    batch_size = 50000
+    batch_size = 1000
 
     # Read SQL query from file
     sql_query_path = os.path.join(repo_path, args.query_path)

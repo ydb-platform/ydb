@@ -26,7 +26,6 @@
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
-#include <yt/yt/core/misc/signal_registry.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/heap.h>
 
@@ -39,6 +38,8 @@
 
 #include <yt/yt/library/profiling/producer.h>
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/variant.h>
@@ -79,6 +80,7 @@ using namespace NYTree;
 using namespace NConcurrency;
 using namespace NFS;
 using namespace NProfiling;
+using namespace NSignals;
 using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -390,6 +392,7 @@ public:
 
         if (!IsConfiguredFromEnv()) {
             DoUpdateConfig(TLogManagerConfig::CreateDefault(), /*fromEnv*/ false);
+            DefaultConfigured_.store(true);
         }
 
         SystemCategory_ = GetCategory(SystemLoggingCategoryName);
@@ -426,6 +429,13 @@ public:
         if (sync) {
             future.Get().ThrowOnError();
         }
+
+        DefaultConfigured_.store(false);
+    }
+
+    bool IsDefaultConfigured()
+    {
+        return DefaultConfigured_.load();
     }
 
     void ConfigureFromEnv()
@@ -1433,6 +1443,7 @@ private:
     // Incrementing version forces loggers to update their own default configuration (default level etc.).
     std::atomic<int> Version_ = 0;
 
+    std::atomic<bool> DefaultConfigured_ = false;
     std::atomic<bool> ConfiguredFromEnv_ = false;
 
     // These are just cached (for performance reason) copies from Config_.
@@ -1540,6 +1551,14 @@ void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
         return;
     }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
+}
+
+bool TLogManager::IsDefaultConfigured()
+{
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return false;
+    }
+    return Impl_->IsDefaultConfigured();
 }
 
 void TLogManager::ConfigureFromEnv()

@@ -15,6 +15,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 bool TStepAction::DoApply(IDataReader& owner) const {
     if (FinishedFlag) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+        Source->StartSyncSection();
         Source->OnSourceFetchingFinishedSafe(owner, Source);
     }
     return true;
@@ -26,7 +27,7 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
         return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
-    if (!executeResult) {
+    if (executeResult.IsFail()) {
         return executeResult;
     }
     if (*executeResult) {
@@ -35,11 +36,17 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
     return TConclusionStatus::Success();
 }
 
-TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
+TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
+    const bool changeSyncSection)
     : TBase(ownerActorId)
     , Source(source)
     , Cursor(std::move(cursor))
     , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+    if (changeSyncSection) {
+        Source->StartAsyncSection();
+    } else {
+        Source->CheckAsyncSection();
+    }
 }
 
 TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
@@ -48,14 +55,16 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->HasStageData() && source->GetStageData().IsEmptyFiltered()) {
+        if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
             source->OnEmptyStageData(source);
+            break;
+        } else if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);
         TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
             IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)("source_id", source->GetSourceId());
 
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
@@ -105,7 +114,8 @@ TString TFetchingScript::ProfileDebugString() const {
     return sb;
 }
 
-void TFetchingScriptBuilder::AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType) {
+void TFetchingScriptBuilder::AddAllocation(
+    const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType) {
     if (Steps.size() == 0) {
         AddStep(std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage));
     } else {
@@ -148,7 +158,7 @@ TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& contex
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
 }
 
-void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage) {
+void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
     auto actualColumns = columns - AddedFetchingColumns;
     AddedFetchingColumns += columns;
     if (actualColumns.IsEmpty()) {
@@ -166,7 +176,7 @@ void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, cons
 }
 
 void TFetchingScriptBuilder::AddAssembleStep(
-    const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential) {
+    const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const bool sequential) {
     auto actualColumns = columns - AddedAssembleColumns;
     AddedAssembleColumns += columns;
     if (actualColumns.IsEmpty()) {

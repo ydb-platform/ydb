@@ -468,6 +468,7 @@ runs:
               --public_dir "$PUBLIC_DIR" \
               --public_dir_url "$PUBLIC_DIR_URL" \
               --build_preset "$BUILD_PRESET" \
+              --branch "$BRANCH_NAME" \
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \

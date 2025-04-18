@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/threading/writer_starving_rw_spin_lock.h>
 
 #include <concepts>
 

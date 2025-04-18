@@ -46,3 +46,13 @@ def test_minidump_script():
     successes = list(filter(lambda x: x.endswith('.dmp.success'), files))
     assert len(dmps) == len(cluster.nodes)
     assert len(successes) == len(cluster.nodes)
+
+
+def test_compatibility_info():
+    res = yatest.common.subprocess.run(
+        [yatest.common.binary_path(os.getenv('YDB_DRIVER_BINARY')), '--compatibility-info'],
+        capture_output=True,
+        encoding='utf8',
+        check=True
+    )
+    assert res.stdout.find('HasInternalBreakpad: true') >= 0

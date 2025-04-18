@@ -3015,6 +3015,11 @@ void TPartition::ExecImmediateTx(TTransaction& t)
                                  "incorrect offset range (commit to the future)");
             return;
         }
+
+        if ((i64)operation.GetCommitOffsetsEnd() < pendingUserInfo.Offset && !operation.GetReadSessionId().empty()) {
+            continue; // this is stale request, answer ok for it
+        }
+
         pendingUserInfo.Offset = operation.GetCommitOffsetsEnd();
     }
     CommitWriteOperations(t);

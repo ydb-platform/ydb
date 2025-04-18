@@ -69,7 +69,3 @@ class MulticlusterTestBase():
             current_test_full_name.replace("::", ".").removesuffix(" (setup)")
         self.hash = hashlib.md5(self.table_path.encode()).hexdigest()
         self.hash_short = self.hash[:8]
-
-    def create_query(self, cluster):
-        query = Query.create(self.get_database(), self.get_endpoint(cluster))
-        return query.query

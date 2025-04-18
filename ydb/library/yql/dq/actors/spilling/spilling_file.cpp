@@ -712,6 +712,7 @@ private:
             TAG(TH2) { s << "Active files"; }
             PRE() { s << "Used space: " << TotalSize_ << Endl; }
             PRE() { s << "Used file descriptors: " << Counters_->SpillingFileDescriptors->Val() << Endl; }
+            PRE() { s << "IO queue size: " << Counters_->SpillingIOQueueSize->Val() << Endl; }
 
             for (const auto& tx : byTx) {
                 TAG(TH2) { s << "Transaction " << tx.first; }
@@ -824,6 +825,7 @@ private:
 
         fd.HasActiveOp = true;
 
+        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size() + 1);
         return IoThreadPool_->AddAndOwn(std::move(op));
     }
 

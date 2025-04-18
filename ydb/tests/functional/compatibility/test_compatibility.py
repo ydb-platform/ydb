@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import boto3
 import time
 import pytest
 import logging
@@ -57,6 +58,7 @@ class TestCompatibility(object):
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        self.s3_config = self.setup_s3()
 
         self.driver = ydb.Driver(
             ydb.DriverConfig(
@@ -67,6 +69,22 @@ class TestCompatibility(object):
         self.driver.wait()
         yield
         self.cluster.stop()
+        
+    @staticmethod
+    def setup_s3():
+        s3_endpoint = os.getenv("S3_ENDPOINT")
+        s3_access_key = "minio"
+        s3_secret_key = "minio123"
+        s3_bucket = "export_test_bucket"
+
+        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+
+        bucket = resource.Bucket(s3_bucket)
+        bucket.create()
+        bucket.objects.all().delete()
+
+        return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
+    
     def read_update_data(self, iteration_count=1):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         self.log_node_versions()
@@ -118,6 +136,7 @@ class TestCompatibility(object):
                 result = list(result_set)
                 assert len(result) == 1
                 assert result[0]['sum_value'] == upsert_count * iteration_count
+    
     def create_table_column(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         with ydb.SessionPool(self.driver, size=1) as pool:
@@ -125,6 +144,7 @@ class TestCompatibility(object):
                 session.execute_scheme(
                     "create table `sample_table` (id Uint64 NOT NULL, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (STORE = COLUMN,AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
                 )
+    
     def create_table_row(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         with ydb.SessionPool(self.driver, size=1) as pool:
@@ -132,6 +152,7 @@ class TestCompatibility(object):
                 session.execute_scheme(
                     "create table `sample_table` (id Uint64, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
                     )
+    
     def log_node_versions(self):
         for node_id, node in enumerate(self.cluster.nodes.values()):
             node.get_config_version()
@@ -146,6 +167,7 @@ class TestCompatibility(object):
                 f'select version() as node_{node_id}_version'
             ]
             yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+    
     def exec_query(self, query: str):
         command = [
                 yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -170,21 +192,22 @@ class TestCompatibility(object):
         self.cluster.change_node_version(version_id=version_id)
         time.sleep(180)
         self.log_node_versions()
+    
     def log_database_scheme(self):
         for node_id, node in enumerate(self.cluster.nodes.values()):
             node.get_config_version()
-            get_version_command = [
+            get_scheme_command = [
                 yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
                 "--verbose",
                 "-e",
-                "grpc://localhost:%d" % node.grpc_port,
+                self.endpoint,
                 "-d"
                 "/Root",
                 "scheme",
                 "ls"
- 
             ]
-            yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+            yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+    
     def log_nodes_version(self):
         for node_id, node in enumerate(self.cluster.nodes.values()):
             node.get_config_version()
@@ -200,6 +223,7 @@ class TestCompatibility(object):
  
             ]
             yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+    
     @pytest.mark.parametrize("version_change_to", ['combined','next_version'])
     def test_simple(self,version_change_to):
         self.create_table_row()
@@ -215,6 +239,7 @@ class TestCompatibility(object):
         self.exec_query('select count(*) from `sample_table`')
         self.read_update_data(iteration_count=2)
         self.exec_query('select count(*) from `sample_table`')
+    
     @pytest.mark.parametrize("version_change_to", ['combined','next_version'])
     def test_simple_column(self,version_change_to):
         self.create_table_column()

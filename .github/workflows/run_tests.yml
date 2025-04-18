@@ -1,4 +1,4 @@
-name: Run tests
+name: Run_tests
 
 on:
   workflow_call:
@@ -31,7 +31,7 @@ on:
         description: 'Branches to test (JSON array or single branch)'
         required: false
         type: string
-        default: '["main"]'
+        default: '[]'
 
   workflow_dispatch:
     inputs:
@@ -71,7 +71,7 @@ on:
       branches:
         description: 'Branches to test (JSON array or single branch name)'
         required: false
-        default: '["main"]'
+        default: '[]'
 
 jobs:
   prepare:
@@ -79,16 +79,18 @@ jobs:
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
     steps:
-      - name: Set branches
+      - name: Combine branches
         id: set-branches
         run: |
+          CURRENT_BRANCH=$(echo "${GITHUB_REF}" | sed 's|refs/heads/||')
           INPUT_BRANCHES='${{ inputs.branches }}'
-          # Check if input is a JSON array
-          if [[ $INPUT_BRANCHES == \[* ]]; then
-            echo "branch_array=$INPUT_BRANCHES" >> $GITHUB_OUTPUT
+
+          # Ensure input branches is a JSON array
+          if [[ "$INPUT_BRANCHES" == "[]" ]]; then
+            echo "branch_array=[\"$CURRENT_BRANCH\"]" >> $GITHUB_OUTPUT
           else
-            # If it's a single branch, create a JSON array with one element
-            echo "branch_array=[\"$INPUT_BRANCHES\"]" >> $GITHUB_OUTPUT
+            COMBINED_BRANCHES=$(echo "$INPUT_BRANCHES" | jq ". + [\"$CURRENT_BRANCH\"] | unique")
+            echo "branch_array=$COMBINED_BRANCHES" >> $GITHUB_OUTPUT
           fi
           
           echo "Using branches: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"

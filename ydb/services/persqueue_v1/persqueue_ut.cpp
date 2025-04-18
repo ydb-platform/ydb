@@ -1059,7 +1059,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         void SendReadSessionAssign(const ui64 assignId, i64 generation, ui64 lastId = 0,
-                                   const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+                                   const Ydb::StatusIds::StatusCode operationStatus = Ydb::StatusIds::SUCCESS,
+                                   const Ydb::StatusIds::StatusCode stopStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+            // opStatus is for resp.status()
+            // stopStatus is for resp.stop_direct_read_partition_session.status(), if specified
             // Send StartDirectReadPartitionSessionRequest, get StartDirectReadPartitionSessionResponse.
 
             Cerr << "Send next assign to data session " << assignId << Endl;
@@ -1077,9 +1080,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(DirectStream->Read(&resp));
             Cerr << "Got response: " << resp.ShortDebugString() << Endl;
 
-            UNIT_ASSERT_EQUAL(resp.status(), status);
+            UNIT_ASSERT_EQUAL(resp.status(), operationStatus);
 
-            if (status != Ydb::StatusIds::SUCCESS) {
+            if (operationStatus != Ydb::StatusIds::SUCCESS) {
+                return;
+            }
+
+            if (stopStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kStopDirectReadPartitionSession);
+                UNIT_ASSERT_EQUAL(resp.stop_direct_read_partition_session().status(), stopStatus);
                 return;
             }
 
@@ -1217,6 +1226,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 0);
+    }
+
+    Y_UNIT_TEST(DirectReadWrongGeneration) {
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
+        SET_LOCALS;
+        TDirectReadTestSetup setup{server};
+        setup.InitControlSession("acc/topic1");
+        auto assignId = setup.GetNextAssign("acc/topic1").AssignId;
+        setup.InitDirectSession("acc/topic1");
+        i64 wrongGeneration = 2;
+        setup.SendReadSessionAssign(assignId, wrongGeneration, 0, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(DirectReadStop) {

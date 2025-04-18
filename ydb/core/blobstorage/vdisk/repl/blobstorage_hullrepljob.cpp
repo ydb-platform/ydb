@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/util/backoff.h>
 #include <util/datetime/cputimer.h>
 
 // FIXME: we need a process that asyncronously transfers handoff parts to their correct vdisk
@@ -326,6 +327,21 @@ namespace NKikimr {
         std::optional<TRecoveryMachine::TPartSet> CurrentItem;
         TLogoBlobID LastProcessedKey;
 
+        // OOS handling
+        TBackoffTimer BackoffTimer;
+        constexpr static TDuration MinOOSRecoveryRetryDelay = TDuration::Minutes(30);
+        constexpr static TDuration MaxOOSRecoveryRetryDelay = TDuration::Hours(6);
+
+        enum class EStatus {
+            Working,
+            WaitingForRetry,
+        };
+        EStatus Status;
+
+        // TODO: postpone replication on CYAN flag with possibilty of manual force continuation
+        NKikimrBlobStorage::EStatusFlags PostponeReplicationThreshold = NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+
+    private:
         void Finish() {
             STLOG(PRI_DEBUG, BS_REPL, BSVR01, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished replication job"),
                 (LastKey, LastKey), (Eof, Eof));
@@ -494,8 +510,7 @@ namespace NKikimr {
         }
 
         void Merge() {
-            while (MergeIteration())
-                ;
+            while (Status == EStatus::Working && MergeIteration()) {}
         }
 
         bool MergeIteration() {
@@ -873,6 +888,7 @@ namespace NKikimr {
         void HandleYard(NPDisk::TEvChunkWriteResult::TPtr& ev) {
             CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, ActorContext());
             Writer.Apply(ev->Get());
+            CheckSpace(ev);
             Merge();
         }
 
@@ -881,6 +897,7 @@ namespace NKikimr {
             STLOG(PRI_INFO, BS_REPL, BSVR10, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "reserved chunks"),
                 (ChunkIds, FormatList(ev->Get()->ChunkIds)));
             Writer.Apply(ev->Get());
+            CheckSpace(ev);
             Merge();
         }
 
@@ -917,12 +934,73 @@ namespace NKikimr {
             Merge();
         }
 
-        void Handle(TEvBlobStorage::TEvVPutResult::TPtr& /*ev*/) {
-            // FIXME: Handle NotOK
+        void Handle(TEvBlobStorage::TEvVPutResult::TPtr& ev) {
             // this message is received when huge blob is written by Skeleton
-            Y_VERIFY_S(HugeBlobsInFlight != 0, ReplCtx->VCtx->VDiskLogPrefix);
-            --HugeBlobsInFlight;
-            Merge();
+            const auto& record = ev->Get()->Record;
+            TStorageStatusFlags flags(record.GetStatusFlags());
+            switch (record.GetStatus()) {
+                case NKikimrProto::OUT_OF_SPACE:
+                    STLOG(PRI_ERROR, BS_REPL, BSVR43, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                            "PDisk out of space, delaying replication"),
+                            (StatusFlags, flags.ToString()));
+                    SwitchToRetriableErrorState();
+                    break;
+                case NKikimrProto::OK:
+                default: {  // TODO: Handle other reply statuses
+                    Y_VERIFY_S(HugeBlobsInFlight != 0, ReplCtx->VCtx->VDiskLogPrefix);
+                    --HugeBlobsInFlight;
+                    if (flags.Check(PostponeReplicationThreshold)) {
+                        STLOG(PRI_ERROR, BS_REPL, BSVR41, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                                "Available space is running low, delaying replication"),
+                                (StatusFlags, flags.ToString()));
+                        SwitchToRetriableErrorState();
+                    }
+                    Merge();
+                    break;
+                }
+            }
+        }
+
+        void SwitchToRetriableErrorState() {
+            if (std::exchange(Status, EStatus::WaitingForRetry) == EStatus::Working) {
+                ScheduleSpaceCheck();
+                TimeAccount.SetState(ETimeState::OUT_OF_SPACE_DELAY);
+                // we don't have to relinquish replication token here, because other VDisks
+                // on this PDisk also lack space
+            }
+        }
+
+        void ScheduleSpaceCheck() {
+            ui8 owner = ReplCtx->PDiskCtx->Dsk->Owner;
+            ui64 ownerRound = ReplCtx->PDiskCtx->Dsk->OwnerRound;
+            std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(
+                    ReplCtx->PDiskCtx->PDiskId, SelfId(), new NPDisk::TEvCheckSpace(owner, ownerRound));
+
+            TActivationContext::Schedule(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()), ev.release());
+        }
+
+        template <class TYardEventPtr>
+        void CheckSpace(const TYardEventPtr& ev) {
+            TStorageStatusFlags flags(ev->Get()->StatusFlags);
+            if (flags.Check(PostponeReplicationThreshold)) {
+                STLOG(PRI_ERROR, BS_REPL, BSVR40, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        "Available space is running low, delaying replication"),
+                        (StatusFlags, flags.ToString()));
+                SwitchToRetriableErrorState();
+            }
+        }
+
+        void Handle(NPDisk::TEvCheckSpaceResult::TPtr& ev) {
+            TStorageStatusFlags flags(ev->Get()->StatusFlags);
+            if (!flags.Check(PostponeReplicationThreshold)) {
+                STLOG(PRI_NOTICE, BS_REPL, BSVR42, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
+                        "Enough space on PDisk, continuing replication"));
+                EStatus prevStatus = std::exchange(Status, EStatus::Working);
+                Y_DEBUG_ABORT_UNLESS(prevStatus == EStatus::WaitingForRetry);
+                Merge();
+            } else {
+                ScheduleSpaceCheck();
+            }
         }
 
         void PassAway() override {
@@ -946,12 +1024,14 @@ namespace NKikimr {
             // yard messages coming to Writer
             hFunc(NPDisk::TEvChunkWriteResult, HandleYard)
             hFunc(NPDisk::TEvChunkReserveResult, HandleYard)
+
             hFunc(TEvBlobStorage::TEvGetResult, Handle)
             hFunc(TEvAddBulkSstResult, Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
             cFunc(TEvBlobStorage::EvDetectedPhantomBlobCommitted, HandleDetectedPhantomBlobCommitted)
             cFunc(TEvents::TSystem::Poison, PassAway)
             hFunc(TEvReplInvoke, Handle)
+            hFunc(NPDisk::TEvCheckSpaceResult, Handle)
         )
 
         STRICT_STFUNC(StateInit,
@@ -1005,6 +1085,9 @@ namespace NKikimr {
             , UnreplicatedBlobRecords(std::move(ubr))
             , MilestoneQueue(std::move(milestoneQueue))
             , Donor(donor)
+            , BackoffTimer(MinOOSRecoveryRetryDelay.MilliSeconds(),
+                           MaxOOSRecoveryRetryDelay.MilliSeconds())
+            , Status(EStatus::Working)
         {
             if (Donor) {
                 ReplInfo->DonorVDiskId = Donor->first;

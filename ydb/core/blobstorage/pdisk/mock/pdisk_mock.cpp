@@ -95,16 +95,19 @@ struct TPDiskMockState::TImpl {
         }
     }
 
-    void UpdateStatusFlags(i64 chunksDelta) {
+    void UpdateStatusFlags() {
         switch (SpaceColorPolicy) {
             case ESpaceColorPolicy::SharedQuota: {
-                NKikimrBlobStorage::TPDiskSpaceColor::E newColor =
-                        ChunkSharedQuota->EstimateSpaceColor(chunksDelta, &Occupancy);
-                if (chunksDelta < 0) {
-                    ChunkSharedQuota->Release(-chunksDelta);
-                } else if (chunksDelta > 0) {
-                    ChunkSharedQuota->ForceAllocate(chunksDelta);
+                i64 before = ChunkSharedQuota->GetFree();
+                i64 now = GetNumFreeChunks();
+                if (before < now) {
+                    ChunkSharedQuota->Release(now - before);
+                } else if (before > now) {
+                    ChunkSharedQuota->ForceAllocate(before - now);
                 }
+
+                NKikimrBlobStorage::TPDiskSpaceColor::E newColor =
+                        ChunkSharedQuota->EstimateSpaceColor(0, &Occupancy);
                 SetStatusFlags(SpaceColorToStatusFlag(newColor));
                 break;
             }
@@ -128,7 +131,6 @@ struct TPDiskMockState::TImpl {
 
         Y_ABORT_UNLESS(chunkIdx != TotalChunks);
 
-        UpdateStatusFlags(1);
         return chunkIdx;
     }
 
@@ -213,7 +215,6 @@ struct TPDiskMockState::TImpl {
             owner.ChunkData.erase(chunkIdx);
         }
 
-        UpdateStatusFlags(-(i64)owner.ReservedChunks.size());
         FreeChunks.merge(owner.ReservedChunks);
         AdjustFreeChunks();
     }
@@ -232,7 +233,6 @@ struct TPDiskMockState::TImpl {
         const bool inserted = FreeChunks.insert(chunkIdx).second;
         Y_ABORT_UNLESS(inserted);
 
-        UpdateStatusFlags(-1);
         AdjustFreeChunks();
     }
 
@@ -520,8 +520,6 @@ public:
                 break;
             } else {
                 owner.Slain = true;
-                Impl.UpdateStatusFlags(-(i64)owner.ReservedChunks.size());
-                Impl.UpdateStatusFlags(-(i64)owner.CommittedChunks.size());
                 Impl.FreeChunks.merge(owner.ReservedChunks);
                 Impl.FreeChunks.merge(owner.CommittedChunks);
                 Impl.AdjustFreeChunks();
@@ -717,6 +715,7 @@ public:
             if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
                 PDISK_MOCK_LOG(NOTICE, PDM09, "received TEvChunkReserve", (Msg, msg->ToString()), (Error, "no free chunks"));
                 res->Status = NKikimrProto::OUT_OF_SPACE;
+                res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
                 res->ErrorReason = "no free chunks";
             } else {
                 PDISK_MOCK_LOG(DEBUG, PDM07, "received TEvChunkReserve", (Msg, msg->ToString()), (VDiskId, owner->VDiskId));
@@ -790,9 +789,11 @@ public:
             if (!msg->ChunkIdx) { // allocate chunk
                 if (!Impl.GetNumFreeChunks()) {
                     res->Status = NKikimrProto::OUT_OF_SPACE;
+                    res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
                     res->ErrorReason = "no free chunks";
                 } else {
                     msg->ChunkIdx = res->ChunkIdx = Impl.AllocateChunk(*owner);
+                    res->StatusFlags = GetStatusFlags();
                 }
             }
             if (msg->ChunkIdx) {
@@ -931,6 +932,7 @@ public:
     }
 
     NPDisk::TStatusFlags GetStatusFlags() {
+        Impl.UpdateStatusFlags();
         return Impl.StatusFlags;
     }
 

@@ -38,6 +38,27 @@ namespace NKikimr {
             ERROR,                 // something gone wrong, further operation impossible
         };
 
+        static TString StateToString(EState state) {
+            switch (state) {
+            case EState::INVALID:
+                return "INVALID";
+            case EState::STOPPED:
+                return "STOPPED";
+            case EState::PDISK_MESSAGE_PENDING:
+                return "PDISK_MESSAGE_PENDING";
+            case EState::NOT_READY:
+                return "NOT_READY";
+            case EState::COLLECT:
+                return "COLLECT";
+            case EState::COMMIT_PENDING:
+                return "COMMIT_PENDING";
+            case EState::WAITING_FOR_COMMIT:
+                return "WAITING_FOR_COMMIT";
+            case EState::ERROR:
+                return "ERROR";
+            }
+        }
+
         enum class EOutputState {
             INVALID,
             INTERMEDIATE_CHUNK,

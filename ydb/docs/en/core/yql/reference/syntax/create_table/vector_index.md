@@ -10,7 +10,7 @@ You should use `ALTER TABLE ... ADD INDEX` to add a vector index to an existing 
 
 {% endnote %}
 
-The INDEX construct is used to define a [vector index](../../../../concepts/vector_indexes.md) in a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table:
+The INDEX construct is used to define a [vector index](../../../../concepts/glossary.md#vector-index) in a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table:
 
 ```yql
 CREATE TABLE table_name (

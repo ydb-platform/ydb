@@ -33,6 +33,7 @@ SRCS(
     vdisk_defrag.h
     vdisk_events.cpp
     vdisk_events.h
+    vdisk_events_binary.h
     vdisk_handle_class.cpp
     vdisk_handle_class.h
     vdisk_histogram_latency.cpp

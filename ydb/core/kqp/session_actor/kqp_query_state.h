@@ -210,6 +210,10 @@ public:
         return RequestEv->GetSyntax();
     }
 
+    Ydb::Query::ResultType GetResultType() const {
+        return RequestEv->GetResultType();
+    }
+
     const TString& GetRequestType() const {
         return RequestEv->GetRequestType();
     }

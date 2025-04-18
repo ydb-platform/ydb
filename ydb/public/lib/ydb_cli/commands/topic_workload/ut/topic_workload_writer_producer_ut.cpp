@@ -23,11 +23,11 @@ namespace NTests {
 
                 MOCK_METHOD(NThreading::TFuture<uint64_t>, GetInitSeqNo, (), (override));
 
-                MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, TWriteMessage&& message, NTable::TTransaction* tx), (override));
+                MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, TWriteMessage&& message, TTransactionBase* tx), (override));
 
                 MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp), (override));
 
-                MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, TWriteMessage&& params, NTable::TTransaction* tx), (override));
+                MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, TWriteMessage&& params, TTransactionBase* tx), (override));
 
                 MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp), (override));
 

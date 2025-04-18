@@ -6,18 +6,13 @@
 #include "retry_policy.h"
 #include "write_events.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::inline Dev::NTable {
-    class TTransaction;
-}
-
 namespace NYdb::inline Dev::NTopic {
-
-using TTransaction = NTable::TTransaction;
 
 //! Settings for write session.
 struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
@@ -192,9 +187,9 @@ public:
     FLUENT_SETTING(TMessageMeta, MessageMeta);
 
     //! Transaction id
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransaction>, Tx);
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 
-    TTransaction* GetTxPtr() const
+    TTransactionBase* GetTxPtr() const
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
@@ -207,7 +202,7 @@ public:
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
     //! no Ack is provided.
     virtual bool Write(TWriteMessage&& message,
-                       NTable::TTransaction* tx = nullptr,
+                       TTransactionBase* tx = nullptr,
                        const TDuration& blockTimeout = TDuration::Max()) = 0;
 
 
@@ -254,7 +249,7 @@ public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
-                       NTable::TTransaction* tx = nullptr) = 0;
+                       TTransactionBase* tx = nullptr) = 0;
 
     //! Write single message. Old method with only basic message options.
     virtual void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo = std::nullopt,
@@ -263,7 +258,7 @@ public:
     //! Write single message that is already coded by codec.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& params,
-                              NTable::TTransaction* tx = nullptr) = 0;
+                              TTransactionBase* tx = nullptr) = 0;
 
     //! Write single message that is already compressed by codec. Old method with only basic message options.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize,

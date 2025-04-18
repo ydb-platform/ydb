@@ -64,6 +64,12 @@ private:
     : TStatus(std::move(status))
     , ReaderImpl_(impl) {}
 
+    TExecuteQueryIterator(
+        std::shared_ptr<TReaderImpl> impl,
+        TStatus&& status)
+    : TStatus(std::move(status))
+    , ReaderImpl_(impl) {}
+
     std::shared_ptr<TReaderImpl> ReaderImpl_;
 };
 

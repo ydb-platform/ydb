@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <memory>
 #include <optional>
@@ -28,7 +28,7 @@ private:
     };
 
     void CreateTopicReadSession(const TOptions& options);
-    void CreateTableSession();
+    void CreateQuerySession();
 
     void BeginTransaction();
     void CommitTransaction();
@@ -40,10 +40,10 @@ private:
 
     std::optional<NYdb::TDriver> Driver;
     std::optional<NYdb::NTopic::TTopicClient> TopicClient;
-    std::optional<NYdb::NTable::TTableClient> TableClient;
+    std::optional<NYdb::NQuery::TQueryClient> QueryClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
-    std::optional<NYdb::NTable::TSession> TableSession;
-    std::optional<NYdb::NTable::TTransaction> Transaction;
+    std::optional<NYdb::NQuery::TSession> QuerySession;
+    std::optional<NYdb::NQuery::TTransaction> Transaction;
     std::vector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> PendingStopEvents;
     std::vector<TRow> Rows;
     std::string TablePath;

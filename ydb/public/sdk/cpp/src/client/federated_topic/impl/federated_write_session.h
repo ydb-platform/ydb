@@ -173,13 +173,13 @@ public:
     NThreading::TFuture<uint64_t> GetInitSeqNo() override {
         return TryGetImpl()->GetInitSeqNo();
     }
-    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, NTable::TTransaction* tx = nullptr) override {
+    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, TTransactionBase* tx = nullptr) override {
         if (tx) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
-    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, NTable::TTransaction* tx = nullptr) override {
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, TTransactionBase* tx = nullptr) override {
         if (tx) {
             ythrow yexception() << "transactions are not supported";
         }

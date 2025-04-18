@@ -13,6 +13,8 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev::NQuery {
 
 using namespace NThreading;
@@ -221,100 +223,127 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     }
 };
 
-TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryImpl(
-    const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
-    const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
-    const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
-{
-    auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
-    request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
-    request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
-    request.set_pool_id(TStringType{settings.ResourcePool_});
-    request.mutable_query_content()->set_text(TStringType{query});
-    request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
-    if (session.has_value()) {
-        request.set_session_id(TStringType{session->GetId()});
-    } else if ((txControl.TxSettings_.has_value() && !txControl.CommitTx_) || txControl.TxId_.has_value()) {
-        throw TContractViolation("Interactive tx must use explisit session");
-    }
-
-    if (settings.ConcurrentResultSets_) {
-        request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
-    }
-
-    if (settings.OutputChunkMaxSize_) {
-        request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
-    }
-
-    if (settings.StatsCollectPeriod_) {
-        request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
-    }
-
-    if (txControl.HasTx()) {
-        auto requestTxControl = request.mutable_tx_control();
-        requestTxControl->set_commit_tx(txControl.CommitTx_);
-        if (txControl.TxId_) {
-            requestTxControl->set_tx_id(TStringType{txControl.TxId_.value()});
-        } else {
-            Y_ASSERT(txControl.TxSettings_);
-            SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+class TExecQueryInternal {
+public:
+    static TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> ExecuteQueryCommon(
+        const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
+        const std::string& query, const TTxControl& txControl, const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
+        const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
+    {
+        auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
+        request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
+        request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+        request.set_pool_id(TStringType{settings.ResourcePool_});
+        request.mutable_query_content()->set_text(TStringType{query});
+        request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
+        if (session.has_value()) {
+            request.set_session_id(TStringType{session->GetId()});
+        } else if ((std::holds_alternative<TTxSettings>(txControl.Tx_) && !txControl.CommitTx_) ||
+                    std::holds_alternative<TTransaction>(txControl.Tx_) ||
+                    std::holds_alternative<std::string>(txControl.Tx_)) {
+            throw TContractViolation("Interactive tx must use explisit session");
         }
-    } else {
-        Y_ASSERT(!txControl.CommitTx_);
+
+        if (settings.ConcurrentResultSets_) {
+            request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
+        }
+
+        if (settings.OutputChunkMaxSize_) {
+            request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
+        }
+
+        if (settings.StatsCollectPeriod_) {
+            request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
+        }
+
+        if (txControl.HasTx()) {
+            auto requestTxControl = request.mutable_tx_control();
+            requestTxControl->set_commit_tx(txControl.CommitTx_);
+
+            if (auto* tx = std::get_if<TTransaction>(&txControl.Tx_)) {
+                requestTxControl->set_tx_id(TStringType{tx->GetId()});
+            } else if (auto* txId = std::get_if<std::string>(&txControl.Tx_)) {
+                requestTxControl->set_tx_id(TStringType{*txId});
+            } else if (auto* txSettings = std::get_if<TTxSettings>(&txControl.Tx_)) {
+                SetTxSettings(*txSettings, requestTxControl->mutable_begin_tx());
+            } else {
+                Y_DEBUG_ABORT("Unexpected tx control type");
+            }
+        } else {
+            Y_ASSERT(!txControl.CommitTx_);
+        }
+
+        if (params) {
+            *request.mutable_parameters() = *params;
+        }
+
+        auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
+
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        if (session.has_value()) {
+            rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
+        }
+
+        connections->StartReadStream<
+            Ydb::Query::V1::QueryService,
+            Ydb::Query::ExecuteQueryRequest,
+            Ydb::Query::ExecuteQueryResponsePart>
+        (
+            std::move(request),
+            [promise] (TPlainStatus status, TExecuteQueryProcessorPtr processor) mutable {
+                promise.SetValue(std::make_pair(status, processor));
+            },
+            &Ydb::Query::V1::QueryService::Stub::AsyncExecuteQuery,
+            driverState,
+            rpcSettings
+        );
+
+        return promise.GetFuture();
     }
 
-    if (params) {
-        *request.mutable_parameters() = *params;
-    }
-
-    auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
-
-    auto rpcSettings = TRpcRequestSettings::Make(settings);
-    if (session.has_value()) {
-        rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
-    }
-
-    connections->StartReadStream<
-        Ydb::Query::V1::QueryService,
-        Ydb::Query::ExecuteQueryRequest,
-        Ydb::Query::ExecuteQueryResponsePart>
-    (
-        std::move(request),
-        [promise] (TPlainStatus status, TExecuteQueryProcessorPtr processor) mutable {
-            promise.SetValue(std::make_pair(status, processor));
-        },
-        &Ydb::Query::V1::QueryService::Stub::AsyncExecuteQuery,
-        driverState,
-        rpcSettings
-    );
-
-    return promise.GetFuture();
-}
+};
 
 TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
     const TDbDriverStatePtr& driverState, const std::string& query, const TTxControl& txControl,
     const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
-    auto promise = NewPromise<TExecuteQueryIterator>();
+    TPlainStatus plainStatus;
+    TExecuteQueryProcessorPtr processor;
 
-    auto iteratorCallback = [promise, session](TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> future) mutable {
-        Y_ASSERT(future.HasValue());
-        auto pair = future.ExtractValue();
-        promise.SetValue(TExecuteQueryIterator(
-            pair.second
-                ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(pair.second, pair.first.Endpoint, session)
-                : nullptr,
-            std::move(pair.first))
-        );
-    };
+    auto sessionCopy = session;
 
-    auto paramsProto = params
-        ? &params->GetProtoMap()
-        : nullptr;
+    if (auto* txPtr = std::get_if<TTransaction>(&txControl.Tx_); txPtr && txControl.CommitTx_) {
+        auto queryCopy = query;
+        auto txControlCopy = txControl;
+        auto paramsCopy = params;
+        auto settingsCopy = settings;
 
-    StreamExecuteQueryImpl(connections, driverState, query, txControl, paramsProto, settings, session)
-        .Subscribe(iteratorCallback);
-    return promise.GetFuture();
+        auto tx = *txPtr;
+        auto precommitStatus = co_await tx.Precommit();
+
+        if (!precommitStatus.IsSuccess()) {
+            co_return TExecuteQueryIterator(nullptr, std::move(precommitStatus));
+        }
+
+        std::tie(plainStatus, processor) = co_await TExecQueryInternal::ExecuteQueryCommon(
+            connections, driverState, queryCopy, txControlCopy, paramsCopy ? &paramsCopy->GetProtoMap() : nullptr, settingsCopy, sessionCopy);
+
+        if (!plainStatus.Ok()) {
+            co_await tx.ProcessFailure();
+
+            co_return TExecuteQueryIterator(nullptr, std::move(plainStatus));
+        }
+    } else {
+        std::tie(plainStatus, processor) = co_await AsExtractingAwaitable(TExecQueryInternal::ExecuteQueryCommon(
+            connections, driverState, query, txControl, params ? &params->GetProtoMap() : nullptr, settings, sessionCopy));
+    }
+
+    co_return TExecuteQueryIterator(
+        processor
+            ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(processor, plainStatus.Endpoint, sessionCopy)
+            : nullptr,
+        std::move(plainStatus)
+    );
 }
 
 TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,

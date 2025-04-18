@@ -6,16 +6,13 @@
 #include "retry_policy.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/logger/log.h>
 
 #include <util/generic/size_literals.h>
-
-namespace NYdb::inline Dev::NTable {
-    class TTransaction;
-}
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -206,7 +203,7 @@ struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSess
     FLUENT_SETTING_DEFAULT(bool, Block, false);
     FLUENT_SETTING_OPTIONAL(size_t, MaxEventsCount);
     FLUENT_SETTING_DEFAULT(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 };
 
 class IReadSession {

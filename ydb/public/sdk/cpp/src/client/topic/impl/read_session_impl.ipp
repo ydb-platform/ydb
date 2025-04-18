@@ -1919,7 +1919,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(TTransactionBase& tx,
                                                                          const std::vector<TReadSessionEvent::TEvent>& events,
                                                                          std::shared_ptr<TTopicClient::TImpl> client)
 {
@@ -1931,7 +1931,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable:
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(TTransactionBase& tx,
                                                                          const TReadSessionEvent::TEvent& event,
                                                                          std::shared_ptr<TTopicClient::TImpl> client)
 {
@@ -1943,7 +1943,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable:
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(TTransactionBase& tx,
                                                                                           std::shared_ptr<TTopicClient::TImpl> client)
 {
     const TTransactionId txId = MakeTransactionId(tx);

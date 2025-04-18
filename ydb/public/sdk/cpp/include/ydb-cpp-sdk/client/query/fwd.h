@@ -27,7 +27,7 @@ class TExecuteQueryPart;
 class TExecuteQueryIterator;
 
 class TTransaction;
-struct TTxControl;
+class TTxControl;
 
 class TQueryContent;
 class TResultSetMeta;

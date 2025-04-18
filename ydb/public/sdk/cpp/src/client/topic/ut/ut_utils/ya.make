@@ -17,7 +17,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
-    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

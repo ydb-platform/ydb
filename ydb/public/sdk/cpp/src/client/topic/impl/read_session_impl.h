@@ -1164,10 +1164,10 @@ public:
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
-    void CollectOffsets(NTable::TTransaction& tx,
+    void CollectOffsets(TTransactionBase& tx,
                         const std::vector<TReadSessionEvent::TEvent>& events,
                         std::shared_ptr<TTopicClient::TImpl> client);
-    void CollectOffsets(NTable::TTransaction& tx,
+    void CollectOffsets(TTransactionBase& tx,
                         const TReadSessionEvent::TEvent& event,
                         std::shared_ptr<TTopicClient::TImpl> client);
 
@@ -1326,7 +1326,7 @@ private:
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
     using TTransactionMap = std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>>;
 
-    void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+    void TrySubscribeOnTransactionCommit(TTransactionBase& tx,
                                          std::shared_ptr<TTopicClient::TImpl> client);
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void DeleteTx(const TTransactionId& txId);

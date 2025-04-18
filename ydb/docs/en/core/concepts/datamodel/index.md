@@ -4,7 +4,7 @@ This section describes the {{ ydb-short-name }} cluster scheme entities.
 
 ## {{ ydb-short-name }} cluster scheme {#cluster-scheme}
 
-{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a **cluster scheme root**. A root of the cluster scheme can be a directory or a root database. Children elements of the cluster scheme root can be [databases](../../concepts/glossary.md#database) or other [scheme objects](../../concepts/glossary.md#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a **cluster scheme root**. [Databases](../../concepts/glossary.md#database) are children elements of the cluster scheme root. It is also possible to create other [scheme objects](../../concepts/glossary.md#scheme-object) in the cluster scheme root. These objects exist at the cluster level and do not belong to tenant databases. Scheme objects inside a database can use nested directories to form a hierarchy.
 
 ![cluster scheme diagram](_assets/cluster-scheme.png =500x)
 
@@ -24,6 +24,6 @@ Scheme objects in {{ ydb-short-name }} databases:
 * [External table](external_table.md)
 * [External data source](external_data_source.md)
 
-[Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below. However, requirements for column names are slightly different.
+[Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below.
 
 {% include [object naming rules](./_includes/object-naming-rules.md) %}

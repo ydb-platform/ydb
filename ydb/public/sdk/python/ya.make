@@ -1,4 +1,4 @@
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 # use direct include py2/py3 for skip protobuf peerdirs from contrib/python/ydb
 IF (PYTHON2)

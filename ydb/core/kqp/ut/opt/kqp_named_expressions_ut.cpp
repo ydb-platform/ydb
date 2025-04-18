@@ -184,8 +184,6 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetQueryClient();
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -194,6 +192,9 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         };
 
         for (const auto& [operation, operationPart] : operations) {
+            TKikimrRunner kikimr(settings);
+            auto client = kikimr.GetQueryClient();
+
             const TString query = std::format(R"(
                 $t = (
                     SELECT 
@@ -239,8 +240,6 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetQueryClient();
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -249,6 +248,9 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         };
 
         for (const auto& [operation, operationPart] : operations) {
+            TKikimrRunner kikimr(settings);
+            auto client = kikimr.GetQueryClient();
+
             const TString query = std::format(R"(
                 $t = (
                     SELECT 
@@ -301,8 +303,6 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -311,43 +311,58 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         };
 
         for (const auto& [operation, operationPart] : operations) {
-            const TString query = std::format(R"(
-                $t = (
-                    SELECT 
-                        Key As Key,
-                        CAST(RandomUuid(Key) AS String) As Value
-                    FROM KeyValue
-                );
+            TKikimrRunner kikimr(settings);
+            auto client = kikimr.GetTableClient();
 
-                {0} KeyValue2 {1} (
-                    SELECT
-                        CAST(Key AS String) AS Key,
-                        Value AS Value
-                    From $t
-                );
+            {
+                const TString query = std::format(R"(
+                    $t = (
+                        SELECT 
+                            Key As Key,
+                            CAST(RandomUuid(Key) AS String) As Value
+                        FROM KeyValue
+                        WHERE LENGTH(Value) < 10u
+                    );
 
-                {0} KeyValue {1} (
-                    SELECT
-                        Key AS Key,
-                        Value AS Value
-                    From $t
-                );
+                    {0} KeyValue2 {1} (
+                        SELECT
+                            CAST(Key AS String) AS Key,
+                            Value AS Value
+                        From $t
+                    );
 
-                SELECT Value FROM KeyValue ORDER BY Value;
-                SELECT Value FROM KeyValue2 ORDER BY Value;
-                SELECT Value FROM $t ORDER BY Value;
-            )", operation, operationPart);
+                    {0} KeyValue {1} (
+                        SELECT
+                            Key AS Key,
+                            Value AS Value
+                        From $t
+                    );
 
-            auto session = client.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                    SELECT Value FROM $t ORDER BY Value;
+                )", operation, operationPart);
 
-            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
-            Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
-            Cerr << FormatResultSetYson(result.GetResultSet(2)) << Endl;
-            
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
-            UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(2)));
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(2, result.GetResultSet(0).RowsCount());
+            }
+            {
+                const TString query = std::format(R"(
+                    SELECT Value FROM KeyValue ORDER BY Value;
+                    SELECT Value FROM KeyValue2 ORDER BY Value;
+                )", operation, operationPart);
+
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+                Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
+
+                UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+            }
         }
     }
 
@@ -357,8 +372,6 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
 
         const std::vector<std::pair<std::string, std::string>> operations = {
             {"UPSERT INTO", ""},
@@ -367,50 +380,63 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         };
 
         for (const auto& [operation, operationPart] : operations) {
-            const TString query = std::format(R"(
-                $t = (
-                    SELECT 
-                        Key As Key,
-                        CAST(RandomUuid(Key) AS String) As Value
-                    FROM KeyValue
-                );
+            TKikimrRunner kikimr(settings);
+            auto client = kikimr.GetTableClient();
 
-                DELETE FROM KeyValue2;
+            {
+                const TString query = std::format(R"(
+                    $t = (
+                        SELECT 
+                            Key As Key,
+                            CAST(RandomUuid(Key) AS String) As Value
+                        FROM KeyValue
+                    );
 
-                {0} KeyValue2 {1} (
-                    SELECT
-                        CAST(Key AS String) AS Key,
-                        Value AS Value
-                    From $t
-                );
+                    DELETE FROM KeyValue2;
 
-                {0} KeyValue2 {1} (
-                    SELECT
-                        CAST(Key + 10u AS String) AS Key,
-                        Value AS Value
-                    From $t
-                );
+                    {0} KeyValue2 {1} (
+                        SELECT
+                            CAST(Key AS String) AS Key,
+                            Value AS Value
+                        From $t
+                    );
 
-                SELECT Value FROM KeyValue2 WHERE CAST(Key AS Uint64) < 10u ORDER BY Value;
-                SELECT Value FROM KeyValue2 WHERE CAST(Key AS Uint64) > 10u ORDER BY Value;
-                SELECT Value FROM $t ORDER BY Value;
-            )", operation, operationPart);
+                    {0} KeyValue2 {1} (
+                        SELECT
+                            CAST(Key + 10u AS String) AS Key,
+                            Value AS Value
+                        From $t
+                    );
 
-            auto session = client.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            
-            Cerr << operation << Endl;
-            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
-            Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
-            Cerr << FormatResultSetYson(result.GetResultSet(2)) << Endl;
-            
-            if (!operation.contains("INSERT")) {
-                UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
-            } else {
-                UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(1)));
+                    SELECT Value FROM $t ORDER BY Value;
+                )", operation, operationPart);
+
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(2, result.GetResultSet(0).RowsCount());
             }
-            UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(2)));
+            {
+                const TString query = std::format(R"(
+                    SELECT Value FROM KeyValue2 WHERE CAST(Key AS Uint64) < 10u ORDER BY Value;
+                    SELECT Value FROM KeyValue2 WHERE CAST(Key AS Uint64) > 10u ORDER BY Value;
+                )", operation, operationPart);
+
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+                Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
+
+                if (!operation.contains("INSERT")) {
+                    UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+                } else {
+                    UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(1)));
+                }
+            }
         }
     }
 }

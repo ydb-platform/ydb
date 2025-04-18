@@ -8,7 +8,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.sql.lib.test_query import Query
 
 logger = logging.getLogger(__name__)
 

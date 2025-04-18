@@ -84,7 +84,7 @@ class DMLOperations():
                 """
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
 
         rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
@@ -342,55 +342,55 @@ class DMLOperations():
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = []
         # delete if after https://github.com/ydb-platform/ydb/issues/16930
-        for type in all_types.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                statements.append(f"col_{cleanup_type_name(type)}")
-        for type in pk_types.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                statements.append(f"pk_{cleanup_type_name(type)}")
-        for type in index.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                statements.append(f"col_index_{cleanup_type_name(type)}")
+        for data_type in all_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"col_{cleanup_type_name(data_type)}")
+        for data_type in pk_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"pk_{cleanup_type_name(data_type)}")
+        for data_type in index.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"col_index_{cleanup_type_name(data_type)}")
         if ttl != "":
             statements.append(f"ttl_{cleanup_type_name(ttl)}")
 
         rows = self.query(f"select {", ".join(statements)} from {table_name}")
         count = 0
-        for type in all_types.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+        for data_type in all_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
                 for i in range(len(rows)):
-                    self.assert_type(all_types, type, i+1, rows[i][count])
+                    self.assert_type(all_types, data_type, i+1, rows[i][count])
                 count += 1
-        for type in pk_types.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+        for data_type in pk_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
                 for i in range(len(rows)):
-                    self.assert_type(pk_types, type, i+1, rows[i][count])
+                    self.assert_type(pk_types, data_type, i+1, rows[i][count])
                 count += 1
-        for type in index.keys():
-            if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
+        for data_type in index.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
                 for i in range(len(rows)):
-                    self.assert_type(index, type, i+1, rows[i][count])
+                    self.assert_type(index, data_type, i+1, rows[i][count])
                 count += 1
         if ttl != "":
             for i in range(len(rows)):
                 self.assert_type(ttl_types, ttl, i+1, rows[i][count])
             count += 1
 
-    def assert_type(self, key, type: str, values: int, values_from_rows):
-        if type == "String" or type == "Yson":
+    def assert_type(self, key, data_type: str, values: int, values_from_rows):
+        if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode(
-                "utf-8") == key[type](values), f"{type}"
-        elif type == "Float" or type == "DyNumber":
+                "utf-8") == key[data_type](values), f"{data_type}"
+        elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(float(values_from_rows), float(
-                key[type](values)), rel_tol=1e-3), f"{type}"
-        elif type == "Interval" or type == "Interval64":
+                key[data_type](values)), rel_tol=1e-3), f"{data_type}"
+        elif data_type == "Interval" or data_type == "Interval64":
             assert values_from_rows == timedelta(
-                microseconds=key[type](values)), f"{type}"
-        elif type == "Timestamp" or type == "Timestamp64":
+                microseconds=key[data_type](values)), f"{data_type}"
+        elif data_type == "Timestamp" or data_type == "Timestamp64":
             assert values_from_rows == datetime.fromtimestamp(
-                key[type](values)/1_000_000), f"{type}"
-        elif type == "Json" or type == "JsonDocument":
+                key[data_type](values)/1_000_000), f"{data_type}"
+        elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace(
-                "'", "\"") == str(key[type](values)), f"{type}"
+                "'", "\"") == str(key[data_type](values)), f"{data_type}"
         else:
-            assert str(values_from_rows) == str(key[type](values)), f"{type}"
+            assert str(values_from_rows) == str(key[data_type](values)), f"{data_type}"

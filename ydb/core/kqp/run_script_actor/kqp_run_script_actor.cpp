@@ -420,6 +420,7 @@ private:
                             rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
                         }
                         Issues.AddIssue(rootIssue);
+                        meta.clear_columns();
                         Finish(Ydb::StatusIds::INTERNAL_ERROR);
                         return;
                     }

@@ -24,83 +24,84 @@
 
 1. Получить текущую конфигурацию кластера с помощью команды:
 
-  ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --for-v1-migration > config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --for-v1-migration > config.yaml
+    ```
 
-  {% cut "Подробнее" %}
+    {% cut "Подробнее" %}
 
-  Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
+    Аргумент `--full` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
 
-  {% endcut %}
+    {% endcut %}
 
 1. Изменить конфигурационный файл `config.yaml`, поменяв значение параметра `self_management_config.enabled` с `true` на `false`:
 
-  ```yaml
-  self_management_config:
+    ```yaml
+    self_management_config:
     enabled: false
-  ```
+    ```
 
-  {% cut "Подробнее" %}
+    {% cut "Подробнее" %}
 
-  Данная секция отвечает за управление механизмом [распределенной конфигурации](../../../concepts/glossary.md#distributed-configuration). Установка значения `enabled: false` отключает этот механизм. Далее управление конфигурацией State Storage и статической группы будет осуществляться вручную, через секции `domains_config` и `blob_storage_config` соответственно в конфигурационном файле (эти секции были получены на предыдущем шаге при использовании флага `--full`).
+    Данная секция отвечает за управление механизмом [распределенной конфигурации](../../../concepts/glossary.md#distributed-configuration). Установка значения `enabled: false` отключает этот механизм. Далее управление конфигурацией State Storage и статической группы будет осуществляться вручную, через секции `domains_config` и `blob_storage_config` соответственно в конфигурационном файле (эти секции были получены на предыдущем шаге при использовании флага `--full`).
 
-  {% endcut %}
+    {% endcut %}
 
 1. Загрузить обновленный конфигурационный файл на кластер:
 
-  ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config replace -f config.yaml
+    ```
 
 1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md).
 
-  {% cut "Подробнее" %}
+    {% cut "Подробнее" %}
 
-  После перезапуска узлов кластер будет переведён в режим ручного управления State Storage и статической группой, но все еще будет использовать единый конфигурационный файл, доставляемый через таблетку BSController. Конфигурация узлов при запуске все еще будет читаться из директории, указанной в опции `ydbd --config-dir`, и там же сохраняться.
+    После перезапуска узлов кластер будет переведён в режим ручного управления State Storage и статической группой, но все еще будет использовать единый конфигурационный файл, доставляемый через таблетку BSController. Конфигурация узлов при запуске все еще будет читаться из директории, указанной в опции `ydbd --config-dir`, и там же сохраняться.
 
-  {% endcut %}
+    {% endcut %}
 
 1. Получить текущую конфигурацию кластера
 
-  ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ```
 
-  {% cut "Подробнее" %}
+    {% cut "Подробнее" %}
 
-  В полученной конфигурации будут отсутствовать `domains_config` и `blob_storage_config`, т.к. они управляются вручную и не должны быть частью динамической конфигурации
+    В полученной конфигурации будут отсутствовать `domains_config` и `blob_storage_config`, т.к. они управляются вручную и не должны быть частью динамической конфигурации
 
-  {% endcut %}
+    {% endcut %}
+
 1. Разместить полученный файл `config.yaml` (это будет ваша статическая конфигурация v1) на файловую систему каждого узла кластера.
 
 1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md), указав путь к статическому конфигурационному файлу через опцию `ydbd --yaml-config` и убрав опцию `ydbd --config-dir`:
 
-{% list tabs group=manual-systemd %}
+    {% list tabs group=manual-systemd %}
 
-- Вручную
+    - Вручную
 
-    При ручном запуске добавьте опцию `--yaml-config`, к команде `ydbd server`, не указывая опцию `--config-dir`:
+        При ручном запуске добавьте опцию `--yaml-config`, к команде `ydbd server`, не указывая опцию `--config-dir`:
 
-    ```bash
-    ydb server --yaml-config /opt/ydb/cfg/config.yaml
-    ```
+        ```bash
+        ydb server --yaml-config /opt/ydb/cfg/config.yaml
+        ```
 
-- С использованием systemd
+    - С использованием systemd
 
-  При использовании systemd добавьте опцию `--yaml-config` к команде `ydbd server` в конфигурационный файл systemd, а также избавьтесь от опции `--config-dir`:
+        При использовании systemd добавьте опцию `--yaml-config` к команде `ydbd server` в конфигурационный файл systemd, а также избавьтесь от опции `--config-dir`:
 
-  ```ini
-  ExecStart=/opt/ydb/bin/ydbd server --yaml-config /opt/ydb/config/config.yaml
-  ```
+        ```ini
+        ExecStart=/opt/ydb/bin/ydbd server --yaml-config /opt/ydb/config/config.yaml
+        ```
 
-  После обновления файла systemd выполните следующую команду, чтобы применить изменения:
+        После обновления файла systemd выполните следующую команду, чтобы применить изменения:
 
-  ```bash
-  sudo systemctl daemon-reload
-  ```
+        ```bash
+        sudo systemctl daemon-reload
+        ```
 
-{% endlist %}
+    {% endlist %}
 
 Убедиться в успешном завершении миграции можно, проверив версию конфигурации на узлах кластера одним из способов, описанных в статье [Проверка версии конфигурации](../configuration-management/check-config-version.md). На всех узлах кластера `Configuration version` должна быть `v1`.
 

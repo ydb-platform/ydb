@@ -1612,6 +1612,44 @@ void TTupleLayout::TupleDeepCopy(
     }
 }
 
+/// TODO: write unit tests
+void TTupleLayout::Join(
+    std::vector<ui8, TMKQLAllocator<ui8>>& dst,
+        std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
+        ui32 dstCount,
+        const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const 
+{
+    ui32 dstOverflowOffset = dstOverflow.size();
+    dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
+    std::memcpy(dstOverflow.data() + dstOverflowOffset, srcOverflow, srcOverflowSize);
+
+    constexpr ui32 blockRows = 128;
+    dst.resize((dstCount + srcCount) * TotalRowSize);
+    ui8 *dstRow = dst.data() + dstCount * TotalRowSize;
+    ui32 blockSize;
+    
+    for (ui32 rowInd = 0; rowInd < srcCount; rowInd += blockRows, 
+                                             dstRow += blockSize * TotalRowSize,
+                                             src += blockSize * TotalRowSize) {
+        blockSize = std::min(srcCount - rowInd, blockRows);
+        std::memcpy(dstRow, src, blockSize * TotalRowSize);
+
+        ui8 *res = dstRow;
+        for (ui32 blockInd = 0; blockInd < blockSize; blockInd++,
+                                                      res += TotalRowSize) {
+            for (auto &col : VariableColumns) {
+                if (res[col.Offset] == 255) {
+                    WriteUnaligned<ui32>(res + col.Offset + 1 + 0 * sizeof(ui32),
+                                         dstOverflowOffset);
+                    dstOverflowOffset += ReadUnaligned<ui32>(
+                        res + col.Offset + 1 + 1 * sizeof(ui32));
+                }
+            }
+        }
+
+    }
+}
+
 ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
     ui32 result = 0;
     for (const auto& col: VariableColumns) {

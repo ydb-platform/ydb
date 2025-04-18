@@ -334,7 +334,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
 
     void Run(bool toCSV = false) {
         CTEST << "================================\n";
-        CTEST << "-------- " << BenchName_ << " --------\n";
+        CTEST << "======== " << BenchName_ << "\n";
         CTEST << "Hash tables being benchmarked:\n";
         ApplyNumbered([&]<class Arg, size_t Ind> {
             PrintArg<Arg>("  (" + std::to_string(Ind) + ") ",
@@ -343,7 +343,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
         CTEST << Endl;
 
         for (const auto &config : Configs_) {
-            CTEST << "----------------";
+            CTEST << "--------------------------------\n";
 
             std::ofstream out;
             if (toCSV) {

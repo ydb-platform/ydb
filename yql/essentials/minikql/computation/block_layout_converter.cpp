@@ -506,7 +506,7 @@ public:
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
     }
 
-    void Pack(const TVector<arrow::Datum>& columns, PackResult& packed) override {
+    void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
 
         auto& packedTuples = packed.PackedTuples;
@@ -524,12 +524,12 @@ public:
             packedTuples.data() + currentSize, overflow, 0, tuplesToPack);
     }
 
-    void BucketPack(const TVector<arrow::Datum>& columns, PackResult packs[], ui32 bucketsLogNum) override {
+    void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
         auto tuplesToPack = columns.front().array()->length;
 
-        const auto reses = TPaddedPtr(&packs[0].PackedTuples, sizeof(PackResult));
-        const auto overflows = TPaddedPtr(&packs[0].Overflow, sizeof(PackResult));
+        const auto reses = TPaddedPtr(&packs[0].PackedTuples, packs.Step());
+        const auto overflows = TPaddedPtr(&packs[0].Overflow, packs.Step());
 
         TupleLayout_->BucketPack(
             columnsData.data(), columnsNullBitmap.data(),
@@ -541,7 +541,7 @@ public:
         }
     }
 
-    void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) override {
+    void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) override {
         columns.resize(Extractors_.size());
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;

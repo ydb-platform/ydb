@@ -66,7 +66,8 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true,
+          typename TAllocator = TMKQLAllocator<ui8>>
 class TNeumannHashTable {
     /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
     using Hash = ui32;
@@ -158,9 +159,12 @@ class TNeumannHashTable {
   public:
     using TIterator = TIteratorImpl<ConsecutiveDuplicates>;
   
-    TNeumannHashTable() = default;
+    TNeumannHashTable()
+        : DirectoriesData_(Allocator_)
+        , Buffer_(Allocator_) 
+    {}
 
-    explicit TNeumannHashTable(const TTupleLayout *layout) {
+    explicit TNeumannHashTable(const TTupleLayout *layout): TNeumannHashTable() {
         SetTupleLayout(layout);
     }
 
@@ -195,9 +199,17 @@ class TNeumannHashTable {
         Overflow_ = overflow;
 
         DirectoryHashBits_ = estimatedLogSize;
-        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_ ? kBloomHashBits : sizeof(Hash) * 8 - DirectoryHashBits_;
+        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_
+                                ? kBloomHashBits
+                                : sizeof(Hash) * 8 - DirectoryHashBits_;
         DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
-        Directories_.resize((1ul << DirectoryHashBits_) + 1);
+        
+        const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
+        DirectoriesData_.resize(dirsSize * sizeof(TDirectory));
+        Directories_ = std::span((TDirectory *)DirectoriesData_.data(), dirsSize);
+        for (auto& directory : Directories_) {
+            directory = {};
+        }
 
         for (ui32 ind = 0; ind != nItems; ++ind) {
             const THash thash =
@@ -385,8 +397,10 @@ class TNeumannHashTable {
     }
 
     void Clear() {
-        Directories_.clear();
+        Directories_ = {};
+        DirectoriesData_.clear();
         Buffer_.clear();
+
         Tuples_ = nullptr;
         Overflow_ = nullptr;
     }
@@ -430,19 +444,21 @@ class TNeumannHashTable {
   private:
     const TTupleLayout * Layout_ = nullptr;
 
-    unsigned DirectoryHashBits_;
-    unsigned DirectoryHashShift_;
-    Hash DirectoryHashMask_;
-    std::vector<TDirectory, TMKQLAllocator<TDirectory>> Directories_;
+    const ui8 *Tuples_ = nullptr;
+    const ui8 *Overflow_ = nullptr;
 
-    std::vector<ui8, TMKQLAllocator<ui8>> Buffer_;
-    
     bool IsInplace_;
     ui32 BufferSlotSize_;
     ui32 RowIndexSize_;
 
-    const ui8 *Tuples_ = nullptr;
-    const ui8 *Overflow_ = nullptr;
+    unsigned DirectoryHashBits_;
+    unsigned DirectoryHashShift_;
+    Hash DirectoryHashMask_;
+
+    TAllocator Allocator_;
+    std::span<TDirectory> Directories_;
+    std::vector<ui8, TAllocator> DirectoriesData_;
+    std::vector<ui8, TAllocator> Buffer_;
 };
 
 } // namespace NPackedTuple

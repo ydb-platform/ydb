@@ -81,7 +81,8 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
 
     ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
-    ui32 mask = ((1 << bitsCount) - 1) << (32 - bitsCount);
+    ui32 shift = 32 - bitsCount;
+    ui32 mask = (1 << bitsCount) - 1;
 
     std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(nBuckets, {0, 0});
     ui64 totalTime = 0;
@@ -90,7 +91,7 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
         Histogram hist;
-        hist.AddData(tl.Get(), res.data(), nTuples, TAccumulator::GetBucketId, mask, bitsCount);
+        hist.AddData(tl.Get(), res.data(), nTuples, TAccumulator::GetBucketId, shift, mask);
         hist.EstimateSizes(sizes);
 
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -127,7 +128,7 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         CTEST << " " << Endl;
     }
 
-    auto accum = TAccumulator::Create(tl.Get(), log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
+    auto accum = TAccumulator::Create(tl.Get(), 0, log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
 
     {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -205,7 +206,8 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     CTEST << " " << Endl;
 
     ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
-    ui32 mask = ((1 << bitsCount) - 1) << (32 - bitsCount);
+    ui32 shift = 32 - bitsCount;
+    ui32 mask = (1 << bitsCount) - 1;
 
     std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(nBuckets, {0, 0});
     ui64 totalTime = 0;
@@ -214,7 +216,7 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
         Histogram hist;
-        hist.AddData(tl.Get(), res.data(), nTuples, TAccumulator::GetBucketId, mask, bitsCount);
+        hist.AddData(tl.Get(), res.data(), nTuples, TAccumulator::GetBucketId, shift, mask);
         hist.EstimateSizes(sizes);
 
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -251,7 +253,7 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         CTEST << " " << Endl;
     }
 
-    auto accum = TAccumulator::Create(tl.Get(), log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
+    auto accum = TAccumulator::Create(tl.Get(), 0, log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
 
     {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -302,7 +304,7 @@ Y_UNIT_TEST(CreateAccumulator) {
     std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2, pc3};
     auto tl = TTupleLayout::Create(columns);
 
-    auto accum = TAccumulator::Create(tl.Get(), 1);
+    auto accum = TAccumulator::Create(tl.Get(), 0, 1);
     auto info = accum->GetBucket(0);
 
     UNIT_ASSERT(info.NTuples == 0);
@@ -337,7 +339,7 @@ Y_UNIT_TEST(MultipleAddToAccumulator) {
     std::vector<ui8, TMKQLAllocator<ui8>> overflow;
     tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples);
 
-    auto accum = TAccumulator::Create(tl.Get(), 3);
+    auto accum = TAccumulator::Create(tl.Get(), 0, 3);
 
     for (int i = 0; i < 2; ++i) {
         accum->AddData(res.data(), overflow.data(), NTuples); // + 1000 elements
@@ -395,7 +397,7 @@ Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
     std::vector<ui8, TMKQLAllocator<ui8>> overflow;
     tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples);
 
-    auto accum = TAccumulator::Create(tl.Get(), 5);
+    auto accum = TAccumulator::Create(tl.Get(), 0, 5);
     accum->AddData(res.data(), overflow.data(), NTuples);
 
     ui32 total = 0;
@@ -443,14 +445,15 @@ Y_UNIT_TEST(AccumulatorFuzz) {
             ui32 log2Buckets = rng() % 11;
             ui32 nBuckets = (1 << log2Buckets);
             ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
-            ui32 mask = ((1 << bitsCount) - 1) << (32 - bitsCount);
+            ui32 shift = 32 - bitsCount;
+            ui32 mask = (1 << bitsCount) - 1;
             ui32 subRows = 1 + (rows ? rng() % (rows - 1) : 0);
             ui32 off = subRows != rows ? rng() % (rows - subRows) : 0;
             std::vector<ui8, TMKQLAllocator<ui8>> overflow;
             res.resize(subRows*tl->TotalRowSize);
             tl->Pack(colsptr.data(), isValidPtr.data(), res.data(), overflow, off, subRows);
 
-            auto accum = TAccumulator::Create(tl.Get(), log2Buckets);
+            auto accum = TAccumulator::Create(tl.Get(), 0, log2Buckets);
             accum->AddData(res.data(), overflow.data(), subRows);
 
             ui32 totalCount = 0;
@@ -463,7 +466,7 @@ Y_UNIT_TEST(AccumulatorFuzz) {
                     UNIT_ASSERT(info.PackedTuples->size() > 0);
                     UNIT_ASSERT(info.PackedTuples->size() / tl->TotalRowSize == info.NTuples);
                     for (ui32 count = 0; count < info.NTuples; ++count) {
-                        auto maskedHash = TAccumulator::GetBucketId(ReadUnaligned<ui32>(Bucket + offset), mask, bitsCount);
+                        auto maskedHash = TAccumulator::GetBucketId(ReadUnaligned<ui32>(Bucket + offset), shift, mask);
                         UNIT_ASSERT(maskedHash == i);
                         offset += info.Layout->TotalRowSize;
                         totalCount++;

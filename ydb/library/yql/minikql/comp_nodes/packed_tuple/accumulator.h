@@ -40,13 +40,13 @@ public:
     // Create new accumulator for log2Buckets for given layout using given memory.
     // Accumulator will not allocate any memory
     static THolder<TAccumulator> Create(
-        const TTupleLayout* layout, ui32 log2Buckets,
+        const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
     // Create new accumulator for log2Buckets for given layout.
     // Accumulator will manage memory by itself
-    static THolder<TAccumulator> Create(const TTupleLayout* layout, ui32 log2Buckets);
+    static THolder<TAccumulator> Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets);
 
     // Add new nItems of data in TTupleLayout representation to accumulator 
     virtual void AddData(const ui8* data, const ui8* overflow, ui32 nItems) = 0;
@@ -58,8 +58,8 @@ public:
     virtual void Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buckets) = 0;
 
     // Get bucket id
-    inline static ui32 GetBucketId(ui32 hash, ui32 mask, ui32 bitsCount) {
-        return ((hash & mask) >> (32 - bitsCount)) & ((1 << bitsCount) - 1);
+    inline static ui32 GetBucketId(ui32 hash, ui32 shift, ui32 mask) {
+        return (hash >> shift) & mask;
     }
 };
 
@@ -68,11 +68,11 @@ public:
 class TAccumulatorImpl: public TAccumulator {
 public:
     TAccumulatorImpl(
-        const TTupleLayout* layout, ui32 log2Buckets,
+        const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
-    TAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets);
+    TAccumulatorImpl(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets);
 
     ~TAccumulatorImpl() = default;
 
@@ -84,8 +84,8 @@ public:
 
 private:
     ui32 NBuckets_{0};                                                   // Number of buckets
-    ui32 PMask_{0};                                                      // Mask used for partitioning tuples 
-    ui32 BitsCount_{0};                                                  // Bits count to write buckets number in binary
+    ui32 Shift_{0};                                                      // Mask used for partitioning tuples 
+    ui32 Mask_{0};                                                  // Bits count to write buckets number in binary
     const TTupleLayout* Layout_;                                         // Tuple layout
     std::vector<ui64, TMKQLAllocator<ui64>> PackedTupleBucketSizes_;     // Sizes for filled part of packed tuple buckets
     std::vector<ui64, TMKQLAllocator<ui64>> OverflowBucketSizes_;        // Sizes for filled part of overflow buckets
@@ -98,11 +98,11 @@ private:
 class TSMBAccumulatorImpl: public TAccumulator {
 public:
     TSMBAccumulatorImpl(
-        const TTupleLayout* layout, ui32 log2Buckets,
+        const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
         std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
-    TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets);
+    TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets);
 
     ~TSMBAccumulatorImpl() = default;
 
@@ -123,8 +123,8 @@ private:
 
 private:
     ui32 NBuckets_{0};                                                   // Number of buckets
-    ui32 PMask_{0};                                                      // Mask used for partitioning tuples 
-    ui32 BitsCount_{0};                                                  // Bits count to write buckets number in binary
+    ui32 Shift_{0};                                                      // Mask used for partitioning tuples 
+    ui32 Mask_{0};                                                  // Bits count to write buckets number in binary
     const TTupleLayout* Layout_;                                         // Tuple layout
     std::vector<ui64, TMKQLAllocator<ui64>> PackedTupleBucketSizes_;     // Sizes for filled part of packed tuple buckets
     std::vector<ui64, TMKQLAllocator<ui64>> OverflowBucketSizes_;        // Sizes for filled part of overflow buckets

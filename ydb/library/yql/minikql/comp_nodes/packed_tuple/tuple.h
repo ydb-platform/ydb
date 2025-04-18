@@ -30,12 +30,19 @@ class TPaddedPtr
     using TRef = std::iterator_traits<TPaddedPtr>::reference;
 
   public:
-    TPaddedPtr(ui8 *ptr, uint32_t step)
+    TPaddedPtr(TData *ptr)
+        : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(sizeof(TData)) {}
+
+    TPaddedPtr(TData *ptr, ui32 step)
         : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
 
-    TPaddedPtr(TData *ptr, uint32_t step)
+    TPaddedPtr(ui8 *ptr, ui32 step)
         requires(!std::same_as<ui8, TData>)
         : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
+
+    ui32 Step() const {
+        return Step_;
+    }
 
     TRef operator[](int64_t ind) const {
         return TPtrTransform::ToRef(Ptr_ + Step_ * ind);
@@ -98,7 +105,7 @@ class TPaddedPtr
 
   private:
     ui8* Ptr_;
-    int64_t Step_;
+    i64 Step_;
 };
 
 namespace NPackedTuple {
@@ -186,6 +193,12 @@ struct TTupleLayout {
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
+    void Join(
+        std::vector<ui8, TMKQLAllocator<ui8>>& dst,
+        std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
+        ui32 dstCount,
+        const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
+    
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;

@@ -32,12 +32,9 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("data").GetString(), rowContent);
         }
 
-        if (results.GetNextFetchToken().empty()) {
-            return false;
-        }
-
-        settings.FetchToken(results.GetNextFetchToken());
-        return true;
+        const auto& fetchToken = results.GetNextFetchToken();
+        settings.FetchToken(fetchToken);
+        return !fetchToken.empty();
     }
 
     void ExecuteSelectQuery(const TString& bucket, size_t fileSize, size_t numberRows) {
@@ -130,7 +127,9 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         UNIT_ASSERT(resultMeta.Finished);
         UNIT_ASSERT_C(rowsFetched > 0, "Expected intermediate results");
 
-        while (FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
+        if (!settings.FetchToken_.empty()) {
+            while (FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
+        }
         UNIT_ASSERT_VALUES_EQUAL(rowsFetched, numberRows);
 
         // Test forget operation

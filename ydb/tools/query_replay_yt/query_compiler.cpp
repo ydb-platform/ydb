@@ -312,33 +312,37 @@ private:
 
 private:
 
+    TKqpQueryRef MakeQueryRef() {
+        return TKqpQueryRef(Query->Text, Query->QueryParameterTypes);
+    }
+
     void StartCompilation() {
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = false;
 
         switch (Query->Settings.QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQuery(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQuery(MakeQueryRef(), prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_AST_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQueryAst(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQueryAst(MakeQueryRef(), prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-                AsyncCompileResult = KqpHost->PrepareScanQuery(Query->Text, Query->IsSql(), prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareScanQuery(MakeQueryRef(), Query->IsSql(), prepareSettings);
                 break;
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareGenericScript(Query->Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(MakeQueryRef(), prepareSettings);
                 break;
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY: {
                 prepareSettings.ConcurrentResults = false;
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(MakeQueryRef(), prepareSettings, nullptr);
                 break;
             }
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY: {
-                AsyncCompileResult = KqpHost->PrepareGenericQuery(Query->Text, prepareSettings, nullptr);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(MakeQueryRef(), prepareSettings, nullptr);
                 break;
             }
 
@@ -548,7 +552,9 @@ private:
         Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
-            if (MetadataLoader->HasMissingTableMetadata()) {
+            if (!MetadataLoader) {
+                ev->Status = TQueryReplayEvents::UncategorizedFailure;
+            } else if (MetadataLoader->HasMissingTableMetadata()) {
                 ev->Status = TQueryReplayEvents::MissingTableMetadata;
             } else if (status == Ydb::StatusIds::TIMEOUT) {
                 ev->Status = TQueryReplayEvents::CompileTimeout;
@@ -578,7 +584,14 @@ private:
 
         std::map<TString, Ydb::Type> queryParameterTypes;
         if (ReplayDetails.Has("query_parameter_types")) {
-            for (const auto& [paramName, paramType] : ReplayDetails["query_parameter_types"].GetMapSafe()) {
+            NJson::TJsonValue qpt;
+            Y_ENSURE(ReplayDetails["query_parameter_types"].IsString());
+            static NJson::TJsonReaderConfig readConfig;
+            TStringInput in(ReplayDetails["query_parameter_types"].GetStringSafe());
+            NJson::ReadJsonTree(&in, &readConfig, &qpt, false);
+
+            Y_ENSURE(qpt.IsMap());
+            for (const auto& [paramName, paramType] : qpt.GetMapSafe()) {
                 if (!queryParameterTypes[paramName].ParseFromString(Base64Decode(paramType.GetStringSafe()))) {
                     queryParameterTypes.erase(paramName);
                 }

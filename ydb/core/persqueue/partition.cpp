@@ -2419,10 +2419,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             return EProcessResult::Blocked;
         }
 
-        auto [error, real] = ValidatePartitionOperation(operation);
+        auto [error, needCheckConsumer] = ValidatePartitionOperation(operation);
         result = error.empty();
 
-        if (real) {
+        if (needCheckConsumer) {
             if (!result) {
                 bool isAffectedConsumer = AffectedUsers.contains(consumer);
 
@@ -2929,7 +2929,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        auto [error, real] = ValidatePartitionOperation(operation);
+        auto [error, needCheckConsumer] = ValidatePartitionOperation(operation);
         if (!error.empty()) {
             ScheduleReplyPropose(tx,
                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
@@ -2938,7 +2938,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        if (real) {
+        if (needCheckConsumer) {
             consumers.insert(user);
         }
     }

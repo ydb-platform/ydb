@@ -51,7 +51,7 @@ permissions                 Modify permissions
 Каждое право нужно передавать отдельным параметром, например:
 
 ```bash
-{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser 
+{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser
 ```
 
 ## set
@@ -111,8 +111,8 @@ user1:ydb.generic.read
 
 Структура результата состоит из трёх блоков:
 
-- `Owner` — показывает владельца объекта схемы.  
-- `Permissions` — отображает список прав, выданных непосредственно на данный объект.  
+- `Owner` — показывает владельца объекта схемы.
+- `Permissions` — отображает список прав, выданных непосредственно на данный объект.
 - `Effective permissions` — отображает список прав, фактически действующих на данный схемный объект с учётом правил наследования прав.  Данный список также включает все права, отображаемые в секции `Permissions`.
 
 ## clear
@@ -129,7 +129,7 @@ user1:ydb.generic.read
 Например, если над состоянием базы данных из предыдущего примера [`list`](#list) выполнить команду:
 
 ```bash
-{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp' 
+{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp'
 ```
 
 И затем заново выполнить команду `list` на объект `/Root/db1/MyApp`, то получим следующий результат:

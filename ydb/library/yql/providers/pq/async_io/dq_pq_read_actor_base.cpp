@@ -22,32 +22,32 @@ TInstant TrimToMillis(TInstant instant) {
 }
 
 TInstant InitStartingMessageTimestamp(const FederatedQuery::StreamingDisposition& streamingDisposition) {
-    switch (streamingDisposition.GetDispositionCase()) {
-        case FederatedQuery::StreamingDisposition::kOldest:
-            [[fallthrough]];
-        case FederatedQuery::StreamingDisposition::kFresh:
-            return TrimToMillis(TInstant::Now());
-        case FederatedQuery::StreamingDisposition::kFromTime: {
-            const auto& disposition = streamingDisposition.from_time();
-            TInstant timestamp = timeval{
-                .tv_sec = disposition.timestamp().seconds(),
-                .tv_usec = disposition.timestamp().nanos() / 1'000,
-            };
-            return TrimToMillis(timestamp);
+    return TrimToMillis([&]() -> TInstant {
+        switch (streamingDisposition.GetDispositionCase()) {
+            case FederatedQuery::StreamingDisposition::kOldest:
+                return TInstant::Zero();
+            case FederatedQuery::StreamingDisposition::kFresh:
+                return TInstant::Now();
+            case FederatedQuery::StreamingDisposition::kFromTime: {
+                const auto& disposition = streamingDisposition.from_time();
+                return TInstant{timeval{
+                    .tv_sec = disposition.timestamp().seconds(),
+                    .tv_usec = disposition.timestamp().nanos() / 1'000,
+                }};
+            }
+            case FederatedQuery::StreamingDisposition::kTimeAgo: {
+                const auto& disposition = streamingDisposition.time_ago();
+                return TInstant::Now() - TDuration{timeval{
+                    .tv_sec = disposition.duration().seconds(),
+                    .tv_usec = disposition.duration().nanos() / 1'000,
+                }};
+            }
+            case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
+                [[fallthrough]];
+            case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
+                return TInstant::Now();
         }
-        case FederatedQuery::StreamingDisposition::kTimeAgo: {
-            const auto& disposition = streamingDisposition.time_ago();
-            TDuration duration = timeval{
-                .tv_sec = disposition.duration().seconds(),
-                .tv_usec = disposition.duration().nanos() / 1'000,
-            };
-            return TrimToMillis(TInstant::Now() - duration);
-        }
-        case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
-            return TrimToMillis(TInstant::Now());
-        case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
-            Y_ABORT("Unknown streaming disposition");
-    }
+    }());
 }
 
 } // anonymous namespace

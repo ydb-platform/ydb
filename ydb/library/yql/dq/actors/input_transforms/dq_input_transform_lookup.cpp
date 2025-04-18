@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/mkql_key_payload_value_lru_cache.h>
 
@@ -495,6 +496,10 @@ public:
         , ReadyQueue(OutputRowType)
         , LastLruSize(0)
     {
+        Cerr << "LookupKeyType " << NMiniKQL::PrintNode(lookupKeyType, true) << Endl;
+        Cerr << "LookupPayloadType " << NMiniKQL::PrintNode(lookupPayloadType, true) << Endl;
+        Cerr << "InputRowType " << NMiniKQL::PrintNode(inputRowType, true) << Endl;
+        Cerr << "OutputRowType " << NMiniKQL::PrintNode(outputRowType, true) << Endl;
         Y_ABORT_UNLESS(Alloc);
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
             Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());
@@ -539,12 +544,12 @@ private: //events
         Y_ABORT_UNLESS(lookupResult == KeysForLookup);
         for (; !AwaitingQueue.empty(); AwaitingQueue.pop_front()) {
             auto& output = AwaitingQueue.front();
-            for (ui32 idx = 0; idx != output.MissingIndexes.size(); ++idx) {
-                auto lookupPayload = lookupResult->find(output.MissingKeys[idx]);
-                if (lookupPayload == lookupResult->end()) {
+            for (auto& [subKey, subIndex] : output.MissingKeysAndIndexes) {
+                auto lookupPayload = lookupResult->find(subKey);
+                if (lookupPayload == lookupResult->end() || !lookupPayload->second) {
                     continue;
                 }
-                FillOutputRow(output.OutputListItems, output.MissingIndexes[idx], lookupPayload->first, lookupPayload->second);
+                FillOutputRow(output.OutputListItems, subIndex, lookupPayload->first, lookupPayload->second);
             }
             ReadyQueue.PushRow(output.OutputRowItems, OutputRowType->GetElementsCount());
         }
@@ -644,7 +649,7 @@ private: //IDqComputeActorAsyncInput
             LruCache->Prune(now);
             size_t rowLimit = std::numeric_limits<size_t>::max();
             size_t row = 0;
-            AwaitingQueue.emplace_back();
+            const auto outputColumns = OutputRowType->GetElementsCount();
             while (
                 row < rowLimit &&
                 (KeysForLookup->size() < MaxKeysInRequest) &&
@@ -654,40 +659,58 @@ private: //IDqComputeActorAsyncInput
                 NUdf::TUnboxedValue* otherItems;
                 NUdf::TUnboxedValue other = HolderFactory.CreateDirectArrayHolder(OtherInputIndexes.size(), otherItems);
                 bool nullsInKey = false;
-                Y_UNUSED(nullsInKey); // TBD: do we need to distinguish left-side-list-is-NULL and left-side-key-is-empty-list?
-                // as of now, we produce NULL list on right side on both cases
-                ui32 minKeyListSize = std::numeric_limits<ui32>::max();
+                ui32 minKeyListLength = std::numeric_limits<ui32>::max();
+                Cerr << "inputKeys ";
                 for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
                     auto& key = keyItems[i] = inputRowItems[LookupInputIndexes[i]];
+                    Cerr << ' ' << key;
                     if (!key) {
                         nullsInKey = true;
-                        minKeyListSize = 0;
-                    } else if (minKeyListSize) {
-                        minKeyListSize = std::min<ui32>(minKeyListSize, key.GetListLength());
+                        minKeyListLength = 0;
+                    } else {
+                        ui32 listLength = key.GetListLength();
+                        minKeyListLength = std::min(minKeyListLength, listLength);
+                        PayloadExtraSize += listLength * sizeof(NUdf::TUnboxedValue);
                     }
                 }
-                PayloadExtraSize += minKeyListSize * (LookupInputIndexes.size() + LookupPayloadType->GetMembersCount()) * sizeof(NUdf::TUnboxedValue);
+                PayloadExtraSize += minKeyListLength * (LookupInputIndexes.size() + LookupPayloadType->GetMembersCount()) * sizeof(NUdf::TUnboxedValue);
+                Cerr << " output ";
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
+                    Cerr << ' ' << otherItems[i];
                 }
                 auto& output = AwaitingQueue.emplace_back();
-                MakeOutputRow(key, other, minKeyListSize, output);
-                for (ui32 subKeyIdx = 0; subKeyIdx < minKeyListSize; ++subKeyIdx) {
+                Cerr
+                    << " nullsInKey = " << nullsInKey
+                    << " minKeyListLength = " << minKeyListLength << Endl;
+                MakeOutputRow(key, other, minKeyListLength, output, nullsInKey);
+                for (ui32 subKeyIdx = 0; subKeyIdx != minKeyListLength; ++subKeyIdx) {
                     NUdf::TUnboxedValue* subKeyItems;
                     NUdf::TUnboxedValue subKey = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), subKeyItems);
-                    for (ui32 columnIdx = 0; columnIdx < LookupInputIndexes.size(); ++columnIdx) {
-                        subKeyItems[columnIdx] = keyItems[columnIdx].GetElement(subKeyIdx);
+                    Cerr << "subKey[" << subKeyIdx << "]";
+                    bool nullsInSubKey = false;
+                    for (ui32 columnIdx = 0; columnIdx != LookupInputIndexes.size(); ++columnIdx) {
+                        auto& key = subKeyItems[columnIdx] = keyItems[columnIdx].GetElement(subKeyIdx);
+                        if (!key) {
+                            nullsInSubKey = true;
+                            break;
+                        }
+                        Cerr << ' ' << key;
                     }
-                    if (auto lookupPayload = LruCache->Get(key, now)) {
+                    Cerr << Endl;
+
+                    if (nullsInSubKey) {
+                        // do nothing, right side is nulls
+                    } else if (auto lookupPayload = LruCache->Get(subKey, now)) {
                         FillOutputRow(output.OutputListItems, subKeyIdx, subKey, *lookupPayload);
                     } else {
-                        output.MissingIndexes.push_back(subKeyIdx);
-                        output.MissingKeys.push_back(
-                                KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{}).first->first);
+                        output.MissingKeysAndIndexes.emplace_back(
+                                KeysForLookup->emplace(std::move(subKey), NUdf::TUnboxedValue{}).first->first,
+                                subKeyIdx);
                     }
                 }
-                if (output.MissingIndexes.empty()) {
-                    ReadyQueue.PushRow(output.OutputRowItems, OutputRowType->GetElementsCount());
+                if (output.MissingKeysAndIndexes.empty()) {
+                    ReadyQueue.PushRow(output.OutputRowItems, outputColumns);
                     AwaitingQueue.pop_back();
                 } else {
                     if (AwaitingQueue.size() == 1) {
@@ -801,8 +824,7 @@ protected:
         NUdf::TUnboxedValue* OutputRowItems;
         NUdf::TUnboxedValue InputOther;
         std::vector<NUdf::TUnboxedValue*> OutputListItems;
-        std::vector<NUdf::TUnboxedValue> MissingKeys;
-        std::vector<ui32> MissingIndexes;
+        std::vector<std::pair<NUdf::TUnboxedValue, ui32>> MissingKeysAndIndexes;
     };
     using TAwaitingQueue = std::deque<TAwaitingRow, NKikimr::NMiniKQL::TMKQLAllocator<TAwaitingRow>>;
     TAwaitingQueue AwaitingQueue;
@@ -820,12 +842,13 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
     TDuration CpuTime;
 
-    void MakeOutputRow(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, ui32 listSize, TAwaitingRow& output) {
+    void MakeOutputRow(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, ui32 listLength, TAwaitingRow& output, bool nullsInKey) {
         NUdf::TUnboxedValue* outputRowItems;
         NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
         output.OutputRow = outputRow;
         output.OutputRowItems = outputRowItems;
-        if (listSize) {
+        if (listLength > 0) {
+            Y_DEBUG_ABORT_UNLESS(!nullsInKey);
             output.OutputListItems.resize(OutputRowColumnOrder.size());
         }
         for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
@@ -839,10 +862,12 @@ protected:
                     break;
                 case EOutputRowItemSource::LookupKey:
                 case EOutputRowItemSource::LookupOther:
-                    if (listSize > 0) {
+                    if (!nullsInKey) {
                         NUdf::TUnboxedValue* rightRowItems;
-                        outputRowItems[i] = HolderFactory.CreateDirectArrayHolder(listSize, rightRowItems);
-                        output.OutputListItems[i] = rightRowItems;
+                        outputRowItems[i] = HolderFactory.CreateDirectArrayHolder(listLength, rightRowItems);
+                        if (listLength > 0) {
+                            output.OutputListItems[i] = rightRowItems;
+                        }
                     }
                     break;
                 case EOutputRowItemSource::None:
@@ -856,6 +881,10 @@ protected:
     }
 
     void FillOutputRow(std::vector<NUdf::TUnboxedValue*>& outputListItems, ui32 subRowIdx, const NUdf::TUnboxedValue& lookupSubKey, NUdf::TUnboxedValue& lookupPayload) {
+        Cerr << "Fill: " << lookupSubKey << '=' << lookupPayload << Endl;
+        if (!lookupPayload) {
+            return;
+        }
         for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
             const auto& [source, index] = OutputRowColumnOrder[i];
             switch (source) {
@@ -1082,6 +1111,25 @@ TVector<size_t> GetJoinColumnIndexes(const NMiniKQL::TStructType* type, const TH
     }, joinColumns);
 }
 
+NMiniKQL::TStructType* DeListifyType(const NMiniKQL::TStructType* type, const NMiniKQL::TTypeEnvironment& env, bool asOptional = false)
+{
+    std::vector<NMiniKQL::TStructMember> members;
+    const ui32 membersCount = type->GetMembersCount();
+    members.resize(membersCount);
+    for (ui32 i = 0; i != membersCount; ++i) {
+        members[i].Name = type->GetMemberName(i);
+        auto* memberType = type->GetMemberType(i);
+        Y_ENSURE(memberType->GetKind() == NMiniKQL::TType::EKind::List);
+        memberType = static_cast<NMiniKQL::TListType *>(memberType)->GetItemType();
+        Y_ENSURE(memberType->GetKind() == NMiniKQL::TType::EKind::Optional);
+        if (!asOptional) {
+            memberType = static_cast<NMiniKQL::TOptionalType *>(memberType)->GetItemType();
+        }
+        members[i].Type = memberType;
+    }
+    return NMiniKQL::TStructType::Create(membersCount, std::as_const(members).data(), env);
+}
+
 } // namespace
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStreamLookup(
@@ -1142,8 +1190,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 std::move(lookupKeyInputIndexes),
                 std::move(otherInputIndexes),
                 inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
+                DeListifyType(lookupKeyType, args.TypeEnv),
+                DeListifyType(lookupPayloadType, args.TypeEnv, true),
                 outputRowType,
                 std::move(outputColumnsOrder),
                 settings.GetMaxDelayedRows(),
@@ -1163,8 +1211,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 std::move(lookupKeyInputIndexes),
                 std::move(otherInputIndexes),
                 inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
+                DeListifyType(lookupKeyType, args.TypeEnv),
+                DeListifyType(lookupPayloadType, args.TypeEnv, true),
                 outputRowType,
                 std::move(outputColumnsOrder),
                 settings.GetMaxDelayedRows(),

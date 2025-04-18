@@ -521,6 +521,91 @@ TESTCASES = [
             ]
         ),
     ),
+    # 10
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`;
+
+            $enriched = select
+                            e.Data as data, u.id as lookup
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                on(AsList(e.Data) = u.data)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        [
+            ('ydb10', '{"data":"ydb10","lookup":[1]}'),
+            ('ydb20', '{"data":"ydb20","lookup":[2]}'),
+            ('ydb30', '{"data":"ydb30","lookup":[3]}'),
+            ('ydb40', '{"data":"ydb40","lookup":[null]}'),
+            ('ydb50', '{"data":"ydb50","lookup":[null]}'),
+            ('ydb10', '{"data":"ydb10","lookup":[1]}'),
+            ('ydb20', '{"data":"ydb20","lookup":[2]}'),
+            ('ydb30', '{"data":"ydb30","lookup":[3]}'),
+            ('ydb40', '{"data":"ydb40","lookup":[null]}'),
+            ('ydb50', '{"data":"ydb50","lookup":[null]}'),
+        ]
+        * 10,
+    ),
+    # 11
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            user List<Int32?>?,
+                            user_is_null Bool?
+                        )
+                    )            ;
+            $input = SELECT id, case when user_is_null then NULL else user end as user from $input;
+
+            $enriched = select e.id as id,
+                            e.user as user_id,
+                            u.data as lookup
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                on(e.user = u.id)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                ('{"id":3,"user":[5]}', '{"id":3,"user_id":[5],"lookup":[null]}'),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":3,"user":[5,3,2,1,0]}', '{"id":3,"user_id":[5,3,2,1,0],"lookup":[null,"ydb30","ydb20","ydb10",null]}'),
+                ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":10,"user":[null]}', '{"id":10,"user_id":[null],"lookup":[null]}'),
+                ('{"id":4,"user":[3]}', '{"id":4,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":5,"user":[3]}', '{"id":5,"user_id":[3],"lookup":["ydb30"]}'),
+                ('{"id":6,"user":[1]}', '{"id":6,"user_id":[1],"lookup":["ydb10"]}'),
+                ('{"id":7,"user":[2]}', '{"id":7,"user_id":[2],"lookup":["ydb20"]}'),
+                ('{"id":10,"user":[]}', '{"id":10,"user_id":[],"lookup":[]}'),
+                # ('{"id":10}', '{"id":10,"user_id":null,"lookup":null}'), -- does not work as expected, "user" is parsed as [] instead of NULL
+                # ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'), -- does not work as expected either, "user" is parsed as [] instead of NULL
+                ('{"id":10,"user_is_null":true}', '{"id":10,"user_id":null,"lookup":null}'),
+            ]
+            * 20
+        ),
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "7",
+        "MaxDelayedRows",
+        "100",
+    ),
 ]
 
 

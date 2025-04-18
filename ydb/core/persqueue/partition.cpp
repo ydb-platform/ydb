@@ -2343,19 +2343,19 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-std::pair<bool, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TPartitionOperation& operation) {
+std::pair<TString, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TPartitionOperation& operation) {
     const TString& consumer = operation.GetConsumer();
 
     if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
         PQ_LOG_D("Partition " << Partition <<
                 " Consumer '" << consumer << "' has been removed");
-        return {false, false};
+        return {TStringBuilder() << "Consumer '" << consumer << "' has been removed", false};
     }
 
     if (!UsersInfoStorage->GetIfExists(consumer)) {
         PQ_LOG_D("Partition " << Partition <<
                     " Unknown consumer '" << consumer << "'");
-        return {false, false};
+        return {TStringBuilder() << "Unknown consumer '" << consumer << "'", false};
     }
 
     TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
@@ -2367,12 +2367,12 @@ std::pair<bool, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TP
             " RequestSessionId '" << operation.GetReadSessionId() <<
             "' CurrentSessionId '" << userInfo.Session <<
             "'");
-        return {false, false};
+        return {"Bad request (session already dead)", false};
     } else if (operation.GetOnlyCheckCommitedToFinish()) {
         if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
-           return {false, false};
+            return {TStringBuilder() << "There are uncommitted messages in partition " << Partition.OriginalPartitionId, false};
         } else {
-            return {true, false};
+            return {"", false};
         }
     } else {
         if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
@@ -2381,23 +2381,23 @@ std::pair<bool, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TP
                         " Bad request (invalid range) " <<
                         " Begin " << operation.GetCommitOffsetsBegin() <<
                         " End " << operation.GetCommitOffsetsEnd());
-            return {false, true};
+            return {"Bad request (invalid range)", true};
         } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
             PQ_LOG_D("Partition " << Partition <<
                         " Consumer '" << consumer << "'" <<
                         " Bad request (gap) " <<
                         " Offset " << userInfo.Offset <<
                         " Begin " << operation.GetCommitOffsetsBegin());
-            return {false, true};
+            return {"Bad request (gap)", true};
         } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
             PQ_LOG_D("Partition " << Partition <<
                         " Consumer '" << consumer << "'" <<
                         " Bad request (behind the last offset) " <<
                         " EndOffset " << EndOffset <<
                         " End " << operation.GetCommitOffsetsEnd());
-            return {false, true};
+            return {"Bad request (behind the last offset", true};
         }
-        return {true, true};
+        return {"", true};
     }
 }
 
@@ -2419,11 +2419,11 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             return EProcessResult::Blocked;
         }
 
-        auto [r, real] = ValidatePartitionOperation(operation);
-        result = r;
+        auto [error, real] = ValidatePartitionOperation(operation);
+        result = error.empty();
 
         if (real) {
-            if (!r) {
+            if (!result) {
                 bool isAffectedConsumer = AffectedUsers.contains(consumer);
 
                 if (!isAffectedConsumer) {
@@ -2433,7 +2433,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             }
             consumers.insert(consumer);
         }
-        if (!r) {
+        if (!result) {
             break;
         }
     }
@@ -2929,12 +2929,12 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        auto [r, real] = ValidatePartitionOperation(operation);
-        if (!r) {
+        auto [error, real] = ValidatePartitionOperation(operation);
+        if (!error.empty()) {
             ScheduleReplyPropose(tx,
                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                 NKikimrPQ::TError::BAD_REQUEST,
-                "incorrect request");
+                error);
             return EProcessResult::ContinueDrop;
         }
 

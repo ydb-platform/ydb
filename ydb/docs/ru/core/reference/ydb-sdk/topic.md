@@ -1931,6 +1931,27 @@
   }
   ```
 
+- Python
+
+  Для чтения без `Consumer`а следует создать читателя с помощью метода `no_consumer_reader`:
+  
+  ```python
+  def callee(partition_id: int) -> int:
+      return 0
+
+  reader = driver.topic_client.no_consumer_reader(
+      topic="topic-path",
+      partition_ids=[0,1,2],
+      get_start_offset_lambda=callee,
+  )
+  ```
+
+  Данный метод принимает три обязательных аргумента:
+  * `topic` - путь до топика;
+  * `partition_ids` - массив id партиций, из которых будет производиться чтение;
+  * `get_start_offset_lambda` - функция, благодаря которой будет высчитываться стартовый offset при старте читателя, а так же при его переподключениях. Может быть асинхронной.
+
+
 {% endlist %}
 
 ### Чтение в транзакции {#read-tx}

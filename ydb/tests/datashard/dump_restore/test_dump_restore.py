@@ -55,19 +55,25 @@ class TestDumpRestore(TestBase):
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
     def dump(self, table_name):
-        self.is_dump_or_restore(True, table_name)
-
-    def restore(self, table_name):
-        self.is_dump_or_restore(False, table_name)
-
-    def is_dump_or_restore(self, is_dump: bool, table_name: str):
         yatest.common.execute([
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '-e', 'grpc://'+self.get_endpoint(),
             "--database", self.get_database(),
             "tools",
-            "dump" if is_dump else "restore",
+            "dump",
             "--path", "/Root",
-            "--output" if is_dump else "--input",
+            "--output",
+            f"dump_{table_name}"
+        ])
+
+    def restore(self, table_name):
+        yatest.common.execute([
+            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+            '-e', 'grpc://'+self.get_endpoint(),
+            "--database", self.get_database(),
+            "tools",
+            "restore",
+            "--path", "/Root",
+            "--input",
             f"dump_{table_name}"
         ])

@@ -10,7 +10,6 @@ SIZE(MEDIUM)
 
 TEST_SRCS(
     test_copy_table.py
-
 )
 
 PEERDIR(

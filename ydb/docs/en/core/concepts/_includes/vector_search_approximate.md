@@ -6,7 +6,7 @@ Approximate methods do not perform a complete enumeration of the initial data. T
 
 Scalar quantization reduces the time required for reading and writing data by decreasing the number of bytes. For example, when quantizing from `Float` to `Bit`, each vector is reduced by 32 times.
 
-[Approximate vector search without an index](../yql/reference/udf/list/knn.md#approximate-vector-search-examples) uses a very simple additional data structure - a set of vectors with other quantization. This allows the use of a simple search algorithm: first, a rough preliminary search is performed on the compressed vectors, followed by refining the results on the original vectors.
+[Approximate vector search without an index](../../yql/reference/udf/list/knn.md#approximate-vector-search-examples) uses a very simple additional data structure - a set of vectors with other quantization. This allows the use of a simple search algorithm: first, a rough preliminary search is performed on the compressed vectors, followed by refining the results on the original vectors.
 
 Main advantages:
 

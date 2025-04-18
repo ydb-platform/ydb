@@ -825,7 +825,7 @@ private:
 
         fd.HasActiveOp = true;
 
-        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size() + 1);
         return IoThreadPool_->AddAndOwn(std::move(op));
     }
 

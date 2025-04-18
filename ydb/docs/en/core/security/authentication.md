@@ -48,6 +48,26 @@ To enable username/password authentication, use `true` in the `enforce_user_toke
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
 
+### Protection against password brute force
+
+{{ ydb-short-name }} provides protection against password brute force. The user will be considered locked out if they exceed the number of allowed incorrect password attempts. After the specified period, they will be able to attempt authentication again.
+
+{% note info %}
+
+This mechanism applies only to users managed by {{ ydb-short-name }}, the so-called built-in users. When authentication is performed via external services, such as an LDAP server, this lockout mechanism is not applied. Each authentication attempt results in a corresponding request to the external authentication service.
+
+{% endnote %}
+
+By default, a user is given 4 attempts to enter the correct password. Otherwise, authentication will be denied for one hour. You can configure the user lockout criteria in the [configuration](../reference/configuration/index.md#account-lockout).
+
+If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) the user prematurely.
+
+Information about the user's lockout status and the number of incorrect password attempts can be found in the user's [system view](../dev/system-views.md#auth-users-users).
+
+### Forced lock/unlock of a user
+
+There is another way to prevent a user from authenticating—forced lockout by the cluster or database administrator. Administrators can unlock users who have been forcibly locked, as well as those who have exceeded the number of incorrect password attempts. Detailed information on forced locking and unlocking of users can be found in the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
+
 ## LDAP directory integration {#ldap-auth-provider}
 
 {{ ydb-short-name }} supports authentication and authorization via an [LDAP directory](https://en.wikipedia.org/wiki/LDAP). To use this feature, an LDAP directory service must be deployed and accessible from the {{ ydb-short-name }} servers.

@@ -397,7 +397,7 @@
           "refId": "A"
         }
       ],
-      "title": "hive event response time",
+      "title": "hive self-ping time",
       "type": "timeseries"
     },
     {

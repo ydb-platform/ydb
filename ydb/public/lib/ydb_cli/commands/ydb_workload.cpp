@@ -375,8 +375,8 @@ void TWorkloadCommandBase::Config(TConfig& config) {
 }
 
 int TWorkloadCommandBase::Run(TConfig& config) {
-    Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
     if (!DryRun) {
+        Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
         TableClient = MakeHolder<NTable::TTableClient>(*Driver);
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
@@ -384,7 +384,17 @@ int TWorkloadCommandBase::Run(TConfig& config) {
     }
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
-    return DoRun(*workloadGen, config);
+    auto result = DoRun(*workloadGen, config);
+    if (!DryRun) {
+        TableClient->Stop().Wait();
+        QueryClient.Reset();
+        SchemeClient.Reset();
+        TopicClient.Reset();
+        TableClient.Reset();
+        Driver->Stop(true);
+        Driver.Reset();
+    }
+    return result;
 }
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {

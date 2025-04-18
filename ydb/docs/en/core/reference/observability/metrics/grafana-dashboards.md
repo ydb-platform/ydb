@@ -114,12 +114,17 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 
 [Hive](../../../contributor/hive.md) metrics for the selected database.
 
+The dashboard includes the following filters:
+* database - used to select the database which metrics need to be displayed;
+* ds - used to select the Grafana datasource the dashboard will use;
+* local-tx - determines which data will be displayed on the `{{local-tx}}` avg time widget.
+
 | Name | Description |
 |---|---|
 | hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR |
 | hive event response time | Time it takes for Hive to respond |
 | hive local transaction times | CPU time utilized by Hive when executing local transactions |
-| `{{local-tx}}` avg time | Count and average execution time of {{local-tx}} transactions. The transaction type `{{local-tx}}` is set in the filter on the dashboard. |
+| `{{local-tx}}` avg time | Count and average execution time of `{{local-tx}}` transactions. The transaction type `{{local-tx}}` is set in the filter on the dashboard. |
 | tablet count | Total number of tablets in the database |
 | event queue size | Size of the database Hive event queue |
 | versions | Versions of {{ ydb-short-name }} running on cluster nodes |

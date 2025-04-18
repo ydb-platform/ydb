@@ -267,6 +267,7 @@ message TSetYamlConfigRequest {
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
+    optional bool SkipAuditLog = 6;
 }
 
 message TSetYamlConfigResponse {
@@ -279,6 +280,7 @@ message TReplaceYamlConfigRequest {
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
+    optional bool SkipAuditLog = 6;
 }
 
 message TReplaceYamlConfigResponse {

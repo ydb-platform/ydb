@@ -426,13 +426,22 @@ struct TPDiskConfig : public TThrRefBase {
         }
     }
 
-    static ui32 SlotUnitSizeEnumToInt(NKikimrBlobStorage::TPDiskSlotUnitSize::E enum_value) {
+    static ui32 SlotSizeUnitsToInt(NKikimrBlobStorage::TPDiskSlotUnitSize::E enum_value) {
         switch (enum_value) {
             case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified:
             case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitSingle:
                 return 1;
             case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitDouble:
                 return 2;
+        }
+    }
+
+    static bool SlotSizeUnitsSpecified(NKikimrBlobStorage::TPDiskSlotUnitSize::E enum_value) {
+        switch (enum_value) {
+            case NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified:
+                return false;
+            default:
+                return true;
         }
     }
 };

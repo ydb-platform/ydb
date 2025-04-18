@@ -407,7 +407,7 @@ namespace NKikimr::NStorage {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
-                    slotUnitSizeInt = TPDiskConfig::SlotUnitSizeEnumToInt(pdiskConfig.GetSlotUnitSize());
+                    slotUnitSizeInt = TPDiskConfig::SlotSizeUnitsToInt(pdiskConfig.GetSlotUnitSize());
                 }
             }
 

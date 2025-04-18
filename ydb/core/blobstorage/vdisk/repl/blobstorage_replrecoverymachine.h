@@ -19,6 +19,7 @@ namespace NKikimr {
             COMMIT,
             OTHER,
             PHANTOM,
+            OUT_OF_SPACE_DELAY,
             COUNT
         };
 
@@ -46,6 +47,7 @@ namespace NKikimr {
                 replInfo.CommitDuration = Durations[static_cast<ui32>(ETimeState::COMMIT)];
                 replInfo.OtherDuration = Durations[static_cast<ui32>(ETimeState::OTHER)];
                 replInfo.PhantomDuration = Durations[static_cast<ui32>(ETimeState::PHANTOM)];
+                replInfo.OutOfSpaceDelayDuration = Durations[static_cast<ui32>(ETimeState::OUT_OF_SPACE_DELAY)];
             }
 
         private:

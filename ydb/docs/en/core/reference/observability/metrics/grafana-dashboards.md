@@ -121,11 +121,11 @@ The dashboard includes the following filters:
 
 | Name | Description |
 |---|---|
-| hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR |
-| hive event response time | Time it takes for Hive to respond |
-| hive local transaction times | CPU time utilized by Hive when executing local transactions |
-| `{{local-tx}}` avg time | Count and average execution time of `{{local-tx}}` transactions. The transaction type `{{local-tx}}` is set in the filter on the dashboard. |
-| tablet count | Total number of tablets in the database |
-| event queue size | Size of the database Hive event queue |
-| versions | Versions of {{ ydb-short-name }} running on cluster nodes |
-| hive node | Node where the database Hive is running |
+| hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR, the two of the most important actors of the Hive tablet. |
+| hive self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
+| hive local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
+| `{{local-tx}}` avg time | Average execution time of a single local transaction for the type specified in the `local-tx` parameter selector on the dashboard. |
+| tablet count | Total number of tablets in the database. |
+| event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
+| versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
+| hive node | Node where the database Hive is running. |

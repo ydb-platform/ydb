@@ -92,6 +92,12 @@ namespace NKikimr {
                 return action;
             }
 
+            // compact explicitly defined SST's, if set
+            action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
+            if (action != ActNothing) {
+                return action;
+            }
+
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
@@ -116,6 +122,12 @@ namespace NKikimr {
 
             // try to promote ssts on higher levels w/o merging
             action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
+            if (action != ActNothing) {
+                return action;
+            }
+
+            // compact explicitly defined SST's, if set
+            action = TStrategyExplicit(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
                 return action;
             }

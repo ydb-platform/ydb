@@ -16,7 +16,6 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/datashard/lib
-    ydb/tests/stress/oltp_workload/workload
     ydb/tests/sql/lib
     contrib/python/moto
     contrib/python/boto3

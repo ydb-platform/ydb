@@ -47,15 +47,15 @@ target_link_libraries(ydb-library-breakpad.global PUBLIC
 
 target_sources(ydb-library-breakpad.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/breakpad/minidumps.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/4266910803c1ffed43cd5455bc9be97a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/8e79af847c99a66d1a44a28fc0afce5f.cpp
 )
 
 
 resources(ydb-library-breakpad.global
-  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/4266910803c1ffed43cd5455bc9be97a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/breakpad/8e79af847c99a66d1a44a28fc0afce5f.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/breakpad/about.txt
   KEYS
-  interanal_breakpad_about
+  internal_breakpad_about
   OPTS
 )

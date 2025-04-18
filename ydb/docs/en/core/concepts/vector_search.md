@@ -1,6 +1,6 @@
-# Vector Search
+# Vector search
 
-## Concept of Vector Search
+## Concept of vector search
 
 **Vector search**, also known as [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN), is an optimization problem where the goal is to find the nearest vector (or a set of vectors) in a given dataset relative to a specified query vector. The proximity between vectors is determined using distance or similarity metrics.
 
@@ -22,19 +22,19 @@ Methods for solving vector search tasks can be divided into three major categori
 
 The choice of method depends on the number of vectors and the nature of the workload. Exact methods search slowly but update quickly, whereas indexes do the opposite.
 
-## Exact Vector Search {#vector-search-exact}
+## Exact vector search {#vector-search-exact}
 
 {% include [vector_search_exact.md](_includes/vector_search_exact.md) %}
 
 Learn more about [exact vector search](../yql/reference/udf/list/knn.md#exact-vector-search-examples).
 
-## Approximate Vector Search Without Index {#vector-search-approximate}
+## Approximate vector search without index {#vector-search-approximate}
 
 {% include [vector_search_approximate.md](_includes/vector_search_approximate.md) %}
 
 Learn more about [approximate vector search without index](../yql/reference/udf/list/knn.md#approximate-vector-search-examples).
 
-## Approximate Vector Search With Index {#vector-search-index}
+## Approximate vector search with index {#vector-search-index}
 
 When the data volume significantly increases, non-index approaches cease to work within acceptable time limits. In such cases, additional data structures are necessary such as [vector indexes](../dev/vector-indexes.md), which accelerate the search process.
 

@@ -44,15 +44,21 @@ class TestDumpRestore(TestBase):
             ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
         ]
     )
-    def test_T(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    def test_dump_restore(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
-        self.is_dump_or_restore(True, table_name)
+        self.dump(table_name)
         dml.query(f"drop table {table_name}")
-        self.is_dump_or_restore(False, table_name)
+        self.restore(table_name)
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+
+    def dump(self, table_name):
+        self.is_dump_or_restore(True, table_name)
+
+    def restore(self, table_name):
+        self.is_dump_or_restore(False, table_name)
 
     def is_dump_or_restore(self, is_dump: bool, table_name: str):
         yatest.common.execute([

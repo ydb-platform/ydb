@@ -40,14 +40,3 @@ def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_n
          ON {ttl} {f"AS {time}" if time != "" else ""} )
     """
     return sql_ttl
-
-
-def create_vector_index_sql_request(table_name: str, embedding: str, prefix: str, data: str):
-    sql_vector_index = f"""
-        ALTER TABLE {table_name}
-        ADD INDEX idx_vec_{embedding}
-        GLOBAL USING vector_kmeans_tree
-        ON ({f"{prefix}," if prefix != "" else ""}{embedding}) {f"COVER ({data})" if data != "" else ""}
-        WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
-        """
-    return sql_vector_index

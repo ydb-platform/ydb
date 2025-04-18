@@ -2000,15 +2000,18 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     };
 
     map["EquiJoin"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        ui32 inputsCount = node->ChildrenSize() - 2;
-        for (ui32 i = 0; i < inputsCount; ++i) {
-            if (node->Child(i)->Child(0)->IsCallable("EquiJoin") &&
-                optCtx.IsSingleUsage(*node->Child(i)) &&
-                optCtx.IsSingleUsage(*node->Child(i)->Child(0))) {
-                auto ret = FuseEquiJoins(node, i, ctx);
-                if (ret != node) {
-                    YQL_CLOG(DEBUG, Core) << "FuseEquiJoins";
-                    return ret;
+        if (!optCtx.ForPeephole) {
+            // Peephole splits EquiJoin to pairs, so we don't perform FuseEquiJoin here
+            ui32 inputsCount = node->ChildrenSize() - 2;
+            for (ui32 i = 0; i < inputsCount; ++i) {
+                if (node->Child(i)->Child(0)->IsCallable("EquiJoin") &&
+                    optCtx.IsSingleUsage(*node->Child(i)) &&
+                    optCtx.IsSingleUsage(*node->Child(i)->Child(0))) {
+                    auto ret = FuseEquiJoins(node, i, ctx);
+                    if (ret != node) {
+                        YQL_CLOG(DEBUG, Core) << "FuseEquiJoins";
+                        return ret;
+                    }
                 }
             }
         }

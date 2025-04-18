@@ -555,10 +555,15 @@ private:
     }
 
     void PrepareAutoDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
+        bool isContinued = false;
         PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx) {
             exportInfo->PendingDropItems.push_back(itemIdx);
+            isContinued = true;
             AllocateTxId(exportInfo);
         });
+        if (!isContinued) {
+            AllocateTxId(exportInfo);
+        }
     }
 
     void SubscribeTx(TTxId txId) {

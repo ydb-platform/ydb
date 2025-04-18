@@ -153,7 +153,7 @@ class TestCompatibility(object):
                     "create table `sample_table` (id Uint64, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
                     )
     
-    def log_node_versions(self):
+    def log_nodes_version(self):
         for node_id, node in enumerate(self.cluster.nodes.values()):
             node.get_config_version()
             get_version_command = [
@@ -190,8 +190,8 @@ class TestCompatibility(object):
             version_id = None
             
         self.cluster.change_node_version(version_id=version_id)
-        time.sleep(180)
-        self.log_node_versions()
+        time.sleep(60)
+        self.log_nodes_version()
     
     def log_database_scheme(self):
         for node_id, node in enumerate(self.cluster.nodes.values()):
@@ -208,21 +208,7 @@ class TestCompatibility(object):
             ]
             yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
     
-    def log_nodes_version(self):
-        for node_id, node in enumerate(self.cluster.nodes.values()):
-            node.get_config_version()
-            get_version_command = [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "-e",
-                "grpc://localhost:%d" % node.grpc_port,
-                "-d"
-                "/Root",
-                "scheme",
-                "ls"
- 
-            ]
-            yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+   
     
     @pytest.mark.parametrize("version_change_to", ['combined','next_version'])
     def test_simple(self,version_change_to):

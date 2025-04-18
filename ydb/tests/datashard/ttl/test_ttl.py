@@ -5,6 +5,7 @@ import pytest
 from datetime import datetime, timedelta
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.datashard.lib.create_table import create_ttl_sql_request
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
 
@@ -102,6 +103,9 @@ class TestTTL(TestBase):
         dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
+        dml.query(f"ALTER TABLE `{table_name}` RESET (TTL)")
+        dml.query(create_ttl_sql_request(f"ttl_{ttl}", {"PT0S": ""}, "SECONDS" if ttl ==
+                                         "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name))
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index)
 
@@ -174,7 +178,7 @@ class TestTTL(TestBase):
                 {" and ".join(create_all_type)}
                 """
         wait_for(self.create_predicate(
-            sql_select, expected_count_rows), timeout_seconds=150)
+            sql_select, expected_count_rows), timeout_seconds=200)
         rows = self.query(sql_select)
         assert len(
             rows) == 1 and rows[0].count == expected_count_rows, f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"

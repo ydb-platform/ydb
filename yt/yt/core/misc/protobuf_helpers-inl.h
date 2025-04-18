@@ -407,11 +407,11 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<TOriginal>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<TOriginal>(serializedArray.Get(i)));
     }
 }
 
+// Does not check for duplicates.
 template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
 void FromProtoArrayImpl(
     THashMap<TOriginalKey, TOriginalValue>* originalArray,
@@ -420,8 +420,7 @@ void FromProtoArrayImpl(
     originalArray->clear();
     originalArray->reserve(serializedArray.size());
     for (int i = 0; i < serializedArray.size(); ++i) {
-        originalArray->emplace(
-            FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
+        originalArray->insert(FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
     }
 }
 
@@ -480,6 +479,17 @@ void ToProto(
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap)
+{
+    serializedMap->clear();
+    for (const auto& [key, value] : originalMap) {
+        serializedMap->insert(std::pair(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value)));
+    }
+}
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -512,6 +522,19 @@ void CheckedHashSetFromProto(
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet)
 {
     NYT::NDetail::CheckedFromProtoArrayImpl(originalHashSet, serializedHashSet);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap)
+{
+    originalMap->clear();
+    for (const auto& [serializedKey, serializedValue] : serializedMap) {
+        EmplaceOrCrash(*originalMap, FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

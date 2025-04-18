@@ -392,6 +392,7 @@ public:
 
         if (!IsConfiguredFromEnv()) {
             DoUpdateConfig(TLogManagerConfig::CreateDefault(), /*fromEnv*/ false);
+            DefaultConfigured_.store(true);
         }
 
         SystemCategory_ = GetCategory(SystemLoggingCategoryName);
@@ -428,6 +429,13 @@ public:
         if (sync) {
             future.Get().ThrowOnError();
         }
+
+        DefaultConfigured_.store(false);
+    }
+
+    bool IsDefaultConfigured()
+    {
+        return DefaultConfigured_.load();
     }
 
     void ConfigureFromEnv()
@@ -1435,6 +1443,7 @@ private:
     // Incrementing version forces loggers to update their own default configuration (default level etc.).
     std::atomic<int> Version_ = 0;
 
+    std::atomic<bool> DefaultConfigured_ = false;
     std::atomic<bool> ConfiguredFromEnv_ = false;
 
     // These are just cached (for performance reason) copies from Config_.
@@ -1542,6 +1551,14 @@ void TLogManager::Configure(TLogManagerConfigPtr config, bool sync)
         return;
     }
     Impl_->Configure(std::move(config), /*fromEnv*/ false, sync);
+}
+
+bool TLogManager::IsDefaultConfigured()
+{
+    [[unlikely]] if (!Impl_->IsInitialized()) {
+        return false;
+    }
+    return Impl_->IsDefaultConfigured();
 }
 
 void TLogManager::ConfigureFromEnv()

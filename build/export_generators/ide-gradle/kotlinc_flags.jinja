@@ -12,7 +12,7 @@
 tasks.withType<KotlinCompile> {
     compilerOptions {
 {%-         for kotlinc_flag in kotlinc_flags|unique %}
-        freeCompilerArgs.add("{{ kotlinc_flag|replace(export_root, "$project_root")|replace(arcadia_root, "$project_root") }}")
+        freeCompilerArgs.add("{{ kotlinc_flag|replace(export_root, "$arcadia_root")|replace(arcadia_root, "$arcadia_root") }}")
 {%-         endfor %}
     }
 }

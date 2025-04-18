@@ -143,7 +143,7 @@ public:
                                 .Usable = usable,
                                 .NumSlots = pdisk.GetNumActiveSlots(),
                                 .MaxSlots = pdisk.GetExpectedSlotCount(),
-                                .SlotUnitSizeInt = pdisk.GetSlotUnitSizeInt(),
+                                .SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, // TODO pdisk.GetSlotSizeUnitsInt()
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,

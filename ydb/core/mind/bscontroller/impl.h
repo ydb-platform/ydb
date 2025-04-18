@@ -336,7 +336,7 @@ public:
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
         ui32 NumActiveSlots = 0; // number of active VSlots created over this PDisk
-        NKikimrBlobStorage::TPDiskSlotUnitSize::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -443,8 +443,8 @@ public:
                     ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
                     HasExpectedSlotCount = true;
                 }
-                if (pdiskConfig.HasSlotUnitSize()) {
-                    SlotSizeUnits = pdiskConfig.GetSlotUnitSize();
+                if (pdiskConfig.HasSlotSizeUnits()) {
+                    SlotSizeUnits = pdiskConfig.GetSlotSizeUnits();
                 }
             }
         }
@@ -573,7 +573,7 @@ public:
 
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
-        TMaybe<Table::OccupySlotUnitSize::Type> OccupySlotUnitSize;
+        TMaybe<Table::SlotSizeUnits::Type> SlotSizeUnits;
 
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
@@ -650,7 +650,7 @@ public:
                     Table::MainKeyVersion,
                     Table::SeenOperational,
                     Table::DecommitStatus,
-                    Table::OccupySlotUnitSize,
+                    Table::SlotSizeUnits,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
@@ -673,7 +673,7 @@ public:
                     &TGroupInfo::MainKeyVersion,
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
-                    &TGroupInfo::OccupySlotUnitSize,
+                    &TGroupInfo::SlotSizeUnits,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
@@ -700,7 +700,7 @@ public:
                    Schema::Group::MainKeyVersion::Type mainKeyVersion,
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
-                   Schema::Group::OccupySlotUnitSize::Type occupySlotUnitSize,
+                   Schema::Group::SlotSizeUnits::Type slotSizeUnits,
                    TBoxStoragePoolId storagePoolId,
                    ui32 numFailRealms,
                    ui32 numFailDomainsPerFailRealm,
@@ -719,7 +719,7 @@ public:
             , MainKeyVersion(mainKeyVersion)
             , PersistedDown(down)
             , SeenOperational(seenOperational)
-            , OccupySlotUnitSize(occupySlotUnitSize)
+            , SlotSizeUnits(slotSizeUnits)
             , Down(PersistedDown)
             , VDisksInGroup(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain)
             , StoragePoolId(storagePoolId)
@@ -1203,7 +1203,7 @@ public:
         TMaybe<ui64> SchemeshardId;
         TMaybe<ui64> PathItemId;
         bool RandomizeGroupMapping;
-        TMaybe<Table::OccupySlotUnitSize::Type> OccupySlotUnitSize;
+        TMaybe<Table::DefaultSlotSizeUnits::Type> DefaultSlotSizeUnits;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1306,7 +1306,7 @@ public:
                     Table::SchemeshardId,
                     Table::PathItemId,
                     Table::RandomizeGroupMapping,
-                    Table::OccupySlotUnitSize,
+                    Table::DefaultSlotSizeUnits,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1333,7 +1333,7 @@ public:
                     &TStoragePoolInfo::SchemeshardId,
                     &TStoragePoolInfo::PathItemId,
                     &TStoragePoolInfo::RandomizeGroupMapping,
-                    &TStoragePoolInfo::OccupySlotUnitSize,
+                    &TStoragePoolInfo::DefaultSlotSizeUnits,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );

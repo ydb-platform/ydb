@@ -956,8 +956,8 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
-            if (pool.OccupySlotUnitSize.Defined()) {
-                pb->MutableOccupySlotUnitSize()->SetValue(*pool.OccupySlotUnitSize.Get());
+            if (pool.DefaultSlotSizeUnits.Defined()) {
+                pb->MutableDefaultSlotSizeUnits()->SetValue(*pool.DefaultSlotSizeUnits.Get());
             }
 
             for (const auto &userId : pool.UserIds) {
@@ -1062,8 +1062,8 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
-            if (group.OccupySlotUnitSize.Defined()) {
-                pb->MutableOccupySlotUnitSize()->SetValue(*group.OccupySlotUnitSize.Get());
+            if (group.SlotSizeUnits.Defined()) {
+                pb->MutableSlotSizeUnits()->SetValue(*group.SlotSizeUnits.Get());
             }
 
             const auto& status = group.Status;
@@ -1193,8 +1193,8 @@ namespace NKikimr::NBsController {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
 
-            if (groupInfo.OccupySlotUnitSize.Defined()) {
-                group->MutableOccupySlotUnitSize()->SetValue(*groupInfo.OccupySlotUnitSize.Get());
+            if (groupInfo.SlotSizeUnits.Defined()) {
+                group->MutableSlotSizeUnits()->SetValue(*groupInfo.SlotSizeUnits.Get());
             }
         }
 

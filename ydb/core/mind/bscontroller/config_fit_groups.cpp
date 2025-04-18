@@ -131,7 +131,7 @@ namespace NKikimr {
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
                     groupKeyNonce, MainKeyVersion, false, false,
-                    StoragePool.OccupySlotUnitSize.GetOrElse(NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified),
+                    StoragePool.DefaultSlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED),
                     StoragePoolId, Geometry.GetNumFailRealms(),
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
@@ -431,7 +431,7 @@ namespace NKikimr {
                 State.CheckConsistency();
             }
 
-        private:            
+        private:
             template<typename T>
             std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
                     const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(

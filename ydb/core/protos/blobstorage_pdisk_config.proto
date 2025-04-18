@@ -11,7 +11,7 @@ message TPDiskSlotSizeUnits {
         DOUBLE = 2;
     }
 
-    optional E Velue = 1;
+    optional E Value = 1;
 }
 
 // sets the parameters of PDisk

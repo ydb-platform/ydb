@@ -32,7 +32,7 @@ def do(args):
         'Guid',
         'NumStaticSlots',
         'ExpectedSlotCount',
-        'SlotUnitSize',
+        'SlotSizeUnits',
         'PDiskConfig',
         'Usage',
         'UsedSize',
@@ -48,7 +48,7 @@ def do(args):
         'FQDN',
         'Path',
         'Type',
-        'SlotUnitSize',
+        'SlotSizeUnits',
         'Status',
         'DecommitStatus',
     ]
@@ -92,7 +92,7 @@ def do(args):
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
         row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
-        row['SlotUnitSize'] = kikimr_pdisk_config.TPDiskSlotUnitSize.E.Name(pdisk.PDiskConfig.SlotUnitSize)
+        row['SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(pdisk.PDiskConfig.SlotSizeUnits)
         row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize
         row['TotalSize'] = pdisk.PDiskMetrics.TotalSize

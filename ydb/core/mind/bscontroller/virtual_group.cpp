@@ -71,7 +71,7 @@ namespace NKikimr::NBsController {
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
             TString(), TString(), 0u, 0u, false, false,
-            NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified,
+            NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
             storagePoolId, 0u, 0u, 0u);
 
         // bind group to storage pool

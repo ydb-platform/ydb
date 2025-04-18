@@ -66,9 +66,9 @@ struct Schema : NIceDb::Schema {
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
-        struct OccupySlotUnitSize : Column<16, NScheme::NTypeIds::Uint32> {
-            using Type = NKikimrBlobStorage::TPDiskSlotUnitSize::E;
-            static constexpr Type Default = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified;
+        struct SlotSizeUnits : Column<16, NScheme::NTypeIds::Uint32> {
+            using Type = NKikimrBlobStorage::TPDiskSlotSizeUnits::E;
+            static constexpr Type Default = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
         };
 
         // VirtualGroup management code
@@ -85,7 +85,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, OccupySlotUnitSize, VirtualGroupName, VirtualGroupState, HiveId, Database,
+              SeenOperational, DecommitStatus, SlotSizeUnits, VirtualGroupName, VirtualGroupState, HiveId, Database,
               BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics>;
     };
 
@@ -313,9 +313,9 @@ struct Schema : NIceDb::Schema {
         struct RandomizeGroupMapping : Column<25, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         // every VDisk of the storage group will occupy at least this count of PDisk slot units.
         // Value 0 stands for Unspecified and being handled as 1.
-        struct OccupySlotUnitSize : Column<26, NScheme::NTypeIds::Int32> {
-            using Type = NKikimrBlobStorage::TPDiskSlotUnitSize::E;
-            static constexpr Type Default = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified;
+        struct DefaultSlotSizeUnits : Column<26, NScheme::NTypeIds::Int32> {
+            using Type = NKikimrBlobStorage::TPDiskSlotSizeUnits::E;
+            static constexpr Type Default = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
         };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
@@ -323,7 +323,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
           DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
           VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
-          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping, OccupySlotUnitSize>;
+          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping, DefaultSlotSizeUnits>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

@@ -148,16 +148,16 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
-                        // case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSlotUnitSize: {
-                        //     const auto& p_slot_unit_size = p.GetSlotUnitSize().GetValue();
-                        //     if (p_slot_unit_size == NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified) {
-                        //         Y_DEBUG_ABORT("Invalid PDiskFilter with SlotUnitSize value unspecified");
+                        // case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSlotSizeUnits: {
+                        //     const auto& p_slot_size_units = p.GetSlotSizeUnits().GetValue();
+                        //     if (NKikimrBlobStorage::TPDiskSlotSizeSpecified(p_slot_size_units)) {
+                        //         Y_DEBUG_ABORT("Invalid PDiskFilter with SlotSizeUnits value unspecified");
                         //         break;
                         //     }
-                        //     if (slotUnitSize == NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified) {
-                        //         slotUnitSize = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitSingle;
+                        //     if (NKikimrBlobStorage::TPDiskSlotSizeSpecified(slotSizeUnits)) {
+                        //         slotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::SINGLE;
                         //     }
-                        //     pMatch = p_slot_unit_size == slotUnitSize;
+                        //     pMatch = p_slot_size_units == slotSizeUnits;
                         //     break;
                         // }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
@@ -401,14 +401,14 @@ namespace NKikimr::NStorage {
                 throw TExConfigError() << "no location for node";
             }
 
-            ui32 slotUnitSizeInt = 1;
             ui32 maxSlots = defaultMaxSlots;
+            auto slotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
-                    slotUnitSizeInt = TPDiskConfig::SlotSizeUnitsToInt(pdiskConfig.GetSlotUnitSize());
                 }
+                slotSizeUnits = pdiskConfig.GetSlotSizeUnits();
             }
 
             mapper.RegisterPDisk({
@@ -417,7 +417,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
-                .SlotUnitSizeInt = slotUnitSizeInt,
+                .SlotSizeUnits = slotSizeUnits,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

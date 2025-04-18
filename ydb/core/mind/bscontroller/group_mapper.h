@@ -57,7 +57,7 @@ namespace NKikimr {
                 const bool Usable;
                 ui32 NumSlots;
                 const ui32 MaxSlots;
-                const ui32 SlotUnitSizeInt;
+                const NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
                 TStackVec<ui32, 16> Groups;
                 i64 SpaceAvailable;
                 const bool Operational;
@@ -117,7 +117,7 @@ namespace NKikimr {
                 TMisplacedVDisks(EFailLevel failLevel, std::vector<TVDiskIdShort> disks, TString errorReason = "")
                     : FailLevel(failLevel)
                     , Disks(std::move(disks))
-                    , ErrorReason(errorReason) 
+                    , ErrorReason(errorReason)
                 {}
 
                 EFailLevel FailLevel;
@@ -131,7 +131,7 @@ namespace NKikimr {
 
             TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group);
 
-            std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
+            std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk,
                 TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
         };
 

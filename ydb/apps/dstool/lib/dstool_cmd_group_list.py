@@ -33,7 +33,7 @@ def do(args):
         'PoolId',
         'Generation',
         'ErasureSpecies',
-        'OccupySlotUnitSize',
+        'SlotSizeUnits',
         'ExpectedStatus',
         'OperatingStatus',
         'SeenOperational',
@@ -58,7 +58,7 @@ def do(args):
         'PoolName',
         'Generation',
         'ErasureSpecies',
-        'OccupySlotUnitSize',
+        'SlotSizeUnits',
         'OperatingStatus',
         'VDisks_TOTAL',
     ]
@@ -89,7 +89,7 @@ def do(args):
         group_stat['GroupId'] = group.GroupId
         group_stat['Generation'] = group.GroupGeneration
         group_stat['ErasureSpecies'] = group.ErasureSpecies
-        group_stat['OccupySlotUnitSize'] = kikimr_pdisk_config.TPDiskSlotUnitSize.E.Name(group.OccupySlotUnitSize and group.OccupySlotUnitSize.Value or 0)
+        group_stat['SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(group.SlotSizeUnits and group.SlotSizeUnits.Value or 0)
         group_stat['ExpectedStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.ExpectedStatus)
         group_stat['OperatingStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)
         group_stat['SeenOperational'] = group.SeenOperational

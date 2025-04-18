@@ -213,6 +213,19 @@ public:
     };
     TTenantInitState::EInitState InitState = TTenantInitState::InvalidState;
 
+    struct TActivationOpts {
+        TSideEffects::TPublications DelayPublications;
+        TVector<ui64> ExportIds;
+        TVector<ui64> ImportsIds;
+        TVector<TPathId> CdcStreamScans;
+        TVector<TPathId> TablesToClean;
+        TDeque<TPathId> BlockStoreVolumesToClean;
+        TVector<TPathId> RestoreTablesToUnmark;
+    };
+
+    std::optional<TActivationOpts> DelayedActivationOpts;
+    bool IsWaitingConsoleConfigs = false;
+
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
 
@@ -887,17 +900,9 @@ public:
     struct TTxInitTenantSchemeShard;
     NTabletFlatExecutor::ITransaction* CreateTxInitTenantSchemeShard(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev);
 
-    struct TActivationOpts {
-        TSideEffects::TPublications DelayPublications;
-        TVector<ui64> ExportIds;
-        TVector<ui64> ImportsIds;
-        TVector<TPathId> CdcStreamScans;
-        TVector<TPathId> TablesToClean;
-        TDeque<TPathId> BlockStoreVolumesToClean;
-        TVector<TPathId> RestoreTablesToUnmark;
-    };
-
     void SubscribeToTempTableOwners();
+
+    void ActivateAfterConsoleConfigs(const TActorContext& ctx);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

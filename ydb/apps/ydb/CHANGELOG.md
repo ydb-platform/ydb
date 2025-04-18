@@ -1,3 +1,4 @@
+* Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands.
 * Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
 * Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.

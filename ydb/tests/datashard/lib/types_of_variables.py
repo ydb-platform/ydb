@@ -73,7 +73,6 @@ index_four_sync = {
     "Uint8": lambda i: i,
 }
 
-
 index_first = {
     "Int64": lambda i: i,
     "Uint64": lambda i: i,

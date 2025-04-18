@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta
-import time
 import os
 import subprocess
 import pytest
 
+from datetime import datetime, timedelta
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
+from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
 
 
@@ -99,25 +99,9 @@ class TestTTL(TestBase):
     )
     def test_ttl(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.ttl_time_sec(1)
-        columns = {
-            "pk_": pk_types.keys(),
-            "col_": all_types.keys(),
-            "col_index_": index.keys(),
-            "ttl_": [ttl]
-        }
-        pk_columns = {
-            "pk_": pk_types.keys()
-        }
-        index_columns = {
-            "col_index_": index.keys()
-        }
-        sql_create_table = create_table_sql_request(
-            table_name, columns, pk_columns, index_columns, unique, sync)
-        self.query(sql_create_table)
-        if ttl != "":
-            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
-                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
-            self.query(sql_ttl)
+        dml = DMLOperations(self)
+        dml.create_table(table_name, pk_types, all_types,
+                         index, ttl, unique, sync)
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index)
 
@@ -136,7 +120,6 @@ class TestTTL(TestBase):
             old_date = str(old_date.date())
             future_time_5_sec = str(future_time_5_sec.date())
             future_time = str(future_time.date())
-        print(f"{table_name} insert")
         for i in range(1, 3):
             self.create_insert(table_name, pk_types,
                                all_types, index, ttl, i, old_date)
@@ -149,7 +132,6 @@ class TestTTL(TestBase):
         for i in range(7, 9):
             self.create_insert(table_name, pk_types,
                                all_types, index, ttl, i, future_time)
-        print(f"{table_name} insert ok")
 
     def create_insert(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, value: int, date):
         insert_sql = f"""
@@ -191,17 +173,8 @@ class TestTTL(TestBase):
                 {" and " if len(create_all_type) != 0 else ""}
                 {" and ".join(create_all_type)}
                 """
-        start_time = time.time()
-        max_wait_time = 150
-        while True:
-            rows = self.query(sql_select)
-            if (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1:
-                print(time.time() - start_time)
-                break
-            elapsed_time = time.time() - start_time
-            if elapsed_time >= max_wait_time:
-                break
-            time.sleep(1)
+        wait_for(self.create_predicate(
+            sql_select, expected_count_rows), timeout_seconds=150)
         rows = self.query(sql_select)
         assert len(
             rows) == 1 and rows[0].count == expected_count_rows, f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"
@@ -241,3 +214,9 @@ class TestTTL(TestBase):
         ]
         command = subprocess.run(args, capture_output=True)
         assert command.returncode == 0, command.stderr.decode("utf-8")
+
+    def create_predicate(self, sql_select, expected_count_rows):
+        def predicate():
+            rows = self.query(sql_select)
+            return (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1
+        return predicate

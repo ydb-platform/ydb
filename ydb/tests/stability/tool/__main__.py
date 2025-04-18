@@ -8,6 +8,7 @@ import stat
 import sys
 import argparse
 import re
+import time
 
 from library.python import resource
 
@@ -574,8 +575,8 @@ def main():
                         'workload', 'log', 'run', 'insert',
                         '--rows', "2000",
                         '--threads', '10',
-                        '--date-from', '1744521956',
-                        '--date-to', '1744721956',
+                        '--date-from', f'{int(time.time()) - 86400 * 2}',
+                        '--date-to', f'{int(time.time())}',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
                         '; done"'

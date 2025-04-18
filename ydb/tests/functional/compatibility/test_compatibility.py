@@ -18,12 +18,16 @@ prev_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibi
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
+    [current_binary_path, last_stable_binary_path],
+    [current_binary_path, prev_stable_binary_path],
     [last_stable_binary_path, current_binary_path],
     [prev_stable_binary_path, current_binary_path],
     [prev_stable_binary_path, last_stable_binary_path],
     [last_stable_binary_path, prev_stable_binary_path],
 ]
 all_binary_combinations_ids = [
+    "current_to_last_stable",
+    "current_to_prev_stable",
     "last_stable_to_current",
     "prev_stable_to_current",
     "prev_stable_to_last_stable",

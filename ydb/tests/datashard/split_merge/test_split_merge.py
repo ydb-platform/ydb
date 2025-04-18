@@ -1,9 +1,11 @@
 import pytest
-import time
+from uuid import UUID
+from datetime import datetime
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
-from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, pk_types, non_pk_types, index_first, index_second, ttl_types, \
+from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.datashard.lib.dml_operations import DMLOperations
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
 
@@ -41,158 +43,82 @@ class TestSplitMerge(TestBase):
             ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
             ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
             ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
-            ("table_Int64", {"Int64": "CAST({} AS Int64)"},
-             {}, {}, "", "", ""),
-            ("table_Int32", {"Int32": "CAST({} AS Int32)"},
-             {}, {}, "", "", ""),
-            # ("table_Int16", {"Int16": "CAST({} AS Int16)"},
-            # {}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
-            ("table_Int8", {"Int8": "CAST({} AS Int8)"}, {}, {}, "", "", ""),
-            ("table_Uint64", {"Uint64": "CAST({} AS Uint64)"},
-             {}, {}, "", "", ""),
-            ("table_Uint32", {"Uint32": "CAST({} AS Uint32)"},
-             {}, {}, "", "", ""),
-            # ("table_Uint16", {"Uint16": "CAST({} AS Uint16)"},
-            # {}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
-            ("table_Uint8", {"Uint8": "CAST({} AS Uint8)"},
-             {}, {}, "", "", ""),
+            ("table_Int64", {"Int64": lambda i: i},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_Int32", {"Int32": lambda i: i},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
+            # ("table_Int16", {"Int16": lambda i: i},
+            # {**pk_types, **non_pk_types}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Int8", {"Int8": lambda i: i}, {
+             **pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_Uint64", {"Uint64": lambda i: i},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_Uint32", {"Uint32": lambda i: i},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
+            # ("table_Uint16", {"Uint16": lambda i: i},
+            # {**pk_types, **non_pk_types}, {}, "", "", ""), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Uint8", {"Uint8": lambda i: i},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Decimal150", {
-             "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))"}, {}, {}, "", "", ""),
+                "Decimal(15,0)": lambda i: "{}".format(i)}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Decimal229", {
-             "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))"}, {}, {}, "", "", ""),
+             "Decimal(22,9)": lambda i: "{}.123".format(i)}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Decimal3510", {
-             "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))"}, {}, {}, "", "", ""),
+             "Decimal(35,10)": lambda i: "{}.123456".format(i)}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_DyNumber", {
-             "DyNumber": "CAST('{}E1' AS DyNumber)"}, {}, {}, "", "", ""),
-            ("table_String", {"String": "'String {}'"}, {}, {}, "", "", ""),
-            ("table_Utf8", {"Utf8": "'Utf8 {}'"}, {}, {}, "", "", ""),
+             "DyNumber": lambda i: float(f"{i}e1")}, {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_String", {
+             "String": lambda i: f"String {i}"}, {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_Utf8", {"Utf8": lambda i: f"Utf8 {i}"},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_UUID", {"Utf8": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i))},
+             {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Date", {
-             "Date": "CAST('2{:03}-01-01' AS Date)"}, {}, {}, "", "", ""),
+             "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date()}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Datetime", {
-             "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)"}, {}, {}, "", "", ""),
+             "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ")}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Timestamp", {
-             "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)"}, {}, {}, "", "", ""),
+             "Timestamp": lambda i: 1696200000000000 + i * 100000000}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Interval", {
-             "Interval": "CAST({} AS Interval)"}, {}, {}, "", "", ""),
+             "Interval": lambda i: i}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Date32", {
-             "Date32": "CAST('2{:03}-01-01' AS Date32)"}, {}, {}, "", "", ""),
+             "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date()}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Datetime64", {
-             "Datetime64": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime64)"}, {}, {}, "", "", ""),
+             "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ")}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Timestamp64", {
-             "Timestamp64": "CAST(16962{:03}00000000 AS Timestamp64)"}, {}, {}, "", "", ""),
+             "Timestamp64": lambda i: 1696200000000000 + i * 100000000}, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_Interval64", {
-             "Interval64": "CAST({} AS Interval64)"}, {}, {}, "", "", ""),
+             "Interval64": lambda i: i}, {**pk_types, **non_pk_types}, {}, "", "", ""),
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         big_line = "a" * 100_000
-        all_types["String"] = "'String " + big_line + "{}'"
-        self.create_table(table_name, pk_types, all_types,
-                          index, ttl, unique, sync)
-        self.query(
+        all_types["String"] = lambda i: f"String {big_line}{i}"
+        dml = DMLOperations(self)
+        dml.create_table(table_name, pk_types, all_types,
+                         index, ttl, unique, sync)
+        dml.query(
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
-        self.insert(table_name, all_types, pk_types, index, ttl)
-        for _ in range(150):
-            rows = self.query("""SELECT
-                count(*) as count
-                FROM `.sys/partition_stats`
-                """)
-            if rows[0].count != 1 + len(index):
-                break
-            time.sleep(1)
-        assert len(
-            rows) == 1 and rows[0].count != 1 + len(index), f"The table {table_name} is not split into partition"
-        self.select_after_insert(table_name, all_types, pk_types, index, ttl)
-        self.query(
+        dml.insert(table_name, all_types, pk_types, index, ttl)
+        is_split = wait_for(self.create_predicate(
+            True, index), timeout_seconds=150)
+        assert is_split is True, f"The table {table_name} is not split into partition"
+        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        dml.query(
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
-        for _ in range(150):
+        is_merge = wait_for(self.create_predicate(
+            False, index), timeout_seconds=150)
+        assert is_merge is True, f"the table {table_name} is not merge into one partition"
+        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+
+    def create_predicate(self, is_split, index):
+        def predicate():
             rows = self.query("""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 """)
-            if rows[0].count == 1 + len(index):
-                break
-            time.sleep(1)
-        assert len(
-            rows) == 1 and rows[0].count == 1 + len(index), f"the table {table_name} is not merge into one partition"
-        self.select_after_insert(table_name, all_types, pk_types, index, ttl)
-
-    def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        columns = {
-            "pk_": pk_types.keys(),
-            "col_": all_types.keys(),
-            "col_index_": index.keys(),
-            "ttl_": [ttl]
-        }
-        pk_columns = {
-            "pk_": pk_types.keys()
-        }
-        index_columns = {
-            "col_index_": index.keys()
-        }
-        sql_create_table = create_table_sql_request(
-            table_name, columns, pk_columns, index_columns, unique, sync)
-        self.query(sql_create_table)
-        if ttl != "":
-            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
-                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
-            self.query(sql_ttl)
-
-    def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        number_of_columns = len(pk_types) + len(all_types) + len(index)
-
-        if ttl != "":
-            number_of_columns += 1
-
-        if number_of_columns < 24:
-            number_of_columns = 24
-        for count in range(1, number_of_columns + 1):
-            self.create_insert(table_name, count, all_types,
-                               pk_types, index, ttl)
-
-    def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        insert_sql = f"""
-            INSERT INTO {table_name}(
-                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {f"ttl_{ttl}" if ttl != "" else ""}
-            )
-            VALUES(
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {ttl_types[ttl].format(value) if ttl != "" else ""}
-            );
-        """
-        self.query(insert_sql)
-
-    def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        number_of_columns = len(pk_types) + len(all_types) + len(index)
-
-        if ttl != "":
-            number_of_columns += 1
-        if number_of_columns < 24:
-            number_of_columns = 24
-        for count in range(1, number_of_columns + 1):
-            create_all_type = []
-            for type_name in all_types.keys():
-                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                    create_all_type.append(
-                        f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(count)}")
-            sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count)}" for type_name in pk_types.keys()])}
-                {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(count)}" for type_name in index.keys()])}
-                {" and " if len(create_all_type) != 0 else ""}
-                {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={ttl_types[ttl].format(count)}" if ttl != "" else ""}
-                """
-            rows = self.query(sql_select)
-            assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
-
-        rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
-        assert len(
-            rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
+            if is_split:
+                return rows[0].count != 1 + len(index)
+            else:
+                return rows[0].count == 1 + len(index)
+        return predicate

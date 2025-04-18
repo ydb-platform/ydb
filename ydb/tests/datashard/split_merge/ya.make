@@ -4,7 +4,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(44)
+SPLIT_FACTOR(45)
 SIZE(MEDIUM)
 
 
@@ -15,6 +15,7 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/sql/lib
+    ydb/tests/library
     ydb/tests/datashard/lib
 )
 

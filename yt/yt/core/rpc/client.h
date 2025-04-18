@@ -444,11 +444,11 @@ struct TServiceDescriptor
 
 struct TMethodDescriptor
 {
-    TString MethodName;
+    std::string MethodName;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
     bool StreamingEnabled = false;
 
-    explicit TMethodDescriptor(const TString& methodName);
+    explicit TMethodDescriptor(std::string methodName);
 
     TMethodDescriptor& SetMultiplexingBand(EMultiplexingBand value);
     TMethodDescriptor& SetStreamingEnabled(bool value);

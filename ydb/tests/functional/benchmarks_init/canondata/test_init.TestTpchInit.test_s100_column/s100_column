@@ -15,7 +15,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
 PARTITION BY HASH (c_custkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
@@ -40,7 +40,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
 PARTITION BY HASH (l_orderkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
@@ -71,7 +71,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
 PARTITION BY HASH (o_orderkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
@@ -89,7 +89,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
 PARTITION BY HASH (p_partkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
@@ -103,7 +103,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
 PARTITION BY HASH (ps_partkey, ps_suppkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
@@ -131,7 +131,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
 PARTITION BY HASH (s_suppkey)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 256
 );
 
 Init tables ...Ok

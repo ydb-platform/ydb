@@ -35,6 +35,22 @@ const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
+namespace {
+
+    TString KeysList(const NJson::TJsonValue& table, const TString& key) {
+        TVector<TStringBuf> keysV;
+        for (const auto& k: table[key].GetArray()) {
+            keysV.emplace_back(k.GetString());
+        }
+        return JoinSeq(", ", keysV);
+    }
+
+}
+
+ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return 64;
+}
+
 void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
@@ -65,11 +81,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         }
     }
     result << JoinSeq(",\n", columns);
-    TVector<TStringBuf> keysV;
-    for (const auto& k: table["primary_key"].GetArray()) {
-        keysV.emplace_back(k.GetString());
-    }
-    const TString keys = JoinSeq(", ", keysV);
+    const auto keys = KeysList(table, "primary_key");
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << Endl;
     } else {
@@ -78,7 +90,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     result << ")" << Endl;
 
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
-        result << "PARTITION BY HASH (" << keys << ")" << Endl;
+        result << "PARTITION BY HASH (" <<  (table.Has("partition_by") ? KeysList(table, "partition_by") : keys) << ")" << Endl;
     }
 
     result << "WITH (" << Endl;
@@ -89,12 +101,12 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         break;
     case TWorkloadBaseParams::EStoreType::Column:
         result << "    STORE = COLUMN," << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)) << Endl;
         break;
     case TWorkloadBaseParams::EStoreType::Row:
         result << "    STORE = ROW," << Endl;
         result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)) << Endl;
     }
     result << ");" << Endl;
 }

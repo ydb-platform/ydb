@@ -177,7 +177,7 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
-        opts.AddLongOption("scale", "Option sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
+        opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         break;
     default:

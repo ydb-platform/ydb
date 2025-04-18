@@ -992,8 +992,8 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
-    *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-    *request.mutable_rows()->mutable_value() = rows.GetProto();
+    *request.mutable_rows()->mutable_type() = std::move(rows.GetType()).ExtractProto();
+    *request.mutable_rows()->mutable_value() = std::move(rows).ExtractProto();
 
     auto promise = NewPromise<TBulkUpsertResult>();
 

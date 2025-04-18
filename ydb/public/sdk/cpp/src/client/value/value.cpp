@@ -111,6 +111,10 @@ Ydb::Type& TType::GetProto()
     return Impl_->ProtoType_;
 }
 
+Ydb::Type TType::ExtractProto() && {
+    return std::move(Impl_->ProtoType_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTypeParser::TImpl {
@@ -1078,6 +1082,10 @@ const Ydb::Value& TValue::GetProto() const {
 
 Ydb::Value& TValue::GetProto() {
     return Impl_->ProtoValue_;
+}
+
+Ydb::Value TValue::ExtractProto() && {
+    return std::move(Impl_->ProtoValue_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

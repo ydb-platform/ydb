@@ -17,7 +17,7 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 {%             for classpath in classpaths -%}
 {%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '') %}
 
-    val classpaths = "$project_root/" + File("$project_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$project_root/")
+    val classpaths = "$arcadia_root/" + File("$arcadia_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$arcadia_root/")
     classpath = files(classpaths.split(":"))
 {%-            endfor -%}
 {%-        endif %}

@@ -1,6 +1,6 @@
 {#- empty string #}
 val baseBuildDir = "{{ export_root }}/gradle.build"
-buildDir = file(baseBuildDir + "/" + project.path.replace(":", "/"))
+buildDir = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
 subprojects {
-    buildDir = file(baseBuildDir + "/" + project.path.replace(":", "/"))
+    buildDir = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
 }

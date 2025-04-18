@@ -148,6 +148,7 @@ message TQueryRequest {
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
     optional string DatabaseId = 36;
+    optional Ydb.Query.ResultType ResultType = 37;
 }
 
 message TKqpPathIdProto {

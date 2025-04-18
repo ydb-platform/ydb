@@ -31,7 +31,7 @@ on:
         description: 'Branches to test (JSON array or single branch)'
         required: false
         type: string
-        default: '[]'
+        default: '["main"]'
 
   workflow_dispatch:
     inputs:

@@ -39,7 +39,8 @@ private:
     bool Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
     bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
 
-    void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues);
+    void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId);
 
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);

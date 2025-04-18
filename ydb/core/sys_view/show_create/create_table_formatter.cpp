@@ -409,10 +409,11 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const NKik
 
     if (!tableDesc.GetCdcStreams().empty()) {
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size());
+        auto firstColumnTypeId = columns[tableDesc.GetKeyColumnIds(0)]->GetTypeId();
         try {
-            Format(tablePath, tableDesc.GetCdcStreams(0), persQueues);
+            Format(tablePath, tableDesc.GetCdcStreams(0), persQueues, firstColumnTypeId);
             for (int i = 1; i < tableDesc.GetCdcStreams().size(); i++) {
-                Format(tablePath, tableDesc.GetCdcStreams(i), persQueues);
+                Format(tablePath, tableDesc.GetCdcStreams(i), persQueues, firstColumnTypeId);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -888,7 +889,8 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
     return true;
 }
 
-void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues) {
+void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId) {
     Stream << "ALTER TABLE ";
     EscapeName(tablePath, Stream);
     Stream << "\n\t";
@@ -980,9 +982,16 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     if (persQueue.HasTotalGroupCount()) {
-        Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
-        Stream << persQueue.GetTotalGroupCount();
-        del = ", ";
+        switch (firstColumnTypeId) {
+            case NScheme::NTypeIds::Uint32:
+            case NScheme::NTypeIds::Uint64:
+            case NScheme::NTypeIds::Uuid: {
+                Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
+                Stream << persQueue.GetTotalGroupCount();
+                del = ", ";
+                break;
+            }
+        }
     }
 
     if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {

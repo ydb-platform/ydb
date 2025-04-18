@@ -45,6 +45,7 @@ PEERDIR(
     yql/essentials/providers/result/provider
     ydb/library/yql/providers/s3/expr_nodes
     ydb/public/sdk/cpp/src/client/impl/ydb_internal/common
+    ydb/core/tx/schemeshard/olap/column_family
 )
 
 YQL_LAST_ABI_VERSION()

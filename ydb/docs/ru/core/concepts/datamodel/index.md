@@ -24,6 +24,6 @@
 * [Подключения к внешним БД](external_data_source.md)
 * [Внешние источники данных](external_table.md)
 
-Все [схемные объекты](../../concepts/glossary.md#scheme-object) в {{ ydb-short-name }} имеют одинаковые требования к своим наименованиям. Но правила наименования колонок немного отличаются от правил для схемных объектов.
+Все схемные объекты в {{ ydb-short-name }} имеют одинаковые требования к своим наименованиям.
 
 {% include [object naming rules](./_includes/object-naming-rules.md) %}

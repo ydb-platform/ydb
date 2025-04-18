@@ -16,7 +16,7 @@ A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name 
 
 Like in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities like [tables](#table). However, in {{ ydb-short-name }}, the namespace inside databases is hierarchical like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [folders](#folder) allow for further organization of entities.
 
-Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating an additional database is usually done externally by [DevOps engineers](../devops/index.md) or automation rather than via a SQL query.
+Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating a database requires additional operations from [DevOps engineers](../devops/index.md).
 
 {{ ydb-short-name }} has the following database types:
 
@@ -285,7 +285,7 @@ An **authentication token** or **auth token** is a token that {{ ydb-short-name 
 
 ### User token {#user-token}
 
-When a YDB node gets a request from a [user](#access-user), it requests the service where the user was created to validate the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
+When a {{ ydb-short-name }} node gets a request from a [user](#access-user), it requests the service where the user was created to validate the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
 
 ### Cluster scheme {#scheme}
 
@@ -297,7 +297,7 @@ A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-shor
 
 ### Database root {#scheme-database-root}
 
-A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme. This path acts as a root for database scheme objects.
+A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme.
 
 ### Scheme root {#scheme-root}
 

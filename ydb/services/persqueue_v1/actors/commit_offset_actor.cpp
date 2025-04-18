@@ -106,24 +106,42 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
-        auto killReadSession = commitRequest->read_session_id().empty();
+        auto hasReadSession = !commitRequest->read_session_id().empty();
+        auto killReadSession = !hasReadSession;
+        const TString& readSessionId = commitRequest->read_session_id();
+
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->AllParents) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
+            TDistributedCommitHelper::TCommitInfo commit {
+                .PartitionId = parent->Id,
+                .Offset = Max<i64>(),
+                .KillReadSession = killReadSession,
+                .OnlyCheckCommitedToFinish = false,
+                .ReadSessionId = readSessionId
+            };
             commits.push_back(commit);
         }
 
-        for (auto& child: partitionNode->AllChildren) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
-            commits.push_back(commit);
+        if (!hasReadSession) {
+            for (auto& child: partitionNode->AllChildren) {
+                TDistributedCommitHelper::TCommitInfo commit {
+                    .PartitionId = child->Id,
+                    .Offset = 0,
+                    .KillReadSession = true,
+                    .OnlyCheckCommitedToFinish = false
+                };
+                commits.push_back(commit);
+            }
         }
 
-        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
-
-        if (!commitRequest->read_session_id().empty()) {
-            commit.ReadSessionId = commitRequest->read_session_id();
-        }
+        TDistributedCommitHelper::TCommitInfo commit {
+            .PartitionId = partitionNode->Id,
+            .Offset = commitRequest->offset(),
+            .KillReadSession = killReadSession,
+            .OnlyCheckCommitedToFinish = false,
+            .ReadSessionId = readSessionId
+        };
         commits.push_back(commit);
 
         Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);

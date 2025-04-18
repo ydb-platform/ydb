@@ -97,9 +97,11 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
+            Cerr << ">>>>>> BEGIN" << Endl << Flush;
             auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
             UNIT_ASSERT_VALUES_EQUAL(2, GetCommittedOffset(setup, 0));
+            Cerr << ">>>>>> END" << Endl << Flush;
         }
     }
 
@@ -137,13 +139,15 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         {
             auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
             UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
+            UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
             UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, 1));
         }
 
         {
             auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
-            UNIT_ASSERT_VALUES_EQUAL_C(1, GetCommittedOffset(setup, 0), "Offset doesn`t changed");
+            UNIT_ASSERT_VALUES_EQUAL_C(3, GetCommittedOffset(setup, 0), "Offset doesn`t changed");
+            UNIT_ASSERT_VALUES_EQUAL_C(1, GetCommittedOffset(setup, 1), "Offset doesn`t changed");
         }
     }
 
@@ -441,8 +445,8 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(1, counters["message-0-1"], "Message must be read 1 times because reset commit to offset 3, but 0 message has been read " << counters["message-0-1"] << " times") ;
-        UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-2"], TStringBuilder() << "Message must be read 2 times because reset commit to offset 1, but 1 message has been read " << counters["message-0-2"] << " times") ;
-        UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-3"], TStringBuilder() << "Message must be read 2 times because reset commit to offset 1, but 2 message has been read " << counters["message-0-3"] << " times") ;
+        UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-2"], "Message must be read 2 times because reset commit to offset 1, but 1 message has been read " << counters["message-0-2"] << " times") ;
+        UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-3"], "Message must be read 2 times because reset commit to offset 1, but 2 message has been read " << counters["message-0-3"] << " times") ;
 
         {
             auto s = result.StartPartitionSessionEvents[0];

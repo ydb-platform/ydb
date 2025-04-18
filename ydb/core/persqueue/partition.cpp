@@ -2343,6 +2343,74 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
+std::pair<bool, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TPartitionOperation& operation) {
+    const TString& consumer = operation.GetConsumer();
+
+    if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
+        PQ_LOG_D("Partition " << Partition <<
+                " Consumer '" << consumer << "' has been removed");
+        return {false, false};
+    }
+
+    if (!UsersInfoStorage->GetIfExists(consumer)) {
+        PQ_LOG_D("Partition " << Partition <<
+                    " Unknown consumer '" << consumer << "'");
+        return {false, false};
+    }
+
+    TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
+
+    PQ_LOG_D("CommitOperation Partition " << Partition <<
+        " Consumer '" << consumer << "'" <<
+        " RequestSessionId '" << operation.GetReadSessionId() <<
+        "' CurrentSessionId '" << userInfo.Session <<
+        "' OffsetBegin " << operation.GetCommitOffsetsBegin() <<
+        "' OffsetEnd " << operation.GetCommitOffsetsEnd() <<
+        " OnlyCheckCommitedToFinish " << operation.GetOnlyCheckCommitedToFinish() <<
+        " KillReadSession " << operation.GetKillReadSession()
+    );
+
+    if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
+        PQ_LOG_D("Partition " << Partition <<
+            " Consumer '" << consumer << "'" <<
+            " Bad request (session already dead) " <<
+            " RequestSessionId '" << operation.GetReadSessionId() <<
+            "' CurrentSessionId '" << userInfo.Session <<
+            "'");
+        return {false, false};
+    } else if (operation.GetOnlyCheckCommitedToFinish()) {
+        if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
+           return {false, false};
+        } else {
+            return {true, false};
+        }
+    } else {
+        if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+            PQ_LOG_D("Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (invalid range) " <<
+                        " Begin " << operation.GetCommitOffsetsBegin() <<
+                        " End " << operation.GetCommitOffsetsEnd());
+            return {false, true};
+        } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+            PQ_LOG_D("Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (gap) " <<
+                        " Offset " << userInfo.Offset <<
+                        " Begin " << operation.GetCommitOffsetsBegin());
+            return {false, true};
+        } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+            PQ_LOG_D("Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (behind the last offset) " <<
+                        " EndOffset " << EndOffset <<
+                        " End " << operation.GetCommitOffsetsEnd());
+            return {false, true};
+        }
+        return {true, true};
+    }
+}
+
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
 {
     if (tx.ForcePredicateFalse) {
@@ -2361,60 +2429,13 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             return EProcessResult::Blocked;
         }
 
-        if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
-            PQ_LOG_D("Partition " << Partition <<
-                    " Consumer '" << consumer << "' has been removed");
-            result = false;
-            break;
-        }
+        auto [r, real] = ValidatePartitionOperation(operation);
+        result = r;
 
-        if (!UsersInfoStorage->GetIfExists(consumer)) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Unknown consumer '" << consumer << "'");
-            result = false;
-            break;
-        }
+        if (real) {
+            if (!r) {
+                bool isAffectedConsumer = AffectedUsers.contains(consumer);
 
-        bool isAffectedConsumer = AffectedUsers.contains(consumer);
-        TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
-
-        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
-            PQ_LOG_D("Partition " << Partition <<
-                " Consumer '" << consumer << "'" <<
-                " Bad request (session already dead) " <<
-                " RequestSessionId '" << operation.GetReadSessionId() <<
-                " CurrentSessionId '" << userInfo.Session <<
-                "'");
-            result = false;
-        } else if (operation.GetOnlyCheckCommitedToFinish()) {
-            if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
-               result = false;
-            }
-        } else {
-            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
-                PQ_LOG_D("Partition " << Partition <<
-                            " Consumer '" << consumer << "'" <<
-                            " Bad request (invalid range) " <<
-                            " Begin " << operation.GetCommitOffsetsBegin() <<
-                            " End " << operation.GetCommitOffsetsEnd());
-                result = false;
-            } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
-                PQ_LOG_D("Partition " << Partition <<
-                            " Consumer '" << consumer << "'" <<
-                            " Bad request (gap) " <<
-                            " Offset " << userInfo.Offset <<
-                            " Begin " << operation.GetCommitOffsetsBegin());
-                result = false;
-            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
-                PQ_LOG_D("Partition " << Partition <<
-                            " Consumer '" << consumer << "'" <<
-                            " Bad request (behind the last offset) " <<
-                            " EndOffset " << EndOffset <<
-                            " End " << operation.GetCommitOffsetsEnd());
-                result = false;
-            }
-
-            if (!result) {
                 if (!isAffectedConsumer) {
                     AffectedUsers.erase(consumer);
                 }
@@ -2422,7 +2443,11 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             }
             consumers.insert(consumer);
         }
+        if (!r) {
+            break;
+        }
     }
+
     if (result) {
         TxAffectedConsumers.insert(consumers.begin(), consumers.end());
     }
@@ -2586,6 +2611,9 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
         for (auto& operation : t->Tx->Operations) {
+
+            Cerr << ">>>>> CommitTransaction " << Endl << Flush;
+
             if (operation.GetOnlyCheckCommitedToFinish()) {
                 continue;
             }
@@ -2913,6 +2941,16 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "incorrect offset range (begin > end)");
             return EProcessResult::ContinueDrop;
         }
+
+        auto [r, _] = ValidatePartitionOperation(operation);
+        if (!r) {
+            ScheduleReplyPropose(tx,
+                NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                NKikimrPQ::TError::BAD_REQUEST,
+                "incorrect request");
+            return EProcessResult::ContinueDrop;
+        }
+
         consumers.insert(user);
     }
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());

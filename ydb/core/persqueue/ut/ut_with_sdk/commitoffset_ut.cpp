@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
     }
 
-    Y_UNIT_TEST(Commit_WithSession_ParentNotFinished) {
+    Y_UNIT_TEST(Commit_WithSession_ParentNotFinished_SameSession) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -224,8 +224,8 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto&) {
-                return false;
+            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+                return x.GetMessages().back().GetData() != "message-3-3";
             });
 
             // Commit parent to middle
@@ -238,6 +238,32 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 3));
             UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 4));
         }
+    }
+
+    Y_UNIT_TEST(Commit_WithSession_ParentNotFinished_OtherSession) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+        TTopicClient client(setup.MakeDriver());
+
+        auto createReadSession = [&](size_t partitionId) {
+            return client.CreateReadSession(
+                TReadSessionSettings()
+                    .AutoPartitioningSupport(true)
+                    .AppendTopics(TTopicReadSettings(TEST_TOPIC).AppendPartitionIds(partitionId))
+                    .ConsumerName(TEST_CONSUMER));
+        };
+
+        auto session0 = createReadSession(0);
+        auto session1 = createReadSession(1);
+
+        auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1, session1->GetSessionId());
+        UNIT_ASSERT(!result.IsSuccess());
+
+        UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 0));
+        UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 1));
+        UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 2));
+        UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 3));
+        UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 4));
     }
 
     Y_UNIT_TEST(Commit_WithSession_ToPastParentPartition) {

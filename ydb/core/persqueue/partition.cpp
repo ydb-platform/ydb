@@ -2360,16 +2360,6 @@ std::pair<bool, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TP
 
     TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-    PQ_LOG_D("CommitOperation Partition " << Partition <<
-        " Consumer '" << consumer << "'" <<
-        " RequestSessionId '" << operation.GetReadSessionId() <<
-        "' CurrentSessionId '" << userInfo.Session <<
-        "' OffsetBegin " << operation.GetCommitOffsetsBegin() <<
-        "' OffsetEnd " << operation.GetCommitOffsetsEnd() <<
-        " OnlyCheckCommitedToFinish " << operation.GetOnlyCheckCommitedToFinish() <<
-        " KillReadSession " << operation.GetKillReadSession()
-    );
-
     if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
         PQ_LOG_D("Partition " << Partition <<
             " Consumer '" << consumer << "'" <<
@@ -2611,9 +2601,6 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         Y_ABORT_UNLESS(t->Predicate.Defined() && *t->Predicate);
 
         for (auto& operation : t->Tx->Operations) {
-
-            Cerr << ">>>>> CommitTransaction " << Endl << Flush;
-
             if (operation.GetOnlyCheckCommitedToFinish()) {
                 continue;
             }
@@ -2942,7 +2929,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        auto [r, _] = ValidatePartitionOperation(operation);
+        auto [r, real] = ValidatePartitionOperation(operation);
         if (!r) {
             ScheduleReplyPropose(tx,
                 NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
@@ -2951,7 +2938,9 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        consumers.insert(user);
+        if (real) {
+            consumers.insert(user);
+        }
     }
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
     WriteKeysSizeEstimate += consumers.size();
@@ -2975,6 +2964,10 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
+        if (operation.GetOnlyCheckCommitedToFinish()) {
+            continue;
+        }
+
         if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }

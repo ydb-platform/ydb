@@ -396,7 +396,7 @@ namespace NKikimr::NBsController {
                 if (!degraded.empty()) {
                     msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
                     if (response) {
-                        for (const auto& id: degraded) { 
+                        for (const auto& id: degraded) {
                             response->MutableGroupsGetDegraded()->Add(id.GetRawId());
                         }
                     }

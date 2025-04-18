@@ -336,6 +336,7 @@ public:
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
         ui32 NumActiveSlots = 0; // number of active VSlots created over this PDisk
+        NKikimrBlobStorage::TPDiskSlotUnitSize::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotUnitSize::kSlotUnitUnspecified;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -437,9 +438,14 @@ public:
             ExpectedSlotCount = defaultMaxSlots;
 
             NKikimrBlobStorage::TPDiskConfig pdiskConfig;
-            if (pdiskConfig.ParseFromString(PDiskConfig) && pdiskConfig.HasExpectedSlotCount()) {
-                ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
-                HasExpectedSlotCount = true;
+            if (pdiskConfig.ParseFromString(PDiskConfig)) {
+                if (pdiskConfig.HasExpectedSlotCount()) {
+                    ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
+                    HasExpectedSlotCount = true;
+                }
+                if (pdiskConfig.HasSlotUnitSize()) {
+                    SlotSizeUnits = pdiskConfig.GetSlotUnitSize();
+                }
             }
         }
 
@@ -2215,13 +2221,19 @@ public:
     void UpdatePDisksCounters() {
         ui32 numWithoutSlotCount = 0;
         ui32 numWithoutSerial = 0;
+        ui32 numWithSlotSizeUnspecified = 0;
         for (const auto& [id, pdisk] : PDisks) {
             numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
+            numWithSlotSizeUnspecified += !TPDiskConfig::SlotSizeUnitsSpecified(pdisk->SlotSizeUnits);
         }
         auto& counters = TabletCounters->Simple();
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITH_SLOT_SIZE_UNSPECIFIED].Set(numWithSlotSizeUnspecified);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
+        // TODO
+        // counters[NBlobStorageController::COUNTER_SINGLE_UNIT_VDISKS_OCCUPYING_DOUBLE_PDISK_SLOTS].Set(0);
+        // counters[NBlobStorageController::COUNTER_DOUBLE_UNIT_VDISKS_OCCUPYING_TWO_SINGLE_PDISK_SLOTS].Set(0);
 
         ui32 numFree = 0;
         ui32 numAdded = 0;
@@ -2278,7 +2290,7 @@ public:
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
             Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
-            
+
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
                 .IsReady = true,

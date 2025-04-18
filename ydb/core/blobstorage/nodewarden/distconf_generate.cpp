@@ -218,7 +218,7 @@ namespace NKikimr::NStorage {
                         pdiskInfo.Usable = false;
                         pdiskInfo.WhyUnusable += 'S';
                     }
-                    const bool usableInTermsOfDecommission = 
+                    const bool usableInTermsOfDecommission =
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
                     if (!usableInTermsOfDecommission) {

@@ -186,7 +186,7 @@ message TPDiskInfo {
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
     optional string State = 19;
-    optional uint32 SlotUnitSizeInt = 20;
+    optional uint32 SlotSizeUnitsInt = 20;
     // metrics ?
     // physical location ?
     // config ?
@@ -279,7 +279,7 @@ message TGroupInfo {
     // down/persisted down ?
     // metrics ?
     optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
-    // TODO optional uint32 OccupySlotUnitSize = 17;
+    // TODO optional uint32 DefaultSlotSizeUnits = 17;
 }
 
 message TGroupEntry {

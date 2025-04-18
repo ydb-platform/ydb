@@ -14,8 +14,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
     if (!dontNeedColumns && !source->HasStageData()) {
         if (!AskAccumulatorsScript) {
             NCommon::TFetchingScriptBuilder acc(*this);
-            acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>
-                (source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), EStageFeaturesIndexes::Accessors));
+            acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(
+                source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
             acc.AddStep(std::make_shared<TPortionAccessorFetchingStep>());
             acc.AddStep(std::make_shared<TDetectInMem>(*GetFFColumns()));
             AskAccumulatorsScript = std::move(acc).Build();
@@ -64,31 +64,31 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     NCommon::TFetchingScriptBuilder acc(*this);
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
-        acc.AddFetchingStep(columnsFetch, EStageFeaturesIndexes::Filter);
-        acc.AddAssembleStep(columnsFetch, "SPEC_SHARDING", EStageFeaturesIndexes::Filter, false);
+        acc.AddFetchingStep(columnsFetch, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
+        acc.AddAssembleStep(columnsFetch, "SPEC_SHARDING", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
         acc.AddStep(std::make_shared<TShardingFilter>());
     }
     {
         acc.SetBranchName("exclusive");
         if (needFilterDeletion) {
-            acc.AddFetchingStep(*GetDeletionColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetDeletionColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         if (partialUsageByPredicate) {
-            acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         if (needFilterDeletion) {
-            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
         }
         if (partialUsageByPredicate) {
-            acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();

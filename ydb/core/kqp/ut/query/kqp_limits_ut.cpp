@@ -101,42 +101,45 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
-        app.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(64);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(app)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
+        CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
         
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
-                    Col1 Uint64 NOT NULL,
-                    Col2 String NOT NULL,
-                    Col3 Int32 NOT NULL,
-                    PRIMARY KEY (Col1)
+                    Key Uint64,
+                    KeyText String,
+                    Data Int64,
+                    DataText String,
+                    PRIMARY KEY (Key)
                 )
-                WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);)",
+                WITH (
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8,
+                    PARTITION_AT_KEYS = (1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000)
+                );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = db.ExecuteQuery(R"(
-                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+                UPSERT INTO `/Root/DataShard` SELECT * FROM `/Root/LargeTable`;
             )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             if (!Allowed) {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_C(
                     result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
                     result.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
     }

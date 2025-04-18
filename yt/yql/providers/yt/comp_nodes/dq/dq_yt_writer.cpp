@@ -87,7 +87,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
+            return state;
         } else if (state.IsInvalid())
             MakeState(ctx, state);
 
@@ -100,7 +100,7 @@ public:
             case EFetchResult::Finish:
                 ptr->Finish();
                 state = NUdf::TUnboxedValuePod::MakeFinish();
-                return NUdf::TUnboxedValuePod::MakeFinish();
+                return state;
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN

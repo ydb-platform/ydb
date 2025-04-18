@@ -1,4 +1,4 @@
-# Reading data from an external table pointing to S3 ({{ objstorage-name }})
+# Reading Data from an External Table Pointing to S3 ({{ objstorage-name }})
 
 Sometimes, the same data queries need to be executed regularly. To avoid specifying all the details of working with this data every time a query is called, use the mode with [external tables](../../datamodel/external_table.md). In this case, the query looks like a regular query to {{ydb-full-name}} tables.
 
@@ -13,7 +13,7 @@ WHERE
     version > 1
 ```
 
-## Creating an external table pointing to an S3 bucket ({{ objstorage-name }}) {#external-table-settings}
+## Creating an External Table Pointing to an S3 Bucket ({{ objstorage-name }}) {#external-table-settings}
 
 To create an external table describing the S3 bucket ({{ objstorage-name }}), execute the following SQL query. The query creates an external table named `s3_test_data`, containing files in the `CSV` format with string fields `key` and `value`, located inside the bucket at the path `test_folder`, using the connection credentials specified by the [external data source](../../datamodel/external_data_source.md) object `bucket`:
 
@@ -39,7 +39,7 @@ Where:
 
 You can also specify [format settings](external_data_source.md#format_settings).
 
-## Data model {#data-model}
+## Data Model {#data-model}
 
 Reading data using external tables from S3 ({{ objstorage-name }}) is done with regular SQL queries as if querying a normal table.
 

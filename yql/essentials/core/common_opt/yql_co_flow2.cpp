@@ -2027,7 +2027,100 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return ret;
         }
 
-        return node;
+        // Add PruneKeys to EquiJoin
+        static const char optName[] = "EmitPruneKeys";
+        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+            return node;
+        }
+        auto equiJoin = TCoEquiJoin(node);
+        if (HasSetting(equiJoin.Arg(equiJoin.ArgCount() - 1).Ref(), "prune_keys_added")) {
+            return node;
+        }
+
+        THashMap<TStringBuf, THashSet<TStringBuf>> columnsForPruneKeysExtractor;
+        GetPruneKeysColumnsForJoinLeaves(equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+
+        TExprNode::TListType children;
+        bool hasChanges = false;
+        for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
+            auto child = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+            auto list = child.List();
+            auto scope = child.Scope();
+
+            if (!scope.Ref().IsAtom()) {
+                children.push_back(equiJoin.Arg(i).Ptr());
+                continue;
+            }
+
+            auto itemNames = columnsForPruneKeysExtractor.find(scope.Ref().Content());
+            if (itemNames == columnsForPruneKeysExtractor.end() || itemNames->second.empty()) {
+                children.push_back(equiJoin.Arg(i).Ptr());
+                continue;
+            }
+
+            if (auto distinct = list.Ref().GetConstraint<TDistinctConstraintNode>()) {
+                if (distinct->ContainsCompleteSet(std::vector<std::string_view>(itemNames->second.cbegin(), itemNames->second.cend()))) {
+                    children.push_back(equiJoin.Arg(i).Ptr());
+                    continue;
+                }
+            }
+
+            bool isOrdered = false;
+            if (auto sorted = list.Ref().GetConstraint<TSortedConstraintNode>()) {
+                for (const auto& item : sorted->GetContent()) {
+                    size_t foundItemNamesCount = 0;
+                    for (const auto& path : item.first) {
+                        if (itemNames->second.contains(path.front())) {
+                            foundItemNamesCount++;
+                        }
+                    }
+                    if (foundItemNamesCount == itemNames->second.size()) {
+                        isOrdered = true;
+                        break;
+                    }
+                }
+            }
+
+            auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+            YQL_CLOG(DEBUG, Core) << "Add " << pruneKeysCallable << " to EquiJoin input #" << i << ", label " << scope.Ref().Content();
+            children.push_back(ctx.Builder(child.Pos())
+                .List()
+                    .Callable(0, pruneKeysCallable)
+                        .Add(0, list.Ptr())
+                        .Lambda(1)
+                            .Param("item")
+                            .List(0)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                    ui32 i = 0;
+                                    for (const auto& column : itemNames->second) {
+                                        parent.Callable(i++, "Member")
+                                            .Arg(0, "item")
+                                            .Atom(1, column)
+                                        .Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Add(1, scope.Ptr())
+                .Seal()
+                .Build());
+            hasChanges = true;
+        }
+
+        if (!hasChanges) {
+            return node;
+        }
+
+        children.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr());
+        children.push_back(AddSetting(
+            equiJoin.Arg(equiJoin.ArgCount() - 1).Ref(),
+            equiJoin.Arg(equiJoin.ArgCount() - 1).Pos(),
+            "prune_keys_added",
+            nullptr,
+            ctx));
+        return ctx.ChangeChildren(*node, std::move(children));
     };
 
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

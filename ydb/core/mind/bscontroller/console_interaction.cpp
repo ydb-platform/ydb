@@ -105,7 +105,8 @@ namespace NKikimr::NBsController {
 
                     TYamlConfig yamlConfig(std::move(yaml), version, std::move(yamlReturnedByFetch));
                     Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
-                        std::move(storageConfig), std::nullopt, nullptr, std::nullopt));
+                        std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
+                        std::nullopt));
                     CommitInProgress = true;
                 }
             } catch (const std::exception& ex) {
@@ -239,6 +240,9 @@ namespace NKikimr::NBsController {
 
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;
+
+        // audit log settings
+        AuditLogInfo.emplace(record.GetPeerName(), NACLib::TUserToken{record.GetUserToken()});
 
         if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
             return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit,
@@ -517,7 +521,8 @@ namespace NKikimr::NBsController {
             }
 
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2,
+                std::move(AuditLogInfo)));
             CommitInProgress = true;
             PendingYamlConfig.reset();
         } catch (const TExError& error) {

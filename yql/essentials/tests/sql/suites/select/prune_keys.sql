@@ -11,6 +11,9 @@ SELECT Yql::PruneKeys([], $id);
 $mod2 = ($x) -> { RETURN $x % 2; };
 SELECT ListLength(Yql::PruneKeys(AsList(1,1,1,3,3,3,3), $mod2));
 
+SELECT Yql::PruneAdjacentKeys(AsList(null,null,null,1,1,2,3,3,4,5), $id);
+SELECT Yql::PruneKeys(AsList(1,null,1,null,1,null,1), $id);
+
 -- optimize tests
 
 $get_a = ($x) -> { RETURN <|a:$x.a|>; };

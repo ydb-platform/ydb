@@ -39,6 +39,10 @@
 
 {% include notitle [Содержание](orm/_includes/toc-table.md) %}
 
+## Векторный поиск {#vectorsearch}
+
+{% include notitle [Содержание](vectorsearch/_includes/toc-table.md) %}
+
 ## Смотрите также
 
 * [{#T}](../reference/ydb-sdk/index.md)

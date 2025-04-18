@@ -57,6 +57,10 @@ inline ui64 GetSingleConfigHash(const TYamlConfig& config) {
     return NYaml::GetConfigHash(std::get<0>(config));
 }
 
+inline TString GetSingleConfigYaml(const TYamlConfig& config) {
+    return std::get<0>(config);
+}
+
 } // namespace NBsController
 
 } // namespace NKikimr

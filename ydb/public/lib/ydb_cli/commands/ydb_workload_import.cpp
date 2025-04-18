@@ -78,7 +78,6 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             break;
         }
     }
-    TableClient->Stop();
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 class TWorkloadCommandImport::TUploadCommand::TDbWriter: public IWriter {

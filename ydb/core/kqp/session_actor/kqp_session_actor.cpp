@@ -1169,7 +1169,7 @@ public:
 
         TKqpPhyTxHolder::TConstPtr tx;
         try {
-            tx = QueryState->GetCurrentPhyTx(isBatchQuery);
+            tx = QueryState->GetCurrentPhyTx(isBatchQuery, QueryState->TxCtx->TxAlloc->TypeEnv);
         } catch (const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }

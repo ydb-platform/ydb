@@ -21,8 +21,8 @@ Scheme objects in {{ ydb-short-name }} databases:
 
 * [Topic](../topic.md)
 * [Secret](secrets.md)
-* [External table](external_table.md)
-* [External data source](external_data_source.md)
+* [External Table](external_table.md)
+* [External Data Source](external_data_source.md)
 
 [Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below.
 

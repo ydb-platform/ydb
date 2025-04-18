@@ -5,6 +5,7 @@
 #include "header.h"
 #include "index.h"
 #include "original.h"
+#include "reserve.h"
 #include "stream_logic.h"
 
 #include <ydb/library/arrow_kernels/operations.h>
@@ -206,7 +207,8 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
                 i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
-                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() >
+            1) {
             continue;
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {
@@ -220,6 +222,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         }
     }
     bool changed = false;
+    TGraphNode* nodeFetch = nullptr;
     if (dataAddresses.size() > 1) {
         THashSet<ui32> columnIds;
         for (auto&& i : dataAddresses) {
@@ -231,16 +234,32 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
                 proc->Add(addr.second);
             }
         }
-        auto nodeFetch = AddNode(proc);
+        nodeFetch = AddNode(proc).get();
         FetchersMerged.emplace(nodeFetch->GetIdentifier());
         for (auto&& i : dataAddresses) {
             for (auto&& to : i->GetOutputEdges()) {
-                AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
+                AddEdge(nodeFetch, to.second, to.first.GetResourceId());
             }
             RemoveNode(i->GetIdentifier());
         }
         changed = true;
+    } else if (dataAddresses.size() == 1) {
+        nodeFetch = dataAddresses.front();
     }
+    if (nodeFetch) {
+        std::shared_ptr<IMemoryCalculationPolicy> policy;
+        if (baseNode->Is(EProcessorType::Filter)) {
+            policy = std::make_shared<TFilterCalculationPolicy>();
+        } else if (baseNode->Is(EProcessorType::Projection)) {
+            policy = std::make_shared<TFetchingCalculationPolicy>();
+        }
+        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*nodeFetch->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
+        auto nodeReserve = AddNode(reserveMemory);
+        nodeReserve->GetProcessor()->AddOutput(0);
+        nodeFetch->GetProcessor()->AddInput(0);
+        AddEdge(nodeReserve.get(), nodeFetch, 0);
+    }
+
     if (indexes.size() + headers.size() > 1) {
         THashSet<ui32> columnIds;
         for (auto&& i : indexes) {

@@ -48,6 +48,7 @@ SRCS(
     assign_internal.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
+    reserve.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)

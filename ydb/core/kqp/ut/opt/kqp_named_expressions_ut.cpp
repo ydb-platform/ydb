@@ -96,41 +96,63 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
             .SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);
 
-        const TString query = R"(
-            $t = (
-                SELECT 
-                    Key As Key,
-                    CAST(RandomUuid(Key) AS String) As Value
-                FROM KeyValue
-                WHERE LENGTH(Value) < 10
-            );
+        {
+            const TString query = R"(
+                $t = (
+                    SELECT 
+                        Key As Key,
+                        CAST(RandomUuid(Key) AS String) As NewValue
+                    FROM KeyValue
+                    WHERE LENGTH(Value) < 10
+                    LIMIT 10
+                );
 
-            UPSERT INTO KeyValue2 (
+                UPSERT INTO KeyValue2 (
+                    SELECT
+                        CAST(Key AS String) AS Key,
+                        NewValue AS Value
+                    From $t
+                );
+
+                UPDATE KeyValue ON (
+                    SELECT
+                        Key AS Key,
+                        NewValue AS Value
+                    From $t
+                );
+
                 SELECT
-                    CAST(Key AS String) AS Key,
-                    Value AS Value
-                From $t
-            );
+                    True
+                FROM $t
+                LIMIT 1;
+            )";
 
-            UPDATE KeyValue ON (
-                SELECT
-                    Key AS Key,
-                    Value AS Value
-                From $t
-            );
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-            SELECT Value FROM KeyValue ORDER BY Value;
-            SELECT Value FROM KeyValue2 ORDER BY Value;
-        )";
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
 
-        auto client = kikimr.GetQueryClient();
-        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[%true]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
 
-        Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
-        Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
+        {
+            const TString query = R"(
+                SELECT Value FROM KeyValue ORDER BY Value;
+                SELECT Value FROM KeyValue2 ORDER BY Value;
+            )";
 
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
+        }
     }
 
     Y_UNIT_TEST_TWIN(NamedExpressionRandomChanged2, UseSink) {

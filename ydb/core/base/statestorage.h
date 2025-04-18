@@ -499,6 +499,9 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 NToSelect;
     TVector<TRing> Rings;
 
+    ui32 NewNToSelect;
+    TVector<TRing> NewRings;
+
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
@@ -532,7 +535,7 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config, const NKikimrConfig::TDomainsConfig::TStateStorage* newConfig = nullptr);
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,

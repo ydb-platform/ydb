@@ -16,8 +16,6 @@
 
 #include <yt/yt/core/concurrency/fls.h>
 
-#include <yt/yt_proto/yt/core/misc/proto/guid.pb.h>
-
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/memory/chunked_memory_pool.h>

@@ -22,13 +22,16 @@ enum class EOutputRowItemSource{None, InputKey, InputOther, LookupKey, LookupOth
 using TOutputRowColumnOrder = std::vector<std::pair<EOutputRowItemSource, ui64>>; //i -> {source, indexInSource}
 
 //Design note: Base implementation is optimized for wide channels
-class TInputTransformStreamLookupBase
-        : public NActors::TActor<TInputTransformStreamLookupBase>
+template <typename TInputTransformStreamLookupDerivedBase>
+class TInputTransformStreamLookupCommonBase
+        : public NActors::TActor<TInputTransformStreamLookupDerivedBase>
         , public NYql::NDq::IDqComputeActorAsyncInput
 {
-    using TActor = NActors::TActor<TInputTransformStreamLookupBase>;
+    using TDerived = TInputTransformStreamLookupDerivedBase;
+    using TActor = NActors::TActor<TInputTransformStreamLookupDerivedBase>;
+    friend TDerived;
 public:
-    TInputTransformStreamLookupBase(
+    TInputTransformStreamLookupCommonBase(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NMiniKQL::THolderFactory& holderFactory,
         const NMiniKQL::TTypeEnvironment& typeEnv,
@@ -49,7 +52,7 @@ public:
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
     )
-        : TActor(&TInputTransformStreamLookupBase::StateFunc)
+        : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
@@ -77,6 +80,10 @@ public:
         , LastLruSize(0)
     {
         Y_ABORT_UNLESS(Alloc);
+        Cerr << "LookupKeyType " << NMiniKQL::PrintNode(lookupKeyType, true) << Endl;
+        Cerr << "LookupPayloadType " << NMiniKQL::PrintNode(lookupPayloadType, true) << Endl;
+        Cerr << "InputRowType " << NMiniKQL::PrintNode(inputRowType, true) << Endl;
+        Cerr << "OutputRowType " << NMiniKQL::PrintNode(outputRowType, true) << Endl;
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
             Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());
         }
@@ -87,28 +94,182 @@ public:
         InitMonCounters(taskCounters);
     }
 
-    ~TInputTransformStreamLookupBase() override {
-        Free();
+    ~TInputTransformStreamLookupCommonBase() override {
+        static_cast<TDerived *>(this)->Free();
     }
 
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
     virtual void PushOutputValue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, NUdf::TUnboxedValue* outputRowItems) = 0;
 
-private: //events
-    STRICT_STFUNC(StateFunc,
-        hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
-        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
-    )
-
     void Handle(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr ev) {
         auto evptr = ev->Get();
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
+        this->Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
                                   InputIndex,
                                   evptr->Issues,
                                   evptr->FatalCode));
     }
 
+    // checkpointing waits until there are no state to save
+    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
+    void LoadState(const NYql::NDq::TSourceState&) final {}
+    void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
+
+private: //IDqComputeActorAsyncInput
+    ui64 GetInputIndex() const final {
+        return InputIndex;
+    }
+
+    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
+    }
+
+    void PassAway() final {
+        InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
+        this->Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
+        static_cast<TDerived *>(this)->Free();
+    }
+
+    void Free() {
+        if (LruSize && LastLruSize) {
+            LruSize->Add(-LastLruSize);
+            LastLruSize = 0;
+        }
+        auto guard = BindAllocator();
+        //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
+        KeysForLookup.reset();
+        InputFlow.Clear();
+        KeyTypeHelper.reset();
+        decltype(ReadyQueue){}.swap(ReadyQueue);
+        LruCache.reset();
+    }
+
+    void DrainReadyQueue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) {
+        while (!ReadyQueue.empty()) {
+            PushOutputValue(batch, ReadyQueue.Head());
+            ReadyQueue.Pop();
+        }
+    }
+
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
+        if (!KeysForLookup) {
+            Y_ENSURE(this->SelfId());
+            Y_ENSURE(!LookupSourceId);
+            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
+                .Alloc = Alloc,
+                .KeyTypeHelper = KeyTypeHelper,
+                .ParentId = this->SelfId(),
+                .TaskCounters = TaskCounters,
+                .LookupSource = Settings.GetRightSource().GetLookupSource(),
+                .KeyType = LookupKeyType,
+                .PayloadType = LookupPayloadType,
+                .TypeEnv = TypeEnv,
+                .HolderFactory = HolderFactory,
+                .MaxKeysInRequest = 1000 // TODO configure me
+            };
+            auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
+            MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
+            LookupSourceId = this->RegisterWithSameMailbox(lookupSourceActor);
+            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
+        }
+        return KeysForLookup;
+    }
+
+    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+        if (!taskCounters) {
+            return;
+        }
+        auto component = taskCounters->GetSubgroup("component", "Lookup");
+        LruHits = component->GetCounter("Hits");
+        LruMiss = component->GetCounter("Miss");
+        LruSize = component->GetCounter("Size");
+        CpuTimeUs = component->GetCounter("CpuUs");
+        Batches = component->GetCounter("Batches");
+    }
+
+    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
+    }
+
+    TDuration GetCpuTime() override {
+        return CpuTime;
+    }
+
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        //TODO fill me
+        return result;
+    }
+
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
+        return Guard(*Alloc);
+    }
+
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        NYql::TIssue issue(message);
+        for (const auto& i : subIssues) {
+            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+        }
+
+        NYql::TIssues issues;
+        issues.AddIssue(issue);
+        this->Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
+    }
+protected:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    const NMiniKQL::THolderFactory& HolderFactory;
+    const NMiniKQL::TTypeEnvironment& TypeEnv;
+    ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
+    NUdf::TUnboxedValue InputFlow;
+    const NActors::TActorId ComputeActorId;
+    ::NMonitoring::TDynamicCounterPtr TaskCounters;
+    IDqAsyncIoFactory::TPtr Factory;
+    NDqProto::TDqInputTransformLookupSettings Settings;
+protected:
+    NActors::TActorId LookupSourceId;
+    size_t MaxKeysInRequest;
+    const TVector<size_t> LookupInputIndexes;
+    const TVector<size_t> OtherInputIndexes;
+    const NMiniKQL::TMultiType* const InputRowType;
+    const NMiniKQL::TStructType* const LookupKeyType; //key column types in LookupTable
+    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
+    const NMiniKQL::TStructType* const LookupPayloadType; //other column types in LookupTable
+    const NMiniKQL::TMultiType* const OutputRowType;
+    const TOutputRowColumnOrder OutputRowColumnOrder;
+
+    NUdf::EFetchStatus InputFlowFetchStatus;
+    std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
+    size_t MaxDelayedRows;
+    std::chrono::seconds CacheTtl;
+    size_t MinimumRowSize; // only account for unboxed parts
+    size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
+    NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
+    NYql::NDq::TDqAsyncStats IngressStats;
+    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
+    i64 LastLruSize;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LruSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
+    TDuration CpuTime;
+};
+
+class TInputTransformStreamLookupBase : public TInputTransformStreamLookupCommonBase<TInputTransformStreamLookupBase>
+{
+    using TCommon = TInputTransformStreamLookupCommonBase<TInputTransformStreamLookupBase>;
+    friend TCommon;
+public:
+    using TCommon::TCommon;
+
+private: //events
+    STRICT_STFUNC(StateFunc,
+        hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, TCommon::Handle);
+    )
+
+private:
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
@@ -172,70 +333,10 @@ private: //events
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
-    //TODO implement checkpoints
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
-    void LoadState(const NYql::NDq::TSourceState&) final {}
-    void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
-
-private: //IDqComputeActorAsyncInput
-    ui64 GetInputIndex() const final {
-        return InputIndex;
-    }
-
-    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
-        return IngressStats;
-    }
-
-    void PassAway() final {
-        InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
-        Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
-        Free();
-    }
-
     void Free() {
-        if (LruSize && LastLruSize) {
-            LruSize->Add(-LastLruSize);
-            LastLruSize = 0;
-        }
         auto guard = BindAllocator();
-        //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
-        KeysForLookup.reset();
-        InputFlow.Clear();
-        KeyTypeHelper.reset();
+        TCommon::Free();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
-        decltype(ReadyQueue){}.swap(ReadyQueue);
-        LruCache.reset();
-    }
-
-    void DrainReadyQueue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) {
-        while (!ReadyQueue.empty()) {
-            PushOutputValue(batch, ReadyQueue.Head());
-            ReadyQueue.Pop();
-        }
-    }
-
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
-        if (!KeysForLookup) {
-            Y_ENSURE(SelfId());
-            Y_ENSURE(!LookupSourceId);
-            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
-                .Alloc = Alloc,
-                .KeyTypeHelper = KeyTypeHelper,
-                .ParentId = SelfId(),
-                .TaskCounters = TaskCounters,
-                .LookupSource = Settings.GetRightSource().GetLookupSource(),
-                .KeyType = LookupKeyType,
-                .PayloadType = LookupPayloadType,
-                .TypeEnv = TypeEnv,
-                .HolderFactory = HolderFactory,
-                .MaxKeysInRequest = 1000 // TODO configure me
-            };
-            auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-            MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
-            LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
-        }
-        return KeysForLookup;
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -301,7 +402,7 @@ private: //IDqComputeActorAsyncInput
         if (CpuTimeUs) {
             CpuTimeUs->Add(deltaTime.MicroSeconds());
         }
-        finished = IsFinished();
+        finished = static_cast<TDerived *>(this)->IsFinished();
         if (batch.empty()) {
             // Use non-zero value to signal presence of pending request
             // (value is NOT used for used space accounting)
@@ -315,93 +416,14 @@ private: //IDqComputeActorAsyncInput
             return usedSpace;
         }
     }
-
-    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-        if (!taskCounters) {
-            return;
-        }
-        auto component = taskCounters->GetSubgroup("component", "Lookup");
-        LruHits = component->GetCounter("Hits");
-        LruMiss = component->GetCounter("Miss");
-        LruSize = component->GetCounter("Size");
-        CpuTimeUs = component->GetCounter("CpuUs");
-        Batches = component->GetCounter("Batches");
-    }
-
-    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
-        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
-    }
-
-    TDuration GetCpuTime() override {
-        return CpuTime;
-    }
-
-    TMaybe<google::protobuf::Any> ExtraData() override {
-        google::protobuf::Any result;
-        //TODO fill me
-        return result;
-    }
-
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
-        return Guard(*Alloc);
-    }
-
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        NYql::TIssue issue(message);
-        for (const auto& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-        }
-
-        NYql::TIssues issues;
-        issues.AddIssue(issue);
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
-    }
 private:
-    bool IsFinished() const {
-        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
-    }
-protected:
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    const NMiniKQL::THolderFactory& HolderFactory;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
-    ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
-    NUdf::TUnboxedValue InputFlow;
-    const NActors::TActorId ComputeActorId;
-    ::NMonitoring::TDynamicCounterPtr TaskCounters;
-    IDqAsyncIoFactory::TPtr Factory;
-    NDqProto::TDqInputTransformLookupSettings Settings;
-protected:
-    NActors::TActorId LookupSourceId;
-    size_t MaxKeysInRequest;
-    const TVector<size_t> LookupInputIndexes;
-    const TVector<size_t> OtherInputIndexes;
-    const NMiniKQL::TMultiType* const InputRowType;
-    const NMiniKQL::TStructType* const LookupKeyType; //key column types in LookupTable
-    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
-    const NMiniKQL::TStructType* const LookupPayloadType; //other column types in LookupTable
-    const NMiniKQL::TMultiType* const OutputRowType;
-    const TOutputRowColumnOrder OutputRowColumnOrder;
-
-    NUdf::EFetchStatus InputFlowFetchStatus;
-    std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
-    size_t MaxDelayedRows;
-    std::chrono::seconds CacheTtl;
     using TInputKeyOtherPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
     using TAwaitingQueue = std::deque<TInputKeyOtherPair, NKikimr::NMiniKQL::TMKQLAllocator<TInputKeyOtherPair>>; //input row split in two parts: key columns and other columns
     TAwaitingQueue AwaitingQueue;
-    size_t MinimumRowSize; // only account for unboxed parts
-    size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
-    NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
-    NYql::NDq::TDqAsyncStats IngressStats;
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
-    i64 LastLruSize;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruSize;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
-    TDuration CpuTime;
+    bool IsFinished() const {
+        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
+    }
 };
 
 class TInputTransformStreamLookupWide: public TInputTransformStreamLookupBase {
@@ -442,78 +464,12 @@ protected:
     }
 };
 
-class TInputTransformStreamMultiLookupBase
-        : public NActors::TActor<TInputTransformStreamMultiLookupBase>
-        , public NYql::NDq::IDqComputeActorAsyncInput
+class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase>
 {
-    using TActor = NActors::TActor<TInputTransformStreamMultiLookupBase>;
+    using TCommon = TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase>;
+    friend TCommon;
 public:
-    TInputTransformStreamMultiLookupBase(
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv,
-        ui64 inputIndex,
-        NUdf::TUnboxedValue inputFlow,
-        NActors::TActorId computeActorId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        IDqAsyncIoFactory* factory,
-        NDqProto::TDqInputTransformLookupSettings&& settings,
-        TVector<size_t>&& lookupInputIndexes,
-        TVector<size_t>&& otherInputIndexes,
-        const NMiniKQL::TMultiType* inputRowType,
-        const NMiniKQL::TStructType* lookupKeyType,
-        const NMiniKQL::TStructType* lookupPayloadType,
-        const NMiniKQL::TMultiType* outputRowType,
-        TOutputRowColumnOrder&& outputRowColumnOrder,
-        size_t maxDelayedRows,
-        size_t cacheLimit,
-        std::chrono::seconds cacheTtl
-    )
-        : TActor(&TInputTransformStreamMultiLookupBase::StateFunc)
-        , Alloc(alloc)
-        , HolderFactory(holderFactory)
-        , TypeEnv(typeEnv)
-        , InputIndex(inputIndex)
-        , InputFlow(std::move(inputFlow))
-        , ComputeActorId(std::move(computeActorId))
-        , TaskCounters(taskCounters)
-        , Factory(factory)
-        , Settings(std::move(settings))
-        , LookupInputIndexes(std::move(lookupInputIndexes))
-        , OtherInputIndexes(std::move(otherInputIndexes))
-        , InputRowType(inputRowType)
-        , LookupKeyType(lookupKeyType)
-        , KeyTypeHelper(std::make_shared<IDqAsyncLookupSource::TKeyTypeHelper>(lookupKeyType))
-        , LookupPayloadType(lookupPayloadType)
-        , OutputRowType(outputRowType)
-        , OutputRowColumnOrder(std::move(outputRowColumnOrder))
-        , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
-        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
-        , MaxDelayedRows(maxDelayedRows)
-        , CacheTtl(cacheTtl)
-        , MinimumRowSize(OutputRowColumnOrder.size()*sizeof(NUdf::TUnboxedValuePod))
-        , PayloadExtraSize(0)
-        , ReadyQueue(OutputRowType)
-        , LastLruSize(0)
-    {
-        Cerr << "LookupKeyType " << NMiniKQL::PrintNode(lookupKeyType, true) << Endl;
-        Cerr << "LookupPayloadType " << NMiniKQL::PrintNode(lookupPayloadType, true) << Endl;
-        Cerr << "InputRowType " << NMiniKQL::PrintNode(inputRowType, true) << Endl;
-        Cerr << "OutputRowType " << NMiniKQL::PrintNode(outputRowType, true) << Endl;
-        Y_ABORT_UNLESS(Alloc);
-        for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
-            Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());
-        }
-        for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
-            Y_DEBUG_ABORT_UNLESS(OtherInputIndexes[i] < InputRowType->GetElementsCount());
-        }
-        Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
-        InitMonCounters(taskCounters);
-    }
-
-    ~TInputTransformStreamMultiLookupBase() override {
-        Free();
-    }
+    using TCommon::TCommon;
 
 protected:
     virtual NUdf::EFetchStatus FetchWideInputValue(NUdf::TUnboxedValue* inputRowItems) = 0;
@@ -522,16 +478,8 @@ protected:
 private: //events
     STRICT_STFUNC(StateFunc,
         hFunc(IDqAsyncLookupSource::TEvLookupResult, Handle);
-        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, TCommon::Handle);
     )
-
-    void Handle(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr ev) {
-        auto evptr = ev->Get();
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
-                                  InputIndex,
-                                  evptr->Issues,
-                                  evptr->FatalCode));
-    }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
         auto startCycleCount = GetCycleCountFast();
@@ -568,70 +516,10 @@ private: //events
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
     }
 
-    //TODO implement checkpoints
-    void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) final {}
-    void LoadState(const NYql::NDq::TSourceState&) final {}
-    void CommitState(const NYql::NDqProto::TCheckpoint&) final {}
-
-private: //IDqComputeActorAsyncInput
-    ui64 GetInputIndex() const final {
-        return InputIndex;
-    }
-
-    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
-        return IngressStats;
-    }
-
-    void PassAway() final {
-        InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
-        Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
-        Free();
-    }
-
     void Free() {
-        if (LruSize && LastLruSize) {
-            LruSize->Add(-LastLruSize);
-            LastLruSize = 0;
-        }
         auto guard = BindAllocator();
-        //All resources, held by this class, that have been created with mkql allocator, must be deallocated here
-        KeysForLookup.reset();
-        InputFlow.Clear();
-        KeyTypeHelper.reset();
         decltype(AwaitingQueue){}.swap(AwaitingQueue);
-        decltype(ReadyQueue){}.swap(ReadyQueue);
-        LruCache.reset();
-    }
-
-    void DrainReadyQueue(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) {
-        while (!ReadyQueue.empty()) {
-            PushOutputValue(batch, ReadyQueue.Head());
-            ReadyQueue.Pop();
-        }
-    }
-
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> GetKeysForLookup() { // must be called with mkql allocator
-        if (!KeysForLookup) {
-            Y_ENSURE(SelfId());
-            Y_ENSURE(!LookupSourceId);
-            NDq::IDqAsyncIoFactory::TLookupSourceArguments lookupSourceArgs {
-                .Alloc = Alloc,
-                .KeyTypeHelper = KeyTypeHelper,
-                .ParentId = SelfId(),
-                .TaskCounters = TaskCounters,
-                .LookupSource = Settings.GetRightSource().GetLookupSource(),
-                .KeyType = LookupKeyType,
-                .PayloadType = LookupPayloadType,
-                .TypeEnv = TypeEnv,
-                .HolderFactory = HolderFactory,
-                .MaxKeysInRequest = 1000 // TODO configure me
-            };
-            auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
-            MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
-            LookupSourceId = RegisterWithSameMailbox(lookupSourceActor);
-            KeysForLookup = std::make_shared<IDqAsyncLookupSource::TUnboxedValueMap>(MaxKeysInRequest, KeyTypeHelper->GetValueHash(), KeyTypeHelper->GetValueEqual());
-        }
-        return KeysForLookup;
+        TCommon::Free();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -749,76 +637,6 @@ private: //IDqComputeActorAsyncInput
             return usedSpace;
         }
     }
-    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-        if (!taskCounters) {
-            return;
-        }
-        auto component = taskCounters->GetSubgroup("component", "Lookup");
-        LruHits = component->GetCounter("Hits");
-        LruMiss = component->GetCounter("Miss");
-        LruSize = component->GetCounter("Size");
-        CpuTimeUs = component->GetCounter("CpuUs");
-        Batches = component->GetCounter("Batches");
-    }
-
-    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
-        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
-    }
-
-    TDuration GetCpuTime() override {
-        return CpuTime;
-    }
-
-    TMaybe<google::protobuf::Any> ExtraData() override {
-        google::protobuf::Any result;
-        //TODO fill me
-        return result;
-    }
-
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
-        return Guard(*Alloc);
-    }
-
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        NYql::TIssue issue(message);
-        for (const auto& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-        }
-
-        NYql::TIssues issues;
-        issues.AddIssue(issue);
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
-    }
-private:
-    bool IsFinished() const {
-        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
-    }
-protected:
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    const NMiniKQL::THolderFactory& HolderFactory;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
-    ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
-    NUdf::TUnboxedValue InputFlow;
-    const NActors::TActorId ComputeActorId;
-    ::NMonitoring::TDynamicCounterPtr TaskCounters;
-    IDqAsyncIoFactory::TPtr Factory;
-    NDqProto::TDqInputTransformLookupSettings Settings;
-protected:
-    NActors::TActorId LookupSourceId;
-    size_t MaxKeysInRequest;
-    const TVector<size_t> LookupInputIndexes;
-    const TVector<size_t> OtherInputIndexes;
-    const NMiniKQL::TMultiType* const InputRowType;
-    const NMiniKQL::TStructType* const LookupKeyType; //key column types in LookupTable
-    std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
-    const NMiniKQL::TStructType* const LookupPayloadType; //other column types in LookupTable
-    const NMiniKQL::TMultiType* const OutputRowType;
-    const TOutputRowColumnOrder OutputRowColumnOrder;
-
-    NUdf::EFetchStatus InputFlowFetchStatus;
-    std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
-    size_t MaxDelayedRows;
-    std::chrono::seconds CacheTtl;
     struct TAwaitingRow {
         NUdf::TUnboxedValue OutputRow;
         NUdf::TUnboxedValue* OutputRowItems;
@@ -828,19 +646,10 @@ protected:
     };
     using TAwaitingQueue = std::deque<TAwaitingRow, NKikimr::NMiniKQL::TMKQLAllocator<TAwaitingRow>>;
     TAwaitingQueue AwaitingQueue;
-    size_t MinimumRowSize; // only account for unboxed parts
-    size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
-    NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
-    NYql::NDq::TDqAsyncStats IngressStats;
-    std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
-    i64 LastLruSize;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruHits;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruMiss;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LruSize;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTimeUs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Batches;
-    TDuration CpuTime;
+    bool IsFinished() const {
+        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
+    }
 
     void MakeOutputRow(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, ui32 listLength, TAwaitingRow& output, bool nullsInKey) {
         NUdf::TUnboxedValue* outputRowItems;

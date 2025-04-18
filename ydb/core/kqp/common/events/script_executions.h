@@ -234,7 +234,7 @@ struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptRe
     {}
 
     Ydb::StatusIds::StatusCode Status;
-    size_t ResultSetId;
+    size_t ResultSetId = 0;
     NYql::TIssues Issues;
 };
 

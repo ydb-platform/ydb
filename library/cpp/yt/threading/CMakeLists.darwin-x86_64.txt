@@ -49,5 +49,6 @@ target_sources(cpp-yt-threading PRIVATE
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait.cpp
   ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait_hook.cpp
+  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/writer_starving_rw_spin_lock.cpp
 )
 

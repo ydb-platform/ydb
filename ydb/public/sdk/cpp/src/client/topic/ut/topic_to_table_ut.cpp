@@ -230,11 +230,35 @@ protected:
                                                         const TString& consumerName,
                                                         size_t count);
 
+    void TestSessionAbort();
+
+    void TestTwoSessionOneConsumer();
+
+    void TestOffsetsCannotBePromotedWhenReadingInATransaction();
+
+    void TestWriteToTopicTwoWriteSession();
+
+    void TestWriteRandomSizedMessagesInWideTransactions();
+
+    void TestWriteOnlyBigMessagesInWideTransactions();
+
+    void TestTransactionsConflictOnSeqNo();
+
     void TestWriteToTopic1();
+
+    void TestWriteToTopic2();
+
+    void TestWriteToTopic3();
 
     void TestWriteToTopic4();
 
+    void TestWriteToTopic5();
+
+    void TestWriteToTopic6();
+
     void TestWriteToTopic7();
+
+    void TestWriteToTopic8();
 
     void TestWriteToTopic9();
 
@@ -242,11 +266,69 @@ protected:
 
     void TestWriteToTopic11();
 
+    void TestWriteToTopic12();
+
+    void TestWriteToTopic13();
+
+    void TestWriteToTopic14();
+
+    void TestWriteToTopic15();
+
+    void TestWriteToTopic16();
+
+    void TestWriteToTopic17();
+
     void TestWriteToTopic24();
+
+    void TestWriteToTopic25();
 
     void TestWriteToTopic26();
 
     void TestWriteToTopic27();
+
+    void TestWriteToTopic28();
+
+    void TestWriteToTopic29();
+
+    void TestWriteToTopic30();
+
+    void TestWriteToTopic31();
+
+    void TestWriteToTopic32();
+
+    void TestWriteToTopic33();
+
+    void TestWriteToTopic34();
+
+    void TestWriteToTopic35();
+
+    void TestWriteToTopic36();
+
+    void TestWriteToTopic37();
+
+    void TestWriteToTopic38();
+
+    void TestWriteToTopic39();
+
+    void TestWriteToTopic40();
+
+    void TestWriteToTopic41();
+
+    void TestWriteToTopic42();
+
+    void TestWriteToTopic43();
+
+    void TestWriteToTopic44();
+
+    void TestWriteToTopic45();
+
+    void TestWriteToTopic46();
+
+    void TestWriteToTopic47();
+
+    void TestWriteToTopic48();
+
+    void TestWriteToTopic50();
 
     struct TAvgWriteBytes {
         ui64 PerSec = 0;
@@ -272,6 +354,15 @@ protected:
     virtual bool GetAllowOlapDataQuery() const;
 
     size_t GetPQCacheRenameKeysCount();
+
+    enum class EClientType {
+        Table,
+        Query,
+        None
+    };
+
+    virtual EClientType GetClientType() const = 0;
+    virtual ~TFixture() = default;
 
 private:
     class TTableSession : public ISession {
@@ -361,17 +452,31 @@ private:
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
-    enum class EClientType {
-        Table,
-        Query
-    };
-
-    EClientType ClientType = EClientType::Table;
-
     THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
     THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
 
     ui64 SchemaTxId = 1000;
+};
+
+class TFixtureTable : public TFixture {
+protected:
+    EClientType GetClientType() const override {
+        return EClientType::Table;
+    }
+};
+
+class TFixtureQuery : public TFixture {
+protected:
+    EClientType GetClientType() const override {
+        return EClientType::Query;
+    }
+};
+
+class TFixtureNoClient : public TFixture {
+protected:
+    EClientType GetClientType() const override {
+        return EClientType::None;
+    }
 };
 
 TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
@@ -511,8 +616,8 @@ TAsyncStatus TFixture::TTableSession::AsyncCommitTx(TTransactionBase& tx)
 }
 
 TFixture::TQuerySession::TQuerySession(NQuery::TQueryClient& client,
-                                        const std::string& endpoint,
-                                        const std::string& database)
+                                       const std::string& endpoint,
+                                       const std::string& database)
     : Session_(Init(client))
     , Endpoint_(endpoint)
     , Database_(database)
@@ -622,7 +727,7 @@ TAsyncStatus TFixture::TQuerySession::AsyncCommitTx(TTransactionBase& tx)
 
 std::unique_ptr<TFixture::ISession> TFixture::CreateSession()
 {
-    switch (ClientType) {
+    switch (GetClientType()) {
         case EClientType::Table: {
             UNIT_ASSERT_C(TableClient, "TableClient is not initialized");
             return std::make_unique<TFixture::TTableSession>(*TableClient);
@@ -633,8 +738,12 @@ std::unique_ptr<TFixture::ISession> TFixture::CreateSession()
                                                              Setup->GetEndpoint(),
                                                              Setup->GetDatabase());
         }
+        case EClientType::None: {
+            UNIT_FAIL("CreateSession is forbidden for None client type");
+        }
     }
-    UNIT_FAIL("Invalid client type");
+
+    return nullptr;
 }
 
 auto TFixture::CreateReader() -> TTopicReadSessionPtr
@@ -861,7 +970,7 @@ void TFixture::WriteToTopicWithInvalidTxId(bool invalidTxId)
     }
 }
 
-Y_UNIT_TEST_F(SessionAbort, TFixture)
+void TFixture::TestSessionAbort()
 {
     {
         auto reader = CreateReader();
@@ -896,7 +1005,17 @@ Y_UNIT_TEST_F(SessionAbort, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
+Y_UNIT_TEST_F(SessionAbort_Table, TFixtureTable)
+{
+    TestSessionAbort();
+}
+
+Y_UNIT_TEST_F(SessionAbort_Query, TFixtureQuery)
+{
+    TestSessionAbort();
+}
+
+void TFixture::TestTwoSessionOneConsumer()
 {
     WriteMessage("message #0");
 
@@ -922,7 +1041,17 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
     session1->CommitTx(*tx1, EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture)
+Y_UNIT_TEST_F(TwoSessionOneConsumer_Table, TFixtureTable)
+{
+    TestTwoSessionOneConsumer();
+}
+
+Y_UNIT_TEST_F(TwoSessionOneConsumer_Query, TFixtureQuery)
+{
+    TestTwoSessionOneConsumer();
+}
+
+void TFixture::TestOffsetsCannotBePromotedWhenReadingInATransaction()
 {
     WriteMessage("message");
 
@@ -935,7 +1064,22 @@ Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture
     UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = *tx, .CommitOffsets = true}), yexception);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
+Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Table, TFixtureTable)
+{
+    TestOffsetsCannotBePromotedWhenReadingInATransaction();
+}
+
+Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction_Query, TFixtureQuery)
+{
+    TestOffsetsCannotBePromotedWhenReadingInATransaction();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session_Table, TFixtureTable)
+{
+    WriteToTopicWithInvalidTxId(false);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session_Query, TFixtureQuery)
 {
     WriteToTopicWithInvalidTxId(false);
 }
@@ -945,7 +1089,7 @@ Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
 //    WriteToTopicWithInvalidTxId(true);
 //}
 
-Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
+void TFixture::TestWriteToTopicTwoWriteSession()
 {
     TString topicPath[2] = {
         TString{TEST_TOPIC},
@@ -1007,6 +1151,16 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
     }
 
     UNIT_ASSERT_VALUES_EQUAL(acks, 2);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession_Table, TFixtureTable)
+{
+    TestWriteToTopicTwoWriteSession();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession_Query, TFixtureQuery)
+{
+    TestWriteToTopicTwoWriteSession();
 }
 
 auto TFixture::CreateTopicWriteSession(const TString& topicPath,
@@ -1768,12 +1922,17 @@ bool TFixture::GetAllowOlapDataQuery() const
     return false;
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_1, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_1_Table, TFixtureTable)
 {
     TestWriteToTopic1();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_1_Query, TFixtureQuery)
+{
+    TestWriteToTopic1();
+}
+
+void TFixture::TestWriteToTopic2()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -1820,7 +1979,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_2, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_2_Table, TFixtureTable)
+{
+    TestWriteToTopic2();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_2_Query, TFixtureQuery)
+{
+    TestWriteToTopic2();
+}
+
+void TFixture::TestWriteToTopic3()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -1855,12 +2024,27 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_3, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #2");
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_4, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_3_Table, TFixtureTable)
+{
+    TestWriteToTopic3();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_3_Query, TFixtureQuery)
+{
+    TestWriteToTopic3();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_4_Table, TFixtureTable)
 {
     TestWriteToTopic4();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_4_Query, TFixtureQuery)
+{
+    TestWriteToTopic4();
+}
+
+void TFixture::TestWriteToTopic5()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -1898,7 +2082,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_5, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_6, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_5_Table, TFixtureTable)
+{
+    TestWriteToTopic5();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_5_Query, TFixtureQuery)
+{
+    TestWriteToTopic5();
+}
+
+void TFixture::TestWriteToTopic6()
 {
     CreateTopic("topic_A");
 
@@ -1924,12 +2118,27 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_6, TFixture)
     DescribeTopic("topic_A");
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_7, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_6_Table, TFixtureTable)
+{
+    TestWriteToTopic6();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_6_Query, TFixtureQuery)
+{
+    TestWriteToTopic6();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_7_Table, TFixtureTable)
 {
     TestWriteToTopic7();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_8, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_7_Query, TFixtureQuery)
+{
+    TestWriteToTopic7();
+}
+
+void TFixture::TestWriteToTopic8()
 {
     CreateTopic("topic_A");
 
@@ -1961,12 +2170,32 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_8, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_9, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_8_Table, TFixtureTable)
+{
+    TestWriteToTopic8();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_8_Query, TFixtureQuery)
+{
+    TestWriteToTopic8();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_9_Table, TFixtureTable)
 {
     TestWriteToTopic9();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_10, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_9_Query, TFixtureQuery)
+{
+    TestWriteToTopic9();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_10_Table, TFixtureTable)
+{
+    TestWriteToTopic10();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_10_Query, TFixtureQuery)
 {
     TestWriteToTopic10();
 }
@@ -2225,12 +2454,17 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
     }
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_11, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_11_Table, TFixtureTable)
 {
     TestWriteToTopic11();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_12, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_11_Query, TFixtureQuery)
+{
+    TestWriteToTopic11();
+}
+
+void TFixture::TestWriteToTopic12()
 {
     CreateTopic("topic_A");
 
@@ -2246,7 +2480,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_12, TFixture)
     WaitForSessionClose("topic_A", TEST_MESSAGE_GROUP_ID, NYdb::EStatus::PRECONDITION_FAILED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_13, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_12_Table, TFixtureTable)
+{
+    TestWriteToTopic12();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_12_Query, TFixtureQuery)
+{
+    TestWriteToTopic12();
+}
+
+void TFixture::TestWriteToTopic13()
 {
     CreateTopic("topic_A");
 
@@ -2261,7 +2505,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_13, TFixture)
     session->CommitTx(*tx, EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_13_Table, TFixtureTable)
+{
+    TestWriteToTopic13();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_13_Query, TFixtureQuery)
+{
+    TestWriteToTopic13();
+}
+
+void TFixture::TestWriteToTopic14()
 {
     CreateTopic("topic_A");
 
@@ -2280,7 +2534,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_14, TFixture)
     session->CommitTx(*tx, EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_14_Table, TFixtureTable)
+{
+    TestWriteToTopic14();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_14_Query, TFixtureQuery)
+{
+    TestWriteToTopic14();
+}
+
+void TFixture::TestWriteToTopic15()
 {
     // the session of writing to the topic can be closed before the commit
     CreateTopic("topic_A");
@@ -2301,7 +2565,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_15, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_15_Table, TFixtureTable)
+{
+    TestWriteToTopic15();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_15_Query, TFixtureQuery)
+{
+    TestWriteToTopic15();
+}
+
+void TFixture::TestWriteToTopic16()
 {
     CreateTopic("topic_A");
 
@@ -2320,7 +2594,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_16_Table, TFixtureTable)
+{
+    TestWriteToTopic16();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_16_Query, TFixtureQuery)
+{
+    TestWriteToTopic16();
+}
+
+void TFixture::TestWriteToTopic17()
 {
     CreateTopic("topic_A");
 
@@ -2350,6 +2634,16 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_17, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages[5].size(),  6'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[6].size(), 20'000'000);
     UNIT_ASSERT_VALUES_EQUAL(messages[7].size(),  7'000'000);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_17_Table, TFixtureTable)
+{
+    TestWriteToTopic17();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_17_Query, TFixtureQuery)
+{
+    TestWriteToTopic17();
 }
 
 void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
@@ -2416,13 +2710,22 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
 }
 
 #define Y_UNIT_TEST_WITH_REBOOTS(name, oldHeadCount, bigBlobsCount, newHeadCount) \
-Y_UNIT_TEST_F(name##_RestartNo, TFixture) { \
+Y_UNIT_TEST_F(name##_RestartNo_Table, TFixtureTable) { \
     TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartNo}); \
 } \
-Y_UNIT_TEST_F(name##_RestartBeforeCommit, TFixture) { \
+Y_UNIT_TEST_F(name##_RestartNo_Query, TFixtureQuery) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartNo}); \
+} \
+Y_UNIT_TEST_F(name##_RestartBeforeCommit_Table, TFixtureTable) { \
     TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartBeforeCommit}); \
 } \
-Y_UNIT_TEST_F(name##_RestartAfterCommit, TFixture) { \
+Y_UNIT_TEST_F(name##_RestartBeforeCommit_Query, TFixtureQuery) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartBeforeCommit}); \
+} \
+Y_UNIT_TEST_F(name##_RestartAfterCommit_Table, TFixtureTable) { \
+    TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartAfterCommit}); \
+} \
+Y_UNIT_TEST_F(name##_RestartAfterCommit_Query, TFixtureQuery) { \
     TestTxWithBigBlobs({.OldHeadCount = oldHeadCount, .BigBlobsCount = bigBlobsCount, .NewHeadCount = newHeadCount, .RestartMode = ERestartAfterCommit}); \
 }
 
@@ -2522,12 +2825,17 @@ size_t TFixture::GetTableRecordsCount(const TString& tablePath)
     return parser.ColumnParser(0).GetUint64();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_24, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_24_Table, TFixtureTable)
 {
     TestWriteToTopic24();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_24_Query, TFixtureQuery)
+{
+    TestWriteToTopic24();
+}
+
+void TFixture::TestWriteToTopic25()
 {
     //
     // the test verifies a transaction in which data is read from one topic and written to another
@@ -2554,17 +2862,37 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_25, TFixture)
     Read_Exactly_N_Messages_From_Topic("topic_B", TEST_CONSUMER, 3);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_26, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_25_Table, TFixtureTable)
+{
+    TestWriteToTopic25();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_25_Query, TFixtureQuery)
+{
+    TestWriteToTopic25();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_26_Table, TFixtureTable)
 {
     TestWriteToTopic26();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_27, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_26_Query, TFixtureQuery)
+{
+    TestWriteToTopic26();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_27_Table, TFixtureTable)
 {
     TestWriteToTopic27();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_27_Query, TFixtureQuery)
+{
+    TestWriteToTopic27();
+}
+
+void TFixture::TestWriteToTopic28()
 {
     // The test verifies that the `WriteInflightSize` is correctly considered for the main partition.
     // Writing to the service partition does not change the `WriteInflightSize` of the main one.
@@ -2585,6 +2913,16 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_28, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_28_Table, TFixtureTable)
+{
+    TestWriteToTopic28();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_28_Query, TFixtureQuery)
+{
+    TestWriteToTopic28();
+}
+
 void TFixture::WriteMessagesInTx(size_t big, size_t small)
 {
     CreateTopic("topic_A", TEST_CONSUMER);
@@ -2603,62 +2941,151 @@ void TFixture::WriteMessagesInTx(size_t big, size_t small)
     session->CommitTx(*tx, EStatus::SUCCESS);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_29, TFixture)
+void TFixture::TestWriteToTopic29()
 {
     WriteMessagesInTx(1, 0);
     WriteMessagesInTx(1, 0);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_30, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_29_Table, TFixtureTable)
+{
+    TestWriteToTopic29();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_29_Query, TFixtureQuery)
+{
+    TestWriteToTopic29();
+}
+
+void TFixture::TestWriteToTopic30()
 {
     WriteMessagesInTx(1, 0);
     WriteMessagesInTx(0, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_31, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_30_Table, TFixtureTable)
+{
+    TestWriteToTopic30();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_30_Query, TFixtureQuery)
+{
+    TestWriteToTopic30();
+}
+
+void TFixture::TestWriteToTopic31()
 {
     WriteMessagesInTx(1, 0);
     WriteMessagesInTx(1, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_32, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_31_Table, TFixtureTable)
+{
+    TestWriteToTopic31();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_31_Query, TFixtureQuery)
+{
+    TestWriteToTopic31();
+}
+
+void TFixture::TestWriteToTopic32()
 {
     WriteMessagesInTx(0, 1);
     WriteMessagesInTx(1, 0);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_33, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_32_Table, TFixtureTable)
+{
+    TestWriteToTopic32();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_32_Query, TFixtureQuery)
+{
+    TestWriteToTopic32();
+}
+
+void TFixture::TestWriteToTopic33()
 {
     WriteMessagesInTx(0, 1);
     WriteMessagesInTx(0, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_34, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_33_Table, TFixtureTable)
+{
+    TestWriteToTopic33();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_33_Query, TFixtureQuery)
+{
+    TestWriteToTopic33();
+}
+
+void TFixture::TestWriteToTopic34()
 {
     WriteMessagesInTx(0, 1);
     WriteMessagesInTx(1, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_35, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_34_Table, TFixtureTable)
+{
+    TestWriteToTopic34();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_34_Query, TFixtureQuery)
+{
+    TestWriteToTopic34();
+}
+
+void TFixture::TestWriteToTopic35()
 {
     WriteMessagesInTx(1, 1);
     WriteMessagesInTx(1, 0);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_36, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_35_Table, TFixtureTable)
+{
+    TestWriteToTopic35();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_35_Query, TFixtureQuery)
+{
+    TestWriteToTopic35();
+}
+
+void TFixture::TestWriteToTopic36()
 {
     WriteMessagesInTx(1, 1);
     WriteMessagesInTx(0, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_37, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_36_Table, TFixtureTable)
+{
+    TestWriteToTopic36();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_36_Query, TFixtureQuery)
+{
+    TestWriteToTopic36();
+}
+
+void TFixture::TestWriteToTopic37()
 {
     WriteMessagesInTx(1, 1);
     WriteMessagesInTx(1, 1);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_37_Table, TFixtureTable)
+{
+    TestWriteToTopic37();
+}
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_37_Query, TFixtureQuery)
+{
+    TestWriteToTopic37();
+}
+
+void TFixture::TestWriteToTopic38()
 {
     WriteMessagesInTx(2, 202);
     WriteMessagesInTx(2, 200);
@@ -2667,7 +3094,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_38, TFixture)
     WriteMessagesInTx(0, 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_39, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_38_Table, TFixtureTable)
+{
+    TestWriteToTopic38();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_38_Query, TFixtureQuery)
+{
+    TestWriteToTopic38();
+}
+
+void TFixture::TestWriteToTopic39()
 {
     CreateTopic("topic_A", TEST_CONSUMER);
 
@@ -2684,7 +3121,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_39, TFixture)
     Read_Exactly_N_Messages_From_Topic("topic_A", "consumer", 2);
 }
 
-Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_39_Table, TFixtureTable)
+{
+    TestWriteToTopic39();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_39_Query, TFixtureQuery)
+{
+    TestWriteToTopic39();
+}
+
+Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
 {
     // There was a server
     NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
@@ -2717,7 +3164,7 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixture)
     Read_Exactly_N_Messages_From_Topic(TString{TEST_TOPIC}, "consumer-1", 1);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
+void TFixture::TestWriteToTopic40()
 {
     // The recording stream will run into a quota. Before the commit, the client will receive confirmations
     // for some of the messages. The `CommitTx` call will wait for the rest.
@@ -2735,7 +3182,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_40, TFixture)
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_40_Table, TFixtureTable)
+{
+    TestWriteToTopic40();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_40_Query, TFixtureQuery)
+{
+    TestWriteToTopic40();
+}
+
+void TFixture::TestWriteToTopic41()
 {
     // If the recording session does not wait for confirmations, the commit will fail
     CreateTopic("topic_A", TEST_CONSUMER);
@@ -2752,7 +3209,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_41, TFixture)
     session->CommitTx(*tx, EStatus::SESSION_EXPIRED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_41_Table, TFixtureTable)
+{
+    TestWriteToTopic41();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_41_Query, TFixtureQuery)
+{
+    TestWriteToTopic41();
+}
+
+void TFixture::TestWriteToTopic42()
 {
     CreateTopic("topic_A", TEST_CONSUMER);
 
@@ -2770,7 +3237,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_42, TFixture)
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_42_Table, TFixtureTable)
+{
+    TestWriteToTopic42();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_42_Query, TFixtureQuery)
+{
+    TestWriteToTopic42();
+}
+
+void TFixture::TestWriteToTopic43()
 {
     // The recording stream will run into a quota. Before the commit, the client will receive confirmations
     // for some of the messages. The `ExecuteDataQuery` call will wait for the rest.
@@ -2788,7 +3265,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43, TFixture)
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_43_Table, TFixtureTable)
+{
+    TestWriteToTopic43();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_43_Query, TFixtureQuery)
+{
+    TestWriteToTopic43();
+}
+
+void TFixture::TestWriteToTopic44()
 {
     CreateTopic("topic_A", TEST_CONSUMER);
 
@@ -2808,6 +3295,16 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44, TFixture)
     session->Execute("SELECT 2", tx.get());
 
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 100);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_44_Table, TFixtureTable)
+{
+    TestWriteToTopic44();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_44_Query, TFixtureQuery)
+{
+    TestWriteToTopic44();
 }
 
 void TFixture::CheckAvgWriteBytes(const TString& topicPath,
@@ -2839,7 +3336,7 @@ void TFixture::SplitPartition(const TString& topicName,
                                         boundary);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
+void TFixture::TestWriteToTopic45()
 {
     // Writing to a topic in a transaction affects the `AvgWriteBytes` indicator
     CreateTopic("topic_A", TEST_CONSUMER, 2);
@@ -2867,7 +3364,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_45, TFixture)
     CheckAvgWriteBytes("topic_A", 1, minSize, maxSize);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_45_Table, TFixtureTable)
+{
+    TestWriteToTopic45();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_45_Query, TFixtureQuery)
+{
+    TestWriteToTopic45();
+}
+
+void TFixture::TestWriteToTopic46()
 {
     // The `split` operation of the topic partition affects the writing in the transaction.
     // The transaction commit should fail with an error
@@ -2892,7 +3399,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_46, TFixture)
     session->CommitTx(*tx, EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_47, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_46_Table, TFixtureTable)
+{
+    TestWriteToTopic46();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_46_Query, TFixtureQuery)
+{
+    TestWriteToTopic46();
+}
+
+void TFixture::TestWriteToTopic47()
 {
     // The `split` operation of the topic partition does not affect the reading in the transaction.
     CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
@@ -2924,7 +3441,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47, TFixture)
     session->CommitTx(*tx, EStatus::SUCCESS);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_47_Table, TFixtureTable)
+{
+    TestWriteToTopic47();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_47_Query, TFixtureQuery)
+{
+    TestWriteToTopic47();
+}
+
+void TFixture::TestWriteToTopic48()
 {
     // the commit of a transaction affects the split of the partition
     CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
@@ -2954,7 +3481,17 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
+Y_UNIT_TEST_F(WriteToTopic_Demo_48_Table, TFixtureTable)
+{
+    TestWriteToTopic48();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_48_Query, TFixtureQuery)
+{
+    TestWriteToTopic48();
+}
+
+void TFixture::TestWriteToTopic50()
 {
     // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
     // cache are renamed.
@@ -3003,6 +3540,16 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
     UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_50_Table, TFixtureTable)
+{
+    TestWriteToTopic50();
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Demo_50_Query, TFixtureQuery)
+{
+    TestWriteToTopic50();
+}
+
 class TFixtureSinks : public TFixture {
 protected:
     void CreateRowTable(const TString& path);
@@ -3012,6 +3559,31 @@ protected:
     bool GetEnableOlapSink() const override;
     bool GetEnableHtapTx() const override;
     bool GetAllowOlapDataQuery() const override;
+
+    void TestSinksOltpWriteToTopic5();
+
+    void TestSinksOltpWriteToTopicAndTable2();
+    void TestSinksOltpWriteToTopicAndTable3();
+    void TestSinksOltpWriteToTopicAndTable4();
+    void TestSinksOltpWriteToTopicAndTable5();
+
+    void TestSinksOlapWriteToTopicAndTable1();
+    void TestSinksOlapWriteToTopicAndTable2();
+    void TestSinksOlapWriteToTopicAndTable3();
+};
+
+class TFixtureSinksTable : public TFixtureSinks {
+protected:
+    EClientType GetClientType() const override {
+        return EClientType::Table;
+    }
+};
+
+class TFixtureSinksQuery : public TFixtureSinks {
+protected:
+    EClientType GetClientType() const override {
+        return EClientType::Query;
+    }
 };
 
 void TFixtureSinks::CreateRowTable(const TString& path)
@@ -3059,27 +3631,47 @@ bool TFixtureSinks::GetAllowOlapDataQuery() const
     return true;
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1_Table, TFixtureSinksTable)
 {
     TestWriteToTopic7();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_2, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic7();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_2_Table, TFixtureSinksTable)
 {
     TestWriteToTopic10();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_3, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_2_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic10();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_3_Table, TFixtureSinksTable)
 {
     TestWriteToTopic26();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_4, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_3_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic26();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_4_Table, TFixtureSinksTable)
 {
     TestWriteToTopic9();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_5, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_4_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic9();
+}
+
+void TFixtureSinks::TestSinksOltpWriteToTopic5()
 {
     CreateTopic("topic_A");
 
@@ -3097,32 +3689,67 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_5, TFixtureSinks)
     Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 0);
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_1, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_5_Table, TFixtureSinksTable)
+{
+    TestSinksOltpWriteToTopic5();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_5_Query, TFixtureSinksQuery)
+{
+    TestSinksOltpWriteToTopic5();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_1_Table, TFixtureSinksTable)
 {
     TestWriteToTopic1();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_2, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_1_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic1();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_2_Table, TFixtureSinksTable)
 {
     TestWriteToTopic27();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_3, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_2_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic27();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_3_Table, TFixtureSinksTable)
 {
     TestWriteToTopic11();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_4, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_3_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic11();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_4_Table, TFixtureSinksTable)
 {
     TestWriteToTopic4();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_1, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopics_4_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic4();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_1_Table, TFixtureSinksTable)
 {
     TestWriteToTopic24();
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_1_Query, TFixtureSinksQuery)
+{
+    TestWriteToTopic24();
+}
+
+void TFixtureSinks::TestSinksOltpWriteToTopicAndTable2()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -3159,7 +3786,17 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2, TFixtureSinks)
     CheckTabletKeys("topic_B");
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2_Table, TFixtureSinksTable)
+{
+    TestSinksOltpWriteToTopicAndTable2();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2_Query, TFixtureSinksQuery)
+{
+    TestSinksOltpWriteToTopicAndTable2();
+}
+
+void TFixtureSinks::TestSinksOltpWriteToTopicAndTable3()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -3201,7 +3838,17 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3, TFixtureSinks)
     CheckTabletKeys("topic_B");
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3_Table, TFixtureSinksTable)
+{
+    TestSinksOltpWriteToTopicAndTable3();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3_Query, TFixtureSinksQuery)
+{
+    TestSinksOltpWriteToTopicAndTable3();
+}
+
+void TFixtureSinks::TestSinksOltpWriteToTopicAndTable4()
 {
     CreateTopic("topic_A");
     CreateRowTable("/Root/table_A");
@@ -3228,7 +3875,17 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4_Table, TFixtureSinksTable)
+{
+    TestSinksOltpWriteToTopicAndTable4();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4_Query, TFixtureSinksQuery)
+{
+    TestSinksOltpWriteToTopicAndTable4();
+}
+
+void TFixtureSinks::TestSinksOltpWriteToTopicAndTable5()
 {
     CreateTopic("topic_A");
     CreateRowTable("/Root/table_A");
@@ -3251,7 +3908,17 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Table, TFixtureSinksTable)
+{
+    TestSinksOltpWriteToTopicAndTable5();
+}
+
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Query, TFixtureSinksQuery)
+{
+    TestSinksOltpWriteToTopicAndTable5();
+}
+
+void TFixtureSinks::TestSinksOlapWriteToTopicAndTable1()
 {
     return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
@@ -3274,7 +3941,17 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1_Table, TFixtureSinksTable)
+{
+    TestSinksOlapWriteToTopicAndTable1();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1_Query, TFixtureSinksQuery)
+{
+    TestSinksOlapWriteToTopicAndTable1();
+}
+
+void TFixtureSinks::TestSinksOlapWriteToTopicAndTable2()
 {
     return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
@@ -3318,7 +3995,17 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2, TFixtureSinks)
     CheckTabletKeys("topic_B");
 }
 
-Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2_Table, TFixtureSinksTable)
+{
+    TestSinksOlapWriteToTopicAndTable2();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2_Query, TFixtureSinksQuery)
+{
+    TestSinksOlapWriteToTopicAndTable2();
+}
+
+void TFixtureSinks::TestSinksOlapWriteToTopicAndTable3()
 {
     CreateTopic("topic_A");
     CreateColumnTable("/Root/table_A");
@@ -3341,7 +4028,17 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Table, TFixtureSinksTable)
+{
+    TestSinksOlapWriteToTopicAndTable3();
+}
+
+Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Query, TFixtureSinksQuery)
+{
+    TestSinksOlapWriteToTopicAndTable3();
+}
+
+void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
 {
     // The test verifies the simultaneous execution of several transactions. There is a topic
     // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
@@ -3396,7 +4093,17 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
+Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Table, TFixtureTable)
+{
+    TestWriteRandomSizedMessagesInWideTransactions();
+}
+
+Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions_Query, TFixtureQuery)
+{
+    TestWriteRandomSizedMessagesInWideTransactions();
+}
+
+void TFixture::TestWriteOnlyBigMessagesInWideTransactions()
 {
     // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
     // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
@@ -3449,7 +4156,17 @@ Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
     }
 }
 
-Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Table, TFixtureTable)
+{
+    TestWriteOnlyBigMessagesInWideTransactions();
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions_Query, TFixtureQuery)
+{
+    TestWriteOnlyBigMessagesInWideTransactions();
+}
+
+void TFixture::TestTransactionsConflictOnSeqNo()
 {
     const ui32 PARTITIONS_COUNT = 20;
     const size_t TXS_COUNT = 100;
@@ -3531,7 +4248,17 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
     UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
 }
 
-Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixture)
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Table, TFixtureTable)
+{
+    TestTransactionsConflictOnSeqNo();
+}
+
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Query, TFixtureQuery)
+{
+    TestTransactionsConflictOnSeqNo();
+}
+
+Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixtureNoClient)
 {
     // In the test, we check the compatibility between versions `24-4-2` and `24-4-*/25-1-*`. To do this, the data
     // obtained on the `24-4-2` version is loaded into the PQ tablets.

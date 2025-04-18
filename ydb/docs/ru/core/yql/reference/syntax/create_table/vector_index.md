@@ -33,8 +33,8 @@ CREATE TABLE table_name (
 * **покрывающие_колонки** - дополнительные колонки таблицы, сохраняемые в индексе для возможности их извлечения без обращения к основной таблице
 * **параметры_индекса** - список параметров в формате ключ-значение:
   * общие параметры для всех векторных индексов:
-    * `dimension` - размерность вектора эмбеддинга (<= 16384);
-    * `type` - тип значений вектора (`float`, `uint8`, `int8`, `bit`);
+    * `vector_dimension` - размерность вектора эмбеддинга (<= 16384);
+    * `vector_type` - тип значений вектора (`float`, `uint8`, `int8`, `bit`);
     * `distance` - функция расстояния (`cosine`, `manhattan`, `euclidean`) или `similarity` - функция схожести (`inner_product`, `cosine`).
   * специфичные параметры для `vector_kmeans_tree`:
     * `clusters` - количество центроидов для алгоритма k-means (значения > 1000 могут ухудшить производительность);
@@ -48,7 +48,7 @@ CREATE TABLE table_name (
 
 {% note warning %}
 
-Векторные индексы с `type=bit` в настоящее время не поддерживаются
+Векторные индексы с `vector_type=bit` в настоящее время не поддерживаются
 
 {% endnote %}
 
@@ -63,7 +63,7 @@ CREATE TABLE user_articles (
     embedding String,
     INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
     ON (user, embedding) COVER (title, text)
-    WITH (dimension=512, type="float", distance="cosine", clusters=128, levels=2),
+    WITH (distance="cosine", vector_type="float", vector_dimension=512, clusters=128, levels=2),
     PRIMARY KEY (article_id)
 )
 ```

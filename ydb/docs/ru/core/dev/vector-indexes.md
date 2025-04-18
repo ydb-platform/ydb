@@ -52,7 +52,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
-  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
 ### Векторный индекс с покрывающими колонками {#covering}
@@ -64,7 +64,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding) COVER (data)
-  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
 ### Векторный индекс с префиксом {#prefixed}
@@ -76,7 +76,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
-  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
 ### Векторный индекс с префиксом и покрывающими колонками {#prefixed-covering}
@@ -88,7 +88,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding) COVER (data)
-  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
 ## Создание векторных индексов {#creation}

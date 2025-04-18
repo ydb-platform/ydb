@@ -11,7 +11,6 @@ SIZE(MEDIUM)
 
 TEST_SRCS(
     test_s3.py
-
 )
 
 PEERDIR(

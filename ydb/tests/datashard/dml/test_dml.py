@@ -1,7 +1,7 @@
 import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.DMLOperations import DMLOperations
+from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
@@ -43,7 +43,7 @@ class TestDML(TestBase):
         ]
     )
     def test_dml(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        dml = DMLOperations(self.query)
+        dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)

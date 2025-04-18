@@ -1,9 +1,10 @@
 import pytest
 import time
 
+from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.multicluster_test_base import MulticlusterTestBase
-from ydb.tests.datashard.lib.DMLOperations import DMLOperations
+from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
@@ -45,13 +46,15 @@ class TestAsyncReplication(MulticlusterTestBase):
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        dml_cluster_1 = DMLOperations(self.create_query(self.clusters[0]))
-        dml_cluster_2 = DMLOperations(self.create_query(self.clusters[1]))
+        dml_cluster_1 = DMLOperations(Query.create(
+            self.get_database(), self.get_endpoint(self.clusters[0])))
+        dml_cluster_2 = DMLOperations(Query.create(
+            self.get_database(), self.get_endpoint(self.clusters[1])))
 
         dml_cluster_1.create_table(table_name, pk_types, all_types,
                                    index, ttl, unique, sync)
         dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
-        dml_cluster_2.exec_query_fn(f"""
+        dml_cluster_2.query(f"""
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
                         WITH (
@@ -60,19 +63,19 @@ class TestAsyncReplication(MulticlusterTestBase):
                          """)
         for _ in range(100):
             try:
-                dml_cluster_2.exec_query_fn(
+                dml_cluster_2.query(
                     f"select count(*) as count from {table_name}")
                 break
             except Exception:
                 time.sleep(1)
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
-        dml_cluster_1.exec_query_fn(f"delete from {table_name}")
-        assert wait_for(self.create_predicate(True, table_name, dml_cluster_2.exec_query_fn),
+        dml_cluster_1.query(f"delete from {table_name}")
+        assert wait_for(self.create_predicate(True, table_name, dml_cluster_2.query),
                         timeout_seconds=100) is True, "Expected zero rows after delete"
         dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
         wait_for(self.create_predicate(False, table_name,
-                 dml_cluster_2.exec_query_fn), timeout_seconds=100)
+                 dml_cluster_2.query), timeout_seconds=100)
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
 

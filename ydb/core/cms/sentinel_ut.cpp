@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         }
 
         for (const auto& kv : disallowed) {
-            UNIT_ASSERT(kv.second == NKikimrCms::TPDiskInfo::MAX_FAULTY_PER_NODE);
+            UNIT_ASSERT(kv.second == NKikimrCms::TPDiskInfo::TOO_MANY_FAULTY_PER_NODE);
             disallowedDisksByNode[kv.first.NodeId]++;
         }
 
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         for (auto wholeShelfFailure : {true, false}) {
             NKikimrCms::TCmsConfig config;
 
-            config.MutableSentinelConfig()->SetMaxFaultyPDisksPerNode(disksPerShelf - 1);
+            config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
             TTestEnv env(nodes, disksPerNode, config);
             env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
 
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
         NKikimrCms::TCmsConfig config;
 
-        config.MutableSentinelConfig()->SetMaxFaultyPDisksPerNode(disksPerShelf - 1);
+        config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
         TTestEnv env(nodes, disksPerNode, config);
         env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
 

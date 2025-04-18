@@ -53,21 +53,23 @@ NThreading::TFuture<void> TTransaction::TImpl::ProcessFailure() const
 
 TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSettings& settings)
 {
-    ChangesAreAccepted = false;
+    auto self = shared_from_this();
+
+    self->ChangesAreAccepted = false;
     auto settingsCopy = settings;
 
-    auto precommitResult = co_await Precommit();
+    auto precommitResult = co_await self->Precommit();
 
     if (!precommitResult.IsSuccess()) {
         co_return TCommitTransactionResult(TStatus(precommitResult), std::nullopt);
     }
 
-    PrecommitCallbacks.clear();
+    self->PrecommitCallbacks.clear();
 
-    auto commitResult = co_await Session_.Client_->CommitTransaction(Session_, TxId_, settingsCopy);
+    auto commitResult = co_await self->Session_.Client_->CommitTransaction(self->Session_, self->TxId_, settingsCopy);
 
     if (!commitResult.IsSuccess()) {
-        co_await ProcessFailure();
+        co_await self->ProcessFailure();
     }
 
     co_return commitResult;
@@ -75,11 +77,12 @@ TAsyncCommitTransactionResult TTransaction::TImpl::Commit(const TCommitTxSetting
 
 TAsyncStatus TTransaction::TImpl::Rollback(const TRollbackTxSettings& settings)
 {
-    ChangesAreAccepted = false;
+    auto self = shared_from_this();
+    self->ChangesAreAccepted = false;
 
-    auto rollbackResult = co_await Session_.Client_->RollbackTransaction(Session_, TxId_, settings);
+    auto rollbackResult = co_await self->Session_.Client_->RollbackTransaction(self->Session_, self->TxId_, settings);
 
-    co_await ProcessFailure();
+    co_await self->ProcessFailure();
     co_return rollbackResult;
 }
 

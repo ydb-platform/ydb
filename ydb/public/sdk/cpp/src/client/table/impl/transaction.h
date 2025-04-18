@@ -4,7 +4,7 @@
 
 namespace NYdb::inline Dev::NTable {
 
-class TTransaction::TImpl {
+class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {
 public:
     TImpl(const TSession& session, const std::string& txId);
 

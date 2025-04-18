@@ -732,7 +732,7 @@ TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSet
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
-class TTransaction::TImpl {
+class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {
 public:
     TImpl(const TSession& session, const std::string& txId)
         : Session_(session)
@@ -792,10 +792,12 @@ public:
     }
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings()) {
-        ChangesAreAccepted = false;
+        auto self = shared_from_this();
+
+        self->ChangesAreAccepted = false;
         auto settingsCopy = settings;
 
-        auto precommitResult = co_await Precommit();
+        auto precommitResult = co_await self->Precommit();
 
         if (!precommitResult.IsSuccess()) {
             co_return TCommitTransactionResult(TStatus(precommitResult));
@@ -803,21 +805,23 @@ public:
 
         PrecommitCallbacks.clear();
 
-        auto commitResult = co_await Session_.Client_->CommitTransaction(TxId_, settingsCopy, Session_);
+        auto commitResult = co_await self->Session_.Client_->CommitTransaction(self->TxId_, settingsCopy, self->Session_);
 
         if (!commitResult.IsSuccess()) {
-            co_await ProcessFailure();
+            co_await self->ProcessFailure();
         }
 
         co_return commitResult;
     }
 
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings()) {
-        ChangesAreAccepted = false;
+        auto self = shared_from_this();
 
-        auto rollbackResult = co_await Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+        self->ChangesAreAccepted = false;
 
-        co_await ProcessFailure();
+        auto rollbackResult = co_await self->Session_.Client_->RollbackTransaction(self->TxId_, settings, self->Session_);
+
+        co_await self->ProcessFailure();
         co_return rollbackResult;
     }
 

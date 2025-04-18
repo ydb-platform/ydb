@@ -15,8 +15,4 @@ PEERDIR(
     ydb/tests/sql/lib
 )
 
-PEERDIR(
-    ydb/tests/stress/oltp_workload/workload
-)
-
 END()

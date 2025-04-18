@@ -7,7 +7,7 @@ security_config:
   # настройка режима аутентификации
   enforce_user_token_requirement: false
   enforce_user_token_check_requirement: false
-  default_user_sids: <аутентификационный токен для анонимных запросов>
+  default_user_sids: <SID для анонимных запросов>
   all_authenticated_users: <имя группы всех аутентифицированных пользователей>
   all_users_group: <имя группы всех пользователей>
 

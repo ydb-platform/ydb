@@ -30,7 +30,7 @@ public:
         return StartTime;
     }
 
-    TPlanCompactionInfo(const TInternalPathId pathId)
+    explicit TPlanCompactionInfo(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 

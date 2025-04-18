@@ -3385,20 +3385,22 @@ private:
             } else  if (auto limiter = TTableLimiter(range)) {
                 auto entry = execCtx->GetEntry();
                 bool stop = false;
+                const bool useNativeDyntableRead = execCtx->Options_.Config()->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
                 for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
                     TString srcTableName = execCtx->InputTables_[i].Name;
                     NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
-                    bool isDynamic = execCtx->InputTables_[i].Dynamic;
-                    ui64 recordsCount = execCtx->InputTables_[i].Records;
-                    if (!isDynamic) {
-                        if (!limiter.NextTable(recordsCount)) {
-                            continue;
+                    const bool isDynamic = execCtx->InputTables_[i].Dynamic;
+                    if (!isDynamic || useNativeDyntableRead) {
+                        if (const auto recordsCount = execCtx->InputTables_[i].Records; recordsCount || !isDynamic) {
+                            if (!limiter.NextTable(recordsCount)) {
+                                continue;
+                            }
                         }
                     } else {
                         limiter.NextDynamicTable();
                     }
 
-                    if (isDynamic) {
+                    if (isDynamic && !useNativeDyntableRead) {
                         YQL_ENSURE(srcTable.GetRanges().Empty());
                         stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
                     } else {

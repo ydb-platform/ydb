@@ -1,12 +1,15 @@
+{%- include "[generator]/common_dir.jinja" -%}
 rootProject.name = "{{ project_name }}"
-
 {%  for subdir in subdirs -%}
 {%-     set arcadia_subdir = arcadia_root + "/" + subdir -%}
 {%-     if arcadia_subdir != project_root -%}
-{%-         set classname = subdir | replace("/", ":") %}
-include(":{{ classname }}")
-project(":{{ classname }}").projectDir = file("{{ arcadia_subdir }}")
-{%      endif -%}
+{%-         set classpath = '":' + subdir | replace("/", ":") + '"' -%}
+{%-         include "[generator]/patch_classpath.jinja" %}
+include({{ classpath }})
+{%-         if not common_dir_classpath %}
+project({{ classpath }}).projectDir = file("{{ arcadia_subdir }}")
+{%-         endif -%}
+{%-     endif -%}
 {%- endfor -%}
 
 {%- include "[generator]/debug.jinja" ignore missing -%}

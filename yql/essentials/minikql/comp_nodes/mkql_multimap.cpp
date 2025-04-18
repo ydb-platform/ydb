@@ -21,8 +21,9 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsFinish())
-            return NUdf::TUnboxedValuePod::MakeFinish();
+        if (state.IsFinish()) {
+            return state;
+        }
 
         const auto pos = state.IsInvalid() ? 0ULL : state.Get<ui64>();
         if (!pos) {
@@ -412,8 +413,9 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsFinish())
-            return NUdf::TUnboxedValuePod::MakeFinish();
+        if (state.IsFinish()) {
+            return state;
+        }
 
         const auto pos = state.IsInvalid() ? 0ULL : state.Get<ui64>();
         if (!pos) {

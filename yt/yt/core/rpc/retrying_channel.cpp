@@ -227,7 +227,7 @@ private:
                 }));
 
             if (!RetryChecker_.Run(error)) {
-                ResponseHandler_->HandleError(std::move(error));
+                ReportError(error);
                 return;
             }
 

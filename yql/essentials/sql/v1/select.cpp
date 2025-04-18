@@ -1744,6 +1744,11 @@ public:
         if (Flatten) {
             block = L(block, Y("let", "core", Y(ordered ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Flatten, "res"))));
         }
+        if (ctx.GroupByExprAfterWhere) {
+            if (auto filter = Source->BuildFilter(ctx, "core"); filter) {
+                block = L(block, Y("let", "core", filter));
+            }
+        }
         if (PreaggregatedMap) {
             block = L(block, Y("let", "core", PreaggregatedMap));
             if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
@@ -1752,9 +1757,10 @@ public:
         } else if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
             block = L(block, Y("let", "origcore", "core"));
         }
-        auto filter = Source->BuildFilter(ctx, "core");
-        if (filter) {
-            block = L(block, Y("let", "core", filter));
+        if (!ctx.GroupByExprAfterWhere) {
+            if (auto filter = Source->BuildFilter(ctx, "core"); filter) {
+                block = L(block, Y("let", "core", filter));
+            }
         }
         if (Aggregate) {
             block = L(block, Y("let", "core", Aggregate));

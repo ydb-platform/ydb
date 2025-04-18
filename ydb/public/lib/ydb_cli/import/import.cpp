@@ -304,6 +304,11 @@ public:
         }
     }
 
+    // Get the protobuf arena for allocating messages
+    // google::protobuf::Arena* GetArena() {
+    //     return &ProtoArena;
+    // }
+
     TFileChunk& GetChunk(size_t threadId) {
         if (threadId >= Chunks.size()) {
             throw yexception() << "File chunk number is too big";
@@ -323,6 +328,7 @@ private:
     TVector<TFileChunk> Chunks;
     size_t SplitCount;
     size_t MaxInFlight;
+    // google::protobuf::Arena ProtoArena;
 };
 
 class TJobInFlightManager {
@@ -607,6 +613,10 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
 }
 
 TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath) {
+    // {
+    //     google::protobuf::Arena arena;
+    //     MyMessage* message = google::protobuf::Arena::Create<MyMessage>(&arena);
+    // }
     return Impl_->Import(filePaths, dbPath);
 }
 
@@ -1067,10 +1077,18 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         }
     };
 
-    auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
-        auto buildFunc = [&, buffer = std::move(buffer), row, this] () mutable {
+    auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 batchBytes, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
+        // Create an arena per batch that will be shared in the closure
+        google::protobuf::ArenaOptions options{};
+        options.start_block_size = batchBytes;
+        std::shared_ptr<google::protobuf::Arena> arena = std::make_shared<google::protobuf::Arena>(std::move(options));
+
+        auto buildFunc = [&, buffer = std::move(buffer), row, arena, this] () mutable {
             try {
-                return parser.BuildList(buffer, filePath, row);
+                // Use the arena for allocating protobuf objects
+                auto a = parser.BuildList(buffer, filePath, row, arena.get());
+                // std::cerr << "row " << row << ": SpaceUsed=" << PrettifyBytes(arena->SpaceUsed()) << ", SpaceAllocated=" << PrettifyBytes(arena->SpaceAllocated()) << std::endl;
+                return a;
             } catch (const std::exception& e) {
                 if (!Failed.exchange(true)) {
                     ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
@@ -1081,7 +1099,8 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         };
 
         UpsertTValueBuffer(dbPath, std::move(buildFunc))
-            .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+            // copy arena to the closure to ensure it's not destroyed before the request completes
+            .Apply([&, batchStatus, arena](const TAsyncStatus& asyncStatus) {
                 jobInflightManager->ReleaseJob();
                 if (asyncStatus.GetValueSync().IsSuccess()) {
                     batchStatus->Completed = true;
@@ -1134,9 +1153,9 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             progressCallback(skippedBytes + readBytes, *inputSizeHint);
         }
 
-        auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer),
+        auto workerFunc = [&upsertCsvFunc, batchBytes, row, buffer = std::move(buffer),
                 batchStatus = createStatus(row + batchRows)]() mutable {
-            upsertCsvFunc(std::move(buffer), row, batchStatus);
+            upsertCsvFunc(std::move(buffer), batchBytes, row, batchStatus);
         };
         row += batchRows;
         batchRows = 0;
@@ -1157,7 +1176,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     // Send the rest if buffer is not empty
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
         jobInflightManager->AcquireJob();
-        upsertCsvFunc(std::move(buffer), row, createStatus(row + batchRows));
+        upsertCsvFunc(std::move(buffer), batchBytes, row, createStatus(row + batchRows));
     }
 
     jobInflightManager->WaitForAllJobs();

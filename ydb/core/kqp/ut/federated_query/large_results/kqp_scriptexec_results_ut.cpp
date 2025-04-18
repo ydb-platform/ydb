@@ -22,7 +22,7 @@ using namespace fmt::literals;
 Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
     bool FetchRows(TQueryClient& queryClient, const TOperation& scriptExecutionOperation, TFetchScriptResultsSettings& settings, size_t& rowsFetched, const TString& rowContent) {
         TFetchScriptResultsResult results = queryClient.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
-        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToOneLineString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
@@ -58,10 +58,9 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});
 
-        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});;
-        auto tableClient = kikimr->GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr->GetQueryClient();
         const TString schemeQuery = fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
                 SOURCE_TYPE="ObjectStorage",
@@ -72,11 +71,10 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             "location"_a = GetBucketLocation(bucket)
         );
 
-        const auto schemeResult = session.ExecuteSchemeQuery(schemeQuery).GetValueSync();
-        UNIT_ASSERT_C(schemeResult.GetStatus() == EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+        const auto schemeResult = queryClient.ExecuteQuery(schemeQuery, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToOneLineString());
 
         // Execute test query
-        auto queryClient = kikimr->GetQueryClient();
         const TString query = fmt::format(R"(
             SELECT * FROM `{external_source}`.`/` WITH (
                 FORMAT="csv_with_names",
@@ -89,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         );
 
         auto scriptExecutionOperation = queryClient.ExecuteScript(query).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToOneLineString());
 
         // Wait script execution
         NOperation::TOperationClient operationClient(kikimr->GetDriver());
@@ -100,7 +98,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
 
         const TInstant waitStart = TInstant::Now();
         while (TInstant::Now() - waitStart <= TDuration::Minutes(1)) {
-            scriptExecutionOperation = operationClient.Get<TScriptExecutionOperation>(scriptExecutionOperation.Id()).GetValueSync();
+            scriptExecutionOperation = operationClient.Get<TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
             if (scriptExecutionOperation.Ready()) {
                 break;
             }
@@ -118,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
                 while (rowsFetched < resultMeta.RowsCount && FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToOneLineString());
             Sleep(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT_EQUAL(scriptExecutionOperation.Metadata().ExecStatus, EExecStatus::Completed);
@@ -137,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
 
         // Test forget operation
         auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
 
         const TString countResultsQuery = fmt::format(R"(
                 SELECT COUNT(*)
@@ -147,13 +145,12 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
 
         const TInstant forgetChecksStart = TInstant::Now();
         while (TInstant::Now() - forgetChecksStart <= TDuration::Minutes(1)) {
-            NYdb::NTable::TDataQueryResult result = session.ExecuteDataQuery(countResultsQuery, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto result = queryClient.ExecuteQuery(countResultsQuery, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             auto resultSet = result.GetResultSetParser(0);
             resultSet.TryNextRow();
-
-            ui64 numberRows = resultSet.ColumnParser(0).GetUint64();
+            const ui64 numberRows = resultSet.ColumnParser(0).GetUint64();
             if (!numberRows) {
                 return;
             }
@@ -161,7 +158,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             Cerr << "Rows remains: " << numberRows << ", elapsed time: " << TInstant::Now() - forgetChecksStart << "\n";
             Sleep(TDuration::Seconds(1));
         }
-        UNIT_ASSERT_C(false, "Results removing timeout");
+        UNIT_FAIL("Results removing timeout");
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {

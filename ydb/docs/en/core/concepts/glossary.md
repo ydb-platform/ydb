@@ -16,7 +16,22 @@ A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name 
 
 Like in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities like [tables](#table). However, in {{ ydb-short-name }}, the namespace inside databases is hierarchical like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [folders](#folder) allow for further organization of entities.
 
-Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating an additional database is usually done externally by [DevOps engineers](../devops/index.md) or automation rather than via a SQL query.
+Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating a database requires additional operations from [DevOps engineers](../devops/index.md).
+
+{{ ydb-short-name }} has the following database types:
+
+- [tenant databases](#tenant-database)
+- [root databases](#root-database)
+
+#### Tenant database {#tenant-database}
+
+A **tenant database** is a logical container with an independent namespace for user-defined objects within the database.
+
+Tenant databases are completely isolated from each other — they are processed by separate [database nodes](#database-node), they have separate [storage groups](#storage-group), and they can have separate [users](#access-user) with different [access rights](#access-right) and [access levels](#access-level).
+
+#### Root database {#root-database}
+
+A **root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users](#access-user), [access levels](#access-level) and [access rights](#access-right), [tenant databases](#tenant-database), and more.
 
 ### Node {#node}
 
@@ -262,6 +277,32 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
+### Authentication token {#auth-token}
+
+An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
+
+{{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
+
+### User token {#user-token}
+
+When a {{ ydb-short-name }} node gets a request from a [user](#access-user), it requests the service where the user was created to validate the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
+
+### Cluster scheme {#scheme}
+
+A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#root-database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+
+### Database scheme {#scheme-database}
+
+A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+
+### Database root {#scheme-database-root}
+
+A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme.
+
+### Scheme root {#scheme-root}
+
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+
 ### Scheme object {#scheme-object}
 
 A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
@@ -297,6 +338,24 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
 
+### Access level {#access-level}
+
+An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
+
+{{ ydb-short-name }} uses three access levels:
+
+- viewer
+- operator
+- administrator
+
+An access level is granted by adding an access subject to an [access level list](#access-level-list).
+
+### Access level list {#access-level-list}
+
+An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
+
+{{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
 ### Owner {#access-owner}
 
 An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
@@ -304,6 +363,13 @@ An **[owner](../security/authorization.md#owner)** is an [access subject](#acces
 ### User {#access-user}
 
 A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
+
+{{ ydb-short-name }} has the following types of users depending on their source:
+
+- internal users in {{ ydb-short-name }} databases
+- external users from third-party directory services
+
+{{ ydb-short-name }} users are identified by their [SIDs](#access-sid).
 
 ### Group {#access-group}
 

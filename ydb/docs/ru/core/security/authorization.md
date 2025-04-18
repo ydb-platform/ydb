@@ -6,7 +6,7 @@
 
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
-* [Право доступа](../concepts/glossary.md#access-right)
+* [Права доступа](../concepts/glossary.md#access-right)
 * [Список доступов](../concepts/glossary.md#access-acl)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
@@ -18,7 +18,12 @@
 
 ## Пользователь {#user}
 
-Для создания, изменения и удаления пользователей {{ ydb-short-name }} есть команды:
+Пользователи в {{ ydb-short-name }} могут создаваться в разных источниках:
+
+- внутренние пользователи в базах данных {{ ydb-short-name }};
+- внешние пользователи из сторонних служб доступа к каталогам.
+
+Для создания, изменения и удаления [внутренних пользователей](../concepts/glossary.md#access-user) {{ ydb-short-name }} есть команды:
 
 * [{#T}](../yql/reference/syntax/create-user.md)
 * [{#T}](../yql/reference/syntax/alter-user.md)
@@ -39,10 +44,12 @@
 
 {% endnote %}
 
+### SID {#sid}
+
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются [SID](../concepts/glossary.md#access-sid) с использованием суффикса.
 
 Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) имена пользователей будут `user1@ldap` и `user2@ldap`.<br/>
-Если имя пользователя указано без суффикса, то имеется в виду локальный пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
+Если имя пользователя указано без суффикса, то имеется в виду внутренний пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
 
 ## Группа {#group}
 
@@ -63,7 +70,7 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Право {#right}
+## Права доступа {#right}
 
 [Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 

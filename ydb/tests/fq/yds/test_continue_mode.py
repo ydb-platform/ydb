@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import datetime
 import logging
 import os
 import pytest
@@ -8,8 +7,7 @@ import time
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.tools.fq_runner.fq_client import CONTROL_PLANE_REQUEST_TIMEOUT, FederatedQueryClient, StreamingDisposition
-from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
+from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream

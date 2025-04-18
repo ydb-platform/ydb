@@ -100,7 +100,7 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
 ### Interactive transactions {#interactive-transaction}
 
@@ -162,9 +162,10 @@ A special type of **secondary index** is singled out separately - [vector index]
 
 #### Vector Index {#vector-index}
 
-A **vector index** is an additional data structure used to speed up the [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search), typically when the data is too large for the [index-less approach](../yql/reference/udf/list/knn.md) to handle the load. Unlike the primary index, vector indexes are managed independently of the underlying table data. Thus, a table can have multiple vector indexes for different scenarios. For more information about using vector indexes in {{ ydb-short-name }}, see [{#T}](vector_indexes.md).
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
-A **vector index** is allocated separately from the [secondary index] (#secondary-index), as it solves other tasks.
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+
 
 #### Column family {#column-family}
 

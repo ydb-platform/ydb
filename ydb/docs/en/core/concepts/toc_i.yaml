@@ -14,8 +14,8 @@ items:
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
-- name: Vector indexes
-  href: vector_indexes.md
+- name: Vector search
+  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

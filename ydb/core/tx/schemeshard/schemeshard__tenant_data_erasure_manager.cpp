@@ -1,6 +1,7 @@
 #include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -113,10 +114,16 @@ void TTenantDataErasureManager::ClearWaitingDataErasureRequests() {
 void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
     Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
-        if (shardInfo.TabletType == ETabletType::DataShard) {
+        switch (shardInfo.TabletType) {
+        case NKikimr::NSchemeShard::ETabletType::DataShard:
+        case NKikimr::NSchemeShard::ETabletType::KeyValue: {
             Enqueue(shardIdx);
             WaitingDataErasureShards[shardIdx] = EDataErasureStatus::IN_PROGRESS;
             db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(WaitingDataErasureShards[shardIdx]);
+            break;
+        }
+        default:
+            break;
         }
     }
     if (WaitingDataErasureShards.empty()) {
@@ -168,8 +175,20 @@ NOperationQueue::EStartStatus TTenantDataErasureManager::StartDataErasure(const 
         << ", running# " << Queue->RunningSize() << " shards"
         << " at schemeshard " << SchemeShard->TabletID());
 
-    std::unique_ptr<TEvDataShard::TEvForceDataCleanup> request(
-        new TEvDataShard::TEvForceDataCleanup(Generation));
+    std::unique_ptr<IEventBase> request = nullptr;
+    switch (it->second.TabletType) {
+    case NKikimr::NSchemeShard::ETabletType::DataShard: {
+        request.reset(new TEvDataShard::TEvForceDataCleanup(Generation));
+        break;
+    }
+    case NKikimr::NSchemeShard::ETabletType::KeyValue: {
+        request.reset(new TEvKeyValue::TEvCleanUpDataRequest(Generation));
+    }
+    default:
+        return NOperationQueue::EStartStatus::EOperationRemove;
+    }
+
+
 
     ActivePipes[shardIdx] = SchemeShard->PipeClientCache->Send(
         ctx,

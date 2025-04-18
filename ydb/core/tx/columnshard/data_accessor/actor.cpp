@@ -8,7 +8,7 @@ void TActor::Handle(TEvAskServiceDataAccessors::TPtr& ev) {
 
 void TActor::Bootstrap() {
     AccessorsCallback = std::make_shared<TActorAccessorsCallback>(SelfId());
-    Manager = std::make_shared<TLocalManager>(AccessorsCallback);
+    Manager = std::make_shared<TLocalManager>((NOlap::TTabletId)TabletId, AccessorsCallback);
     Become(&TThis::StateWait);
 }
 

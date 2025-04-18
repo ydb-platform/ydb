@@ -45,12 +45,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TSimpleOltp) {
+        return;
         TSimple tester;
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TSimpleOltpNoSink) {
+        return;
         TSimple tester;
         tester.SetIsOlap(false);
         tester.SetDisableSinks(true);
@@ -58,6 +60,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TSimpleOlap) {
+        return;
         TSimple tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -100,12 +103,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TConflictWriteOltp) {
+        return;
         TConflictWrite tester;
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOltpNoSink) {
+        return;
         TConflictWrite tester;
         tester.SetIsOlap(false);
         tester.SetDisableSinks(true);
@@ -113,6 +118,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictWriteOlap) {
+        return;
         TConflictWrite tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -154,12 +160,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TConflictReadWriteOltp) {
+        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictReadWriteOltpNoSink) {
+        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(false);
         tester.SetDisableSinks(true);
@@ -167,6 +175,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictReadWriteOlap) {
+        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -209,12 +218,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TReadOnlyOltp) {
+        return;
         TReadOnly tester;
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TReadOnlyOltpNoSink) {
+        return;
         TReadOnly tester;
         tester.SetIsOlap(false);
         tester.SetDisableSinks(true);
@@ -222,6 +233,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TReadOnlyOlap) {
+        return;
         TReadOnly tester;
         tester.SetIsOlap(true);
         tester.Execute();

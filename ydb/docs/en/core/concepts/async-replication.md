@@ -1,4 +1,4 @@
-# Asynchronous replication
+# Asynchronous Replication
 
 Asynchronous replication allows for synchronizing data between {{ ydb-short-name }} [databases](glossary.md#database) in near real time. It can also be used for data migration between databases with minimal downtime for applications interacting with these databases. Such databases can be located in the same {{ ydb-short-name }} [cluster](glossary.md#cluster) as well as in different clusters.
 
@@ -66,13 +66,13 @@ Replicas are created under the user account that was used to create the asynchro
 
 {% endnote %}
 
-### Initial table scan {#initial-scan}
+### Initial Table Scan {#initial-scan}
 
 During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
-### Change data replication {#replication-of-changes}
+### Change Data Replication {#replication-of-changes}
 
 After the initial table scan is completed, the consumers read the change data and write it to replicas.
 
@@ -97,7 +97,7 @@ You can also get the replication lag from the [description](../reference/ydb-cli
 * During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
 * During asynchronous replication, replicas are available only for reading.
 
-## Error handling during asynchronous replication {#error-handling}
+## Error Handling During Asynchronous Replication {#error-handling}
 
 Possible errors during asynchronous replication can be grouped into the following classes:
 
@@ -110,9 +110,9 @@ Currently, asynchronous replication that is aborted due to a critical error cann
 
 {% endnote %}
 
-For more information about error classes and how to address them, refer to [Error handling](../reference/ydb-sdk/error_handling.md).
+For more information about error classes and how to address them, refer to [Error Handling](../reference/ydb-sdk/error_handling.md).
 
-## Asynchronous replication completion {#done}
+## Asynchronous Replication Completion {#done}
 
 Completion of asynchronous replication might be an end goal of data migration from one database to another. In this case the client stops writing data to the source, waits for the zero replication lag, and completes replication. After the replication process is completed, replicas become available both for reading and writing. Then you can switch the load from the source database to the target database and complete data migration.
 
@@ -130,7 +130,7 @@ You cannot resume completed asynchronous replication.
 
 To complete asynchronous replication, use the [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md) YQL expression.
 
-## Dropping an asynchronous replication instance {#drop}
+## Dropping an Asynchronous Replication Instance {#drop}
 
 When you drop an asynchronous replication instance:
 

@@ -69,6 +69,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
+    {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -104,6 +105,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
+    if (settings.LangVer >= MakeLangVersion(2025, 2)) {
+        GroupByExprAfterWhere = true;
+    }
+
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
     }

@@ -317,6 +317,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
     NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
     NCommon::TConfSetting<bool, false> UseColumnGroupsFromInputTables;
+    NCommon::TConfSetting<bool, false> UseNativeDynamicTableRead;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

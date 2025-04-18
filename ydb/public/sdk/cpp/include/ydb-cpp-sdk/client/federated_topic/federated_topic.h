@@ -21,6 +21,8 @@ using TAsyncDescribeTopicResult = NTopic::TAsyncDescribeTopicResult;
 struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFederatedPartitionSession> {
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
 
+    friend class TDeferredCommit;
+
 public:
     TFederatedPartitionSession(const NTopic::TPartitionSession::TPtr& partitionSession,
                                std::shared_ptr<TDbInfo> db,
@@ -223,10 +225,10 @@ public:
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
     //! Add offsets range to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
 
     //! Add offset to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 offset);
 
     //! Commit all added offsets.
     void Commit();
@@ -399,7 +401,7 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! See description in TFederatedEventHandlers class.
     FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
 
-    
+
 
     //! Read policy settings
 

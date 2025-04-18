@@ -2052,9 +2052,22 @@ public:
         if (!serializedMetas) {
             if (!operationStatus) {
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Result is not ready");
-            } else {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
+                return;
             }
+
+            const Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
+                NYql::TIssue rootIssue("Script execution failed without results");
+                if (const auto& issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument()) {
+                    for (const auto& issue : DeserializeIssues(TString(*issuesSerialized))) {
+                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                    }
+                }
+                Finish(operationStatusCode, NYql::TIssues{rootIssue});
+                return;
+            }
+
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
             return;
         }
 

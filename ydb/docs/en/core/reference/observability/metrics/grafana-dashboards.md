@@ -109,3 +109,23 @@ DataShard tablet metrics.
 | Other | Other metrics |
 
 Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/datashard.json) file with the **DataShard** dashboard.
+
+## Database Hive {#database-hive-detailed}
+
+[Hive](../../../contributor/hive.md) metrics for the selected database.
+
+The dashboard includes the following filters:
+* database - used to select the database which metrics need to be displayed;
+* ds - used to select the Grafana datasource the dashboard will use;
+* local-tx - determines which data will be displayed on the `{{local-tx}}` avg time widget.
+
+| Name | Description |
+|---|---|
+| hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR, the two of the most important actors of the Hive tablet. |
+| hive self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
+| hive local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
+| `{{local-tx}}` avg time | Average execution time of a single local transaction for the type specified in the `local-tx` parameter selector on the dashboard. |
+| tablet count | Total number of tablets in the database. |
+| event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
+| versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
+| hive node | Node where the database Hive is running. |

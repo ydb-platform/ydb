@@ -93,7 +93,7 @@ public:
 };
 
 class TTableInfo {
-    TInternalPathId PathId;
+    const TInternalPathId PathId;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 

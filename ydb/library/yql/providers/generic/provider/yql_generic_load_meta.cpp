@@ -361,10 +361,12 @@ namespace NYql {
                 .Listify<TCoVoid>().Build();
             // clang-format on
 
-            for (auto& child: read.FreeArgs().Get(4).Ref().Children()) {
-                Cerr << "Child: " << child->Dump() << Endl;
-                if (child.Get()->ChildrenSize() == 1 && child.Get()->Head().IsAtom("listify")) {
-                   builder.Listify(child.Get()->HeadPtr());
+            if (read.FreeArgs().Count() > 4) {
+                for (auto& child: read.FreeArgs().Get(4).Ref().Children()) {
+                    Cerr << "Child: " << child->Dump() << Endl;
+                    if (child.Get()->ChildrenSize() == 1 && child.Get()->Head().IsAtom("listify")) {
+                       builder.Listify(child.Get()->HeadPtr());
+                    }
                 }
             }
             return std::move(builder).Done().Ptr();

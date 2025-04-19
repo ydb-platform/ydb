@@ -25,7 +25,7 @@ Generate the dynamic configuration based on the static configuration:
 ydb admin cluster config generate > config.yaml
 ```
 
-After executing this command, the `config.yaml` file will contain a YAML document like the following:
+After executing this command, the `config.yaml` file will contain a YAML document in the following format:
 
 ```yaml
 metadata:

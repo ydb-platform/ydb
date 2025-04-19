@@ -27,7 +27,7 @@ ydb admin node config init --help
 
 ## Примеры {#examples}
 
-Инициализируйте конфигурационную директорию узла, используя файл конфигурации на узле:
+Инициализируйте конфигурационную директорию узла, используя указанный файл конфигурации:
 
 ```bash
 ydb admin node config init --config-dir /opt/ydb/cfg-dir --from-config config.yaml

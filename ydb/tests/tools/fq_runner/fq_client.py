@@ -48,7 +48,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         t = Timestamp()
         t.FromMilliseconds(int(seconds * 1000))
-        disposition.from_time.timestamp = t
+        disposition.from_time.timestamp.CopyFrom(t)
         return disposition
 
     @staticmethod
@@ -56,7 +56,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         d = Duration()
         d.FromMilliseconds(int(seconds * 1000))
-        disposition.time_ago.duration = d
+        disposition.time_ago.duration.CopyFrom(d)
         return disposition
 
     @staticmethod

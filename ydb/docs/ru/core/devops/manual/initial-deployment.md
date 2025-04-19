@@ -238,6 +238,14 @@ vdb    252:16   0   186G  0 disk
         - "DATABASE-ADMINS"
     ```
 
+1. Регистрация динамического узла (опционально).
+
+    Если на этапе включения аутентификации пользователя был установлен флаг `security_config.enforce_user_token_requirement: true`, в конфигурацию необходимо добавить информацию для возможности регистрации динамического узла.
+    Поскольку динамический узел в процессе регистрации отправляет запрос к статическому узлу кластера, он должен предоставить аутентификационную информацию, которую статический узел сможет проверить.
+
+    Так как динамический узел действует в роли виртуального пользователя, в качестве аутентификационной информации он должен предоставить SSL-сертификат. После проверки этого сертификата статический узел разрешает динамическому узлу зарегистрироваться.
+    Подробная информация о регистрации динамического узла описана в разделе [{#T}](../../reference/configuration/index.md#dynamic-node-registration)
+
 При использовании режима шифрования трафика убедитесь в наличии в конфигурационном файле {{ ydb-short-name }} установленных путей к файлам ключей и сертификатов в секциях `interconnect_config` и `grpc_config`:
 
 ```yaml
@@ -443,7 +451,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   ```
 
   В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
@@ -478,7 +488,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720

@@ -49,7 +49,7 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TTestSchema {
-    static inline const TString DefaultTtlColumn = "saved_at";
+    static inline const TString DefaultTtlColumn = "timestamp";
 
     struct TStorageTier {
         TString TtlColumn = DefaultTtlColumn;

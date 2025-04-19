@@ -43,32 +43,33 @@
 [scheme describe](../commands/scheme-describe.md) | Описание объекта схемы данных
 [scheme ls](../commands/scheme-ls.md) | Список объектов схемы данных
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории
-scheme permissions add | Предоставление разрешения
-scheme permissions chown | Изменение владельца объекта
-scheme permissions clear | Очистка разрешений
-scheme permissions grant | Предоставление разрешения
-scheme permissions remove | Удаление разрешения
-scheme permissions revoke | Удаление разрешения
-scheme permissions set | Установка разрешений
+[scheme permissions chown](../commands/scheme-permissions.md#chown) | Изменение владельца объекта
+[scheme permissions clear](../commands/scheme-permissions.md#clear) | Очистка разрешений
+[scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Предоставление разрешения
+[scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Удаление разрешения
+[scheme permissions set](../commands/scheme-permissions.md#set) | Установка разрешений
+[scheme permissions list](../commands/scheme-permissions.md#list) | Просмотр разрешений
+[scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений
+[scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
 [scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
-table attribute add | Добавление атрибута таблицы
-table attribute drop | Удаление атрибута таблицы
-[table drop](../table-drop.md) | Удаление таблицы
-[table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса
-[table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса
-[table index drop](../commands/secondary_index.md#drop) | Удаление индекса
+table attribute add | Добавление атрибута для строкой или колоночной таблицы
+table attribute drop | Удаление атрибута у строковой или колоночной таблицы
+[table drop](../table-drop.md) | Удаление строковой или колоночной таблицы
+[table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса для строковых таблиц
+[table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса для строковых таблиц
+[table index drop](../commands/secondary_index.md#drop) | Удаление индекса у строковых таблиц
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
-[table read](../commands/readtable.md) | Потоковое чтение таблицы
-[table ttl set](../table-ttl-set.md) | Установка параметров TTL
-[table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL
+[table read](../commands/readtable.md) | Потоковое чтение строковой таблицы
+[table ttl set](../table-ttl-set.md) | Установка параметров TTL для строковых и колоночных таблиц
+[table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL для строковых и колоночных таблиц
 [tools copy](../tools-copy.md) | Копирование таблиц
-[tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблицы в файловую систему
+[tools dump](../export-import/tools-dump.md) | Выгрузка директории или таблиц в файловую систему
 {% if ydb-cli == "ydb" %}
-[tools pg-convert](../../../postgresql/pg-dump.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
+[tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
-[tools rename](../commands/tools/rename.md) | Переименование таблиц
+[tools rename](../commands/tools/rename.md) | Переименование строковых таблиц
 [tools restore](../export-import/tools-restore.md) | Восстановление из файловой системы
 [topic create](../topic-create.md) | Создание топика
 [topic alter](../topic-alter.md) | Модификация параметров топика и перечня читателей

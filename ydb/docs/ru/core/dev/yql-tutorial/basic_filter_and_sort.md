@@ -4,12 +4,12 @@
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT
    series_id,
    season_id,
    episode_id,
-   CAST(air_date AS Date) AS air_date, 
+   CAST(air_date AS Date) AS air_date,
    title
 
 FROM episodes
@@ -25,6 +25,4 @@ ORDER BY              -- Сортировка результатов.
 LIMIT 3               -- LIMIT N после ORDER BY означает
                       -- «получить первые N» или «последние N» результатов
 ;                     -- в зависимости от порядка сортировки.
-
-COMMIT;
 ```

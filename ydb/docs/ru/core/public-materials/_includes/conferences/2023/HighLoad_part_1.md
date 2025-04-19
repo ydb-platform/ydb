@@ -1,4 +1,4 @@
-### Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
+## Реализовать OLAP: как мы делали колоночное хранение в {{ ydb-short-name }} {#2023-conf-hl-olap}
 
 <div class = "multi-tags-container">
 
@@ -8,10 +8,11 @@
 
 </div>
 
-{{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing). 
+{{ ydb-short-name }} – это платформа, которая умеет обрабатывать большой поток быстрых транзакций (OLTP, Online Transaction Processing). Команда, в которой работает {{ team.novozhilova.name }} ({{ team.novozhilova.position }}) захотела научить YDB обрабатывать другой тип запросов — аналитические (OLAP, Online Analytical Processing).
 
-Из доклада вы узнаете ответы на вопросы: 
-* Достаточно ли просто поменять систему хранения, упаковать данные по колонкам, чтобы получить профит? 
+Из доклада вы узнаете ответы на вопросы:
+
+* Достаточно ли просто поменять систему хранения, упаковать данные по колонкам, чтобы получить профит?
 * Зачем это было нужно и какая польза от таких расширений системе в целом?
 
 @[YouTube](https://www.youtube.com/watch?v=6A7ZfMsHJRM&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=59&pp=iAQB)
@@ -21,7 +22,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/olap/presentation.pdf)
 
 
-### database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
+## database/sql: плохой, хороший и злой. Опыт разработки драйвера для распределенной СУБД YDB {#2023-conf-hl-database-sql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -36,7 +37,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/database_sql/presentation.pdf)
 
 
-### YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
+## YDB-оптимизации производительности под ARM {#2023-conf-hl-ydb-opt}
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 

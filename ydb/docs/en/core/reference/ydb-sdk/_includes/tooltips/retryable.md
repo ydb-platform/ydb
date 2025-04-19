@@ -1,0 +1,1 @@
+**Temporary failures** (retryable). Such errors include a short-term loss of network connectivity, temporary unavailability, overload of a {{ ydb-short-name }} subsystem, or a failure of {{ ydb-short-name }} to respond to a query within the set timeout. If one of these errors occurs, retrying the failed query is likely to be successful after some time.

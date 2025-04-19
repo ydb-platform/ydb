@@ -14,14 +14,14 @@
 
 ### Создание {{ k8s }} кластера
 
-Пропустите этот раздел, если у вас уже имеется подходящий {{ k8s }} 
+Пропустите этот раздел, если у вас уже имеется подходящий {{ k8s }}
 
 {% list tabs %}
 
 - AWS EKS
 
   1. Настройте утилиты `awscli` и `eksctl` для работы с ресурсами AWS по [документации](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
-  
+
   2. Настройте `kubectl` для работы с кластером {{ k8s }}.
 
   3. Выполните следующую команду:
@@ -57,7 +57,7 @@
 
 ## Обзор {{ ydb-short-name }} Helm-чарта
 
-Helm-чарт устанавливает [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) в {{ k8s }} кластер. Он представляет собой контроллер, построенный по паттерну [Оператор](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). Он реализует необходимую логику для развертывания и управления компонентами {{ ydb-short-name }}.
+Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) в {{ k8s }} кластер. Он представляет собой контроллер, построенный по паттерну [Оператор](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/). Он реализует необходимую логику для развертывания и управления компонентами {{ ydb-short-name }}.
 
 Кластер {{ ydb-short-name }} состоит из двух видов узлов:
 
@@ -77,13 +77,7 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 
 ## Подготовка рабочего окружения
 
-1. Склонируйте репозиторий с [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
-
-    ```bash
-    git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
-    ```
-
-2. Добавьте в Helm репозиторий для {{ ydb-short-name }}:
+1. Добавьте в Helm репозиторий для {{ ydb-short-name }}:
 
     Выполните команду:
 
@@ -100,7 +94,7 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
     "ydb" has been added to your repositories
     ```
 
-3. Обновите индекс чартов Helm:
+2. Обновите индекс чартов Helm:
 
     Выполните команду:
 
@@ -121,27 +115,25 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 
 ### Установите {{ ydb-short-name }} {{ k8s }} оператор
 
-Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`:
+Разверните {{ ydb-short-name }} {{ k8s }} оператор на кластере с помощью `helm`, выполните команду:
 
-  Выполните команду:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator` — имя установки;
+* `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
 
-  * `ydb-operator` — имя установки;
-  * `ydb/ydb-operator` — название чарта в добавленном ранее репозитории.
+Результат выполнения:
 
-  Результат выполнения:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 
 ### Разверните узлы хранения
@@ -155,7 +147,7 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 - block-4-2
 
   ```bash
-  kubectl apply -f samples/storage-block-4-2.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-block-4-2.yaml
   ```
 
   Это создаст 8 узлов хранения {{ ydb-short-name }}, сохраняющих данные с использованием erasure coding. В этом случае используется лишь +50% дополнительного дискового пространства для обеспечения отказоустойчивости.
@@ -163,7 +155,7 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 - mirror-3-dc
 
   ```bash
-  kubectl apply -f samples/storage-mirror-3-dc.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-mirror-3dc.yaml
   ```
 
   Это создаст 9 узлов хранения {{ ydb-short-name }}, которые сохраняют данные с фактором репликации 3.
@@ -187,7 +179,7 @@ Helm-чарт устанавливает [YDB Kubernetes Operator](https://githu
 Примените манифест для создания базы данных и динамических узлов:
 
 ```bash
-kubectl apply -f samples/database.yaml
+kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/database.yaml
 ```
 
 {% note info %}
@@ -239,7 +231,7 @@ Events:
 
     Результат:
 
-    ```
+    ```text
     NAME                READY   STATUS    RESTARTS   AGE
     database-sample-0   1/1     Running   0          1m
     database-sample-1   1/1     Running   0          1m

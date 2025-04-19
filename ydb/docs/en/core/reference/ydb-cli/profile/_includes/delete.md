@@ -11,7 +11,7 @@ where `<profile_name>` is the profile name.
 The {{ ydb-short-name }} CLI will request confirmation to delete the profile:
 
 ```text
-Profile "<profile_name>" will be permanently removed. Continue? (y/n): 
+Profile "<profile_name>" will be permanently removed. Continue? (y/n):
 ```
 
 Choose `y` (Yes) to delete the profile.

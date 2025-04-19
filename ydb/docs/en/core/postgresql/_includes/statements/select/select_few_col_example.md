@@ -1,4 +1,4 @@
 ```sql
-SELECT id, name, lastname 
+SELECT id, name, lastname
 FROM people;
 ```

@@ -2,8 +2,8 @@
 
 {% include notitle [releases_tag](../../tags.md#releases) %}
 
-В вебинаре рассказывается о поддержке изначального сканирования в CDC, атомарной замене индексов, и аудитном логе: 
-* Устройство [Change Data Capture](https://www.youtube.com/live/vzKoEVvESi0?si=PDu8VliKHNKn25iE&t=171) (механизм отслеживания изменения данных в таблицах) и улучшения этой системы в новом релизе. [{{ team.nizametdinov.name }}]({{ team.nizametdinov.profile }}) ({{ team.nizametdinov.position }}). 
+В вебинаре рассказывается о поддержке изначального сканирования в CDC, атомарной замене индексов, и аудитном логе:
+* Устройство [Change Data Capture](https://www.youtube.com/live/vzKoEVvESi0?si=PDu8VliKHNKn25iE&t=171) (механизм отслеживания изменения данных в таблицах) и улучшения этой системы в новом релизе. [{{ team.nizametdinov.name }}]({{ team.nizametdinov.profile }}) ({{ team.nizametdinov.position }}).
 * Новая функциональность YDB – [аудитный лог](https://www.youtube.com/live/vzKoEVvESi0?si=umC_WpfI8XXpWrRY&t=925), которая позволяет отслеживать ключевые действия и события в системе. [{{ team.rykov.name }}]({{ team.rykov.profile }}) ({{ team.rykov.position }}).
 * Улучшение в конфигурации [акторной системы]((https://www.youtube.com/live/vzKoEVvESi0?si=roXublyzdBy8UNjC&t=1177)). [{{ team.kriukov.name }}]({{ team.kriukov.profile }}) ({{ team.kriukov.position }})
 * Улучшения в форматах [передачи данных](https://www.youtube.com/watch?v=vzKoEVvESi0&t=1381s) между этапами выполнения запросов. [{{ team.gridnev.name }}]({{ team.gridnev.profile }}) ({{ team.gridnev.position }}).

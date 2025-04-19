@@ -1,5 +1,7 @@
 # INSERT INTO
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [alert_preview.md](../_includes/alert_preview.md) %}
 
 Syntax of the `INSERT INTO` statement:

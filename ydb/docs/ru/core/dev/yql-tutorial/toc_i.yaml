@@ -1,6 +1,4 @@
     items:
-    - name: Обзор
-      href: index.md
     - name: Создание таблицы
       href: create_demo_tables.md
     - name: Добавление данных в таблицу

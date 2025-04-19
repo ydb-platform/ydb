@@ -17,10 +17,11 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
+#include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -302,7 +303,7 @@ private:
     virtual const TString& GetTable() = 0;
     virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
     virtual bool CheckAccess(TString& errorMessage) = 0;
-    virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0;
+    virtual TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
     virtual bool ExtractBatch(TString& errorMessage) = 0;
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
@@ -343,7 +344,7 @@ private:
     }
 
     TStringBuilder LogPrefix() {
-        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "'";
+        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "' ";
     }
 
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
@@ -366,9 +367,10 @@ private:
         return ok;
     }
 
-    bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
+        AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
@@ -377,6 +379,7 @@ private:
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
         SrcColumns.reserve(entry.Columns.size());
+        THashSet<TString> HasInternalConversion;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
@@ -396,87 +399,95 @@ private:
             }
         }
 
-        KeyColumnPositions.resize(KeyColumnTypes.size());
-        KeyColumnNames.resize(KeyColumnTypes.size());
-
-        auto reqColumns = GetRequestColumns(errorMessage);
-        if (!errorMessage.empty()) {
-            return false;
-        } else if (reqColumns.empty()) {
-            for (auto& [name, typeInfo] : SrcColumns) {
-                Ydb::Type ydbType;
-                ProtoFromTypeInfo(typeInfo, ydbType);
-                reqColumns.emplace_back(name, std::move(ydbType));
+        if (entry.ColumnTableInfo) {
+            for (const auto& colInfo : entry.ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                auto& name = colInfo.GetName();
+                NArrow::NAccessor::TConstructorContainer accessor;
+                if (colInfo.HasDataAccessorConstructor()) {
+                    if (!accessor.DeserializeFromProto(colInfo.GetDataAccessorConstructor())) {
+                        return TConclusionStatus::Fail("cannot parse accessor for column: " + name);
+                    }
+                    if (accessor->HasInternalConversion()) {
+                        HasInternalConversion.emplace(name);
+                    }
+                }
             }
         }
 
-        for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
-            auto& name = reqColumns[pos].first;
+        KeyColumnPositions.resize(KeyColumnTypes.size());
+        KeyColumnNames.resize(KeyColumnTypes.size());
+
+        auto reqColumns = GetRequestColumns();
+        if (reqColumns.IsFail()) {
+            return reqColumns;
+        } else if (reqColumns->empty()) {
+            for (auto& [name, typeInfo] : SrcColumns) {
+                Ydb::Type ydbType;
+                ProtoFromTypeInfo(typeInfo, ydbType);
+                reqColumns->emplace_back(name, std::move(ydbType));
+            }
+        }
+
+        for (size_t pos = 0; pos < reqColumns->size(); ++pos) {
+            auto& name = (*reqColumns)[pos].first;
             const auto* cp = columnByName.FindPtr(name);
             if (!cp) {
-                errorMessage = Sprintf("Unknown column: %s", name.c_str());
-                return false;
+                return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
             i32 pgTypeMod = -1;            
-            ui32 colId = *cp;
+            const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
-            const Ydb::Type& typeInProto = reqColumns[pos].second;
+            const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
             
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
-                errorMessage = Sprintf("Type parse error for column %s: %s",
-                    name.c_str(), parseProtoError.c_str());
-                return false;
+                return TConclusionStatus::Fail(Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str()));
             }
 
             const NScheme::TTypeInfo& typeInRequest = inTypeInfoMod.TypeInfo;
 
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
-            if (typeInProto.has_type_id()) {
-                bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
+                if (typeInProto.has_type_id()) {
+                    bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
-                if (!ok) {
-                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
-                    return false;
-                }
-                if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
-                    ColumnsToConvertInplace[name] = ci.PType;
-                }
-            } else if (typeInProto.has_decimal_type()) {
-                if (typeInRequest != ci.PType) {
-                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
-                    return false;
-                }
-            } else if (typeInProto.has_pg_type()) {
-                bool ok = SameDstType(typeInRequest, ci.PType, false);
-                if (!ok) {
-                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
-                    return false;
-                }
-                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
-                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
-                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
-                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str());
-                        return false;
+                    if (!ok) {
+                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
                     }
+                    if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                        ColumnsToConvertInplace[name] = ci.PType;
+                    }
+                } else if (typeInProto.has_decimal_type()) {
+                    if (typeInRequest != ci.PType) {
+                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                    }
+                } else if (typeInProto.has_pg_type()) {
+                    bool ok = SameDstType(typeInRequest, ci.PType, false);
+                    if (!ok) {
+                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                    }
+                    if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                        if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                            return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                                inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
+                        }
 
-                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
-                    if (result.Error) {
-                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
-                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
-                        return false;
+                        const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                        if (result.Error) {
+                            return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                                inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
+                        }
+                        pgTypeMod = result.Typmod;
                     }
-                    pgTypeMod = result.Typmod;
                 }
-            }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);
             if (notNull) {
@@ -524,8 +535,7 @@ private:
             }
 
             if (!allowUpdate) {
-                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
-                return false;
+                return TConclusionStatus::Fail("Only async-indexed tables are supported by BulkUpsert");
             }
         }
 
@@ -546,6 +556,9 @@ private:
             }
 
             for (const auto& [colName, colType] : YdbSchema) {
+                if (HasInternalConversion.contains(colName)) {
+                    continue;
+                }
                 if (NArrow::TArrowToYdbConverter::NeedDataConversion(colType)) {
                     ColumnsToConvert[colName] = colType;
                 }
@@ -553,8 +566,7 @@ private:
         }
 
         if (!keyColumnsLeft.empty()) {
-            errorMessage = Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str());
-            return false;
+            return TConclusionStatus::Fail(Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str()));
         }
 
         if (!notNullColumnsLeft.empty() && UpsertIfExists) {
@@ -564,11 +576,10 @@ private:
         }
 
         if (!notNullColumnsLeft.empty()) {
-            errorMessage = Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str());
-            return false;
+            return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
-        return true;
+        return TConclusionStatus::Success();
     }
 
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
@@ -615,7 +626,7 @@ private:
         }
 
         TableKind = entry.Kind;
-        bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+        const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
         if (entry.TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
@@ -631,11 +642,14 @@ private:
         ResolveNamesResult.reset(ev->Get()->Request.Release());
 
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
-        TString errorMessage;
-        if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
+        {
+            auto conclusion = BuildSchema(ctx, makeYdbSchema);
+            if (conclusion.IsFail()) {
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
+            }
         }
 
+        TString errorMessage;
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {

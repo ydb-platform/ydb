@@ -79,7 +79,9 @@
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/clickbench/plans/column/hits",
-                                                        "ReadColumns": null,
+                                                        "ReadColumns": [
+                                                            "CounterID"
+                                                        ],
                                                         "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
@@ -141,6 +143,9 @@
                     "name": "/local/clickbench/plans/column/hits",
                     "reads": [
                         {
+                            "columns": [
+                                "CounterID"
+                            ],
                             "scan_by": [
                                 "CounterID (-\u221e, +\u221e)",
                                 "EventDate (-\u221e, +\u221e)",

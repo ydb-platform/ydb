@@ -105,7 +105,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
                                                      "input", inputColumns.front()->GetRecordsCount());
     if (context.GetLimit()) {
         context.GetResources()->AddFilter(
-            filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
+            filter.Cut(context.GetResources()->GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse()));
     } else {
         context.GetResources()->AddFilter(filter);
     }

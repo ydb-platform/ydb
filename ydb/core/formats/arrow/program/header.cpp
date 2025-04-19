@@ -17,10 +17,10 @@ TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExe
     }
     if (conclusion->IsTotalDenyFilter()) {
         context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
     } else if (conclusion->IsTotalAllowFilter() || !ApplyToFilterFlag) {
         context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
     } else {
         context.GetResources()->AddFilter(*conclusion);
     }

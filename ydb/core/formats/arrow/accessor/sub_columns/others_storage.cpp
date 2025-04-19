@@ -21,12 +21,14 @@ TOthersData::TBuilderWithStats::TBuilderWithStats() {
     Values = static_cast<arrow::StringBuilder*>(Builders[2].get());
 }
 
-void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
+void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value) {
     AFL_VERIFY(Builders.size());
     if (StatsByKeyIndex.size() <= keyIndex) {
         StatsByKeyIndex.resize((keyIndex + 1) * 2);
     }
-    StatsByKeyIndex[keyIndex].AddValue(value);
+    if (value) {
+        StatsByKeyIndex[keyIndex].AddValue(*value);
+    }
     if (!LastRecordIndex) {
         LastRecordIndex = recordIndex;
         LastKeyIndex = keyIndex;
@@ -35,7 +37,11 @@ void TOthersData::TBuilderWithStats::Add(const ui32 recordIndex, const ui32 keyI
     }
     TStatusValidator::Validate(RecordIndex->Append(recordIndex));
     RTKeyIndexes.emplace_back(keyIndex);
-    TStatusValidator::Validate(Values->Append(value.data(), value.size()));
+    if (value) {
+        TStatusValidator::Validate(Values->Append(value->data(), value->size()));
+    } else {
+        TStatusValidator::Validate(Values->AppendNull());
+    }
     ++RecordsCount;
 }
 
@@ -247,7 +253,7 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
         filter.Add(it.GetKeyIndex() == *idx);
     }
     auto recordsFiltered = Records;
-    AFL_VERIFY(filter.Apply(recordsFiltered));
+    filter.Apply(recordsFiltered);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
 
     TSparsedArray::TBuilder builder(nullptr, arrow::utf8());

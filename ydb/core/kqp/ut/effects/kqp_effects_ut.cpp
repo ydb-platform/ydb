@@ -31,8 +31,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Literal_Duplicates) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Literal_Duplicates, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -41,8 +43,8 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
                 ("foo", 10u), ("bar", 11u), ("baz", 10u)
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Duplicated keys found.");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [&](const auto& issue) {
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -53,8 +55,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Literal_Conflict) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Literal_Conflict, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -64,7 +68,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Conflict with existing key.");
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Conflict with existing key.");
         }), result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
@@ -114,8 +118,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Params_Duplicates) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Params_Duplicates, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -145,7 +151,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Duplicated keys found.");
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -158,8 +164,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Params_Conflict) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Params_Conflict, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -184,7 +192,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Conflict with existing key.");
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -234,8 +242,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Select_Duplicates) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Select_Duplicates, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -261,7 +271,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Duplicated keys found.");
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Duplicated keys found.");
         }));
 
         result = session.ExecuteDataQuery(R"(
@@ -274,8 +284,10 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(InsertAbort_Select_Conflict) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertAbort_Select_Conflict, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -300,7 +312,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-            return issue.GetMessage().contains("Conflict with existing key.");
+            return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Conflict with existing key.");
         }));
 
         result = session.ExecuteDataQuery(R"(

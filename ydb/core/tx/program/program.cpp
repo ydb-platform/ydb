@@ -94,8 +94,8 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     using TId = NKikimrSSA::TProgram::TCommand;
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
-//    Cerr << program.DebugString() << Endl;
     NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
+    bool hasProjection = false;
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign: {
@@ -117,6 +117,7 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
                 if (status.IsFail()) {
                     return status;
                 }
+                hasProjection = true;
                 break;
             }
             case TId::kGroupBy: {
@@ -129,6 +130,9 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
             case TId::LINE_NOT_SET:
                 return TConclusionStatus::Fail("incorrect SSA line case");
         }
+    }
+    if (!hasProjection) {
+        return TConclusionStatus::Fail("program has no projections");
     }
     auto programStatus = programBuilder.Finish();
     if (programStatus.IsFail()) {

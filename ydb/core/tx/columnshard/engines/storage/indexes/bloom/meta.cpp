@@ -63,10 +63,10 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     return GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::set<ui64> hashes;
-    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     const ui32 bitsCount = data.GetBitsCount();
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
@@ -88,8 +88,8 @@ bool TBloomIndexMeta::DoCheckValueImpl(
 
 std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
     ui64 result;
-    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     if (subColumnName) {
         return result;
     } else {

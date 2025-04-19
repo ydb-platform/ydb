@@ -7,6 +7,14 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+#include <contrib/libs/xxhash/xxhash.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -18,7 +26,6 @@ class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
     YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
-    std::vector<TString> ValuesStorage;
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
@@ -38,23 +45,45 @@ public:
 
     void AddData(const TStringBuf sb, const ui32 index) {
         Values.emplace_back(sb);
+        AFL_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
         RecordIndexes.emplace_back(index);
         DataSize += sb.size();
-    }
-
-    void AddDataToOwn(const TString& value, const ui32 index) {
-        ValuesStorage.emplace_back(value);
-        AddData(TStringBuf(value.data(), value.size()), index);
     }
 };
 
 class TDataBuilder {
 private:
+    class TStorageAddress {
+    private:
+        const TStringBuf Prefix;
+        const TStringBuf Key;
+        const size_t Hash;
+
+    public:
+        TStorageAddress(const TStringBuf prefix, const TStringBuf key)
+            : Prefix(prefix)
+            , Key(key)
+            , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size())) {
+        }
+
+        operator size_t() const {
+            return Hash;
+        }
+
+        bool operator==(const TStorageAddress& item) const {
+            return Hash == item.Hash && Prefix == item.Prefix && Key == item.Key;
+        }
+    };
+
     ui32 CurrentRecordIndex = 0;
     THashMap<TStringBuf, TColumnElements> Elements;
-    std::deque<TString> Storage;
+    THashMap<TStorageAddress, std::string> StorageHash;
+    std::deque<std::string> Storage;
+    std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
+    std::deque<simdjson::padded_string> PaddedStrings;
+    simdjson::ondemand::parser Parser;
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
@@ -62,8 +91,33 @@ public:
         , Settings(settings) {
     }
 
+    simdjson::simdjson_result<simdjson::ondemand::document> ParseJsonOnDemand(const TStringBuf sv) {
+        PaddedStrings.emplace_back(simdjson::padded_string(sv.data(), sv.size()));
+        return Parser.iterate(PaddedStrings.back());
+    }
+
     void StartNextRecord() {
         ++CurrentRecordIndex;
+    }
+
+    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key);
+    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key);
+
+    void AddKVNull(const TStringBuf key) {
+        auto itElements = Elements.find(key);
+        if (itElements == Elements.end()) {
+            itElements = Elements.emplace(key, key).first;
+        }
+        itElements->second.AddData(GetNullString(), CurrentRecordIndex);
+    }
+
+    static const TString& GetNullString() {
+        const static TString nullString = "NULL";
+        return nullString;
+    }
+
+    static std::string_view GetNullStringView() {
+        return std::string_view(GetNullString().data(), GetNullString().size());
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {
@@ -74,13 +128,22 @@ public:
         itElements->second.AddData(value, CurrentRecordIndex);
     }
 
-    void AddKVOwn(const TStringBuf key, const TString& value) {
-        Storage.emplace_back(value);
+    void AddKVOwn(const TStringBuf key, std::string&& value) {
+        Storage.emplace_back(std::move(value));
         auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(value, CurrentRecordIndex);
+        itElements->second.AddData(Storage.back(), CurrentRecordIndex);
+    }
+
+    void AddKVOwn(const TStringBuf key, TString&& value) {
+        StorageStrings.emplace_back(std::move(value));
+        auto itElements = Elements.find(key);
+        if (itElements == Elements.end()) {
+            itElements = Elements.emplace(key, key).first;
+        }
+        itElements->second.AddData(StorageStrings.back(), CurrentRecordIndex);
     }
 
     class THeapElements {
@@ -108,8 +171,8 @@ public:
             return KeyIndex;
         }
 
-        TStringBuf GetValue() const {
-            return Elements->GetValues()[Index];
+        const TStringBuf* GetValuePointer() const {
+            return &Elements->GetValues()[Index];
         }
 
         bool operator<(const THeapElements& item) const {

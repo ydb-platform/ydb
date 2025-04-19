@@ -2,7 +2,7 @@
 #include "splitter.h"
 #include "sub_columns.h"
 
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

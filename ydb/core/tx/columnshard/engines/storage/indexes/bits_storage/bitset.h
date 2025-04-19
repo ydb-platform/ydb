@@ -30,6 +30,9 @@ public:
     }
 
     bool TestHash(const ui64 hash) const {
+        if (!Bits.Size()) {
+            return false;
+        }
         return Bits.Get(hash % Bits.Size());
     }
 

@@ -13,6 +13,7 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
+    bool CaseSensitive = true;
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
     ui32 RecordsCount = 10000;
@@ -28,16 +29,13 @@ private:
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
     }
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
-        if (!!subColumnName) {
-            return false;
-        }
-        switch (op) {
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
+        switch (op.GetOperation()) {
             case EOperation::Equals:
             case EOperation::StartsWith:
             case EOperation::EndsWith:
             case EOperation::Contains:
-                return true;
+                return !CaseSensitive || op.GetCaseSensitive();
         }
 
         return false;
@@ -49,12 +47,6 @@ protected:
         if (!bMeta) {
             return TConclusionStatus::Fail(
                 "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
-        }
-        if (HashesCount != bMeta->HashesCount) {
-            return TConclusionStatus::Fail("cannot modify hashes count");
-        }
-        if (NGrammSize != bMeta->NGrammSize) {
-            return TConclusionStatus::Fail("cannot modify ngramm size");
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
@@ -79,6 +71,9 @@ protected:
         }
         if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
             return false;
+        }
+        if (bFilter.HasCaseSensitive()) {
+            CaseSensitive = bFilter.GetCaseSensitive();
         }
         HashesCount = bFilter.GetHashesCount();
         if (!TConstants::CheckHashesCount(HashesCount)) {
@@ -111,18 +106,20 @@ protected:
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
         filterProto->SetColumnId(GetColumnId());
+        filterProto->SetCaseSensitive(CaseSensitive);
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId,
         const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount, const ui32 filterSizeBytes, const ui32 nGrammSize,
-        const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
+        const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
         : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
+        , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)

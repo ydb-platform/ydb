@@ -239,7 +239,7 @@ public:
     }
 
     virtual bool NeedAccessorsFetching() const override {
-        return !StageData || !StageData->HasPortionAccessor();
+        return !HasStageData() || !GetStageData().HasPortionAccessor();
     }
 
     virtual bool DoAddTxConflict() override {
@@ -308,6 +308,7 @@ private:
     using TBase = IDataSource;
     TCommittedBlob CommittedBlob;
     bool ReadStarted = false;
+    bool AssembledFlag = false;
 
     virtual void DoAbort() override {
     }

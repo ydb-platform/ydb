@@ -181,7 +181,7 @@ public:
         }
     }
 
-    std::shared_ptr<IIndexMeta> FindIndexFor(const NRequest::TOriginalDataAddress& address, const NArrow::NSSA::EIndexCheckOperation op) const;
+    std::shared_ptr<IIndexMeta> FindIndexFor(const NRequest::TOriginalDataAddress& address, const NArrow::NSSA::TIndexCheckOperation& op) const;
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

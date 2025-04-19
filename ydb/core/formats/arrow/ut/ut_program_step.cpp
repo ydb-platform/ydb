@@ -149,7 +149,13 @@ struct TSumData {
     }
 
     static void CheckResult(ETest test, const std::shared_ptr<TAccessorsCollection>& batch, ui32 numKeys, bool nullable) {
-        AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        if (test == ETest::EMPTY) {
+            UNIT_ASSERT(!batch->HasData());
+            return;
+        } else {
+            AFL_VERIFY(batch->GetColumnsCount() == numKeys + 2);
+        }
+
         auto aggXOriginal = batch->GetArrayVerified(3);
         auto aggYOriginal = batch->GetArrayVerified(4);
         auto colXOriginal = batch->GetArrayVerified(1);
@@ -552,7 +558,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({10001}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
+            proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(
+                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::Contains, true, false));
             builder.Add(proc);
         }
         {
@@ -562,7 +569,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1002), std::make_shared<TSimpleFunction>(EOperation::StartsWith)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
+            proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(
+                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::StartsWith, true, false));
             builder.Add(proc);
         }
         {
@@ -572,7 +580,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
-            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals);
+            proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicEquals>(false));
             builder.Add(proc);
         }
         {
@@ -587,7 +595,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;CheckHeaderData:1;StreamLogic:1;];SUB:[FetchOriginalData:1;AssembleOriginalData:1;CheckHeaderData:1;];")("debug", chain->DebugStats());
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
     }
 
     Y_UNIT_TEST(Projection) {

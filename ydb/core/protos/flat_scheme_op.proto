@@ -430,6 +430,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TRequestedMaxIndex {
@@ -471,6 +472,7 @@ message TBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TMaxIndex {
@@ -522,6 +524,7 @@ message TCompactionLevelConstructorContainer {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
+        optional uint64 PortionsCountLimit = 4;
     }
 
     oneof Implementation {
@@ -1526,6 +1529,7 @@ message TApplyIf {
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
     optional bool CheckEntityVersion = 4 [default = false];
+    repeated EPathType PathTypes = 5;
 }
 
 message TUpgradeSubDomain {

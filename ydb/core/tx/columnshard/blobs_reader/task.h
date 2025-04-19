@@ -3,7 +3,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 

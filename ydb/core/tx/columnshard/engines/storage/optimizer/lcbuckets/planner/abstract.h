@@ -295,6 +295,10 @@ protected:
     mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
+    virtual bool IsOverloaded() const {
+        return false;
+    }
+
     bool HasData() const {
         return PortionsInfo.GetCount();
     }

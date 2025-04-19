@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(SlicesDef) {
         for (ui32 colsCount = 0; colsCount < 5; ++colsCount) {
-            NSubColumns::TSettings settings(4, colsCount, 0, 0);
+            NSubColumns::TSettings settings(4, colsCount, 0, 0, NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
 
             const std::vector<TString> jsons = {
                 R"({"a" : 1, "b" : 1, "c" : "111"})",
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 ++idx;
             }
             auto bJsonArr = arrBuilder.Finish(jsons.size());
-            auto arrData = TSubColumnsArray::Make(bJsonArr, std::make_shared<NSubColumns::TFirstLevelSchemaData>(), settings).DetachResult();
+            auto arrData = TSubColumnsArray::Make(bJsonArr, settings).DetachResult();
             Cerr << arrData->DebugJson() << Endl;
             AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
                     "string", PrintBinaryJsons(arrData->GetChunkedArray()));
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(FiltersDef) {
         for (ui32 colsCount = 0; colsCount < 5; ++colsCount) {
-            NSubColumns::TSettings settings(4, colsCount, 0, 0);
+            NSubColumns::TSettings settings(4, colsCount, 0, 0, NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
 
             const std::vector<TString> jsons = {
                 R"({"a" : 1, "b" : 1, "c" : "111"})",
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 ++idx;
             }
             auto bJsonArr = arrBuilder.Finish(jsons.size());
-            auto arrData = TSubColumnsArray::Make(bJsonArr, std::make_shared<NSubColumns::TFirstLevelSchemaData>(), settings).DetachResult();
+            auto arrData = TSubColumnsArray::Make(bJsonArr, settings).DetachResult();
             Cerr << arrData->DebugJson() << Endl;
             AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
                     "string", PrintBinaryJsons(arrData->GetChunkedArray()));

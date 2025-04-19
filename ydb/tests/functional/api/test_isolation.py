@@ -651,6 +651,9 @@ class TestTransactionIsolation(object):
         def callee():
             t1.execute('{} update {} set value = 0 where id = 1;'.format(prefix, table_name))
 
+            # Sinks allow UPDATE statement to be delayed, so we do commit here to execute update.
+            t1.commit()
+
         assert_that(
             callee,
             raises(

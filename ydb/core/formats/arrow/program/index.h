@@ -28,7 +28,7 @@ private:
     bool ApplyToFilterFlag = false;
 
     virtual TString DoGetSignalCategoryName() const override {
-        return ::ToString(GetProcessorType()) + "::" + ::ToString(IndexContext.GetOperation());
+        return ::ToString(GetProcessorType()) + "::" + IndexContext.GetOperation().GetSignalId();
     }
 
 public:

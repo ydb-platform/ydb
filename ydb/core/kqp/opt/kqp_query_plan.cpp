@@ -65,13 +65,12 @@ std::string RemoveForbiddenChars(std::string s) {
     return NYql::IsUtf8(s)? s: "Non-UTF8 string";
 }
 
-struct TTableRead {
+struct TTableRead: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     EPlanTableReadType Type = EPlanTableReadType::Unspecified;
     TVector<TString> LookupBy;
     TVector<TString> ScanBy;
     TVector<TString> Columns;
     TMaybe<TString> Limit;
-    bool Reverse = false;
 };
 
 struct TTableWrite {
@@ -795,7 +794,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -811,7 +810,50 @@ private:
 
         // Common settings that can be overwritten by provider
         op.Properties["SinkType"] = dataSinkCategory;
-        if (auto cluster = TryGetCluster(dataSink)) {
+        if (dataSinkCategory == NYql::KqpTableSinkName) {
+            auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
+
+            TTableWrite writeInfo;
+            if (settings.Mode().StringValue() == "replace") {
+                op.Properties["Name"] = "Replace";
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
+            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue().empty()) {
+                op.Properties["Name"] = "Upsert";
+                writeInfo.Type = EPlanTableWriteType::MultiUpsert;
+            } else if (settings.Mode().StringValue() == "insert") {
+                op.Properties["Name"] = "Insert";
+                writeInfo.Type = EPlanTableWriteType::MultiInsert;
+            } else if (settings.Mode().StringValue() == "delete") {
+                op.Properties["Name"] = "Delete";
+                writeInfo.Type = EPlanTableWriteType::MultiErase;
+            } else if (settings.Mode().StringValue() == "update") {
+                op.Properties["Name"] = "Update";
+                writeInfo.Type = EPlanTableWriteType::MultiUpdate;
+            } else {
+                YQL_ENSURE(false, "Unsupported sink mode");
+            }
+
+            const auto tablePath = settings.Table().Path().StringValue();
+            const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+            op.Properties["Path"] = tablePath;
+
+            if (writeInfo.Type != EPlanTableWriteType::MultiErase) {
+                const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+                YQL_ENSURE(tupleType);
+                YQL_ENSURE(tupleType->GetSize() == 1);
+                const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+                YQL_ENSURE(listType);
+                const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+                YQL_ENSURE(structType);
+                for (const auto& item : structType->GetItems()) {
+                    writeInfo.Columns.push_back(TString(item->GetName()));
+                }
+            }
+
+            SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
+            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+        } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
             op.Properties["Name"] = TStringBuilder() << "Write " << dataSource;
@@ -896,7 +938,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), stagePlanNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), stagePlanNode);
                     }
                 }
             }
@@ -1871,9 +1913,11 @@ private:
             readInfo.Limit = limit;
             op.Properties["ReadLimit"] = limit;
         }
-        if (settings.Reverse) {
-            readInfo.Reverse = true;
+        readInfo.SetSorting(settings.GetSorting());
+        if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
+        } else if (settings.GetSorting() == ERequestSorting::ASC) {
+            op.Properties["Reverse"] = false;
         }
 
         if (settings.SequentialInFlight) {
@@ -1963,7 +2007,7 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
                 if (read.Limit) {
                     writer.WriteKey("limit").WriteString(*read.Limit);
                 }
-                if (read.Reverse) {
+                if (read.IsReverse()) {
                     writer.WriteKey("reverse").WriteBool(true);
                 }
 

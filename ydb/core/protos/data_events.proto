@@ -139,6 +139,7 @@ message TEvWriteResult {
         STATUS_DISK_SPACE_EXHAUSTED = 10;
         STATUS_WRONG_SHARD_STATE = 11;
         STATUS_CONSTRAINT_VIOLATION = 12;
+        STATUS_OUT_OF_SPACE = 13;
     }
 
     // Status

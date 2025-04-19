@@ -2,6 +2,7 @@
 #include "abstract.h"
 #include "functions.h"
 #include "kernel_logic.h"
+#include "execution.h"
 
 namespace NKikimr::NArrow::NSSA {
 

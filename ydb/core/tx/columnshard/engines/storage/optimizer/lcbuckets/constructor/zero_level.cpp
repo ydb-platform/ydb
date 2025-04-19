@@ -33,6 +33,13 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         ExpectedBlobsSize = jsonValue.GetUInteger();
     }
+    if (json.Has("portions_count_limit")) {
+        const auto& jsonValue = json["portions_count_limit"];
+        if (!jsonValue.IsUInteger()) {
+            return TConclusionStatus::Fail("incorrect portions_count_limit value (have to be unsigned int)");
+        }
+        PortionsCountLimit = jsonValue.GetUInteger();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -49,6 +56,9 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (proto.GetZeroLevel().HasPortionsCountAvailable()) {
         PortionsCountAvailable = proto.GetZeroLevel().GetPortionsCountAvailable();
     }
+    if (proto.GetZeroLevel().HasPortionsCountLimit()) {
+        PortionsCountLimit = proto.GetZeroLevel().GetPortionsCountLimit();
+    }
     return true;
 }
 
@@ -62,12 +72,15 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (PortionsCountAvailable) {
         proto.MutableZeroLevel()->SetPortionsCountAvailable(*PortionsCountAvailable);
     }
+    if (PortionsCountLimit) {
+        proto.MutableZeroLevel()->SetPortionsCountLimit(*PortionsCountLimit);
+    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const {
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters, PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10));
+        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

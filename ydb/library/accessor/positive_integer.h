@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/actors/core/log.h>
 #include <util/system/types.h>
 #include <util/stream/output.h>
 #include <util/generic/typetraits.h>
@@ -40,4 +41,26 @@ public:
     }
 };
 
+class TPositiveIncreasingControlInteger {
+    private:
+        ui64 Value = 0;
+    public:
+        constexpr TPositiveIncreasingControlInteger() = default;
+        explicit constexpr TPositiveIncreasingControlInteger(const ui64 value)
+            : Value(value) {
+        }
+        TPositiveIncreasingControlInteger(const TPositiveIncreasingControlInteger&) = default;
+        TPositiveIncreasingControlInteger& operator=(const TPositiveIncreasingControlInteger& v);
+
+        TPositiveIncreasingControlInteger operator+(ui64 v) const {
+            return TPositiveIncreasingControlInteger(Value + v);
+        }
+        TPositiveIncreasingControlInteger operator-(const ui64 v) const {
+            AFL_VERIFY(v <= Value);
+            return TPositiveIncreasingControlInteger(Value - v);
+        }
+        ui64 Val() const {
+            return Value;
+        }
+    };
 }

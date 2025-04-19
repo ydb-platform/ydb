@@ -501,6 +501,200 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             driver.Stop(true);
         }
     }
+
+    Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(appConfig);
+
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/test_acl` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            AssertSuccessResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+
+            driver.Stop(true);
+        }
+
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto client = NYdb::NQuery::TQueryClient(driver);
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPSERT INTO `/Root/test_acl` (id, name) VALUES
+                    (10u, "One");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                REPLACE INTO `/Root/test_acl` (id, name) VALUES
+                    (11u, "Two");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/test_acl` (id, name) VALUES
+                    (12u, "Three");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPDATE `/Root/test_acl` SET name = "test" WHERE id = 10u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPDATE `/Root/test_acl` ON SELECT 11u AS id, "test" AS name;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/test_acl` WHERE id = 10u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/test_acl` ON SELECT 11u AS id;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row", "ydb.deprecated.erase_row"});
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/test_acl` WHERE id = 10u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/test_acl` ON SELECT 11u AS id;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row", "ydb.deprecated.erase_row", "ydb.deprecated.select_row"});
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                UPDATE `/Root/test_acl` SET name = "test" WHERE id = 10u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                DELETE FROM `/Root/test_acl` WHERE id = 10u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(appConfig);
+
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/test_acl` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            AssertSuccessResult(client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+
+            driver.Stop(true);
+        }
+
+        AddConnectPermission(kikimr, UserName);
+        
+        for (const auto permission : {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}) {
+            AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
+
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken(UserName);
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            const TString query = R"(UPSERT INTO `/Root/test_acl` (id, name) VALUES (10u, "One");)";
+
+            for (size_t index = 0; index < 10; ++index) {
+                auto result = session.ExecuteQuery(
+                    query,
+                    NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                AssertSuccessResult(result);
+            }
+
+            {
+                auto schemeClient = kikimr.GetSchemeClient();
+                NYdb::NScheme::TPermissions permissions("user0@builtin", {permission});
+                AssertSuccessResult(schemeClient.ModifyPermissions("/Root/test_acl",
+                        NYdb::NScheme::TModifyPermissionsSettings().AddRevokePermissions(permissions)
+                    ).ExtractValueSync()
+                );
+            }
+
+            {
+                auto result = session.ExecuteQuery(
+                    query,
+                    NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            driver.Stop(true);
+        }
+    }
 }
 
 } // namespace NKqp

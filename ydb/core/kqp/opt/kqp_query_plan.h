@@ -27,6 +27,9 @@ enum class EPlanTableWriteType {
     MultiUpsert,
     Erase,
     MultiErase,
+    MultiReplace,
+    MultiInsert,
+    MultiUpdate,
 };
 
 /*

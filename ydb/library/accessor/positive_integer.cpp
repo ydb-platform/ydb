@@ -34,10 +34,25 @@ ui64 TPositiveControlInteger::Val() const {
     return Value.Val();
 }
 
+TPositiveIncreasingControlInteger&TPositiveIncreasingControlInteger::operator=(const TPositiveIncreasingControlInteger& v) {
+    if (&v != this) {
+        AFL_VERIFY(Value < v.Value);
+        Value = v.Value;
+    }
+    return *this;
 }
+
+} //namespace NKikimr
 
 template<>
 void Out<NKikimr::TPositiveControlInteger>(IOutputStream& o,
     typename TTypeTraits<NKikimr::TPositiveControlInteger>::TFuncParam x) {
+    o << x.Val();
+}
+
+
+template<>
+void Out<NKikimr::TPositiveIncreasingControlInteger>(IOutputStream& o,
+    typename TTypeTraits<NKikimr::TPositiveIncreasingControlInteger>::TFuncParam x) {
     o << x.Val();
 }

@@ -67,7 +67,7 @@ public:
 
     virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         auto result = IncomingData;
-        AFL_VERIFY(Filter.Apply(result.MutableContainer()));
+        Filter.Apply(result.MutableContainer());
         return result;
     }
 };

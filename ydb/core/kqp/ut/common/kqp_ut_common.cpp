@@ -1478,8 +1478,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
         if (
             opName.find("Join") != TString::npos || 
             opName.find("Union") != TString::npos ||
-            (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
-            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles)
+            (opName.find("Filter") != TString::npos && params.IncludeFilters)
         ) {
             NJson::TJsonValue newChildren;
 

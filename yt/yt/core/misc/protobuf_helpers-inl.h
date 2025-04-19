@@ -486,7 +486,12 @@ void ToProto(
 {
     serializedMap->clear();
     for (const auto& [key, value] : originalMap) {
-        serializedMap->insert(std::pair(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value)));
+        auto [_, inserted] = serializedMap->insert(std::pair(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value)));
+        if (!inserted) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map serialization")
+                << TErrorAttribute("key", key)
+                << TErrorAttribute("serialized_key", ToProto<TSerializedKey>(key));
+        }
     }
 }
 
@@ -533,7 +538,11 @@ void FromProto(
 {
     originalMap->clear();
     for (const auto& [serializedKey, serializedValue] : serializedMap) {
-        EmplaceOrCrash(*originalMap, FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+        auto [_, inserted] = originalMap->emplace(FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+        if (!inserted) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map deserialization")
+                << TErrorAttribute("key", FromProto<TKey>(serializedKey));
+        }
     }
 }
 

@@ -154,10 +154,11 @@ public:
     TDistribution ByRoom;
     TDistribution ByRack;
     THashMap<TString, TNodeIDSet> NodeByRack;
+    TDistribution BadByNode;
 
     explicit TClusterMap(TSentinelState::TPtr state);
 
-    void AddPDisk(const TPDiskID& id);
+    void AddPDisk(const TPDiskID& id, const bool inGoodState = true);
 
 }; // TClusterMap
 
@@ -171,7 +172,7 @@ class TGuardian : public TClusterMap {
     }
 
 public:
-    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100);
+    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
 
     TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIgnoredMap& disallowed) const;
 
@@ -179,6 +180,7 @@ private:
     const ui32 DataCenterRatio;
     const ui32 RoomRatio;
     const ui32 RackRatio;
+    const ui32 FaultyPDisksThresholdPerNode;
 
 }; // TGuardian
 

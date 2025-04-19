@@ -268,7 +268,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 {
 }
 
-void TClusterMap::AddPDisk(const TPDiskID& id) {
+void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
     const auto& location = State->Nodes[id.NodeId].Location;
 
@@ -276,15 +276,20 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     ByRoom[location.HasKey(TNodeLocation::TKeys::Module) ? location.GetModuleId() : ""].insert(id);
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
     NodeByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id.NodeId);
+
+    if (!inGoodState) {
+        BadByNode[ToString(id.NodeId)].insert(id);
+    }
 }
 
 /// TGuardian
 
-TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
+TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio, ui32 faultyPDisksThresholdPerNode)
     : TClusterMap(state)
     , DataCenterRatio(dataCenterRatio)
     , RoomRatio(roomRatio)
     , RackRatio(rackRatio)
+    , FaultyPDisksThresholdPerNode(faultyPDisksThresholdPerNode)
 {
 }
 
@@ -344,6 +349,31 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             EraseNodesIf(result, [&rack = kv.second](const TPDiskID& id) {
                 return rack.contains(id);
             });
+        }
+    }
+
+    if (FaultyPDisksThresholdPerNode != 0) {
+        // If the number of FAULTY PDisks on a node — including those already FAULTY or about to be marked FAULTY —
+        // exceeds this threshold, no additional disks on the same node will be marked as FAULTY,
+        // except for those explicitly marked as FAULTY by the user via the replace devices command.
+        for (const auto& kv : BadByNode) {
+            if (kv.first) {
+                auto it = all.BadByNode.find(kv.first);
+                ui32 currentCount = it != all.BadByNode.end() ? it->second.size() : 0;
+
+                if (currentCount > FaultyPDisksThresholdPerNode) {
+                    for (const auto& pdisk : kv.second) {
+                        disallowed.emplace(pdisk, NKikimrCms::TPDiskInfo::TOO_MANY_FAULTY_PER_NODE);
+                        result.erase(pdisk);
+                    }
+                    auto disallowedPdisks = disallowed | std::views::keys;
+                    issuesBuilder
+                        << "Ignore state updates due to FaultyPDisksThresholdPerNode"
+                        << ": changed# " << kv.second.size()
+                        << ", total# " << currentCount
+                        << ", affected pdisks# " << JoinSeq(", ", disallowedPdisks) << Endl;
+                }
+            }
         }
     }
 
@@ -941,7 +971,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         TClusterMap all(SentinelState);
-        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
+        TGuardian changed(SentinelState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio, Config.FaultyPDisksThresholdPerNode);
         TClusterMap::TPDiskIDSet alwaysAllowed;
 
         for (auto& pdisk : SentinelState->PDisks) {
@@ -956,18 +986,20 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                 continue;
             }
 
+            bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
+
             if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
+                hasGoodState = false;
                 info.SetForcedStatus(*Config.EvictVDisksStatus);
             } else {
                 info.ResetForcedStatus();
             }
-
-            all.AddPDisk(id);
+            all.AddPDisk(id, hasGoodState);
             if (info.IsChanged()) {
                 if (info.IsNewStatusGood() || info.HasForcedStatus()) {
                     alwaysAllowed.insert(id);
                 } else {
-                    changed.AddPDisk(id);
+                    changed.AddPDisk(id, hasGoodState);
                 }
             } else {
                 info.AllowChanging();

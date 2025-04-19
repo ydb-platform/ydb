@@ -54,11 +54,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
 
         while (!rowset.EndOfSet()) {
-            TTableInfo table;
-            if (!table.InitFromDB(rowset)) {
-                timer.AddLoadingFail();
-                return false;
-            }
+            TTableInfo table = table.InitFromDB(rowset);
             if (table.IsDropped()) {
                 AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId()).second);
             }
@@ -114,13 +110,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
         while (!rowset.EndOfSet()) {
             const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
-            Y_ABORT_UNLESS(Tables.contains(pathId));
+            const auto table = Tables.FindPtr(pathId);
+            AFL_VERIFY(table);
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
 
-            auto& table = Tables[pathId];
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-            Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
+            AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_table_version")("path_id", pathId)("snapshot", version);
             AFL_VERIFY(preset);
             AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
@@ -128,7 +124,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             if (versionInfo.HasTtlSettings()) {
                 Ttl.AddVersionFromProto(pathId, version, versionInfo.GetTtlSettings());
             }
-            table.AddVersion(version);
+            table->AddVersion(version);
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
@@ -223,9 +219,9 @@ ui64 TTablesManager::GetMemoryUsage() const {
 }
 
 void TTablesManager::DropTable(const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
-    AFL_VERIFY(Tables.contains(pathId));
-    auto& table = Tables[pathId];
-    table.SetDropVersion(version);
+    auto* table = Tables.FindPtr(pathId);
+    AFL_VERIFY(table);
+    table->SetDropVersion(version);
     AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
     Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
 }

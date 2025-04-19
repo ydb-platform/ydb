@@ -23,6 +23,8 @@ public:
     // if we have single url but with different tokens we can potentially download several different versions of url
     TFileLinkPtr FreezeFile(const TUserDataBlock& block);
 
+    TFileLinkPtr GetFrozenBlock(const TUserDataBlock& block) const;
+
     // downloaded file will be registered in cache after function invocation
     NThreading::TFuture<std::function<TFileLinkPtr()>> FreezeFileAsync(const TUserDataBlock& block);
 

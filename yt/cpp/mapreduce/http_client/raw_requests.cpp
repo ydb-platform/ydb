@@ -356,69 +356,6 @@ std::unique_ptr<IOutputStream> WriteTable(
     return std::make_unique<THttpRequestStream>(std::move(request), options.BufferSize_);
 }
 
-void InsertRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& rows,
-    const TInsertRowsOptions& options)
-{
-    TMutationId mutationId;
-    THttpHeader header("PUT", "insert_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(context.Config->Prefix, path, options));
-    auto body = NodeListToYsonString(rows);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RequestWithoutRetry(context, mutationId, header, body, config)->GetResponse();
-}
-
-TNode::TListType LookupRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TLookupRowsOptions& options)
-{
-    TMutationId mutationId;
-    THttpHeader header("PUT", "lookup_rows");
-    header.AddPath(AddPathPrefix(path, context.Config->ApiVersion));
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .Item("versioned").Value(options.Versioned_)
-        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("column_names").Value(*options.Columns_);
-        })
-    .EndMap());
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(context, mutationId, header, body, config);
-    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
-}
-
-void DeleteRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options)
-{
-    TMutationId mutationId;
-    THttpHeader header("PUT", "delete_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForDeleteRows(context.Config->Prefix, path, options));
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RequestWithoutRetry(context, mutationId, header, body, config)->GetResponse();
-}
-
 TAuthorizationInfo WhoAmI(const TClientContext& context)
 {
     TMutationId mutationId;

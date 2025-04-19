@@ -1,0 +1,52 @@
+diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
+index aa44ced..e100e45 100644
+--- a/include/__memory/allocator.h
++++ b/include/__memory/allocator.h
+@@ -170,6 +170,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
+ 
+ #endif
+ 
++#include <__memory/allocator_const.h>
++
+ _LIBCPP_END_NAMESPACE_STD
+ 
+ #endif // _LIBCPP___MEMORY_ALLOCATOR_H
+diff --git a/include/__memory/uninitialized_algorithms.h b/include/__memory/uninitialized_algorithms.h
+index 8ff87e2..a8dbde0 100644
+--- a/include/__memory/uninitialized_algorithms.h
++++ b/include/__memory/uninitialized_algorithms.h
+@@ -563,8 +563,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
+ 
+ template <class _Alloc,
+           class _In,
++          class _RawTypeIn = __remove_const_t<_In>,
+           class _Out,
+-          __enable_if_t<is_trivially_copy_constructible<_In>::value && is_trivially_copy_assignable<_In>::value &&
++          __enable_if_t<is_trivially_copy_constructible<_RawTypeIn>::value && is_trivially_copy_assignable<_RawTypeIn>::value &&
+                             is_same<__remove_const_t<_In>, __remove_const_t<_Out> >::value &&
+                             __allocator_has_trivial_copy_construct<_Alloc, _In>::value,
+                         int> = 0>
+@@ -578,7 +579,11 @@ __uninitialized_allocator_copy_impl(_Alloc&, _In* __first1, _In* __last1, _Out*
+     }
+     return __first2;
+   } else {
++#ifdef _LIBCPP_ENABLE_REMOVED_ALLOCATOR_CONST
++    return std::copy(__first1, __last1, const_cast<_RawTypeIn*>(__first2));
++#else
+     return std::copy(__first1, __last1, __first2);
++#endif
+   }
+ }
+ 
+@@ -639,7 +644,11 @@ __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _
+     __guard.__complete();
+     std::__allocator_destroy(__alloc, __first, __last);
+   } else {
++#ifdef _LIBCPP_ENABLE_REMOVED_ALLOCATOR_CONST
++    __builtin_memcpy(const_cast<__remove_const_t<_Tp>*>(__result), __first, sizeof(_Tp) * (__last - __first));
++#else
+     __builtin_memcpy(__result, __first, sizeof(_Tp) * (__last - __first));
++#endif
+   }
+ }
+ 

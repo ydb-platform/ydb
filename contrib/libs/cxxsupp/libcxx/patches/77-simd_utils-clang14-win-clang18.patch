@@ -1,5 +1,5 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index c0d04c4..8404007 100644
+index 0299332..fff3a08 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
 @@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS

@@ -1,5 +1,5 @@
 diff --git a/src/include/refstring.h b/src/include/refstring.h
-index 7845224..72daaef 100644
+index 3e0ec7a..bc1d7fa 100644
 --- a/src/include/refstring.h
 +++ b/src/include/refstring.h
 @@ -9,12 +9,18 @@

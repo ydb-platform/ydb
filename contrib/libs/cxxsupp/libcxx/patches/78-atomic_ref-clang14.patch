@@ -1,8 +1,8 @@
 diff --git a/include/__atomic/atomic_ref.h b/include/__atomic/atomic_ref.h
-index 2849b82..a63a95c 100644
+index 465cd9a..301d42b 100644
 --- a/include/__atomic/atomic_ref.h
 +++ b/include/__atomic/atomic_ref.h
-@@ -254,7 +254,7 @@ template <class _Tp>
+@@ -260,7 +260,7 @@ template <class _Tp>
  struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
    using __base = __atomic_ref_base<_Tp>;
  
@@ -11,7 +11,7 @@ index 2849b82..a63a95c 100644
  
    _LIBCPP_HIDE_FROM_ABI explicit atomic_ref(_Tp& __obj) : __base(__obj) {
      _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(
-@@ -300,7 +300,7 @@ template <class _Tp>
+@@ -306,7 +306,7 @@ template <class _Tp>
  struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
    using __base = __atomic_ref_base<_Tp>;
  

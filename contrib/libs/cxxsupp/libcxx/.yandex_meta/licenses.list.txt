@@ -586,6 +586,7 @@ namespace std {
 #include <__type_traits/aligned_storage.h>
 #include <__type_traits/conditional.h>
 #include <__type_traits/decay.h>
+#include <__type_traits/enable_if.h>
 #include <__type_traits/is_constructible.h>
 #include <__type_traits/is_function.h>
 #include <__type_traits/is_nothrow_constructible.h>
@@ -622,7 +623,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 #if _LIBCPP_STD_VER >= 17
 
-_LIBCPP_NORETURN inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST void __throw_bad_any_cast() {
+[[noreturn]] inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST void __throw_bad_any_cast() {
 #  ifndef _LIBCPP_HAS_NO_EXCEPTIONS
   throw bad_any_cast();
 #  else
@@ -1174,6 +1175,10 @@ to use it under either license.  As a contributor, you agree to allow your code
 to be used under both.
 
 Full text of the relevant licenses is included below.
+
+
+====================Public-Domain====================
+// One-sided binary search, aka meta binary search, has been in the public domain for decades, and has the general
 
 
 ====================Public-Domain====================

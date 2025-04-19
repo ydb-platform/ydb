@@ -1,5 +1,5 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index beadd92..d23450f 100644
+index 9e5351f..73ec464 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
 @@ -55,8 +55,6 @@ _LIBCPP_OVERRIDABLE_FUNC_VIS __cxa_exception* __cxa_init_primary_exception(
@@ -59,10 +59,9 @@ index beadd92..d23450f 100644
 -
 -_LIBCPP_EXPORTED_FROM_ABI void swap(exception_ptr&, exception_ptr&) _NOEXCEPT;
 -
--_LIBCPP_EXPORTED_FROM_ABI exception_ptr __copy_exception_ptr(void* __except, const void* __ptr);
+ _LIBCPP_EXPORTED_FROM_ABI exception_ptr __copy_exception_ptr(void* __except, const void* __ptr);
 -_LIBCPP_EXPORTED_FROM_ABI exception_ptr current_exception() _NOEXCEPT;
--_LIBCPP_NORETURN _LIBCPP_EXPORTED_FROM_ABI void rethrow_exception(exception_ptr);
-+_LIBCPP_HIDE_FROM_ABI exception_ptr __copy_exception_ptr(void* __exception, const void* __ptr);
+-[[__noreturn__]] _LIBCPP_EXPORTED_FROM_ABI void rethrow_exception(exception_ptr);
  
  // This is a built-in template function which automagically extracts the required
  // information.

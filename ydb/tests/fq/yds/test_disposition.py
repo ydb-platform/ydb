@@ -62,6 +62,52 @@ class TestContinueMode(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
+    def test_disposition_fresh(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
+        client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
+        self.init_topics("disposition_fresh")
+
+        query_name = "disposition-fresh-query"
+        sql = Rf'''
+            PRAGMA dq.MaxTasksPerStage="1";
+
+            INSERT INTO yds.`{self.output_topic}`
+            SELECT Data FROM yds.`{self.input_topic}`;
+        '''
+
+        def run(input: list[str], output: list[str], query_id: str | None) -> str:
+            write_stream(self.input_topic, input)
+
+            if query_id is None:
+                result: fq.CreateBindingResult = client.create_query(
+                    name=query_name,
+                    text=sql,
+                    type=fq.QueryContent.QueryType.STREAMING,
+                    streaming_disposition=StreamingDisposition.fresh(),
+                ).result
+                query_id = result.query_id
+            else:
+                client.modify_query(
+                    query_id=query_id,
+                    name=query_name,
+                    text=sql,
+                    type=fq.QueryContent.QueryType.STREAMING,
+                    streaming_disposition=StreamingDisposition.fresh(),
+                )
+            client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+            assert read_stream(self.output_topic, len(output), consumer_name=self.consumer_name) == output
+
+            client.abort_query(query_id)
+            client.wait_query(query_id)
+
+            return query_id
+
+        query_id = run(["1", "2"], [], None)
+        query_id = run(["3", "4"], [], query_id)
+        query_id = run(["5", "6"], [], query_id)
+
+    @yq_v1
+    @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_disposition_from_time(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("disposition_from_time")

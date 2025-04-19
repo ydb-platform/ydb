@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
     ydb/core/fq/libs/row_dispatcher

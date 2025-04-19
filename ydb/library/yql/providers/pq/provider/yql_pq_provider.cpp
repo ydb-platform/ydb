@@ -13,7 +13,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-    FederatedQuery::StreamingDisposition disposition) {
+    NPq::NProto::StreamingDisposition disposition) {
     return [gateway, supportRtmrMode, dbResolver, disposition] (
                const TString& userName,
                const TString& sessionId,

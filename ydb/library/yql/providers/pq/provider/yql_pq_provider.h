@@ -6,7 +6,7 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
@@ -55,14 +55,14 @@ public:
     THolder<IDqIntegration> DqIntegration;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
-    FederatedQuery::StreamingDisposition Disposition;
+    NPq::NProto::StreamingDisposition Disposition;
 };
 
 TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode = false,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
-    FederatedQuery::StreamingDisposition disposition = {}
+    NPq::NProto::StreamingDisposition disposition = {}
 );
 
 } // namespace NYql

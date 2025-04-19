@@ -1,17 +1,17 @@
 #include "dq_pq_read_actor.h"
 
+#include <library/cpp/protobuf/interop/cast.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <yql/essentials/utils/log/log.h>
-
-#include <ydb/library/actors/core/log.h>
 
 namespace NYql::NDq::NInternal {
 
@@ -21,30 +21,21 @@ TInstant TrimToMillis(TInstant instant) {
     return TInstant::MilliSeconds(instant.MilliSeconds());
 }
 
-TInstant InitStartingMessageTimestamp(const FederatedQuery::StreamingDisposition& streamingDisposition) {
+// StartingMessageTimestamp is serialized as milliseconds, so drop microseconds part to be consistent with storage
+TInstant InitStartingMessageTimestamp(const NPq::NProto::StreamingDisposition& disposition) {
     return TrimToMillis([&]() -> TInstant {
-        switch (streamingDisposition.GetDispositionCase()) {
-            case FederatedQuery::StreamingDisposition::kOldest:
+        switch (disposition.GetDispositionCase()) {
+            case NPq::NProto::StreamingDisposition::kOldest:
                 return TInstant::Zero();
-            case FederatedQuery::StreamingDisposition::kFresh:
+            case NPq::NProto::StreamingDisposition::kFresh:
                 return TInstant::Now();
-            case FederatedQuery::StreamingDisposition::kFromTime: {
-                const auto& disposition = streamingDisposition.from_time();
-                return TInstant{timeval{
-                    .tv_sec = disposition.timestamp().seconds(),
-                    .tv_usec = disposition.timestamp().nanos() / 1'000,
-                }};
-            }
-            case FederatedQuery::StreamingDisposition::kTimeAgo: {
-                const auto& disposition = streamingDisposition.time_ago();
-                return TInstant::Now() - TDuration{timeval{
-                    .tv_sec = disposition.duration().seconds(),
-                    .tv_usec = disposition.duration().nanos() / 1'000,
-                }};
-            }
-            case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
+            case NPq::NProto::StreamingDisposition::kFromTime:
+                return NProtoInterop::CastFromProto(disposition.from_time().timestamp());
+            case NPq::NProto::StreamingDisposition::kTimeAgo:
+                return TInstant::Now() - NProtoInterop::CastFromProto(disposition.time_ago().duration());
+            case NPq::NProto::StreamingDisposition::kFromLastCheckpoint:
                 [[fallthrough]];
-            case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
+            case NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET:
                 return TInstant::Now();
         }
     }());

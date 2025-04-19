@@ -355,6 +355,12 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
     }
 
+    if (auto lock = Self->LockedPaths.FindPtr(tableId); lock) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxPartitionHistogram Skip locked table tablet " << datashardId << " by " << *lock);
+        return true;
+    }
+
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 

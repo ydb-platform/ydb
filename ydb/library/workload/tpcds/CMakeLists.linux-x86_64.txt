@@ -90,7 +90,7 @@ target_link_libraries(library-workload-tpcds.global PUBLIC
 target_sources(library-workload-tpcds.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/registrar.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/157f0790f67d6e022f0b8e66f2dd91de.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/40dc1fce416c177611436ff1aa632e17.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5029ef29fac0ac38aa7dd535224064d3.cpp
 )
 
 
@@ -104,7 +104,7 @@ resources(library-workload-tpcds.global
 )
 
 resources(library-workload-tpcds.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/40dc1fce416c177611436ff1aa632e17.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5029ef29fac0ac38aa7dd535224064d3.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s1_canonical/q1.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s1_canonical/q10.result.gz

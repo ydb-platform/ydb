@@ -41,6 +41,7 @@ target_sources(providers-common-udf_resolve PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_files_box.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h

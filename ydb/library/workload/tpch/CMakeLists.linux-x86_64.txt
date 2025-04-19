@@ -83,7 +83,7 @@ target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/9604d7cfe5b647e964e6be189a1a7be6.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/266f999a7afb1a95b472cbcf0ff17e4e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/625af767788c54592a90146e8c0f8abc.cpp
 )
 
 
@@ -99,7 +99,7 @@ resources(library-workload-tpch.global
 )
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/266f999a7afb1a95b472cbcf0ff17e4e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/625af767788c54592a90146e8c0f8abc.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q1.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q10.result

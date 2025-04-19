@@ -306,14 +306,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapTable();
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
-        THashSet<NColumnShard::TInternalPathId> pathsToLock{
-            NColumnShard::TInternalPathId::FromRawValue(0),
-            NColumnShard::TInternalPathId::FromRawValue(1),
-            NColumnShard::TInternalPathId::FromRawValue(2),
-            NColumnShard::TInternalPathId::FromRawValue(3),
-            NColumnShard::TInternalPathId::FromRawValue(4),
-            NColumnShard::TInternalPathId::FromRawValue(5),
-        };
+        THashSet<NColumnShard::TInternalPathId> pathsToLock;
+        for (const auto& tablet: csController->GetShardActualIds()) {
+            for (size_t i = 0; i != 6; ++i) {
+                if(auto internalPathId = csController->GetInternalPathIdOptional(tablet, NColumnShard::TLocalPathId::FromRawValue(i))) {
+                    pathsToLock.insert(*internalPathId);
+                }
+            }
+        }
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));
         {
             const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT1S") ON timestamp)";

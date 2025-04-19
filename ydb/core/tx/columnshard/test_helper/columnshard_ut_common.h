@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -272,7 +273,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         tx.MutableSeqNo()->SetGeneration(generation);
         auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -297,7 +298,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -313,7 +314,7 @@ struct TTestSchema {
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -328,7 +329,7 @@ struct TTestSchema {
     static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
         tx.MutableSeqNo()->SetRound(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
@@ -345,7 +346,7 @@ struct TTestSchema {
 
     static TString DropTableTxBody(ui64 pathId, ui32 version) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        tx.MutableDropTable()->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableDropTable());
         tx.MutableSeqNo()->SetRound(version);
 
         TString out;
@@ -417,7 +418,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 
-void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds, NOlap::TSnapshot snap, ui64 scanId = 0);
+void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const NColumnShard::TLocalPathId& localPathId, NOlap::TSnapshot snap, ui64 scanId = 0);
 
 void ProposeCommitFail(
      TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);

@@ -47,15 +47,9 @@ public:
     void CheckDeadlines();
     void CheckDeadlinesIndexation();
 
-    bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
-    void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        auto it = ActiveCompactionInfo.find(info.GetPathId());
-        AFL_VERIFY(it != ActiveCompactionInfo.end());
-        if (it->second.Finish()) {
-            ActiveCompactionInfo.erase(it);
-        }
-        Counters->OnCompactionFinish(info.GetPathId());
-    }
+    bool StartCompaction(const TInternalPathId pathId);
+    void FinishCompaction(const TInternalPathId pathId);
+
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
     }

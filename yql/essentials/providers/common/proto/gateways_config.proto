@@ -679,8 +679,13 @@ message TIcebergCatalog {
     message THadoop {
     }
 
-    // Hive Iceberg Catalog which is based on a Hive Metastore
+    // todo: remove
     message THive {
+        optional string uri = 1;
+    }
+
+    // Hive Iceberg Catalog which is based on a Hive Metastore
+    message THiveMetastore {
         // Location of a hive metastore
         // e.g., thrift://host:9083/
         optional string uri = 1;
@@ -688,7 +693,9 @@ message TIcebergCatalog {
 
     oneof payload {
         THadoop hadoop = 1;
+        // todo: remove
         THive hive = 2;
+        THiveMetastore hive_metastore = 3;
     }
 }
 

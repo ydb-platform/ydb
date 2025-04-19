@@ -66,7 +66,7 @@ def onresource_files(unit, *args):
                 )
                 continue
             if not ugly_conftest_exception(path):
-                src = 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)
+                src = 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)
             else:
                 src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
             res += ['-', src, path, key]

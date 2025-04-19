@@ -30,13 +30,17 @@ public:
         Alloc.Acquire();
     }
 
-    TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary);
+    TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues);
     TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
 
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
     bool Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
     bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
+
+    void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId);
 
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);

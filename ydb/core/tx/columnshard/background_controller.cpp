@@ -3,13 +3,19 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info) {
-    auto it = ActiveCompactionInfo.find(info.GetPathId());
-    if (it == ActiveCompactionInfo.end()) {
-        it = ActiveCompactionInfo.emplace(info.GetPathId(), info.GetPathId()).first;
-    }
+bool TBackgroundController::StartCompaction(const TInternalPathId pathId) {
+    auto [it, _] = ActiveCompactionInfo.emplace(pathId, NOlap::TPlanCompactionInfo{pathId});
     it->second.Start();
     return true;
+}
+
+void TBackgroundController::FinishCompaction(const TInternalPathId pathId) {
+    auto it = ActiveCompactionInfo.find(pathId);
+    AFL_VERIFY(it != ActiveCompactionInfo.end());
+    if (it->second.Finish()) {
+        ActiveCompactionInfo.erase(it);
+    }
+    Counters->OnCompactionFinish(pathId);
 }
 
 void TBackgroundController::CheckDeadlines() {

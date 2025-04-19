@@ -112,8 +112,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
 
         while (!rowset.EndOfSet()) {
-            const auto pathId =  TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
-            auto* table = Tables.FindPtr(pathId);
+            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
+            const auto table = Tables.FindPtr(pathId);
             AFL_VERIFY(table);
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
@@ -229,7 +229,7 @@ ui64 TTablesManager::GetMemoryUsage() const {
 }
 
 void TTablesManager::DropTable(const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
-    const auto table = Tables.FindPtr(pathId);
+    auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table);
     table->SetDropVersion(version);
     AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);

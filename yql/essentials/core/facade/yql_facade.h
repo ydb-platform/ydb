@@ -64,6 +64,7 @@ public:
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing);
     void EnableRangeComputeFor();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
+    void SetUdfResolverLogfile(const TString& path);
 
     TProgramPtr Create(
             const TFile& file,
@@ -101,6 +102,7 @@ private:
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
     IArrowResolver::TPtr ArrowResolver_;
+    TMaybe<TString> UdfResolverLogfile_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -70,6 +70,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"SeqMode", &TContext::SeqMode},
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
+    {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

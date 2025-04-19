@@ -51,7 +51,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
 
         with_lock(Lock_) {
             bool hasErrors = false;
@@ -68,7 +68,6 @@ public:
                 }
             }
 
-            THoldingFileStorage holdingFileStorage(FileStorage_);
             auto newRegistry = FunctionRegistry_->Clone();
             THashMap<std::pair<TString, TString>, THashSet<TString>> cachedModules;
             for (auto import: imports) {
@@ -91,7 +90,7 @@ public:
                 try {
                     THashSet<TString> modules;
                     if (FileStorage_) {
-                        auto link = holdingFileStorage.FreezeFile(*import->Block);
+                        auto link = storage.FreezeFile(*import->Block);
                         auto path = link->GetPath().GetPath();
                         auto [it, inserted] = cachedModules.emplace(std::make_pair(path, customUdfPrefix), THashSet<TString>());
                         if (inserted) {
@@ -141,7 +140,7 @@ public:
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage&) const override {
         Y_UNUSED(imports);
         Y_UNUSED(logLevel);
         ythrow yexception() << "LoadRichMetadata is not supported in SimpleUdfResolver";

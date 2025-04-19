@@ -295,7 +295,7 @@ public:
         CreateTier("tier2");
     }
 
-    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
+    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
         std::optional<TString> sessionId = std::nullopt;
@@ -308,6 +308,10 @@ public:
 
         if (formatQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
+        }
+
+        if (initialScan) {
+            return;
         }
 
         auto describeResultOrig = DescribeTable(tableName, sessionId);
@@ -360,14 +364,14 @@ private:
         )", tierName, tierName));
     }
 
-    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
+    Ydb::Table::DescribeTableResult DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
 
         auto describeTable = [this](TString&& path) {
             auto pathDescription = DescribePath(Runtime, std::move(path));
 
             if (pathDescription.HasColumnTableDescription()) {
                 const auto& tableDescription = pathDescription.GetColumnTableDescription();
-                return *GetCreateTableRequest(tableDescription);
+                return *GetScheme(tableDescription);
             }
 
             if (!pathDescription.HasTable()) {
@@ -375,7 +379,7 @@ private:
             }
 
             const auto& tableDescription = pathDescription.GetTable();
-            return *GetCreateTableRequest(tableDescription);
+            return *GetScheme(tableDescription);
         };
 
         auto tablePath = TString(tableName);
@@ -469,8 +473,8 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         NKikimrMiniKQL::TType mkqlKeyType;
 
@@ -489,6 +493,8 @@ private:
             return Nothing();
         }
 
+        FillChangefeedDescription(scheme, tableDesc);
+
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
         FillPartitioningSettings(scheme, tableDesc);
@@ -504,8 +510,8 @@ private:
         return scheme;
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         FillColumnDescription(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
@@ -1532,6 +1538,121 @@ WITH (
     TTL = INTERVAL('PT1H') DELETE ON Value4
 );
 )"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableChangefeeds) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON');
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', TOPIC_MIN_ACTIVE_PARTITIONS = 3, FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"), INITIAL_SCAN = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT30M'), TOPIC_MIN_ACTIVE_PARTITIONS = 3, INITIAL_SCAN = TRUE)
+;
+)"
+        , false, true
         );
     }
 

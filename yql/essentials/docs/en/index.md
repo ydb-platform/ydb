@@ -8,3 +8,4 @@ This documentation section contains the YQL reference that includes the sections
 - [Syntax](syntax/index.md) with a full list of YQL commands
 - [Built-in functions](builtins/index.md) with a description of the available built-in functions
 - [Recipes](recipes/index.md) with a description of recipes for various tasks
+- [Changelog](changelog/index.md) of YQL

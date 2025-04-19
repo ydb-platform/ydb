@@ -121,9 +121,11 @@ def append_to_config_file(path, shellcode):
         fh.write(shellcode)
     print("Added.", file=sys.stderr)
 
+
 def link_zsh_user_rcfile(zsh_fpath=None):
     zsh_rcfile = os.path.join(os.path.expanduser(os.environ.get("ZDOTDIR", "~")), ".zshenv")
     append_to_config_file(zsh_rcfile, zsh_shellcode.format(zsh_fpath=zsh_fpath or get_activator_dir()))
+
 
 def link_bash_user_rcfile():
     bash_completion_user_file = os.path.expanduser("~/.bash_completion")
@@ -134,6 +136,7 @@ def link_user_rcfiles():
     # TODO: warn if running as superuser
     link_zsh_user_rcfile()
     link_bash_user_rcfile()
+
 
 def add_zsh_system_dir_to_fpath_for_user():
     if "zsh" not in os.environ.get("SHELL", ""):
@@ -147,6 +150,7 @@ def add_zsh_system_dir_to_fpath_for_user():
         link_zsh_user_rcfile(zsh_fpath=zsh_system_dir)
     except (FileNotFoundError, subprocess.CalledProcessError):
         pass
+
 
 def main():
     global args

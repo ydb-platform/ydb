@@ -109,6 +109,8 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TColumnTableDescription& in);
 

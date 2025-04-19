@@ -109,8 +109,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(WritePortions);
-    proto.SetPathId(PathId.GetInternalPathId().GetRawValue());
-    //proto.SetLocalPathId(PathId.GetLocalPathId().GetRawValue());
+    PathId.GetInternalPathId().ToProto(proto); //TODO check me
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
@@ -118,11 +117,10 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     WritePortions = proto.GetWritePortions();
+    const auto pathId =  TInternalPathId::FromProto(proto.GetPathId());
     PathId = {
-        TInternalPathId::FromRawValue(proto.GetPathId()),
-        TLocalPathId::FromRawValue(
-            //proto.HasLocalPathId() ? proto.GetLocalPathId() : 
-            proto.GetPathId())
+        pathId,
+        TLocalPathId::FromRawValue(pathId.GetRawValue()) //TODO fix me
     };
     AFL_VERIFY(!WritePortions || PathId);
     if (proto.HasModificationType()) {

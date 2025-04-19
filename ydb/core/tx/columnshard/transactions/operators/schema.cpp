@@ -174,7 +174,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         {
             THashSet<TInternalPathId> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(TLocalPathId::FromRawValue(i.GetPathId()))) {
+                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(TLocalPathId::FromProto(i))) {
                     if (owner.TablesManager.HasTable(*internalPathId, true)) {
                         WaitPathIdsToErase.emplace(*internalPathId);
                     }

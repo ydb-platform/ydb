@@ -378,7 +378,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const TLocalPathId localPathId = TLocalPathId::FromRawValue(tableProto.GetPathId());
+    const TLocalPathId localPathId = TLocalPathId::FromProto(tableProto);
     if (const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId)) {
         LOG_S_DEBUG("EnsureTable for existed GetLocalPathId(): " << localPathId << " at tablet " << TabletID());
         return;
@@ -390,7 +390,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
                                            << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
-    tableVerProto.SetPathId(internalPathId.GetRawValue());
+    internalPathId.ToProto(tableVerProto); //check me
 
     // check schema changed
 
@@ -441,7 +441,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto localPathId = NColumnShard::TLocalPathId::FromRawValue(alterProto.GetPathId());
+    const auto localPathId = NColumnShard::TLocalPathId::FromProto(alterProto);
     const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId);
     Y_ABORT_UNLESS(internalPathId, "AlterTable on a dropped or non-existent table");
 
@@ -478,7 +478,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto localPathId =  TLocalPathId::FromRawValue(dropProto.GetPathId());
+    const auto localPathId =  TLocalPathId::FromProto(dropProto);
     const auto pathId = TablesManager.ResolveInternalPathId(localPathId);
     if (!pathId || !TablesManager.HasTable(*pathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted table with LocalPathId" << localPathId << " at tablet " << TabletID());

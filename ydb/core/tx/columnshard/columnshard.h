@@ -242,11 +242,11 @@ namespace TEvColumnShard {
     struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
 
-        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
+        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, const NColumnShard::TLocalPathId pathId,
                  const TString& dedupId, const TString& data, const ui32 writePartId,
                 const NEvWrite::EModificationType modificationType) {
             ActorIdToProto(source, Record.MutableSource());
-            Record.SetTableId(tableId);
+            pathId.ToProto(Record);
             Record.SetDedupId(dedupId);
             Record.SetData(data);
             Record.SetWritePartId(writePartId);
@@ -270,11 +270,11 @@ namespace TEvColumnShard {
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
-        TEvWriteResult(ui64 origin, const NColumnShard::TLocalPathId& localPathId, TString dedupId, const i64 writeId, ui32 status) {
+        TEvWriteResult(ui64 origin, const NColumnShard::TLocalPathId pathId, TString dedupId, const i64 writeId, ui32 status) {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(localPathId.GetRawValue());
+            pathId.ToProto(Record);
             Record.SetDedupId(dedupId);
             Record.SetStatus(status);
         }

@@ -190,7 +190,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
-    const auto localPathId = TLocalPathId::FromRawValue(record.GetTableId());
+    const auto localPathId = TLocalPathId::FromProtoOrTableId(record);
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();

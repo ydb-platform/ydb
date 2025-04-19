@@ -273,7 +273,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         tx.MutableSeqNo()->SetGeneration(generation);
         auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -298,7 +298,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -314,7 +314,7 @@ struct TTestSchema {
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -329,7 +329,7 @@ struct TTestSchema {
     static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
-        table->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*table);
         tx.MutableSeqNo()->SetRound(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
@@ -346,7 +346,7 @@ struct TTestSchema {
 
     static TString DropTableTxBody(ui64 pathId, ui32 version) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        tx.MutableDropTable()->SetPathId(pathId);
+        NColumnShard::TLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableDropTable());
         tx.MutableSeqNo()->SetRound(version);
 
         TString out;

@@ -732,7 +732,15 @@ struct Schema : NIceDb::Schema {
         db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Digit>(value));
     }
 
-    template<class TMessage>
+    static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, TInternalPathId pathId) {
+        db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Digit>(pathId.GetRawValue()));
+    }
+
+    static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, TLocalPathId pathId) {
+        db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Digit>(pathId.GetRawValue()));
+    }
+
+   template<class TMessage>
     static void SaveSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, const TMessage& message) {
         TString serialized;
         Y_ABORT_UNLESS(message.SerializeToString(&serialized));

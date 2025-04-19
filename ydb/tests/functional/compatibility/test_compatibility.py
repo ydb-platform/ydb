@@ -87,7 +87,7 @@ class TestCompatibility(object):
     
     def read_update_data(self, iteration_count=1):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
-        self.log_node_versions()
+        self.log_nodes_version()
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 id_ = 0

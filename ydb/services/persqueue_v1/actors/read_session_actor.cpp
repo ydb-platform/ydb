@@ -1278,7 +1278,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     }
 
     std::unordered_set<ui64> notCommitedToFinishParents;
-    for (auto& parent: topic.PartitionGraph->GetPartition(record.GetPartition())->DirectParents) {
+    for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
             if (actorInfo.Partition.Partition == parent->Id && !actorInfo.IsLastOffsetCommitted()) {
                 notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
@@ -1286,7 +1286,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         }
     }
 
-    const auto& parentPartitions = topic.PartitionGraph->GetPartition(partitionId.Partition)->AllParents;
+    const auto& parentPartitions = partitionNode->AllParents;
     const auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetDatabase());
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),

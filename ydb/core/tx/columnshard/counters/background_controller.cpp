@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void TBackgroundControllerCounters::OnCompactionFinish(TLocalPathId pathId) {
+void TBackgroundControllerCounters::OnCompactionFinish(TInternalPathId pathId) {
     TInstant now = TAppData::TimeProvider->Now();
     TInstant& lastFinish = LastCompactionFinishByPathId[pathId];
     lastFinish = std::max(lastFinish, now);

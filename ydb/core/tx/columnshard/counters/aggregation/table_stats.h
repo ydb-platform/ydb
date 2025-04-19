@@ -29,10 +29,10 @@ public:
         , Executor(*executor) {
     }
 
-    void FillTableStats(TUnifiedPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
-        Counters.FillTableStats(pathId.GetLocalPathId(), tableStats);
+    void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+        Counters.FillTableStats(pathId, tableStats);
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId.GetInternalPathId(), TPortionIndexStats::TActivePortions());
+        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());
         FillPortionStats(tableStats, activeStats);
     }
 

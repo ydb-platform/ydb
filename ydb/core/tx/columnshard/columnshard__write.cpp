@@ -211,7 +211,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(localPathId)->OnWriteEvent();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(*pathId)->OnWriteEvent();
 
     std::optional<ui32> granuleShardingVersion;
     if (record.HasGranuleShardingVersion()) {
@@ -584,7 +584,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(localPathId)->OnWriteEvent();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(*pathId)->OnWriteEvent();
 
     auto arrowData = std::make_shared<TArrowData>(schema);
     if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {

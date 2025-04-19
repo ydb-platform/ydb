@@ -32,7 +32,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo({GranuleMeta->GetPathId(), GranuleMeta->GetLocalPathId()}));
+    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
 }
@@ -45,7 +45,7 @@ void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSh
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    self.BackgroundController.FinishCompaction(TPlanCompactionInfo({GranuleMeta->GetPathId(), GranuleMeta->GetLocalPathId()}));
+    self.BackgroundController.FinishCompaction(TPlanCompactionInfo(GranuleMeta->GetPathId()));
     Y_ABORT_UNLESS(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();

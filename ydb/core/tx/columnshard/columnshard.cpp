@@ -424,7 +424,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
                 resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
             }
 
-            tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+            tableStatsBuilder.FillTableStats(pathId.GetInternalPathId(), *(periodicTableStats->MutableTableStats()));
 
             LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId.GetLocalPathId());
         }

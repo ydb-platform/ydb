@@ -351,11 +351,11 @@ private:
             .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
             .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, Config), "NewRBOTransformer")
 
-            .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
-            .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
-            .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
-            .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
-            .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
+            //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
+            //.Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
+            //.Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
+            //.Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
+            //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)

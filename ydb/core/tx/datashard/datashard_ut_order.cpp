@@ -1352,7 +1352,6 @@ Y_UNIT_TEST(TestOutOfOrderLockLost) {
 Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1458,7 +1457,6 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
 Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2964,7 +2962,6 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
 Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
     app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")

@@ -1246,8 +1246,8 @@ protected:
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
-        if (Buckets.GetWeight()) {
-            return TOptimizationPriority::Critical(Buckets.GetWeight());
+        if (const auto weight = Buckets.GetWeight()) {
+            return TOptimizationPriority::Critical(weight);
         } else {
             return TOptimizationPriority::Zero();
         }

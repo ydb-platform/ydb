@@ -2944,7 +2944,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["test_view"];["View"];["CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\nSELECT * FROM KeyValue;\n"]];
+                [["test_view"];["View"];["CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS\nSELECT\n    *\nFROM\n    KeyValue\n;\n"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

@@ -22,6 +22,9 @@ namespace NKikimr {
                         TABLED() {SMALL() {str << StorageRatio.MonSummary();}}
                         TABLED() {SMALL() {str << (Info.IsCreatedByRepl() ? "REPL" : "COMP");}}
                         TABLED() {SMALL() {str << ToStringLocalTimeUpToSeconds(Info.CTime);}}
+                        TABLED() {SMALL() {
+                            str << AssignedSstId << '/' << VolatileOrderId << '@' << FormatList(AllChunks);
+                        }}
                         ++index;
                     }
                 }

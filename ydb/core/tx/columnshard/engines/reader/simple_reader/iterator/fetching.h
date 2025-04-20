@@ -15,7 +15,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class IDataSource;
 using TColumnsSet = NCommon::TColumnsSet;
 using TIndexesSet = NCommon::TIndexesSet;
-using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScriptCursor = NCommon::TFetchingScriptCursor;

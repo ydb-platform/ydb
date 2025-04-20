@@ -827,6 +827,36 @@ blob_storage_config:
 
 {{ ydb-short-name }} позволяет использовать различные способы аутентификации пользователя в системе. Настройки аутентификации и провайдеров аутентификации задаются в секции `auth_config`.
 
+### Конфигурация сложности пароля {#password-complexity}
+
+{{ ydb-short-name }} позволяет аутентифицировать пользователей по логину и паролю. Подробнее можно прочитать в разделе [аутентификация по логину и паролю](../../security/authentication.md#static-credentials). Для повышения безопасности в {{ ydb-short-name }} имеется возможность настроить [политику паролей](../../security/authentication.md#password-complexity) пользователей. Параметры политики паролей настраиваются в секции `password_complexity`.
+
+Синтаксис секции `password_complexity`:
+
+```yaml
+auth_config:
+  ...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  ...
+```
+
+| Параметр | Описание | Значение по умолчанию |
+| :--- | :--- | :---: |
+| `min_length` | Минимальная длина пароля | 0 |
+| `min_lower_case_count` | Минимальное число символов в нижнем регистре | 0 |
+| `min_upper_case_count` | Минимальное число символов в верхнем регистре | 0 |
+| `min_numbers_count` | Минимальное число цифр в пароле | 0 |
+| `min_special_chars_count` | Минимальное число специальных символов из списка `special_chars` | 0 |
+| `special_chars` | Специальные символы, которые допустимо использовать в пароле. Допускается указать любое подмножество из следующих символов `!@#$%^&*()_+{}\|<>?=`. Значение (`""`) эквивалентно списку `!@#$%^&*()_+{}\|<>?=` | `""` |
+| `can_contain_username` | Может ли пароль содержать имя пользователя | `false` |
+
 ### Конфигурация LDAP аутентификации {#ldap-auth-config}
 
 Одним из способов аутентификации пользователей в {{ ydb-short-name }} является использование LDAP каталога. Подробнее о таком виде аутентификации написано в разделе про [использование LDAP каталога](../../security/authentication.md#ldap). Для конфигурирования LDAP аутентификации необходимо описать секцию `ldap_authentication`.
@@ -835,29 +865,28 @@ blob_storage_config:
 
 ```yaml
 auth_config:
-  ...
+  #...
   ldap_authentication:
     hosts:
       - "ldap-hostname-01.example.net"
       - "ldap-hostname-02.example.net"
       - "ldap-hostname-03.example.net"
     port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+    scheme: "ldap"
+    base_dn: "dc=mycompany,dc=net"
+    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
+    bind_password: "serviceAccauntPassword"
+    search_filter: "uid=$username"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+        enable_nested_groups_search: true
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
-  ...
+  #...
 ```
 
 | Параметр                                        | Описание                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

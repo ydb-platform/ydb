@@ -820,6 +820,10 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
                 // do nothing
             } else if (optionName == "multiple_joins") {
                 // do nothing
+            } else if (optionName == "prune_keys_added") {
+                if (!EnsureTupleSize(*child, 1, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
             } else {
                 YQL_ENSURE(false, "Cached join option '" << optionName << "' not handled");
             }
@@ -2007,13 +2011,40 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
 }
 
 bool IsCachedJoinOption(TStringBuf name) {
-    static THashSet<TStringBuf> CachedJoinOptions = {"preferred_sort", "cbo_passed", "multiple_joins"};
+    static THashSet<TStringBuf> CachedJoinOptions = {"preferred_sort", "cbo_passed", "multiple_joins", "prune_keys_added"};
     return CachedJoinOptions.contains(name);
 }
 
 bool IsCachedJoinLinkOption(TStringBuf name) {
     static THashSet<TStringBuf> CachedJoinLinkOptions = {"shuffle_lhs_by", "shuffle_rhs_by"};
     return CachedJoinLinkOptions.contains(name);
+}
+
+void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor) {
+    auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+    TStringBuf joinKind = joinTree.Type().Value();
+
+    auto left = joinTree.LeftScope();
+    if (!left.Maybe<TCoAtom>()) {
+        GetPruneKeysColumnsForJoinLeaves(left.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+    } else {
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+            if (!settings.LeftHints.contains("unique")) {
+                CollectEquiJoinKeyColumnsFromLeaf(joinTree.LeftKeys().Ref(), columnsForPruneKeysExtractor);
+            }
+        }
+    }
+
+    auto right = joinTree.RightScope();
+    if (!right.Maybe<TCoAtom>()) {
+        GetPruneKeysColumnsForJoinLeaves(right.Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+    } else {
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+            if (!settings.RightHints.contains("unique")) {
+                CollectEquiJoinKeyColumnsFromLeaf(joinTree.RightKeys().Ref(), columnsForPruneKeysExtractor);
+            }
+        }
+    }
 }
 
 } // namespace NYql

@@ -11,8 +11,8 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 class TTableBucketSpiller;
-#define GRACEJOIN_DEBUG DEBUG
-#define GRACEJOIN_TRACE TRACE
+#define GRACEJOIN_DEBUG NUdf::ELogLevel::Debug
+#define GRACEJOIN_TRACE NUdf::ELogLevel::Trace
 
 const ui64 BitsForNumberOfBuckets = 6; // 2^6 = 64
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
@@ -348,6 +348,9 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
+    const NUdf::TLoggerPtr Logger_ = nullptr; // Logger instance
+    const NUdf::TLogComponentId LogComponent_ = 0; // Unique component id. GraceJoin here.
+
 public:
 
 
@@ -417,10 +420,12 @@ public:
     void Clear();
 
     // Creates new table with key columns and data columns
-    TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
-            ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
-            ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+    TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,
+           ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
+           ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
+           ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
+           ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr,
+           bool isAny = false);
 
     enum class EAddTupleResult { Added, Unmatched, AnyMatch };
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns,

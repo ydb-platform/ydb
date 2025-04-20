@@ -2150,6 +2150,12 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
+                        || HasNonEmptyKeyFilter(TYtSection(section))))
+                    {
+                        exclusiveOuts.insert(outIndex);
+                    }
+
                     // Section may be used multiple times in different operations
                     // So, check only unique pair of operation + section
                     if (!duplicateCheck[outIndex].insert(std::make_pair(op, section)).second) {

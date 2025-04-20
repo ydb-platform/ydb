@@ -69,7 +69,7 @@ class YdbCliHelper:
 
     class WorkloadRunResult:
         def __init__(self):
-            self.stats: dict[str, dict[str, Any]] = {}
+            self._stats: dict[str, dict[str, Any]] = {}
             self.query_out: Optional[str] = None
             self.stdout: str = ''
             self.stderr: str = ''
@@ -85,6 +85,19 @@ class YdbCliHelper:
         def success(self) -> bool:
             return len(self.error_message) == 0
 
+        def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
+            result = self._stats.get(test, {})
+            result.update({
+                'with_warrnings': bool(self.warning_message),
+                'with_errors': bool(self.error_message),
+                'errors': self.get_error_stats()
+            })
+            return result
+
+        def add_stat(self, test: str, signal: str, value: Any) -> None:
+            self._stats.setdefault(test, {})
+            self._stats[test][signal] = value
+
         def get_error_stats(self):
             result = {}
             for iter in self.iterations.values():
@@ -96,6 +109,20 @@ class YdbCliHelper:
             if self.warning_message:
                 result['warning'] = True
             return result
+
+        def add_error(self, msg: Optional[str]):
+            if msg:
+                if len(self.error_message) > 0:
+                    self.error_message += f'\n\n{msg}'
+                else:
+                    self.error_message = msg
+
+        def add_warning(self, msg: Optional[str]):
+            if msg:
+                if len(self.warning_message) > 0:
+                    self.warning_message += f'\n\n{msg}'
+                else:
+                    self.warning_message = msg
 
     class WorkloadProcessor:
         def __init__(self,
@@ -126,20 +153,6 @@ class YdbCliHelper:
             self._query_output_path = _get_output_path('out')
             self._json_path = _get_output_path('json')
 
-        def _add_error(self, msg: Optional[str]):
-            if msg is not None and len(msg) > 0:
-                if len(self.result.error_message) > 0:
-                    self.result.error_message += f'\n\n{msg}'
-                else:
-                    self.result.error_message = msg
-
-        def _add_warning(self, msg: Optional[str]):
-            if msg is not None and len(msg) > 0:
-                if len(self.result.warning_message) > 0:
-                    self.result.warning_message += f'\n\n{msg}'
-                else:
-                    self.result.warning_message = msg
-
         def _init_iter(self, iter_num: int) -> None:
             if iter_num not in self.result.iterations:
                 self.result.iterations[iter_num] = YdbCliHelper.Iteration()
@@ -167,11 +180,11 @@ class YdbCliHelper:
                     msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
                     self._init_iter(iter)
                     self.result.iterations[iter].error_message = msg
-                    self._add_error(f'Iteration {iter}: {msg}')
+                    self.result.add_error(f'Iteration {iter}: {msg}')
 
         def _process_returncode(self, returncode) -> None:
             if returncode != 0 and not self.result.error_message and not self.result.warning_message:
-                self._add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
+                self.result.add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
 
         def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:
             result = YdbCliHelper.QueryPlan()
@@ -206,15 +219,12 @@ class YdbCliHelper:
             with open(self._json_path, 'r') as r:
                 json_data = r.read()
             for signal in json.loads(json_data):
-                q = signal['labels']['query']
-                if q not in self.result.stats:
-                    self.result.stats[q] = {}
-                self.result.stats[q][signal['sensor']] = signal['value']
-            if self.result.stats.get(f'Query{self.query_num:02d}', {}).get("DiffsCount", 0) > 0:
+                self.result.add_stat(signal['labels']['query'], signal['sensor'], signal['value'])
+            if self.result.get_stats(f'Query{self.query_num:02d}').get("DiffsCount", 0) > 0:
                 if self.check_canonical == CheckCanonicalPolicy.WARNING:
-                    self._add_warning('There is diff in query results')
+                    self.result.add_warning('There is diff in query results')
                 else:
-                    self._add_error('There is diff in query results')
+                    self.result.add_error('There is diff in query results')
 
         def _load_query_out(self) -> None:
             if (os.path.exists(self._query_output_path)):
@@ -240,7 +250,7 @@ class YdbCliHelper:
             for node, info in self._nodes_info.items():
                 if not info.get('processed', False):
                     node_errors.append(f'Node {node} is down')
-            self._add_error('\n'.join(node_errors))
+            self.result.add_error('\n'.join(node_errors))
 
         def _parse_stdout(self, stdout: str) -> None:
             self.result.stdout = stdout
@@ -289,7 +299,7 @@ class YdbCliHelper:
                     self._load_plans()
                     self._process_returncode(process.returncode)
             except BaseException as e:
-                self._add_error(str(e))
+                self.result.add_error(str(e))
                 self.result.traceback = e.__traceback__
             return self.result
 

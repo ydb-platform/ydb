@@ -1000,8 +1000,9 @@ struct TEnvironmentSetup {
         return SyncQueryFactory<TResult>(actorId, [&] { return std::make_unique<TQuery>(args...); });
     }
 
-    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+    ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue, 
+            TString counter, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1019,12 +1020,24 @@ struct TEnvironmentSetup {
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup("subsystem", subsystem)->
+                        GetSubgroup(subsgroupName, subgroupValue)->
                         GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
-    };
+    }
+
+    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+            "subsystem", subsystem, counter, derivative);
+    }
+
+    ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+            "handleclass", handleclass, counter);
+    }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {

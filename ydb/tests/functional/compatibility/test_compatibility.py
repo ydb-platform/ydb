@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+import boto3
+
+import os
+
 import yatest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -24,6 +28,10 @@ class TestCompatibility(object):
             )
         )
         cls.driver.wait()
+        output_path = yatest.common.test_output_path()
+        cls.output_f = open(os.path.join(output_path, "out.log"), "w")
+
+        cls.s3_config = cls.setup_s3()
 
     @classmethod
     def teardown_class(cls):
@@ -32,6 +40,21 @@ class TestCompatibility(object):
 
         if hasattr(cls, 'cluster'):
             cls.cluster.stop(kill=True)  # TODO fix
+
+    @staticmethod
+    def setup_s3():
+        s3_endpoint = os.getenv("S3_ENDPOINT")
+        s3_access_key = "minio"
+        s3_secret_key = "minio123"
+        s3_bucket = "export_test_bucket"
+
+        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+
+        bucket = resource.Bucket(s3_bucket)
+        bucket.create()
+        bucket.objects.all().delete()
+
+        return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
 
     def test_simple(self):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
@@ -75,3 +98,47 @@ class TestCompatibility(object):
                 result = list(result_sets[0].rows[0].values())
                 assert len(result) == 1
                 assert result[0] == upsert_count * iteration_count
+
+    def test_export(self):
+        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
+
+        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+
+        for table_num in range(1, 6):
+            table_name = f"sample_table_{table_num}"
+
+            session.execute_scheme(
+                f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
+            )
+
+            query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
+                (1, 'Payload 1 for table {table_num}'),
+                (2, 'Payload 2 for table {table_num}'),
+                (3, 'Payload 3 for table {table_num}'),
+                (4, 'Payload 4 for table {table_num}'),
+                (5, 'Payload 5 for table {table_num}');"""
+            session.transaction().execute(
+                query, commit_tx=True
+            )
+
+        export_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+            "--database=/Root",
+            "export",
+            "s3",
+            "--s3-endpoint",
+            s3_endpoint,
+            "--bucket",
+            s3_bucket,
+            "--access-key",
+            s3_access_key,
+            "--secret-key",
+            s3_secret_key,
+            "--item",
+            "src=/Root,dst=Root"
+        ]
+
+        yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)

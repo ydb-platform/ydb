@@ -1354,6 +1354,83 @@ void TestSomePrograms(const TestTableDescription& table) {
     }
 }
 
+void TestReadWithProgramNoProjection(const TestTableDescription& table = {}) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    {   // write some data
+        std::vector<ui64> writeIds;
+        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
+        UNIT_ASSERT(ok);
+        planStep = ProposeCommit(runtime, sender, txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+
+    std::vector<TString> programs;
+    programs.push_back("XXXYYYZZZ");
+    {
+        NKikimrSSA::TProgram ssa = MakeSelect(TAssignment::FUNC_CMP_EQUAL);
+        TString serialized;
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+
+        NKikimrSSA::TOlapProgram program;
+        program.SetProgram(serialized);
+
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+
+        //remove projections
+        auto* commands = ssa.MutableCommand();
+        for(int i = commands->size() - 1; i >= 0; --i) {
+            if ((*commands)[i].HasProjection()) {
+                commands->DeleteSubrange(i, 1);
+            }
+        }
+
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+        program.SetProgram(serialized);
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+    }
+
+    ui32 i = 0;
+    for (auto& programText : programs) {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetProgram(programText);
+        auto rb = reader.ReadAll();
+        switch(i) {
+            case 0:
+            UNIT_ASSERT(reader.IsError());
+            break;
+
+            case 1:
+            UNIT_ASSERT(!reader.IsError());
+            break;
+
+            case 2:
+            UNIT_ASSERT(reader.IsError());
+            UNIT_ASSERT(reader.GetErrors().back().Getmessage().Contains("program has no projections"));
+            break;
+        }
+        UNIT_ASSERT(reader.IsFinished());
+        ++i;
+    }
+}
+
 struct TReadAggregateResult {
     ui32 NumRows = 1;
 
@@ -1918,6 +1995,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         table.Pk = { NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)) };
 
         TestSomePrograms(table);
+    }
+
+    Y_UNIT_TEST(ReadWithProgramNoProjection) {
+        TestReadWithProgramNoProjection();
     }
 
     Y_UNIT_TEST(ReadAggregate) {

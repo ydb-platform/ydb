@@ -2688,6 +2688,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Done = 240,
         Dropping = 241,
         Dropped = 242,
+        AutoDropping = 243,
         Cancellation = 250,
         Cancelled = 251,
     };
@@ -2805,12 +2806,16 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         return State == EState::Dropping;
     }
 
+    bool IsAutoDropping() const {
+        return State == EState::AutoDropping;
+    }
+
     bool IsCancelling() const {
         return State == EState::Cancellation;
     }
 
     bool IsInProgress() const {
-        return IsPreparing() || IsWorking() || IsDropping() || IsCancelling();
+        return IsPreparing() || IsWorking() || IsDropping() || IsAutoDropping() || IsCancelling();
     }
 
     bool IsDone() const {

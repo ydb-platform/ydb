@@ -47,6 +47,8 @@ private:
         }
 
     public:
+        TString DebugString() const;
+
         const std::shared_ptr<IDataSource>& GetSource() const {
             AFL_VERIFY(Source);
             return Source;

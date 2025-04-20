@@ -1,3 +1,4 @@
+#include "distconf_audit.h"
 #include "distconf_invoke.h"
 
 namespace NKikimr::NStorage {
@@ -186,12 +187,24 @@ namespace NKikimr::NStorage {
             UpdateFingerprint(config);
         }
 
-        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "StartProposition config validation failed", (SelfId, SelfId()),
-                (Error, *error), (Config, config));
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "StartProposition config validation failed: " << *error);
+        if (!CheckConfigUpdate(*config)) {
+            return;
         }
+
+        const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
+        TStringBuilder oldConfig;
+        oldConfig << Self->MainConfigYaml << (Self->StorageConfigYaml ? *Self->StorageConfigYaml : "");
+        TStringBuilder newConfig;
+        newConfig << *NewYaml << (NewStorageYaml ? *NewStorageYaml : "");
+        NACLib::TUserToken userToken = NACLib::TUserToken{replaceConfig.GetUserToken()};
+        AuditLogReplaceConfig(
+            /* peer = */ replaceConfig.GetPeerName(),
+            /* userSID = */ userToken.GetUserSID(),
+            /* sanitizedToken = */ userToken.GetSanitizedToken(),
+            /* oldConfig = */ oldConfig,
+            /* newConfig = */ newConfig,
+            /* reason = */ {},
+            /* success = */ true);
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
 
@@ -215,6 +228,16 @@ namespace NKikimr::NStorage {
         IssueScatterTask(std::move(task), done);
 
         Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
+    }
+
+    bool TInvokeRequestHandlerActor::CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) {
+        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, proposed)) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
+                (Error, *error), (ProposedConfig, proposed));
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
+            return false;
+        }
+        return true;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

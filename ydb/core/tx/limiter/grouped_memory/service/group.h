@@ -1,7 +1,7 @@
 #pragma once
 #include "allocation.h"
 
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 

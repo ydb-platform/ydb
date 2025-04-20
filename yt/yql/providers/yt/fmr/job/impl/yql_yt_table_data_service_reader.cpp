@@ -9,7 +9,7 @@ TFmrTableDataServiceReader::TFmrTableDataServiceReader(
     const TString& tableId,
     const std::vector<TTableRange>& tableRanges,
     ITableDataService::TPtr tableDataService,
-    const TFmrTableDataServiceReaderSettings& settings
+    const TFmrReaderSettings& settings
 )
     : TableId_(tableId),
     TableRanges_(tableRanges),

@@ -22,7 +22,7 @@ __all__ = (
     "getversion",
 )
 
-__version__ = "6.2.0"
+__version__ = "6.4.3"
 
 
 if TYPE_CHECKING or not USE_EXTENSIONS:
@@ -35,14 +35,25 @@ if TYPE_CHECKING or not USE_EXTENSIONS:
         istr,
     )
 else:
+    from collections.abc import ItemsView, KeysView, ValuesView
+
     from ._multidict import (
         CIMultiDict,
         CIMultiDictProxy,
         MultiDict,
         MultiDictProxy,
+        _ItemsView,
+        _KeysView,
+        _ValuesView,
         getversion,
         istr,
     )
+
+    MultiMapping.register(MultiDictProxy)
+    MutableMultiMapping.register(MultiDict)
+    KeysView.register(_KeysView)
+    ItemsView.register(_ItemsView)
+    ValuesView.register(_ValuesView)
 
 
 upstr = istr

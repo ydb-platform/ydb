@@ -964,4 +964,74 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UpdateDataSourceCluster
     return ctx.ChangeChild(node.Ref(), TYtReadTable::idx_DataSource, MakeDataSource(op.DataSource().Pos(), cluster, ctx).Ptr());
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOperation(TExprBase node, TExprContext& ctx) const {
+    auto op = node.Cast<TCoPruneKeysBase>();
+    auto extractorLambda = op.Extractor();
+
+    if (!IsYtProviderInput(op.Input())) {
+        return node;
+    }
+
+    TSyncMap syncList;
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(op.Input(), selectionMode);
+    if (!cluster || !IsYtCompleteIsolatedLambda(extractorLambda.Ref(), syncList, *cluster, false, selectionMode)) {
+        return {};
+    }
+
+    auto mapper = ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("stream")
+            .Callable(node.Ref().Content())
+                .Arg(0, "stream")
+                .Add(1, extractorLambda.Ptr())
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto outItemType = SilentGetSequenceItemType(op.Input().Ref(), true);
+    if (!outItemType || !outItemType->IsPersistable()) {
+        return node;
+    }
+    if (!EnsurePersistableYsonTypes(node.Pos(), *outItemType, ctx, State_)) {
+        return {};
+    }
+
+    bool sortedOutput = TCoPruneAdjacentKeys::Match(node.Raw());
+    TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, sortedOutput, node.Pos(),
+        outItemType, ctx, State_, node.Ref().GetConstraintSet());
+
+    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
+    if (sortedOutput) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Ordered))
+                .Build()
+            .Build();
+    }
+    if (State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Flow))
+                .Build()
+            .Build();
+    }
+
+    auto map = Build<TYtMap>(ctx, node.Pos())
+        .World(GetWorld(op.Input(), {}, ctx))
+        .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
+        .Input(ConvertInputTable(op.Input(), ctx))
+        .Output()
+            .Add(outTables)
+        .Build()
+        .Settings(settingsBuilder.Done())
+        .Mapper(std::move(mapper))
+        .Done();
+
+    return WrapOp(map, ctx);
+}
+
 }  // namespace NYql

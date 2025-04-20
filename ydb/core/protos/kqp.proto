@@ -701,6 +701,8 @@ message TEvScanPing {
 }
 
 message TEvKqpScanCursor {
+    optional uint64 TabletId = 1;
+
     message TColumnShardScanPlain {
     }
     message TColumnShardScanSimple {
@@ -784,6 +786,7 @@ message TKqpTableSinkSettings {
         MODE_INSERT = 2;
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
+        MODE_FILL = 5;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
@@ -801,6 +804,7 @@ message TKqpTableSinkSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 15;
     optional bool EnableStreamWrite = 16;
     optional bool IsBatch = 17;
+    repeated string InputColumns = 18; // Only for MODE_FILL
 }
 
 message TKqpStreamLookupSettings {

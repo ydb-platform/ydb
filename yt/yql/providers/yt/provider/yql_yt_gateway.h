@@ -635,6 +635,19 @@ public:
         TMaybe<TString> Token;
     };
 
+    struct TGetTableFilePathOptions: public TCommonOptions {
+        using TSelf = TGetTableFilePathOptions;
+
+        TGetTableFilePathOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Path)
+        OPTION_FIELD(bool, IsTemp)
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -697,6 +710,9 @@ public:
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 
     virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
+
+    virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
+
 };
 
 }

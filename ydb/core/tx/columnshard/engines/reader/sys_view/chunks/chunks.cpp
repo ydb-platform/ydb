@@ -37,7 +37,7 @@ void TStatsIterator::AppendStats(
         for (auto&& r : records) {
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
@@ -94,7 +94,7 @@ void TStatsIterator::AppendStats(
         for (auto&& r : indexes) {
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());

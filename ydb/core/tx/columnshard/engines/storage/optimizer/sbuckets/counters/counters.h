@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
-#include <ydb/core/tx/columnshard/counters/common/agent.h>
+#include <ydb/library/signals/owner.h>
+#include <ydb/library/signals/agent.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {

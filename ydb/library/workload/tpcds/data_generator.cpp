@@ -19,7 +19,7 @@ TTpcdsWorkloadDataInitializerGenerator::TTpcdsWorkloadDataInitializerGenerator(c
 
 void TTpcdsWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOpts& opts) {
     TWorkloadDataInitializerBase::ConfigureOpts(opts);
-    opts.AddLongOption("scale", "scale in percents")
+    opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
         .DefaultValue(Scale).StoreResult(&Scale);
     opts.AddLongOption("tables", "Commaseparated list of tables for generate. Empty means all tables.\n"
             "Enabled tables: " + JoinSeq(", ", TBulkDataGenerator::TFactory::GetRegisteredKeys()))

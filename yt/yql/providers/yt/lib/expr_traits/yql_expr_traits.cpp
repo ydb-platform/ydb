@@ -49,8 +49,11 @@ namespace NYql {
                         (*memoryUsage)["CommonJoinCore"] += FromString<ui64>(memLimitSetting->Child(1)->Content());
                     }
                 } else if (node.IsCallable("WideCombiner")) {
-                    (*memoryUsage)["WideCombiner"] += FromString<ui64>(node.Child(1U)->Content());
-                } else if (NNodes::TCoCombineCore::Match(&node)) {
+                    i64 memLimit = 0LL;
+                    if (TryFromString<i64>(node.Child(1U)->Content(), memLimit)) {
+                        (*memoryUsage)["WideCombiner"] += memLimit;
+                    }
+                } else if (NNodes::TCoCombineCore::Match(&node) && NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize()) {
                     (*memoryUsage)["CombineCore"] += FromString<ui64>(node.Child(NNodes::TCoCombineCore::idx_MemLimit)->Content());
                 }
             }

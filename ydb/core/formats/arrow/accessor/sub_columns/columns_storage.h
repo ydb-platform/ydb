@@ -29,7 +29,7 @@ public:
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("stats", Stats.DebugJson());
-        result.InsertValue("records", Records->DebugJson(true));
+        result.InsertValue("records", Records->DebugJson());
         return result;
     }
 

@@ -21,7 +21,7 @@ private:
     const TActorId Sender;
 
 private:
-    [[nodiscard]] NKikimr::NEvents::TDataEvents::TEvWriteResult* StartCommitImpl(const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult StartCommitImpl(const ui64 txId);
 
 public:
     TShardWriter(TTestBasicRuntime& runtime, const ui64 tabletId, const ui64 pathId, const ui64 lockId)

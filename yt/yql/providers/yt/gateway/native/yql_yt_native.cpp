@@ -1843,9 +1843,13 @@ private:
                         TString path = normalizedPath.Path_;
 
                         // Convert back from absolute path to relative
-                        // All futhrer YT operations will use the path with YT_PREFIX
+                        // All further YT operations will use the path with YT_PREFIX
                         if (path.StartsWith("//")) {
                             path = path.substr(2);
+                        }
+                        // Ignore & at the and
+                        while (path.EndsWith('&')) {
+                            path = path.pop_back();
                         }
                         res.Data[idx].Path = path;
                         if (normalizedPath.Columns_) {
@@ -2851,7 +2855,7 @@ private:
 
         const auto entry = execCtx->GetEntry();
 
-        toRemove = entry->CancelDeleteAtFinalize(toRemove);
+        toRemove = entry->FilterTablesToDeleteAtFinalize(toRemove);
         if (toRemove.empty()) {
             return MakeFuture();
         }
@@ -2862,7 +2866,12 @@ private:
             batchResults.push_back(batch->Remove(p, TRemoveOptions().Force(true)));
         }
         batch->ExecuteBatch();
-        return WaitExceptionOrAll(batchResults);
+        return WaitExceptionOrAll(batchResults).Apply([entry = std::move(entry), toRemove = std::move(toRemove)] (const TFuture<void>& f) {
+            if (f.HasValue()) {
+                entry->CancelDeleteAtFinalize(toRemove);
+            }
+            return f;
+        });
     }
 
     static void FillMetadataResult(
@@ -3376,20 +3385,22 @@ private:
             } else  if (auto limiter = TTableLimiter(range)) {
                 auto entry = execCtx->GetEntry();
                 bool stop = false;
+                const bool useNativeDyntableRead = execCtx->Options_.Config()->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
                 for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
                     TString srcTableName = execCtx->InputTables_[i].Name;
                     NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
-                    bool isDynamic = execCtx->InputTables_[i].Dynamic;
-                    ui64 recordsCount = execCtx->InputTables_[i].Records;
-                    if (!isDynamic) {
-                        if (!limiter.NextTable(recordsCount)) {
-                            continue;
+                    const bool isDynamic = execCtx->InputTables_[i].Dynamic;
+                    if (!isDynamic || useNativeDyntableRead) {
+                        if (const auto recordsCount = execCtx->InputTables_[i].Records; recordsCount || !isDynamic) {
+                            if (!limiter.NextTable(recordsCount)) {
+                                continue;
+                            }
                         }
                     } else {
                         limiter.NextDynamicTable();
                     }
 
-                    if (isDynamic) {
+                    if (isDynamic && !useNativeDyntableRead) {
                         YQL_ENSURE(srcTable.GetRanges().Empty());
                         stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
                     } else {
@@ -3615,6 +3626,7 @@ private:
         return execCtx->Session_->Queue_->Async([execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
@@ -3681,6 +3693,7 @@ private:
         return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
                 TVector<TRichYPath> outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
@@ -3753,6 +3766,7 @@ private:
                           inputType, extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -3981,6 +3995,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -4199,6 +4214,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
 
@@ -4449,6 +4465,7 @@ private:
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -4782,6 +4799,7 @@ private:
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([lambda, extraUsage, tmpTable, execCtx, testRun] (const auto& f) mutable {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->SetNodeExecProgress("Preparing");
             TTransactionCache::TEntry::TPtr entry;
             TVector<TRichYPath> outYPaths;
             if (testRun) {
@@ -5408,6 +5426,7 @@ private:
 
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         {
+            execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
@@ -5798,12 +5817,20 @@ private:
             TClusterConnectionResult clusterConnectionResult{};
             clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
             clusterConnectionResult.YtServerName = ytServer;
-            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            auto auth = options.Config()->Auth.Get();
+            if (!auth || auth->empty()) {
+                auth = Clusters_->GetAuth(options.Cluster());
+            }
+            clusterConnectionResult.Token = auth;
             clusterConnectionResult.SetSuccess();
             return clusterConnectionResult;
         } catch (...) {
             return ResultFromCurrentException<TClusterConnectionResult>({}, true);
         }
+    }
+
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&&) override {
+        return Nothing();
     }
 
     static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {

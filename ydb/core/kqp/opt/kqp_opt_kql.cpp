@@ -308,6 +308,18 @@ TCoAtomList ExtendGenerateOnInsertColumnsList(const TKiWriteTable& write, TCoAto
     return Build<TCoAtomList>(ctx, write.Pos()).Add(result).Done();
 }
 
+TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
+{
+    auto originalPathNode = GetSetting(write.Settings().Ref(), "OriginalPath");
+    AFL_ENSURE(originalPathNode);
+    return Build<TKqlFillTable>(ctx, write.Pos())
+        .Input(write.Input())
+        .Table(write.Table())
+        .Cluster(write.DataSink().Cluster())
+        .OriginalPath(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>())
+        .Done();
+}
+
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement, const bool isSink,
     const TKikimrTableDescription& table, TExprContext& ctx)
@@ -901,6 +913,9 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
 
 TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, const TKikimrTablesData& tablesData)
 {
+    if (GetTableOp(write) == TYdbOperation::FillTable) {
+        return BuildFillTable(write, ctx).Ptr();
+    }
     auto& tableData = GetTableData(tablesData, write.DataSink().Cluster(), write.Table().Value());
     const bool isSink = NeedSinks(tableData, kqpCtx);
 

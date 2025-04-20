@@ -1596,6 +1596,9 @@ private:
         return TClusterConnectionResult();
     }
 
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
+        return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
+    }
 
 private:
     TYtFileServices::TPtr Services_;

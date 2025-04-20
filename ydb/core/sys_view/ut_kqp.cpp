@@ -1,5 +1,6 @@
 #include "ut_common.h"
 
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -9,6 +10,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/sys_view/show_create/create_view_formatter.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -293,7 +295,7 @@ public:
         CreateTier("tier2");
     }
 
-    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
+    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
         std::optional<TString> sessionId = std::nullopt;
@@ -308,6 +310,10 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
         }
 
+        if (initialScan) {
+            return;
+        }
+
         auto describeResultOrig = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
@@ -318,6 +324,27 @@ public:
         DropTable(session, tableName);
 
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
+    }
+
+    // Checks that the view created from the description provided by the `SHOW CREATE VIEW` statement
+    // can be used to create a view with a description equal to the original.
+    void CheckShowCreateView(const std::string& query, const std::string& viewName, const std::string& expectedResult = "") {
+        ExecuteQuery(Session, query);
+        auto showCreateViewResult = ShowCreateView(Session, viewName);
+
+        if (!expectedResult.empty()) {
+            UNIT_ASSERT_STRINGS_EQUAL(UnescapeC(showCreateViewResult), UnescapeC(expectedResult));
+        }
+
+        const auto originalDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        DropView(Session, viewName);
+        ExecuteQuery(Session, showCreateViewResult);
+
+        const auto newDescription = CanonizeViewDescription(DescribeView(viewName));
+
+        CompareDescriptions(originalDescription, newDescription, showCreateViewResult);
+        DropView(Session, viewName);
     }
 
 private:
@@ -337,14 +364,14 @@ private:
         )", tierName, tierName));
     }
 
-    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
+    Ydb::Table::DescribeTableResult DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
 
         auto describeTable = [this](TString&& path) {
             auto pathDescription = DescribePath(Runtime, std::move(path));
 
             if (pathDescription.HasColumnTableDescription()) {
                 const auto& tableDescription = pathDescription.GetColumnTableDescription();
-                return *GetCreateTableRequest(tableDescription);
+                return *GetScheme(tableDescription);
             }
 
             if (!pathDescription.HasTable()) {
@@ -352,7 +379,7 @@ private:
             }
 
             const auto& tableDescription = pathDescription.GetTable();
-            return *GetCreateTableRequest(tableDescription);
+            return *GetScheme(tableDescription);
         };
 
         auto tablePath = TString(tableName);
@@ -366,6 +393,24 @@ private:
         auto tableDesc = describeTable(std::move(tablePath));
 
         return tableDesc;
+    }
+
+    NKikimrSchemeOp::TViewDescription DescribeView(const std::string& viewName) {
+        auto pathDescription = DescribePath(Runtime, TString(viewName));
+        UNIT_ASSERT_C(pathDescription.HasViewDescription(), pathDescription.DebugString());
+        return pathDescription.GetViewDescription();
+    }
+
+    NKikimrSchemeOp::TViewDescription CanonizeViewDescription(NKikimrSchemeOp::TViewDescription&& description) {
+        description.ClearVersion();
+        description.ClearPathId();
+
+        TString queryText;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NDump::Format(description.GetQueryText(), queryText, issues), issues.ToString());
+        *description.MutableQueryText() = queryText;
+
+        return description;
     }
 
     std::string ShowCreate(NQuery::TSession& session, std::string_view type, const std::string& path) {
@@ -406,8 +451,16 @@ private:
         return ShowCreate(session, "TABLE", tableName);
     }
 
+    std::string ShowCreateView(NQuery::TSession& session, const std::string& viewName) {
+        return ShowCreate(session, "VIEW", viewName);
+    }
+
     void DropTable(NQuery::TSession& session, const std::string& tableName) {
         ExecuteQuery(session, std::format("DROP TABLE `{}`;", tableName));
+    }
+
+    void DropView(NQuery::TSession& session, const std::string& viewName) {
+        ExecuteQuery(session, std::format("DROP VIEW `{}`;", viewName));
     }
 
     template <typename TProtobufDescription>
@@ -420,8 +473,8 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         NKikimrMiniKQL::TType mkqlKeyType;
 
@@ -440,6 +493,8 @@ private:
             return Nothing();
         }
 
+        FillChangefeedDescription(scheme, tableDesc);
+
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
         FillPartitioningSettings(scheme, tableDesc);
@@ -455,8 +510,8 @@ private:
         return scheme;
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         FillColumnDescription(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
@@ -1483,6 +1538,121 @@ WITH (
     TTL = INTERVAL('PT1H') DELETE ON Value4
 );
 )"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableChangefeeds) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON');
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', TOPIC_MIN_ACTIVE_PARTITIONS = 3, FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"), INITIAL_SCAN = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT30M'), TOPIC_MIN_ACTIVE_PARTITIONS = 3, INITIAL_SCAN = TRUE)
+;
+)"
+        , false, true
         );
     }
 
@@ -5689,6 +5859,257 @@ WITH (
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+}
+
+Y_UNIT_TEST_SUITE(ShowCreateView) {
+
+Y_UNIT_TEST(Basic) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS SELECT 1;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    1
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(FromTable) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE t (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "test_view",
+R"(CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            CREATE VIEW test_view WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithSingleQuotedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            -- the case of the pragma identifier does not matter, but is preserved
+            pragma tabLEpathPRefix = '/Root/a/b';
+            CREATE VIEW `../../test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM `c/t`;
+        )",
+        "test_view",
+R"(-- the case of the pragma identifier does not matter, but is preserved
+PRAGMA tabLEpathPRefix = '/Root/a/b';
+
+CREATE VIEW `../../test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    `c/t`
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithPairedTablePathPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `a/b/c/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix ("db", "/Root/a/b/c");
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "a/b/c/test_view",
+R"(PRAGMA TablePathPrefix('db', '/Root/a/b/c');
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+Y_UNIT_TEST(WithTwoTablePathPrefixes) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    ExecuteQuery(session, R"(
+        CREATE TABLE `some/other/folder/t` (
+            key int,
+            value utf8,
+            PRIMARY KEY(key)
+        );
+    )");
+
+    checker.CheckShowCreateView(R"(
+            PRAGMA TablePathPrefix = "/Root/a/b/c";
+            PRAGMA TablePathPrefix = "/Root/some/other/folder";
+            CREATE VIEW `test_view` WITH security_invoker = TRUE AS
+                SELECT * FROM t;
+        )",
+        "some/other/folder/test_view",
+R"(PRAGMA TablePathPrefix = '/Root/a/b/c';
+PRAGMA TablePathPrefix = '/Root/some/other/folder';
+
+CREATE VIEW `test_view` WITH (security_invoker = TRUE) AS
+SELECT
+    *
+FROM
+    t
+;
+)"
+    );
+}
+
+}
+
+Y_UNIT_TEST_SUITE(ViewQuerySplit) {
+
+Y_UNIT_TEST(Basic) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery("select 1", split, issues), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix = \"/foo/bar\";\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPairedPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithComments) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select * from t",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from t");
+}
+
+Y_UNIT_TEST(Joins) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+        "select * from $x as x join $y as y on x.key == y.key",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from $x as x join $y as y on x.key == y.key");
+}
+
 }
 
 } // NSysView

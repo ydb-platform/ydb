@@ -2,7 +2,7 @@
 
 val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
 {%-     if target.proto_files|length %}
-    from("$project_root") {
+    from("$arcadia_root") {
 {#- list of all current project proto files -#}
 {%-         for proto in target.proto_files %}
         include("{{ proto }}")
@@ -30,11 +30,11 @@ val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
 }
 {%- endif -%}
 
-{%- if extractLibrariesProtosTask -%}
+{%- if extractLibrariesProtosTask %}
 
 val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
-{%- if libraries|length -%}
-    from("$project_root") {
+{%- if libraries|length %}
+    from("$arcadia_root") {
 {#- list of all library directories -#}
 {%-     for library in libraries -%}
 {%-         set path_and_jar = rsplit(library.jar, '/', 2) %}

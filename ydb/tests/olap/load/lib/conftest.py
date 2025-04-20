@@ -36,6 +36,7 @@ class LoadSuiteBase:
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
+    verify_data: bool = True
 
     @classmethod
     def suite(cls) -> str:
@@ -62,7 +63,7 @@ class LoadSuiteBase:
 
     @classmethod
     def _test_name(cls, query_num: int) -> str:
-        return f'Query{query_num:02d}'
+        return f'Query{query_num:02d}' if query_num >= 0 else '_Verification'
 
     @classmethod
     @allure.step('check tables size')
@@ -148,16 +149,16 @@ class LoadSuiteBase:
     @classmethod
     def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
-            if stats is None:
-                return None
-            result = stats.get(field)
-            return float(result) / 1e3 if result is not None else None
+            r = stats.get(field)
+            return float(r) / 1e3 if r is not None else None
 
         def _duration_text(duration: float | int):
             s = f'{int(duration)}s ' if duration >= 1 else ''
             return f'{s}{int(duration * 1000) % 1000}ms'
 
         def _attach_plans(plan: YdbCliHelper.QueryPlan, name: str) -> None:
+            if plan is None:
+                return
             if plan.plan is not None:
                 allure.attach(json.dumps(plan.plan), f'{name} json', attachment_type=allure.attachment_type.JSON)
             if plan.table is not None:
@@ -170,9 +171,6 @@ class LoadSuiteBase:
                 allure.attach(plan.stats, f'{name} stats', attachment_type=allure.attachment_type.TEXT)
 
         test = cls._test_name(query_num)
-        stats = result.stats.get(test)
-        if stats is None:
-            stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
@@ -208,22 +206,12 @@ class LoadSuiteBase:
 
         if result.stderr is not None:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
+        stats = result.get_stats(test)
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-        error_message = ''
-        success = True
-        if not result.success:
-            success = False
-            error_message = result.error_message
-        elif stats.get('FailsCount', 0) != 0:
-            success = False
-            error_message = 'There are fail attemps'
-        if os.getenv('NO_KUBER_LOGS') is None and not success:
+        if os.getenv('NO_KUBER_LOGS') is None and not result.success:
             cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
-        stats['with_warrnings'] = bool(result.warning_message)
-        stats['with_errors'] = bool(error_message)
-        stats['errors'] = result.get_error_stats()
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
             ResultsProcessor.upload_results(
@@ -231,15 +219,15 @@ class LoadSuiteBase:
                 suite=cls.suite(),
                 test=test,
                 timestamp=time(),
-                is_successful=success,
+                is_successful=result.success,
                 min_duration=_get_duraton(stats, 'Min'),
                 max_duration=_get_duraton(stats, 'Max'),
                 mean_duration=_get_duraton(stats, 'Mean'),
                 median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
-        if not success:
-            exc = pytest.fail.Exception('\n'.join([error_message, result.warning_message]))
+        if not result.success:
+            exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
@@ -249,30 +237,22 @@ class LoadSuiteBase:
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()
-        error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
-        tb = None
-        if not error and hasattr(cls, 'do_setup_class'):
+        result = YdbCliHelper.WorkloadRunResult()
+        result.iterations[0] = YdbCliHelper.Iteration()
+        result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
+        result.traceback = None
+        if not result.error_message and hasattr(cls, 'do_setup_class'):
             try:
                 cls.do_setup_class()
             except BaseException as e:
-                error = str(e)
-                tb = e.__traceback__
+                result.add_error(str(e))
+                result.traceback = e.__traceback__
+        result.iterations[0].time = time() - start_time
+        result.add_stat('_Verification', 'Mean', 1000 * result.iterations[0].time)
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
-        ResultsProcessor.upload_results(
-            kind='Load',
-            suite=cls.suite(),
-            test='_Verification',
-            timestamp=start_time,
-            is_successful=(error is None),
-            statistics={'with_errors': bool(error), 'with_warrnings': False}
-        )
-        if os.getenv('NO_KUBER_LOGS') is None and error is not None:
-            cls._attach_logs(start_time=max(start_time - 600, first_node_start_time), attach_name='kikimr_start')
-        if error is not None:
-            exc = pytest.fail.Exception(error)
-            exc.with_traceback(tb)
-            raise exc
+        result.start_time = max(start_time - 600, first_node_start_time)
+        cls.process_query_result(result, -1, 1, True)
 
     def run_workload_test(self, path: str, query_num: int) -> None:
         for plugin in plugin_manager.get_plugin_manager().get_plugins():

@@ -748,8 +748,8 @@ TServiceDescriptor& TServiceDescriptor::SetAcceptsBaggage(bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMethodDescriptor::TMethodDescriptor(const TString& methodName)
-    : MethodName(methodName)
+TMethodDescriptor::TMethodDescriptor(std::string methodName)
+    : MethodName(std::move(methodName))
 { }
 
 TMethodDescriptor& TMethodDescriptor::SetMultiplexingBand(EMultiplexingBand value)

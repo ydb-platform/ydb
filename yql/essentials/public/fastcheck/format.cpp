@@ -25,6 +25,21 @@ TString NormalizeEOL(TStringBuf input) {
     return res;
 }
 
+TString ReplaceHidden(TStringBuf input) {
+    TStringBuilder res;
+    for (const auto c : input) {
+        if (c == ' ') {
+            res << "\xe2\x80\xa2";
+        } else if (c == '\t') {
+            res << "\xe2\x86\x92";
+        } else {
+            res << c;
+        }
+    }
+
+    return res;
+}
+
 class TFormatRunner : public ICheckRunner {
 public:
     TString GetCheckName() const final {
@@ -107,7 +122,7 @@ private:
             }
 
             auto issue = TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample);
+                "Format mismatch, expected:\n" << ReplaceHidden(formattedSample) << "\nbut got:\n" << ReplaceHidden(origSample) << "\n");
             issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
             res.Issues.AddIssue(issue);
         }

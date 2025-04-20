@@ -52,9 +52,9 @@ struct TContext {
     NKikimr::NPQ::TRlContext RlContext;
 
     bool Authenticated() {
-        
+
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
-    
+
     }
 };
 
@@ -184,6 +184,7 @@ NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, cons
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message);
 NActors::IActor* CreateKafkaCreateTopicsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreateTopicsRequestData>& message);
 NActors::IActor* CreateKafkaCreatePartitionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreatePartitionsRequestData>& message);
+NActors::IActor* CreateKafkaDescribeConfigsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TDescribeConfigsRequestData>& message);
 NActors::IActor* CreateKafkaAlterConfigsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TAlterConfigsRequestData>& message);
 
 } // namespace NKafka

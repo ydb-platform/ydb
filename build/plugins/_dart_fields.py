@@ -1116,6 +1116,7 @@ class TestFiles:
         'maps/renderer/libs/data_sets/yt_data_set',
         'maps/renderer/libs/design',
         'maps/renderer/libs/geosx',
+        'maps/renderer/libs/geojson_to_yt',
         'maps/renderer/libs/gltf',
         'maps/renderer/libs/golden',
         'maps/renderer/libs/hd3d',

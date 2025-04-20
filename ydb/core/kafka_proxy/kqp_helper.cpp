@@ -15,7 +15,7 @@ void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, const TMay
     if (!kqpActorId) {
         actorId = MakeKqpProxyID(ctx.SelfID.NodeId());
     } else {
-        actorId = *kqpActorId.Get();
+        actorId = *kqpActorId;
     }
     ctx.Send(actorId, ev.Release(), 0, 0);
 }
@@ -91,7 +91,7 @@ void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlPa
     if (!kqpActorId) {
         actorId = MakeKqpProxyID(ctx.SelfID.NodeId());
     } else {
-        actorId = *kqpActorId.Get();
+        actorId = *kqpActorId;
     }
     ctx.Send(actorId, ev.Release(), 0, cookie);
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kafka_events.h"
-#include "actors/txn_actor_response_builder.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -83,7 +82,6 @@ namespace NKafka {
 
             std::unordered_map<TString, TProducerState> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
-            NKafkaTransactions::TResponseBuilder ResponseBuilder = NKafkaTransactions::TResponseBuilder();
     };
 
     inline NActors::IActor* CreateKafkaTransactionsCoordinator() {

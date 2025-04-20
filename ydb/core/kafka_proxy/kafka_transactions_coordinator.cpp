@@ -1,5 +1,6 @@
 #include "kafka_transactions_coordinator.h"
 #include "actors/kafka_transaction_actor.h"
+#include "actors/txn_actor_response_builder.h"
 #include <ydb/core/kqp/common/simple/services.h>
 
 namespace NKafka {
@@ -100,7 +101,7 @@ namespace NKafka {
     template<class ErrorResponseType, class RequestType>
     void TKafkaTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
         KAFKA_LOG_W(error);
-        std::shared_ptr<ErrorResponseType> response = ResponseBuilder.Build<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
+        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
 

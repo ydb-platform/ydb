@@ -1,5 +1,6 @@
 #include "kafka_transaction_actor.h"
 #include "kafka_transaction_actor_sql.cpp"
+#include "txn_actor_response_builder.h"
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
@@ -168,7 +169,7 @@ namespace NKafka {
             << ", producerId=" << kafkaRequest->ProducerId 
             << ", producerEpoch=" << kafkaRequest->ProducerEpoch
         );
-        std::shared_ptr<ErrorResponseType> response = ResponseBuilder.Build<ErrorResponseType>(kafkaRequest, EKafkaErrors::UNKNOWN_SERVER_ERROR);
+        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::UNKNOWN_SERVER_ERROR);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::UNKNOWN_SERVER_ERROR));
     }
 
@@ -180,7 +181,7 @@ namespace NKafka {
             KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode);
         }
 
-        std::shared_ptr<ErrorResponseType> response = ResponseBuilder.Build<ErrorResponseType>(evHandle->Get()->Request, errorCode);
+        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(evHandle->Get()->Request, errorCode);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, errorCode));
     }
 
@@ -188,7 +189,7 @@ namespace NKafka {
     void TKafkaTransactionActor::SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
         auto kafkaRequest = evHandle->Get()->Request;
         KAFKA_LOG_D(TStringBuilder() << "Sending OK response to " << evHandle->Get()->ConnectionId << " with correlationId " << evHandle->Get()->CorrelationId << " and transactionalId " << TransactionalId);
-        std::shared_ptr<ResponseType> response = ResponseBuilder.Build<ResponseType>(kafkaRequest, EKafkaErrors::NONE_ERROR);
+        std::shared_ptr<ResponseType> response = NKafkaTransactions::BuildResponse<ResponseType>(kafkaRequest, EKafkaErrors::NONE_ERROR);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::NONE_ERROR));
     }
 

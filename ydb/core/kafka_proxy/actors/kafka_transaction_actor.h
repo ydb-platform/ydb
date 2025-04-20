@@ -1,6 +1,5 @@
 #pragma once
 
-#include "txn_actor_response_builder.h"
 #include "kafka_init_producer_id_actor.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -129,7 +128,6 @@ namespace NKafka {
 
             // helper fields
             const TString DatabasePath;
-            NKafkaTransactions::TResponseBuilder ResponseBuilder;
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;

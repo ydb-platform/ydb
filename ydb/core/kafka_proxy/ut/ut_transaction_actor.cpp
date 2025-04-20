@@ -15,10 +15,10 @@ namespace {
             TDummyKqpActor() : TActor<TDummyKqpActor>(&TDummyKqpActor::StateFunc) {}
 
             void SetValidationResponse(const TString& transactionalId, ui64 producerId, ui64 producerEpoch, const std::unordered_map<TString, i32>& consumerGenerations = {}) {
-                TransactionalIdToReturn = std::move(transactionalId);
+                TransactionalIdToReturn = transactionalId;
                 ProducerIdToReturn = producerId;
                 ProducerEpochToReturn = producerEpoch;
-                ConsumerGenerationsToReturn = std::move(consumerGenerations);
+                ConsumerGenerationsToReturn = consumerGenerations;
             }
 
             void SetCommitResponse(bool success) {
@@ -170,6 +170,8 @@ namespace {
             struct TConsumerCommitMatcher {
                 TString ConsumerName;
                 i32 GenerationId;
+                // map, where key - topicName, value - vector with pairs, 
+                // where left - partition index, right - consumer offset for this partition
                 std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> PartitionOffsetsByTopic;
             };
 
@@ -182,6 +184,8 @@ namespace {
             struct TCommitRequest {
                 TString ConsumerName;
                 i32 GenerationId;
+                // map, where key - topicName, value - vector with pairs, 
+                // where left - partition index, right - consumer offset for this partition
                 std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> PartitionOffsetsToCommitByTopic;
             };
 

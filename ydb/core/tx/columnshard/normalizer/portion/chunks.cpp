@@ -140,7 +140,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
         return tasks;
     }
 
-    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>((NOlap::TTabletId)txc.Tablet, nullptr),
+    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
         std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");

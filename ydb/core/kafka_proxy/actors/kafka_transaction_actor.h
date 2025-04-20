@@ -20,10 +20,7 @@ namespace NKafka {
                 TString TopicPath;
                 ui32 PartitionId;
 
-                bool operator==(const TTopicPartition &other) const
-                { return (TopicPath == other.TopicPath
-                        && PartitionId == other.PartitionId);
-                }
+                bool operator==(const TTopicPartition &other) const = default;
             };
 
             struct TopicPartitionHashFn {

@@ -324,7 +324,7 @@ namespace {
                 std::unordered_set<TKafkaTransactionActor::TTopicPartition, TKafkaTransactionActor::TopicPartitionHashFn> paritionsInRequestSet;
                 paritionsInRequestSet.reserve(partitionsInRequest.size());
                 for (auto& partition : partitionsInRequest) {
-                    paritionsInRequestSet.insert({partition.GetTopicPath(), partition.GetPartitionId()});
+                    paritionsInRequestSet.emplace(partition.GetTopicPath(), partition.GetPartitionId());
                 };
 
                 ui32 totalExpectedPartitions = 0;
@@ -470,6 +470,61 @@ namespace {
             }, consumerGenerationByNameToReturnFromKqp);
 
             SendTxnOffsetCommitRequest({consumerName, consumerGeneration, partitionOffsetsToCommitByTopic});
+            SendEndTxnRequest(true);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+            UNIT_ASSERT(seenEvent);
+        }
+
+        Y_UNIT_TEST(OnDoubleTxnOffsetCommitRequest_shouldSendToKqpLatestGeneration) {
+            TString consumerName = "my-consumer";
+            i32 consumerGenerationFromTable = 1;
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> partitionOffsetsToCommitByTopic;
+            partitionOffsetsToCommitByTopic["topic1"] = {{0, 0}};
+            std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
+            consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGenerationFromTable;
+            bool seenEvent = false;
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {true, {}, {{consumerName, consumerGenerationFromTable, partitionOffsetsToCommitByTopic}}});
+                seenEvent = true;
+            }, consumerGenerationByNameToReturnFromKqp);
+
+            // first request with old generation
+            SendTxnOffsetCommitRequest({consumerName, consumerGenerationFromTable - 1, partitionOffsetsToCommitByTopic});
+            // second with actual generation
+            SendTxnOffsetCommitRequest({consumerName, consumerGenerationFromTable, partitionOffsetsToCommitByTopic});
+            SendEndTxnRequest(true);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+            UNIT_ASSERT(seenEvent);
+        }
+
+        Y_UNIT_TEST(OnDoubleTxnOffsetCommitRequest_shouldSendToKqpLatestSpecifiedOffsets) {
+            TString consumerName = "my-consumer";
+            i32 consumerGeneration = 0;
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> firstRequestOffsetsByTopic;
+            firstRequestOffsetsByTopic["topic1"] = {{0, 0}};
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> secondRequestOffsetsByTopic;
+            secondRequestOffsetsByTopic["topic1"] = {{0, 1}};
+            std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
+            consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
+            bool seenEvent = false;
+            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                // we validate that to KQP are sent offsets from second request
+                MatchQueryRequest(request, {true, {}, {{consumerName, consumerGeneration, secondRequestOffsetsByTopic}}});
+                seenEvent = true;
+            }, consumerGenerationByNameToReturnFromKqp);
+
+            SendTxnOffsetCommitRequest({consumerName, consumerGeneration, firstRequestOffsetsByTopic});
+            SendTxnOffsetCommitRequest({consumerName, consumerGeneration, secondRequestOffsetsByTopic});
             SendEndTxnRequest(true);
 
             TDispatchOptions options;

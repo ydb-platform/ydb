@@ -17,7 +17,7 @@ namespace NKafka {
         }
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                PartitionsInTxn.insert({GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest});
+                PartitionsInTxn.emplace(GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest);
             }
         }
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
@@ -47,12 +47,18 @@ namespace NKafka {
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
                 TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest.PartitionIndex};
-                OffsetsToCommit[topicPartition] = TPartitionCommit{
-                        .Partition = partitionInRequest.PartitionIndex,
-                        .Offset = partitionInRequest.CommittedOffset,
-                        .ConsumerName = ev->Get()->Request->GroupId->c_str(),
-                        .ConsumerGeneration = ev->Get()->Request->GenerationId
+                TPartitionCommit newCommit{
+                    .Partition = partitionInRequest.PartitionIndex,
+                    .Offset = partitionInRequest.CommittedOffset,
+                    .ConsumerName = ev->Get()->Request->GroupId->c_str(),
+                    .ConsumerGeneration = ev->Get()->Request->GenerationId
                 };
+                auto it = OffsetsToCommit.find(topicPartition);
+                if (it == OffsetsToCommit.end()) {
+                    OffsetsToCommit.emplace(std::make_pair(topicPartition, newCommit));
+                } else {
+                    it->second = newCommit;
+                }
             }
         }
         SendOkResponse<TTxnOffsetCommitResponseData>(ev);
@@ -231,7 +237,7 @@ namespace NKafka {
         // select unique consumer group names
         std::unordered_set<TString> uniqueConsumerGroups;
         for (auto& [partition, commitDetails] : OffsetsToCommit) {
-            uniqueConsumerGroups.insert(commitDetails.ConsumerName);
+            uniqueConsumerGroups.emplace(commitDetails.ConsumerName);
         }
 
         // add unique consumer group names to request as params
@@ -391,7 +397,7 @@ namespace NKafka {
         while (parser.TryNextRow()) {
             TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();;
             i32 generation = (i32)parser.ColumnParser("generation").GetUint64();
-            generationByConsumerName[consumerName] = generation;
+            generationByConsumerName.emplace(consumerName, generation);
         }
     
         return generationByConsumerName;
@@ -401,8 +407,9 @@ namespace NKafka {
         TStringBuilder builder;
         bool foundError = false;
         for (auto& [topicPartition, offsetCommit] : OffsetsToCommit) {
-            if (consumerGenerationByName.contains(offsetCommit.ConsumerName)) {
-                i32 consumerGenerationInTable = consumerGenerationByName.at(offsetCommit.ConsumerName);
+            auto it = consumerGenerationByName.find(offsetCommit.ConsumerName);
+            if (it != consumerGenerationByName.end()) {
+                i32 consumerGenerationInTable = it->second;
                 if (consumerGenerationInTable != offsetCommit.ConsumerGeneration) {
                     if (foundError) {
                         builder << ", ";

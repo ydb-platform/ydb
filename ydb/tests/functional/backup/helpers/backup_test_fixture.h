@@ -11,6 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/maybe.h>
+#include <util/system/defaults.h>
 #include <util/system/env.h>
 
 class TBackupTestFixture : public NUnitTest::TBaseFixture {
@@ -33,47 +34,26 @@ public:
         return *Driver;
     }
 
-    NYdb::NTable::TTableClient& YdbTableClient() {
-        if (!TableClient) {
-            TableClient.ConstructInPlace(YdbDriver());
-        }
-        return *TableClient;
-    }
+#define YDB_SDK_CLIENT(type, funcName)                               \
+    protected:                                                       \
+    TMaybe<type> Y_CAT(funcName, Instance);                          \
+    public:                                                          \
+    type& funcName() {                                               \
+        if (!Y_CAT(funcName, Instance)) {                            \
+            Y_CAT(funcName, Instance).ConstructInPlace(YdbDriver()); \
+        }                                                            \
+        return *Y_CAT(funcName, Instance);                           \
+    }                                                                \
+    /**/
 
-    NYdb::NExport::TExportClient& YdbExportClient() {
-        if (!ExportClient) {
-            ExportClient.ConstructInPlace(YdbDriver());
-        }
-        return *ExportClient;
-    }
+    YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
+    YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
+    YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
+    YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
+    YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
+    YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
 
-    NYdb::NImport::TImportClient& YdbImportClient() {
-        if (!ImportClient) {
-            ImportClient.ConstructInPlace(YdbDriver());
-        }
-        return *ImportClient;
-    }
-
-    NYdb::NQuery::TQueryClient& YdbQueryClient() {
-        if (!QueryClient) {
-            QueryClient.ConstructInPlace(YdbDriver());
-        }
-        return *QueryClient;
-    }
-
-    NYdb::NScheme::TSchemeClient& YdbSchemeClient() {
-        if (!SchemeClient) {
-            SchemeClient.ConstructInPlace(YdbDriver());
-        }
-        return *SchemeClient;
-    }
-
-    NYdb::NOperation::TOperationClient& YdbOperationClient() {
-        if (!OperationClient) {
-            OperationClient.ConstructInPlace(YdbDriver());
-        }
-        return *OperationClient;
-    }
+#undef YDB_SDK_CLIENT
 
     template<typename TOp>
     void WaitOp(TMaybe<NYdb::TOperation>& op) {
@@ -87,6 +67,21 @@ public:
         }
         UNIT_ASSERT_C(attempt, "Unable to wait completion of operation");
     }
+
+    template <class TResponseType>
+    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res) {
+        if (res.Ready()) {
+            UNIT_ASSERT_C(res.Status().IsSuccess(), res.Status().GetIssues().ToString());
+            return res;
+        } else {
+            TMaybe<NYdb::TOperation> op = res;
+            WaitOp<TResponseType>(op);
+            UNIT_ASSERT_C(op->Status().IsSuccess(), "Status: " << int(op->Status().GetStatus()) << ". Issues: " << op->Status().GetIssues().ToString());
+            return op;
+        }
+    }
+
+    TString DebugListDir(const TString& path);
 
     TString S3Endpoint() const {
         return GetEnv("S3_ENDPOINT");

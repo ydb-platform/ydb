@@ -48,7 +48,9 @@ namespace NKikimr {
             bool ignoreBlock = false,
             ui64* cookie = nullptr,
             TInstant deadline = TInstant::Max(),
-            NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog
+            NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
+            bool rewriteBlob = false,
+            bool isInternal = false
         ) {
             BlobId = blobId;
             Buffer = buffer;
@@ -60,6 +62,8 @@ namespace NKikimr {
             }
             Deadline = deadline;
             HandleClass = handleClass;
+            RewriteBlob = rewriteBlob;
+            IsInternal = isInternal;
         }
 
         TEvVPutBinary(const TEvVPut& original) {
@@ -81,6 +85,10 @@ namespace NKikimr {
             for (const auto& check : original.Record.GetExtraBlockChecks()) {
                 ExtraBlockChecks.emplace_back(check.GetTabletId(), check.GetGeneration());
             }
+            
+            // Копируем дополнительные флаги
+            RewriteBlob = original.RewriteBlob;
+            IsInternal = original.IsInternal;
         }
 
         TEvVPut* ToOriginal() const {
@@ -112,6 +120,10 @@ namespace NKikimr {
             }
             
             result->Record.SetBuffer(Buffer);
+            
+            // Устанавливаем дополнительные флаги
+            result->RewriteBlob = RewriteBlob;
+            result->IsInternal = IsInternal;
             
             return result;
         }
@@ -220,9 +232,9 @@ namespace NKikimr {
                 
                 result->BlobId = TLogoBlobID(
                     LittleToHost(tabletId),
-                    LittleToHost(channel),
                     LittleToHost(generation),
                     LittleToHost(step),
+                    LittleToHost(channel),
                     LittleToHost(blobSize),
                     LittleToHost(partId)
                 );

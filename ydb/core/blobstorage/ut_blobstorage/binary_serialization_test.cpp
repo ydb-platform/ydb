@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(BinarySerializationTest) {
             true, // ignoreBlock
             &cookie, //  cookie
             TInstant::Seconds(1000), // deadline
-            NKikimrBlobStorage::AsyncRead // handleClass
+            NKikimrBlobStorage::TabletLog // handleClass
         );
         
         UNIT_ASSERT_VALUES_EQUAL(binary->BlobId, blobId);
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(BinarySerializationTest) {
         UNIT_ASSERT_VALUES_EQUAL(binary->HasCookie, true);
         UNIT_ASSERT_VALUES_EQUAL(binary->Cookie, cookie);
         UNIT_ASSERT_VALUES_EQUAL(binary->Deadline, TInstant::Seconds(1000));
-        UNIT_ASSERT_VALUES_EQUAL(binary->HandleClass, NKikimrBlobStorage::AsyncRead);
+        UNIT_ASSERT_VALUES_EQUAL(binary->HandleClass, NKikimrBlobStorage::TabletLog);
         
         TString serialized;
         TEvBlobStorage::TEvVPutBinary::Serialize(*binary, serialized);
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(BinarySerializationTest) {
         UNIT_ASSERT_VALUES_EQUAL(deserialized->HasCookie, true);
         UNIT_ASSERT_VALUES_EQUAL(deserialized->Cookie, cookie);
         UNIT_ASSERT_VALUES_EQUAL(deserialized->Buffer, testData);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized->HandleClass, NKikimrBlobStorage::AsyncRead);
+        UNIT_ASSERT_VALUES_EQUAL(deserialized->HandleClass, NKikimrBlobStorage::TabletLog);
         
         delete deserialized;
     }
@@ -201,6 +201,76 @@ Y_UNIT_TEST_SUITE(BinarySerializationTest) {
         UNIT_ASSERT_VALUES_EQUAL(deserializedBinary->Buffer, testData);
         
         delete rawEvent;
+    }
+    
+    Y_UNIT_TEST(TEvVPutBinaryRewriteBlobAndIsInternalTest) {
+        TLogoBlobID blobId(123456, 1, 2, 3, 1024, 0);
+        TString testData = GenerateTestData(1024);
+        TVDiskID vdiskId(TGroupId::FromValue(42), 1, 2, 3, 4);
+        
+        // Тест через конструктор TEvVPut
+        auto original = MakeHolder<TEvBlobStorage::TEvVPut>(
+            blobId, TRope(testData), vdiskId, true, nullptr, TInstant::Now(), 
+            NKikimrBlobStorage::TabletLog
+        );
+        
+        original->RewriteBlob = true;
+        original->IsInternal = true;
+        
+        auto binaryFromPut = MakeHolder<TEvBlobStorage::TEvVPutBinary>(*original);
+        
+        UNIT_ASSERT_VALUES_EQUAL(binaryFromPut->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(binaryFromPut->IsInternal, true);
+        
+        TString serialized;
+        TEvBlobStorage::TEvVPutBinary::Serialize(*binaryFromPut, serialized);
+        
+        auto deserialized = TEvBlobStorage::TEvVPutBinary::Deserialize(serialized);
+        UNIT_ASSERT(deserialized != nullptr);
+        
+        UNIT_ASSERT_VALUES_EQUAL(deserialized->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(deserialized->IsInternal, true);
+        
+        // Проверяем обратное преобразование в TEvVPut
+        auto convertedBack = deserialized->ToOriginal();
+        UNIT_ASSERT_VALUES_EQUAL(convertedBack->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(convertedBack->IsInternal, true);
+        
+        delete deserialized;
+        delete convertedBack;
+        
+        // Тест через прямой конструктор
+        auto binaryDirect = MakeHolder<TEvBlobStorage::TEvVPutBinary>(
+            blobId,
+            testData,
+            vdiskId,
+            true, // ignoreBlock
+            nullptr, // cookie
+            TInstant::Now(), // deadline
+            NKikimrBlobStorage::TabletLog, // handleClass
+            true, // rewriteBlob
+            true  // isInternal
+        );
+        
+        UNIT_ASSERT_VALUES_EQUAL(binaryDirect->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(binaryDirect->IsInternal, true);
+        
+        TString serializedDirect;
+        TEvBlobStorage::TEvVPutBinary::Serialize(*binaryDirect, serializedDirect);
+        
+        auto deserializedDirect = TEvBlobStorage::TEvVPutBinary::Deserialize(serializedDirect);
+        UNIT_ASSERT(deserializedDirect != nullptr);
+        
+        UNIT_ASSERT_VALUES_EQUAL(deserializedDirect->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(deserializedDirect->IsInternal, true);
+        
+        // Проверяем обратное преобразование в TEvVPut для прямого конструктора
+        auto convertedBackDirect = deserializedDirect->ToOriginal();
+        UNIT_ASSERT_VALUES_EQUAL(convertedBackDirect->RewriteBlob, true);
+        UNIT_ASSERT_VALUES_EQUAL(convertedBackDirect->IsInternal, true);
+        
+        delete deserializedDirect;
+        delete convertedBackDirect;
     }
     
 } // Y_UNIT_TEST_SUITE(BinarySerializationTest) 

@@ -2361,6 +2361,9 @@ std::pair<TString, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ:
     TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
     if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
+        if (!IsActive() && operation.GetCommitOffsetsEnd() >= EndOffset && userInfo.Offset == i64(EndOffset)) {
+            return {"", false};
+        }
         PQ_LOG_D("Partition " << Partition <<
             " Consumer '" << consumer << "'" <<
             " Bad request (session already dead) " <<

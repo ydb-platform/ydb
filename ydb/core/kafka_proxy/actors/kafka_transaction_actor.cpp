@@ -102,7 +102,7 @@ namespace NKafka {
     void TKafkaTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D(TStringBuilder() << "KQP session created");
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
             return;
         }
@@ -114,7 +114,7 @@ namespace NKafka {
         KAFKA_LOG_D(TStringBuilder() << "Receieved query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
         if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
             Die(ctx);
             return;
         }
@@ -174,7 +174,7 @@ namespace NKafka {
     }
 
     template<class ErrorResponseType, class EventType>
-    void TKafkaTransactionActor::SendResponseFail(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
+    void TKafkaTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
             KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
         } else {
@@ -291,7 +291,7 @@ namespace NKafka {
         if (response.GetResponse().GetYdbResults().size() != 2) {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.GetResponse().GetYdbResults().size() << ".";
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
@@ -303,13 +303,13 @@ namespace NKafka {
         } catch (const yexception& y) {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
         }
@@ -318,7 +318,7 @@ namespace NKafka {
         std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
         if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
             KAFKA_LOG_W(error);
-            SendResponseFail<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
         }

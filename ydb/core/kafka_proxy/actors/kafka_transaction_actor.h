@@ -99,7 +99,7 @@ namespace NKafka {
             template<class ErrorResponseType, class EventType>
             void SendInvalidTransactionActorStateResponse(TAutoPtr<TEventHandle<EventType>>& evHandle);
             template<class ErrorResponseType, class EventType>
-            void SendResponseFail(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage = {});
+            void SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage = {});
             template<class ResponseType, class EventType>
             void SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle);
 

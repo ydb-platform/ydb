@@ -10,8 +10,9 @@ namespace NKafka {
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx){
         TEvKafka::TEvSaveTxnProducerRequest* request = ev->Get();
 
-        if (ProducersByTransactionalId.contains(request->TransactionalId)) {
-            TProducerState& currentProducerState = ProducersByTransactionalId[request->TransactionalId];
+        auto it = ProducersByTransactionalId.find(request->TransactionalId);
+        if (it != ProducersByTransactionalId.end()) {
+            TProducerState& currentProducerState = it->second;
             TProducerState newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
 
             if (NewProducerStateIsOutdated(currentProducerState, newProducerState)) {
@@ -46,12 +47,12 @@ namespace NKafka {
     };
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext&) {
-        TProducerState deadActorState = {ev->Get()->ProducerId, ev->Get()->ProducerEpoch};
+        auto it = ProducersByTransactionalId.find(ev->Get()->TransactionalId);
         TProducerState currentProducerState = ProducersByTransactionalId[ev->Get()->TransactionalId];
 
-        if (deadActorState != currentProducerState) {
+        if (it == ProducersByTransactionalId.end() || it->second != currentProducerState) {
             // new actor was already registered, we can just ignore this event
-            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already reinitialized with new epoch. Ignoring this event");
+            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
         } else {
             KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
                 << " and producerId " << ev->Get()->ProducerId 
@@ -130,10 +131,12 @@ namespace NKafka {
     };
 
     TMaybe<TString> TKafkaTransactionsCoordinator::GetTxnRequestError(const TTransactionalRequest& request) {
-        if (!ProducersByTransactionalId.contains(request.TransactionalId)) {
+        auto it = ProducersByTransactionalId.find(request.TransactionalId);
+
+        if (it == ProducersByTransactionalId.end()) {
             return TStringBuilder() << "Producer with transactional id " << request.TransactionalId << " was not yet initailized.";
-        } else if (NewProducerStateIsOutdated(ProducersByTransactionalId[request.TransactionalId], request.ProducerState)) {
-            return GetProducerIsOutdatedError(request.TransactionalId, ProducersByTransactionalId[request.TransactionalId], request.ProducerState);
+        } else if (NewProducerStateIsOutdated(it->second, request.ProducerState)) {
+            return GetProducerIsOutdatedError(request.TransactionalId, it->second, request.ProducerState);
         } else {
             return {};
         }

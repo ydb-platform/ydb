@@ -19,17 +19,20 @@ namespace NKikimr::NOlap::NDataAccessorControl {
 class TEvAddPortion: public NActors::TEventLocal<TEvAddPortion, NColumnShard::TEvPrivate::EEv::EvAddPortionDataAccessor> {
 private:
     std::vector<TPortionDataAccessor> Accessors;
+    YDB_READONLY_DEF(TTabletId, TabletId);
 
 public:
     std::vector<TPortionDataAccessor> ExtractAccessors() {
         return std::move(Accessors);
     }
 
-    explicit TEvAddPortion(const TPortionDataAccessor& accessor) {
+    TEvAddPortion(const TTabletId tabletId, const TPortionDataAccessor& accessor)
+        : TabletId(tabletId) {
         Accessors.emplace_back(accessor);
     }
 
-    explicit TEvAddPortion(const std::vector<TPortionDataAccessor>& accessors) {
+    TEvAddPortion(const TTabletId tabletId, const std::vector<TPortionDataAccessor>& accessors)
+        : TabletId(tabletId) {
         Accessors = accessors;
     }
 };
@@ -37,10 +40,12 @@ public:
 class TEvRemovePortion: public NActors::TEventLocal<TEvRemovePortion, NColumnShard::TEvPrivate::EEv::EvRemovePortionDataAccessor> {
 private:
     YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
+    YDB_READONLY_DEF(TTabletId, TabletId);
 
 public:
-    explicit TEvRemovePortion(const TPortionInfo::TConstPtr& portion)
-        : Portion(portion) {
+    TEvRemovePortion(const TTabletId tabletId, const TPortionInfo::TConstPtr& portion)
+        : Portion(portion)
+        , TabletId(tabletId) {
     }
 };
 
@@ -48,6 +53,7 @@ class TEvRegisterController: public NActors::TEventLocal<TEvRegisterController, 
 private:
     std::unique_ptr<IGranuleDataAccessor> Controller;
     bool IsUpdateFlag = false;
+    TTabletId TabletId;
 
 public:
     bool IsUpdate() const {
@@ -58,9 +64,12 @@ public:
         return std::move(Controller);
     }
 
-    explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate)
+    TTabletId GetTabletId() const { return TabletId;}
+
+    TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const TTabletId tabletId, const bool isUpdate)
         : Controller(std::move(accessor))
         , IsUpdateFlag(isUpdate)
+        , TabletId(tabletId)
     {
     }
 };
@@ -69,10 +78,12 @@ class TEvUnregisterController
     : public NActors::TEventLocal<TEvUnregisterController, NColumnShard::TEvPrivate::EEv::EvUnregisterGranuleDataAccessor> {
 private:
     YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(TTabletId, TabletId);
 
 public:
-    explicit TEvUnregisterController(const TInternalPathId pathId)
-        : PathId(pathId) {
+    TEvUnregisterController(const TTabletId tabletId, const TInternalPathId pathId)
+        : PathId(pathId)
+        , TabletId(tabletId){
     }
 };
 
@@ -81,13 +92,15 @@ private:
     YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IAccessorCallback>, Callback);
     YDB_READONLY_DEF(TString, Consumer);
+    YDB_READONLY_DEF(TTabletId, TabletId);
 
 public:
     explicit TEvAskTabletDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions,
-        const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback, const TString& consumer)
+        const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback, const TString& consumer, const TTabletId tabletId)
         : Portions(portions)
         , Callback(callback)
-        , Consumer(consumer) {
+        , Consumer(consumer)
+        , TabletId(tabletId) {
     }
 };
 
@@ -95,10 +108,12 @@ class TEvAskServiceDataAccessors
     : public NActors::TEventLocal<TEvAskServiceDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskServiceDataAccessors> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TDataAccessorsRequest>, Request);
+    YDB_READONLY_DEF(TTabletId, TabletId);
 
 public:
-    explicit TEvAskServiceDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request)
-        : Request(request) {
+    explicit TEvAskServiceDataAccessors(const TTabletId tabletId, const std::shared_ptr<TDataAccessorsRequest>& request)
+        : Request(request)
+        , TabletId(tabletId) {
     }
 };
 

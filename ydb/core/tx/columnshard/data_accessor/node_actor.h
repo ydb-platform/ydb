@@ -20,18 +20,18 @@ private:
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->IsUpdate());
+        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->GetTabletId(), ev->Get()->IsUpdate());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
-        Manager->UnregisterController(ev->Get()->GetPathId());
+        Manager->UnregisterController(ev->Get()->GetTabletId(), ev->Get()->GetPathId());
     }
     void Handle(TEvAddPortion::TPtr& ev) {
         for (auto&& a : ev->Get()->ExtractAccessors()) {
-            Manager->AddPortion(std::move(a));
+            Manager->AddPortion(ev->Get()->GetTabletId(), std::move(a));
         }
     }
     void Handle(TEvRemovePortion::TPtr& ev) {
-        Manager->RemovePortion(ev->Get()->GetPortion());
+        Manager->RemovePortion(ev->Get()->GetTabletId(), ev->Get()->GetPortion());
     }
     void Handle(TEvAskServiceDataAccessors::TPtr& ev);
     

@@ -19,8 +19,8 @@ std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
     return result;
 }
 
-std::unique_ptr<IGranuleDataAccessor> TManager::DoBuildCollector(const TInternalPathId pathId) {
-    return std::make_unique<TCollector>(pathId);
+std::unique_ptr<IGranuleDataAccessor> TManager::DoBuildCollector(const TTabletId tabletId, const TInternalPathId pathId) {
+    return std::make_unique<TCollector>(tabletId, pathId);
 }
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

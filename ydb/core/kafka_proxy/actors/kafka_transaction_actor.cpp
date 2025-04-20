@@ -17,7 +17,7 @@ namespace NKafka {
         }
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                PartitionsInTxn.emplace(GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest);
+                PartitionsInTxn.emplace(GetFullTopicPath(topicInRequest.Name->c_str()), static_cast<ui32>(partitionInRequest));
             }
         }
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
@@ -46,7 +46,7 @@ namespace NKafka {
         // save offsets for future use
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), (ui32)partitionInRequest.PartitionIndex};
+                TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), static_cast<ui32>(partitionInRequest.PartitionIndex)};
                 TPartitionCommit newCommit{
                     .Partition = partitionInRequest.PartitionIndex,
                     .Offset = partitionInRequest.CommittedOffset,

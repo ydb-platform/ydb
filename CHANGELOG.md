@@ -5,6 +5,16 @@
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 17394:Added counters to the spilling IO queue to track number of waiting operations
+... [#17394](https://github.com/ydb-platform/ydb/pull/17394) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 17362:https://github.com/ydb-platform/ydb/issues/16468 [#17362](https://github.com/ydb-platform/ydb/pull/17362) ([Олег](https://github.com/iddqdex))
+* 17282:https://github.com/ydb-platform/ydb/issues/16468 [#17282](https://github.com/ydb-platform/ydb/pull/17282) ([Олег](https://github.com/iddqdex))
+* 17230:* YDB FQ: enhance error occurring during Generic::TPartition parsing [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
+* 17222:https://github.com/ydb-platform/ydb/issues/16944 [#17222](https://github.com/ydb-platform/ydb/pull/17222) ([Олег](https://github.com/iddqdex))
+* 17148:YDB FQ: support `Prometheus` as an external data source [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
+* 17007:YQ: Add support of an iceberg data source [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
+* 16982:Add predicate selectivity with Histogram (#14564)... [#16982](https://github.com/ydb-platform/ydb/pull/16982) ([Denis Khalikov](https://github.com/denis0x0D))
+* 16076:Automatic deletion of temporary tables and directories during export [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 
 ### Bug fixes
 
@@ -16,3 +26,24 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16768:Fixed an issue with topic auto-partitioning when the `max_active_partition` configuration parameter was set via the `ALTER TOPIC` statement. [#16768](https://github.com/ydb-platform/ydb/pull/16768) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
+* 17285:https://github.com/ydb-platform/ydb/issues/16984
+Нашел неоднозначность в q21 clickbench [#17285](https://github.com/ydb-platform/ydb/pull/17285) ([Олег](https://github.com/iddqdex))
+* 17198:Add handling of UUID in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
+* 17192:Fixed https://github.com/ydb-platform/ydb-cpp-sdk/issues/399 register of GZIP and ZSTD codecs in C++ SDK topic client [#17192](https://github.com/ydb-platform/ydb/pull/17192) ([Bulat](https://github.com/Gazizonoki))
+* 17157:fixes filters for tablets on nodes
+closes #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 17116:Issue #17118
+
+The message `TEvDeletePartition` may arrive earlier than `TEvApproveWriteQuota`. The batch did not send `TEvConsumed` and this blocked the queue of write quota requests. [#17116](https://github.com/ydb-platform/ydb/pull/17116) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+
+### Performance
+
+* 17416:[...](https://github.com/ydb-platform/ydb/issues/17415) [#17416](https://github.com/ydb-platform/ydb/pull/17416) ([Олег](https://github.com/iddqdex))
+* 17387:In TPC-DS 1000 change iterations to 1, timeout to 1 hour per request and set expected table sizes. [#17387](https://github.com/ydb-platform/ydb/pull/17387) ([Олег](https://github.com/iddqdex))
+
+### Backward incompatible change
+
+* 17194:Partially Revert https://github.com/ydb-platform/ydb/commit/5eed854386cd5d71eb2bf411106aeb6bf231d4d8 because It does not work
+
+https://github.com/ydb-platform/ydb/issues/16944 [#17194](https://github.com/ydb-platform/ydb/pull/17194) ([Олег](https://github.com/iddqdex))
+

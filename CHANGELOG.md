@@ -32,9 +32,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17192:Fixed https://github.com/ydb-platform/ydb-cpp-sdk/issues/399 register of GZIP and ZSTD codecs in C++ SDK topic client [#17192](https://github.com/ydb-platform/ydb/pull/17192) ([Bulat](https://github.com/Gazizonoki))
 * 17157:fixes filters for tablets on nodes
 closes #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
-* 17116:Issue #17118
-
-The message `TEvDeletePartition` may arrive earlier than `TEvApproveWriteQuota`. The batch did not send `TEvConsumed` and this blocked the queue of write quota requests. [#17116](https://github.com/ydb-platform/ydb/pull/17116) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 
 ### Performance
 

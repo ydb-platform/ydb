@@ -62,7 +62,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     template <typename TProtoSettings>
     static void ExtractPaths(TVector<TString>& paths, const TProtoSettings& settings) {
-        paths.reserve(settings.items_size() + 1);
+        paths.reserve(settings.items_size() + 2);
         for (const auto& item : settings.items()) {
             paths.emplace_back(item.source_path());
         }
@@ -72,6 +72,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         TVector<TString> paths;
 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
+        if constexpr (IsS3Export) {
+            if (!this->GetProtoRequest()->settings().source_path().empty()) {
+                paths.emplace_back(this->GetProtoRequest()->settings().source_path());
+            }
+        }
         ExtractPaths(paths, this->GetProtoRequest()->settings());
 
         return paths;
@@ -145,15 +150,22 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         TString error;
 
         if (this->UserToken) {
-            bool isDatabase = true; // first entry is database
-
-            for (const auto& entry : request->ResultSet) {
-                const ui32 access = isDatabase ? NACLib::GenericRead | NACLib::GenericWrite : NACLib::SelectRow;
-                if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, access)) {
+            for (size_t i = 0; i < request->ResultSet.size(); ++i) {
+                const auto& entry = request->ResultSet[i];
+                ui32 access = 0;
+                if (i == 0) { // database
+                    access = NACLib::GenericRead | NACLib::GenericWrite;
+                } else {
+                    access = NACLib::SelectRow;
+                }
+                if constexpr (IsS3Export) {
+                    if (i == 1 && !this->GetProtoRequest()->settings().source_path().empty()) {
+                        access = 0;
+                    }
+                }
+                if (access && !this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, access)) {
                     return;
                 }
-
-                isDatabase = false;
             }
         }
 
@@ -229,6 +241,10 @@ public:
                 }
             }
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!commonDestPrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
+                }
+
                 try {
                     NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
                     NBackup::TEncryptionKey key(settings.encryption_settings().symmetric_key().key());

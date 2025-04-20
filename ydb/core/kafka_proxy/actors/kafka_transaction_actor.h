@@ -12,9 +12,9 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TKafkaTransactionActor : public NActors::TActorBootstrapped<TKafkaTransactionActor> {
+    class TKafkaTransactionActor : public NActors::TActor<TKafkaTransactionActor> {
 
-        using TBase = NActors::TActorBootstrapped<TKafkaTransactionActor>;
+        using TBase = NActors::TActor<TKafkaTransactionActor>;
         
         public:
             struct TTopicPartition {
@@ -53,6 +53,7 @@ namespace NKafka {
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
             TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
+                TActor<TKafkaTransactionActor>(&TKafkaTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerId(producerId),
                 ProducerEpoch(producerEpoch),
@@ -60,16 +61,12 @@ namespace NKafka {
                 TxnCoordinatorActorId(txnCoordinatorActorId),
                 KqpActorId(kqpActorId) {};
 
-            void Bootstrap(const NActors::TActorContext&) {
-                TBase::Become(&TKafkaTransactionActor::StateWork);
-            }
-
             TStringBuilder LogPrefix() const {
                 return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerId << "; ProducerEpoch=" << ProducerEpoch << "}: ";
             }
         
         private:
-            STFUNC(StateWork) {
+            STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvKafka::TEvAddPartitionsToTxnRequest, Handle);
                     HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);

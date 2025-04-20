@@ -139,8 +139,8 @@ public:
     }
 
     std::shared_ptr<TGranuleMeta> RegisterTable(
-        const TInternalPathId pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
-        auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
+        const TUnifiedPathId pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
+        auto infoEmplace = Tables.emplace(pathId.GetInternalPathId(), std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
@@ -170,16 +170,16 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TLocalPathId> pathIdFrom, const std::optional<TLocalPathId> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
-        for (auto&& i : Tables) {
-            if (pathIdFrom && i.first < *pathIdFrom) {
+        for (const auto& [_, table]: Tables) {
+            if (pathIdFrom && table->GetLocalPathId() < *pathIdFrom) {
                 continue;
             }
-            if (pathIdTo && i.first > *pathIdTo) {
+            if (pathIdTo && table->GetLocalPathId() > *pathIdTo) {
                 continue;
             }
-            result.emplace_back(i.second);
+            result.emplace_back(table);
         }
         return result;
     }

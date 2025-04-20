@@ -59,8 +59,7 @@ public:
     };
 
     virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
-        return result;
+        return THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
     }
 
     void Insert(const TInsertedData& data) override {
@@ -520,9 +519,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        std::vector<TInternalPathId> paths = { 
-            TInternalPathId::FromRawValue(1),
-            TInternalPathId::FromRawValue(2)
+        std::vector<TUnifiedPathId> paths = { 
+            {TInternalPathId::FromRawValue(1), NColumnShard::TLocalPathId::FromRawValue(11)},
+            {TInternalPathId::FromRawValue(2), NColumnShard::TLocalPathId::FromRawValue(12)}
         };
 
         TString testBlob = MakeTestBlob();
@@ -541,8 +540,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         engine.TestingLoad(db);
 
-        std::vector<TCommittedData> dataToIndex = { TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
-            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
+        std::vector<TCommittedData> dataToIndex = { TCommittedData(TUserData::Build(paths[0].GetInternalPathId(), blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
+            TCommittedData(TUserData::Build(paths[0].GetInternalPathId(), blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
 
         // write
 
@@ -570,28 +569,28 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {   // select from snap before insert
             ui64 planStep = 1;
             ui64 txId = 0;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+            auto selectInfo = engine.Select(paths[0].GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
 
         {   // select from snap between insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+            auto selectInfo = engine.Select(paths[0].GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
 
         {   // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+            auto selectInfo = engine.Select(paths[0].GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 1);
         }
 
         {   // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+            auto selectInfo = engine.Select(paths[1].GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
     }
@@ -613,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        const auto& pathId =  TInternalPathId::FromRawValue(1);
+        const TUnifiedPathId& pathId =  {TInternalPathId::FromRawValue(1), NColumnShard::TLocalPathId::FromRawValue(11)};
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
@@ -638,7 +637,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
+                TCommittedData(TUserData::Build(pathId.GetInternalPathId(), blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -661,7 +660,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {   // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+            auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
         }
 
@@ -675,7 +674,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter;
             Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, indexInfo.GetReplaceKey()));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
+            auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), pkFilter, false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
         }
 
@@ -687,7 +686,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter;
             Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, indexInfo.GetReplaceKey()));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter, false);
+            auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), pkFilter, false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 9);
         }
     }
@@ -711,7 +710,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         ;
 
-        const auto& pathId =  TInternalPathId::FromRawValue(1);
+        const TUnifiedPathId& pathId =  {TInternalPathId::FromRawValue(1), NColumnShard::TLocalPathId::FromRawValue(11)};
         ui32 step = 1000;
 
         // inserts
@@ -736,7 +735,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
+                TCommittedData(TUserData::Build(pathId.GetInternalPathId(), blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, (TInsertWriteId)txId));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             blobsAll.Merge(std::move(blobs));
@@ -769,7 +768,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             std::vector<TCommittedData> dataToIndex;
             TSnapshot ss(planStep, txId);
             dataToIndex.push_back(
-                TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
+                TCommittedData(TUserData::Build(pathId.GetInternalPathId(), blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
 
             bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -790,7 +789,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
-        const auto pathId = TInternalPathId::FromRawValue(1);
+        const auto pathId = TUnifiedPathId{TInternalPathId::FromRawValue(1), NColumnShard::TLocalPathId::FromRawValue(1)};
         ui32 step = 1000;
 
         // insert
@@ -819,7 +818,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TSnapshot ss(planStep, txId);
                 std::vector<TCommittedData> dataToIndex;
                 dataToIndex.push_back(
-                    TCommittedData(TUserData::Build(pathId, blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
+                    TCommittedData(TUserData::Build(pathId.GetInternalPathId(), blobRange, TLocalHelper::GetMetaProto(), 0, {}), ss, 0, TInsertWriteId(txId)));
 
                 bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);
@@ -845,7 +844,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             {   // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+                auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
@@ -854,7 +853,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             {   // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+                auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 20);
             }
 
@@ -863,14 +862,14 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             THashMap<TInternalPathId, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
-            pathTtls.emplace(pathId, std::move(tiering));
+            pathTtls.emplace(pathId.GetInternalPathId(), std::move(tiering));
             Ttl(engine, db, pathTtls, txCount / 2);
 
             // read + load + read
 
             {   // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+                auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
         }
@@ -886,7 +885,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             {   // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
+                auto selectInfo = engine.Select(pathId.GetInternalPathId(), TSnapshot(planStep, txId), NOlap::TPKRangesFilter(), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 10);
             }
         }

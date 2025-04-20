@@ -28,7 +28,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             NKikimrTxColumnShard::TInternalOperationData metaProto;
             Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
-            auto operation = std::make_shared<TWriteOperation>(TInternalPathId{}, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
+            auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
                 granuleShardingVersionId, NEvWrite::EModificationType::Upsert, false);
             operation->FromProto(metaProto);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
@@ -202,7 +202,7 @@ void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {
 }
 
-TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TInternalPathId pathId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
     const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool portionsWriting) {
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),

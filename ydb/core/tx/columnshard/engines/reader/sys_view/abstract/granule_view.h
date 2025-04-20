@@ -8,12 +8,12 @@ namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 class TGranuleMetaView {
 private:
     using TPortions = std::deque<std::shared_ptr<TPortionInfo>>;
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(TUnifiedPathId, PathId);
     YDB_READONLY_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::vector<NStorageOptimizer::TTaskDescription>, OptimizerTasks);
 public:
     TGranuleMetaView(const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot)
-        : PathId(granule.GetPathId())
+        : PathId({granule.GetPathId(), granule.GetLocalPathId()})
     {
         for (auto&& i : granule.GetPortions()) {
             if (i.second->IsRemovedFor(reqSnapshot)) {

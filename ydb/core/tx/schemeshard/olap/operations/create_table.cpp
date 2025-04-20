@@ -287,7 +287,7 @@ public:
             }
 
             Y_ABORT_UNLESS(create);
-            create->SetPathId(pathId.LocalPathId);
+            NColumnShard::TLocalPathId::FromRawValue(pathId.LocalPathId).ToProto(*create);
 
             if (tableInfo->Description.HasTtlSettings()) {
                 create->MutableTtlSettings()->CopyFrom(tableInfo->Description.GetTtlSettings());

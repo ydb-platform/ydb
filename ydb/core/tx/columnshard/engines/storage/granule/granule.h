@@ -126,7 +126,7 @@ private:
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
-    const TInternalPathId PathId;
+    const TUnifiedPathId PathId;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -179,7 +179,7 @@ public:
     std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;
-        return MetadataMemoryManager->BuildCollector(PathId);
+        return MetadataMemoryManager->BuildCollector(PathId.GetInternalPathId());
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -366,7 +366,11 @@ public:
     }
 
     TInternalPathId GetPathId() const {
-        return PathId;
+        return PathId.GetInternalPathId();
+    }
+
+    TLocalPathId GetLocalPathId() const {
+        return PathId.GetLocalPathId();
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
@@ -385,7 +389,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+    explicit TGranuleMeta(const TUnifiedPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
         const TVersionedIndex& versionedIndex);
 
     bool Empty() const noexcept {

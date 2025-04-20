@@ -1404,7 +1404,7 @@ private:
         for (auto&& i : Portions) {
             accessors.emplace_back(i.BuildAccessor());
         }
-        FetchCallback->OnAccessorsFetched(std::move(accessors));
+        FetchCallback->OnAccessorsFetched(TabletId, std::move(accessors));
         return TConclusionStatus::Success();
     }
     virtual void DoOnCannotExecute(const TString& reason) override {

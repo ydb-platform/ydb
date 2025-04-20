@@ -111,12 +111,12 @@ namespace NKafka {
             TString GetYqlWithTablesNames(const TString& templateStr);
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp(const TString& kqpTransactionId);
-            void HandleSelectResponse(const NKikimrKqp::TEvQueryResponse& response, const TActorContext& ctx);
+            void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
-            TMaybe<TProducerState> ParseProducerState(const NKikimrKqp::TEvQueryResponse& response);
+            TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
-            std::unordered_map<TString, i32> ParseConsumersGenerations(const NKikimrKqp::TEvQueryResponse& response);
+            std::unordered_map<TString, i32> ParseConsumersGenerations(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInConsumersStates(const std::unordered_map<TString, i32>& consumerGenerationByName);
             TString GetAsStr(EKafkaTxnKqpRequests request);
 

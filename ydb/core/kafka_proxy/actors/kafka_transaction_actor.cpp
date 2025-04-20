@@ -119,10 +119,9 @@ namespace NKafka {
             return;
         }
 
-        const auto& record = ev->Get()->Record;
         switch (LastSentToKqpRequest) {
             case EKafkaTxnKqpRequests::SELECT:
-                HandleSelectResponse(record, ctx);
+                HandleSelectResponse(*ev->Get(), ctx);
                 break;
             case EKafkaTxnKqpRequests::COMMIT:
                 HandleCommitResponse(ctx);
@@ -286,10 +285,10 @@ namespace NKafka {
         return ev;
     }
 
-    void TKafkaTransactionActor::HandleSelectResponse(const NKikimrKqp::TEvQueryResponse& response, const TActorContext& ctx) {
+    void TKafkaTransactionActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
         // YDB should return exactly two result sets for two queries: to producer and consumer state tables
-        if (response.GetResponse().GetYdbResults().size() != 2) {
-            TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.GetResponse().GetYdbResults().size() << ".";
+        if (response.Record.GetResponse().GetYdbResults().size() != 2) {
+            TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
             KAFKA_LOG_W(error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
@@ -324,7 +323,7 @@ namespace NKafka {
         }
 
         KAFKA_LOG_D(TStringBuilder() << "Validated producer and consumers states. Everything is alright, sending commit");
-        auto kqpTxnId = response.GetResponse().GetTxMeta().id();
+        auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can attempt to commit
         SendCommitTxnRequest(kqpTxnId);
     }
@@ -346,8 +345,8 @@ namespace NKafka {
         }
     }
 
-    TMaybe<TProducerState> TKafkaTransactionActor::ParseProducerState(const NKikimrKqp::TEvQueryResponse& response) {
-        auto& resp = response.GetResponse();
+    TMaybe<TProducerState> TKafkaTransactionActor::ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response) {
+        auto& resp = response.Record.GetResponse();
 
         NYdb::TResultSetParser parser(resp.GetYdbResults(NKafkaTransactionSql::PRODUCER_STATE_REQUEST_INDEX));
 
@@ -390,10 +389,10 @@ namespace NKafka {
         * @param response The response object containing the result set from the YDB query.
         * @return A map where keys are consumer group names and values are their corresponding generations.
         */
-    std::unordered_map<TString, i32> TKafkaTransactionActor::ParseConsumersGenerations(const NKikimrKqp::TEvQueryResponse& response) {
+    std::unordered_map<TString, i32> TKafkaTransactionActor::ParseConsumersGenerations(const NKqp::TEvKqp::TEvQueryResponse& response) {
         std::unordered_map<TString, i32> generationByConsumerName;
     
-        NYdb::TResultSetParser parser(response.GetResponse().GetYdbResults(NKafkaTransactionSql::CONSUMER_STATES_REQUEST_INDEX));
+        NYdb::TResultSetParser parser(response.Record.GetResponse().GetYdbResults(NKafkaTransactionSql::CONSUMER_STATES_REQUEST_INDEX));
         while (parser.TryNextRow()) {
             TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();;
             i32 generation = (i32)parser.ColumnParser("generation").GetUint64();

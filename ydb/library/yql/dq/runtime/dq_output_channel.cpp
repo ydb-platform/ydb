@@ -78,10 +78,13 @@ public:
     TDqFillLevel GetFillLevel() const override {
         if (Storage) {
             if (Storage->IsFull()) {
+                if (PopStats.DstStageId == 2) Cerr << "OUT=>2 HARD LIMIT\n";
                 return HardLimit;
             }
+            if (PopStats.DstStageId == 2 && FirstStoredId < NextStoredId) Cerr << "OUT=>2 SOFT LIMIT\n";
             return FirstStoredId < NextStoredId ? SoftLimit : NoLimit;
         } else {
+            if (PopStats.DstStageId == 2 && PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes) Cerr << "OUT=>2 HARD LIMIT\n";
             return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
         }
     }

@@ -16,3 +16,5 @@ items:
     path: migration/toc_p.yaml
 - name: Проверка версии конфигурации
   href: check-config-version.md
+- name: Сравнение конфигураций V1 и V2
+  href: compare-configs.md

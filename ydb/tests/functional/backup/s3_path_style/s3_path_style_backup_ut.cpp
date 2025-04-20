@@ -37,14 +37,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
             settings.AppendItem({"/local/Table", "Table"});
 
             const auto backupOp = YdbExportClient().ExportToS3(settings).GetValueSync();
-
-            if (backupOp.Ready()) {
-                UNIT_ASSERT_C(backupOp.Status().IsSuccess(), backupOp.Status().GetIssues().ToString());
-            } else {
-                TMaybe<TOperation> op = backupOp;
-                WaitOp<NExport::TExportToS3Response>(op);
-                UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
-            }
+            WaitOpSuccess(backupOp);
         }
 
         {
@@ -54,14 +47,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
             settings.AppendItem({"Table", "/local/Restored"});
 
             const auto restoreOp = YdbImportClient().ImportFromS3(settings).GetValueSync();
-
-            if (restoreOp.Ready()) {
-                UNIT_ASSERT_C(restoreOp.Status().IsSuccess(), restoreOp.Status().GetIssues().ToString());
-            } else {
-                TMaybe<TOperation> op = restoreOp;
-                WaitOp<NImport::TImportFromS3Response>(op);
-                UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
-            }
+            WaitOpSuccess(restoreOp);
         }
     }
 }

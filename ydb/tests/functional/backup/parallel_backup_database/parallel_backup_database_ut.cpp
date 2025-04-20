@@ -13,19 +13,6 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
 {
     Y_UNIT_TEST(ParallelBackupWholeDatabase)
     {
-        auto listDir = [&](const TString& path) -> TString {
-            auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-            TStringBuilder l;
-            for (const auto& entry : res.GetChildren()) {
-                if (l) {
-                    l << ", ";
-                }
-                l << "\"" << entry.Name << "\"";
-            }
-            return l;
-        };
-
         {
             auto res = YdbQueryClient().ExecuteQuery(R"sql(
                 CREATE TABLE `/local/Table0` (
@@ -57,6 +44,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
         auto fillS3Settings = [&](auto& settings) {
             settings.Endpoint(S3Endpoint());
             settings.Bucket(bucketName);
+            settings.Scheme(NYdb::ES3Scheme::HTTP);
             settings.AccessKey("minio");
             settings.SecretKey("minio123");
             settings.UseVirtualAddressing(false);
@@ -70,7 +58,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
             std::vector<NThreading::TFuture<NExport::TExportToS3Response>> parallelBackups(parallelExportsCount);
 
             // Start parallel backups
-            // They are expected not to export special export copies of tables (/local/export-123)
+            // They are expected not to export special export copies of tables (/local/export-123), and also ".sys" and ".metadata" folders
             for (size_t i = 0; i < parallelBackups.size(); ++i) {
                 auto& backupOp = parallelBackups[i];
                 settings.DestinationPrefix(TStringBuilder() << "ParallelBackupWholeDatabasePrefix_" << i);
@@ -79,15 +67,12 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
 
             // Wait
             for (auto& backupOp : parallelBackups) {
-                auto& val = backupOp.GetValueSync();
-                if (val.Ready()) {
-                    UNIT_ASSERT_C(val.Status().IsSuccess(), val.Status().GetIssues().ToString());
-                } else {
-                    TMaybe<TOperation> op = val;
-                    WaitOp<NExport::TExportToS3Response>(op);
-                    UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
-                }
-                auto forgetResult = YdbOperationClient().Forget(val.Id()).GetValueSync();
+                WaitOpSuccess(backupOp.GetValueSync());
+            }
+
+            // Forget
+            for (auto& backupOp : parallelBackups) {
+                auto forgetResult = YdbOperationClient().Forget(backupOp.GetValueSync().Id()).GetValueSync();
                 UNIT_ASSERT_C(forgetResult.IsSuccess(), forgetResult.GetIssues().ToString());
             }
         }
@@ -101,14 +86,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
                 .DestinationPath(TStringBuilder() << "/local/Restored_" << i);
 
             const auto restoreOp = YdbImportClient().ImportFromS3(settings).GetValueSync();
-
-            if (restoreOp.Ready()) {
-                UNIT_ASSERT_C(restoreOp.Status().IsSuccess(), restoreOp.Status().GetIssues().ToString());
-            } else {
-                TMaybe<TOperation> op = restoreOp;
-                WaitOp<NImport::TImportFromS3Response>(op);
-                UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
-            }
+            WaitOpSuccess(restoreOp);
 
             // Check that there are only expected tables
             auto checkOneTableInDirectory = [&](const TString& dir, const TString& name) {
@@ -123,7 +101,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
                         tableIndex = i;
                     }
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(tablesFound, 1, "Current directory children: " << listDir(TStringBuilder() << "/local/Restored_" << i << "/" << dir));
+                UNIT_ASSERT_VALUES_EQUAL_C(tablesFound, 1, "Current directory children: " << DebugListDir(TStringBuilder() << "/local/Restored_" << i << "/" << dir));
                 UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[tableIndex].Name, name);
             };
             checkOneTableInDirectory("", "Table0");
@@ -142,7 +120,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
             };
             auto removeDirectory = [&](const TString& path) {
                 auto res = YdbSchemeClient().RemoveDirectory(path).GetValueSync();
-                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString() << ". Current directory children: " << listDir(path));
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString() << ". Current directory children: " << DebugListDir(path));
             };
             auto remove = [&](const TString& root, bool removeRoot = true) {
                 removeTable(TStringBuilder() << root << "/Table0");
@@ -160,7 +138,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
             remove("/local", false);
             auto listResult = YdbSchemeClient().ListDirectory("/local").GetValueSync();
             UNIT_ASSERT_C(listResult.IsSuccess(), listResult.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetChildren().size(), 2, "Current database directory children: " << listDir("/local"));
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetChildren().size(), 2, "Current database directory children: " << DebugListDir("/local"));
 
             // Import to database root
             NImport::TImportFromS3Settings settings;
@@ -169,14 +147,7 @@ Y_UNIT_TEST_SUITE_F(ParallelBackupDatabase, TBackupTestFixture)
             settings.SourcePrefix(TStringBuilder() << "ParallelBackupWholeDatabasePrefix_0");
 
             const auto restoreOp = YdbImportClient().ImportFromS3(settings).GetValueSync();
-
-            if (restoreOp.Ready()) {
-                UNIT_ASSERT_C(restoreOp.Status().IsSuccess(), restoreOp.Status().GetIssues().ToString());
-            } else {
-                TMaybe<TOperation> op = restoreOp;
-                WaitOp<NImport::TImportFromS3Response>(op);
-                UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
-            }
+            WaitOpSuccess(restoreOp);
 
             // Check data
             auto checkTableData = [&](const TString& path, ui32 data) {

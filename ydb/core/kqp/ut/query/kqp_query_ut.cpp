@@ -2580,6 +2580,60 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(UpdateThenDelete, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+
+        {
+            const TString query = R"(
+                DECLARE $data AS List<Struct<
+                    Key: String,
+                    Value: String
+                >>;
+
+                UPSERT INTO KeyValue2 SELECT * FROM AS_TABLE($data);
+
+                DELETE FROM KeyValue2 ON SELECT * FROM KeyValue2 AS a LEFT ONLY JOIN AS_TABLE($data) AS b USING (Key);
+            )";
+
+            TTypeBuilder builder;
+            builder
+                .BeginStruct()
+                    .AddMember("Key", TTypeBuilder().Primitive(NYdb::EPrimitiveType::String).Build())
+                    .AddMember("Value", TTypeBuilder().Primitive(NYdb::EPrimitiveType::String).Build())
+                .EndStruct();
+
+            auto params = client.GetParamsBuilder()
+                .AddParam("$data")
+                    .EmptyList(builder.Build())
+                    .Build()
+                .Build();
+
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        }
+        {
+            const TString query = R"(
+                SELECT * FROM KeyValue2;
+            )";
+
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(0, result.GetResultSet(0).RowsCount());
+        }
+    }
+
 }
 
 } // namespace NKqp

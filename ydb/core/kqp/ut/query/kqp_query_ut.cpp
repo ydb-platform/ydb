@@ -2657,7 +2657,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        Cerr << "--------------- " << TInstant::Now() << " Start update ---------------\n";
+        Cerr << TInstant::Now() << " --------------- Start update ---------------\n";
 
         const auto hangingResult = client.ExecuteQuery(R"(
             UPDATE test_table SET data = "a"

@@ -518,9 +518,9 @@ namespace NYql {
                 // hadoop nothing yet
                 catalog.mutable_hadoop();
             } else if (VALUE_HIVE_METASTORE == catalogType) {
-                auto hiveUri = GetOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
+                auto uri = GetOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
 
-                catalog.mutable_hive_metastore()->set_uri(hiveUri);
+                catalog.mutable_hive_metastore()->set_uri(uri);
             } else {
                 throw yexception() << "Unexpected catalog type: " << catalogType;
             }

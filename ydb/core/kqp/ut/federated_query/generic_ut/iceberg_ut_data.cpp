@@ -76,8 +76,8 @@ NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHadoop() {
 
 NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHiveMetastore() {
     TTestData data(this);
-    auto& hive = *data.Catalog_.mutable_hive_metastore();
-    hive.set_uri(VALUE_HIVE_METASTORE_URI);
+    auto& h = *data.Catalog_.mutable_hive_metastore();
+    h.set_uri(VALUE_HIVE_METASTORE_URI);
     return data.Result_;
 }
 
@@ -159,7 +159,7 @@ void TIcebergTestData::ExecuteQuery(const std::shared_ptr<NKikimr::NKqp::TKikimr
 void TIcebergTestData::ExecuteCreateHiveMetastoreExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr) {
     using namespace fmt::literals;
 
-    TString hiveCatalog = fmt::format(R"(
+    TString hiveMetastoreCatalog = fmt::format(R"(
         CATALOG_TYPE="{type}",
         CATALOG_HIVE_METASTORE_URI="{uri}"
     )",
@@ -167,7 +167,7 @@ void TIcebergTestData::ExecuteCreateHiveMetastoreExternalDataSource(const std::s
         "uri"_a  = VALUE_HIVE_METASTORE_URI
     );
 
-    ExecuteQuery(kikimr, CreateQuery(hiveCatalog));
+    ExecuteQuery(kikimr, CreateQuery(hiveMetastoreCatalog));
 }
 
 void TIcebergTestData::ExecuteCreateHadoopExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr) {

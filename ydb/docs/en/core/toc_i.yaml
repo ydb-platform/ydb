@@ -54,6 +54,9 @@ items:
     path: public-materials/toc_p.yaml
 - name: Downloads
   href: downloads/index.md
+  include:
+    mode: link
+    path: downloads/toc_i.yaml
 - name: Changelog
   include:
     mode: link

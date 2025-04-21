@@ -60,6 +60,7 @@ target_link_options(ydb-core-persqueue-ut-ut_with_sdk PRIVATE
 target_sources(ydb-core-persqueue-ut-ut_with_sdk PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/ut_with_sdk/autoscaling_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/ut_with_sdk/balancing_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/ut_with_sdk/commitoffset_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/ut_with_sdk/mirrorer_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/ut_with_sdk/topic_ut.cpp
 )

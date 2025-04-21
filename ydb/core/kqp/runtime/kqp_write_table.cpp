@@ -1361,6 +1361,7 @@ public:
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) override {
+        // Cerr << "----------------------------- TShardedWriteController::Write, token: " << token << "\n";
         auto& info = WriteInfos.at(token);
         AFL_ENSURE(!info.Closed);
 
@@ -1377,6 +1378,7 @@ public:
     }
 
     void Close(TWriteToken token) override {
+        // Cerr << "----------------------------- TShardedWriteController::Close, token: " << token << "\n";
         auto& info = WriteInfos.at(token);
         AFL_ENSURE(info.Serializer);
         info.Closed = true;
@@ -1410,6 +1412,7 @@ public:
             });
         
         for (const TWriteToken token : writeTokensFoFlush) {
+            // Cerr << "----------------------------- TShardedWriteController::FlushBuffers, token: " << token << "\n";
             FlushSerializer(token, true);
             AFL_ENSURE(WriteInfos.at(token).Serializer->IsFinished());
         }
@@ -1441,6 +1444,7 @@ public:
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
         auto& shardInfo = ShardsInfo.GetShard(shardId);
         if (shardInfo.IsEmpty()) {
+            // Cerr << "----------------------------- TShardedWriteController::GetMessageMetadata, shardId: " << shardId << ", empty\n";
             return {};
         }
         BuildBatchesForShard(shardInfo);
@@ -1450,6 +1454,7 @@ public:
         meta.OperationsCount = shardInfo.GetBatchesInFlight();
         meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
         meta.SendAttempts = shardInfo.GetSendAttempts();
+        // Cerr << "----------------------------- TShardedWriteController::GetMessageMetadata, shardId: " << shardId << ", shardInfo.GetBatchesInFlight(): " << shardInfo.GetBatchesInFlight() << ", meta.IsFinal: " << meta.IsFinal << ", shardInfo.IsClosed(): " << shardInfo.IsClosed() << ", shardInfo.Size(): " << shardInfo.Size() << "\n";
 
         return meta;
     }
@@ -1580,11 +1585,13 @@ public:
 
 private:
     void FlushSerializer(TWriteToken token, bool force) {
+        // Cerr << "----------------------------- TShardedWriteController::FlushSerializer, force: " << force << "\n";
         const auto& writeInfo = WriteInfos.at(token);
         if (force) {
             for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
                     if (batch && !batch->IsEmpty()) {
+                        // Cerr << "----------------------------- TShardedWriteController::FlushSerializer, force=1, got batch on " << shardId << ", is empty: " << writeInfo.Serializer->IsEmpty() << ", memory: " << writeInfo.Serializer->GetMemory() << "\n";
                         ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                             .Token = token,
                             .Data = std::move(batch),
@@ -1598,6 +1605,7 @@ private:
             for (const ui64 shardId : writeInfo.Serializer->GetShardIds()) {
                 auto& shard = ShardsInfo.GetShard(shardId);
                 while (true) {
+                    // Cerr << "----------------------------- TShardedWriteController::FlushSerializer, force=0, FlushBatch on " << shardId << "\n";
                     auto batch = writeInfo.Serializer->FlushBatch(shardId);
                     if (!batch || batch->IsEmpty()) {
                         break;

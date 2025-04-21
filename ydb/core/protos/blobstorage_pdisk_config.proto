@@ -9,6 +9,7 @@ message TPDiskSlotSizeUnits {
         UNSPECIFIED = 0; // behaves like SINGLE
         SINGLE = 1;
         DOUBLE = 2;
+        QUAD = 4;
     }
 
     optional E Value = 1;

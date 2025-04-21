@@ -2225,7 +2225,7 @@ public:
         for (const auto& [id, pdisk] : PDisks) {
             numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
-            numWithSlotSizeUnspecified += !TPDiskConfig::SlotSizeUnitsSpecified(pdisk->SlotSizeUnits);
+            numWithSlotSizeUnspecified += !(bool)pdisk->SlotSizeUnits;
         }
         auto& counters = TabletCounters->Simple();
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);

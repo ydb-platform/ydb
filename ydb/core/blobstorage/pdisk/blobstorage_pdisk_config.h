@@ -433,15 +433,8 @@ struct TPDiskConfig : public TThrRefBase {
                 return 1;
             case NKikimrBlobStorage::TPDiskSlotSizeUnits::DOUBLE:
                 return 2;
-        }
-    }
-
-    static bool SlotSizeUnitsSpecified(NKikimrBlobStorage::TPDiskSlotSizeUnits::E enum_value) {
-        switch (enum_value) {
-            case NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED:
-                return false;
-            default:
-                return true;
+            case NKikimrBlobStorage::TPDiskSlotSizeUnits::QUAD:
+                return 4;
         }
     }
 };

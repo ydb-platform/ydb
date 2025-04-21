@@ -89,6 +89,11 @@
             "uri": "file://test.test_Replace_/results.txt"
         }
     ],
+    "test.test[Reverse_2025.02]": [
+        {
+            "uri": "file://test.test_Reverse_2025.02_/extracted"
+        }
+    ],
     "test.test[StreamFormat]": [
         {
             "uri": "file://test.test_StreamFormat_/results.txt"

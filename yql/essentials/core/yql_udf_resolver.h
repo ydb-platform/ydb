@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 
 #include <yql/essentials/core/yql_holding_file_storage.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/udf/udf_log.h>
 
@@ -42,6 +43,7 @@ public:
         TString TypeConfig;
         const TTypeAnnotationNode* UserType = nullptr;
         THashMap<TString, TString> SecureParams;
+        NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
 
         // output
         TString NormalizedName;
@@ -50,6 +52,8 @@ public:
         const TTypeAnnotationNode* CallableType = nullptr;
         bool SupportsBlocks = false;
         bool IsStrict = false;
+        NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+        NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
         TVector<TString> Messages;
     };
 

@@ -314,6 +314,7 @@ private:
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
             );
     }

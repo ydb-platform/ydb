@@ -2335,17 +2335,19 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         bool isAffectedConsumer = AffectedUsers.contains(consumer);
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
-            PQ_LOG_D("Partition " << Partition <<
-                " Consumer '" << consumer << "'" <<
-                " Bad request (session already dead) " <<
-                " RequestSessionId '" << operation.GetReadSessionId() <<
-                " CurrentSessionId '" << userInfo.Session <<
-                "'");
-            result = false;
-        } else if (operation.GetOnlyCheckCommitedToFinish()) {
+        if (operation.GetOnlyCheckCommitedToFinish()) {
             if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
                result = false;
+            }
+        } else if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || userInfo.Offset != i64(EndOffset)) {
+                PQ_LOG_D("Partition " << Partition <<
+                    " Consumer '" << consumer << "'" <<
+                    " Bad request (session already dead) " <<
+                    " RequestSessionId '" << operation.GetReadSessionId() <<
+                    " CurrentSessionId '" << userInfo.Session <<
+                    "'");
+                result = false;
             }
         } else {
             if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
@@ -2380,6 +2382,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             consumers.insert(consumer);
         }
     }
+
     if (result) {
         TxAffectedConsumers.insert(consumers.begin(), consumers.end());
     }
@@ -2868,6 +2871,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "incorrect offset range (begin > end)");
             return EProcessResult::ContinueDrop;
         }
+
         consumers.insert(user);
     }
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
@@ -2892,6 +2896,10 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
+        if (operation.GetOnlyCheckCommitedToFinish()) {
+            continue;
+        }
+
         if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
@@ -2932,6 +2940,21 @@ void TPartition::ExecImmediateTx(TTransaction& t)
                                  "incorrect offset range (commit to the future)");
             return;
         }
+
+        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || pendingUserInfo.Offset != i64(EndOffset)) {
+                ScheduleReplyPropose(record,
+                            NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                            NKikimrPQ::TError::BAD_REQUEST,
+                            "session already dead");
+                return;
+            }
+        }
+
+        if ((i64)operation.GetCommitOffsetsEnd() < pendingUserInfo.Offset && !operation.GetReadSessionId().empty()) {
+            continue; // this is stale request, answer ok for it
+        }
+
         pendingUserInfo.Offset = operation.GetCommitOffsetsEnd();
     }
     CommitWriteOperations(t);

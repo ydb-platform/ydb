@@ -2,7 +2,7 @@ items:
 - name: Обзор конфигурации
   href: config-overview.md
 - name: Статическая конфигурация
-  href: ../../../reference/configuration/index.md
+  href: static-config.md
 - name: Динамическая конфигурация
   href: dynamic-config.md
 - name: Временная конфигурация

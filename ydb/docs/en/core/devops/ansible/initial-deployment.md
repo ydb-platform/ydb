@@ -84,6 +84,17 @@ Next, you need to make the following changes in the `vars` section of the invent
   * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
   * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
+#### Installing fq-connector-go
+
+Installing a [connector](../../concepts/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../concepts/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
+
+* `ydb_install_fq_connector` - set `true` for installing the the connector.
+* Choose one of the available options for deploying fq-connector-go executables:
+  * `ydb_fq_connector_version`: automatically download one of the [fq-connector-go official releases](https://github.com/ydb-platform/fq-connector-go/releases) by version number. For example, `v0.7.1`.
+  * `ydb_fq_connector_git_version`: automatically compile the fq-connector-go executable from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/fq-connector-go). The setting's value is a branch, tag, or commit name. For example, `main`.
+  * `ydb_fq_connector_archive`: a local filesystem path for a fq-connector-go distribution archive [downloaded](https://github.com/ydb-platform/fq-connector-go/releases) or otherwise prepared in advance.
+  * `ydb_fq_connector_binary`: local filesystem paths for fq-connector-go executable, [downloaded](https://github.com/ydb-platform/fq-connector-go/releases) or otherwise prepared in advance.
+
 #### Optional changes in the inventory files
 
 Feel free to change these settings if needed, but it is not necessary in straightforward cases:
@@ -183,6 +194,10 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
 
 The rest of the sections and settings in the configuration file can remain unchanged.
 
+### fq-connector-go configuration file
+
+Configuration file for fq-connector-go located in the `/files/fq-connector-go/config.yaml`. In straightforward cases, it can remain unchanged.
+
 ## Deploying the {{ ydb-short-name }} cluster {#erasure-setup}
 
 {% note info %}
@@ -208,10 +223,11 @@ To prepare your template, you can follow the instructions below:
 The sequence of role executions and their brief descriptions:
 
 1. The `packages` role configures repositories, manages APT preferences and configurations, fixes unconfigured packages, and installs necessary software packages depending on the distribution version.
-2. The `system` role sets up system settings, including clock and timezone configuration, time synchronization via NTP with `systemd-timesyncd`, configuring `systemd-journald` for log management, kernel module loading configuration, kernel parameter optimization through `sysctl`, and CPU performance tuning using `cpufrequtils`.
-3. The `ydb` role performs tasks related to checking necessary variables, installing base components and dependencies, setting up system users and groups, deploying and configuring {{ ydb-short-name }}, including managing TLS certificates and updating configuration files.
-4. The `ydb-static` role prepares and launches static nodes of {{ ydb-short-name }}, including checking necessary variables and secrets, formatting and preparing disks, creating and launching `systemd unit` for the storage node, as well as initializing the storage and managing database access.
-5. The `ydb-dynamic` role configures and manages dynamic nodes of {{ ydb-short-name }}, including checking necessary variables, creating configuration and `systemd unit` files for each dynamic node, launching these nodes, obtaining a token for {{ ydb-short-name }} access, and creating a database in {{ ydb-short-name }}.
+1. The `system` role sets up system settings, including clock and timezone configuration, time synchronization via NTP with `systemd-timesyncd`, configuring `systemd-journald` for log management, kernel module loading configuration, kernel parameter optimization through `sysctl`, and CPU performance tuning using `cpufrequtils`.
+1. The `ydb` role performs tasks related to checking necessary variables, installing base components and dependencies, setting up system users and groups, deploying and configuring {{ ydb-short-name }}, including managing TLS certificates and updating configuration files.
+1. The `ydb_fq_connector` role (optional) performs tasks related to deploying and configuring fq-connector-go, including checking necessary variables, installing binaries, configuration files, creating and launching `systemd unit`.
+1. The `ydb-static` role prepares and launches static nodes of {{ ydb-short-name }}, including checking necessary variables and secrets, formatting and preparing disks, creating and launching `systemd unit` for the storage node, as well as initializing the storage and managing database access.
+1. The `ydb-dynamic` role configures and manages dynamic nodes of {{ ydb-short-name }}, including checking necessary variables, creating configuration and `systemd unit` files for each dynamic node, launching these nodes, obtaining a token for {{ ydb-short-name }} access, and creating a database in {{ ydb-short-name }}.
 
 {% cut "Detailed step-by-step installation process description" %}
 

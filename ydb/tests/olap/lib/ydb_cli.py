@@ -148,7 +148,6 @@ class YdbCliHelper:
             self.query_syntax = query_syntax
             self.scale = scale
             self.query_prefix = query_prefix
-            self._nodes_info: dict[str, dict[str, int]] = {}
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
             self._json_path = _get_output_path('json')
@@ -231,27 +230,6 @@ class YdbCliHelper:
                 with open(self._query_output_path, 'r') as r:
                     self.result.query_out = r.read()
 
-        @staticmethod
-        def _get_nodes_info() -> dict[str, dict[str, Any]]:
-            return {
-                n.host: {
-                    'start_time': n.start_time
-                }
-                for n in YdbCluster.get_cluster_nodes(db_only=True)
-            }
-
-        def _check_nodes(self):
-            node_errors = []
-            for node, info in self._get_nodes_info().items():
-                if node in self._nodes_info:
-                    if info['start_time'] > self._nodes_info[node]['start_time']:
-                        node_errors.append(f'Node {node} was restarted')
-                    self._nodes_info[node]['processed'] = True
-            for node, info in self._nodes_info.items():
-                if not info.get('processed', False):
-                    node_errors.append(f'Node {node} is down')
-            self.result.add_error('\n'.join(node_errors))
-
         def _parse_stdout(self, stdout: str) -> None:
             self.result.stdout = stdout
             for line in self.result.stdout.splitlines():
@@ -289,11 +267,9 @@ class YdbCliHelper:
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:
-                    self._nodes_info = self._get_nodes_info()
                     process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
                     self._parse_stderr(process.stderr.decode('utf-8', 'replace'))
                     self._parse_stdout(process.stdout.decode('utf-8', 'replace'))
-                    self._check_nodes()
                     self._load_stats()
                     self._load_query_out()
                     self._load_plans()

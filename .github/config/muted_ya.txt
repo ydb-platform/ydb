@@ -48,8 +48,6 @@ ydb/core/quoter/ut QuoterWithKesusTest.KesusRecreation
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnManyTables
-ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
@@ -121,7 +119,6 @@ ydb/tests/olap/oom overlapping_portions.py.TestOverlappingPortions.test
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
 ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
 ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk

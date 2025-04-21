@@ -3,10 +3,25 @@ import math
 from datetime import datetime, timedelta
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
+from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
+"""
+FROM AS_TABLE +
+FROM SELECT +
+DISTINCT +
+UNIQUE DISTINCT
+UNION +
+WITH
+WITHOUT
+WHERE DMLOperations+
+ORDER BY
+ASSUME ORDER BY
+LIMIT OFFSET +
+SAMPLE
+TABLESAMPLE
+"""
 
 class TestDML(TestBase):
     @pytest.mark.parametrize(
@@ -45,58 +60,14 @@ class TestDML(TestBase):
         ]
     )
     def test_select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        self.create_table(table_name, pk_types, all_types,
+        dml = DMLOperations(self)
+        dml.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
-        self.insert(table_name, all_types, pk_types, index, ttl)
+        dml.insert(table_name, all_types, pk_types, index, ttl)
         self.limit(table_name, all_types, pk_types, index, ttl)
         self.from_select(table_name, all_types, pk_types, index, ttl)
         self.distinct(table_name, all_types, pk_types, index, ttl)
         self.union(table_name, all_types, pk_types, index, ttl)
-
-    def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        columns = {
-            "pk_": pk_types.keys(),
-            "col_": all_types.keys(),
-            "col_index_": index.keys(),
-            "ttl_": [ttl]
-        }
-        pk_columns = {
-            "pk_": pk_types.keys()
-        }
-        index_columns = {
-            "col_index_": index.keys()
-        }
-        sql_create_table = create_table_sql_request(
-            table_name, columns, pk_columns, index_columns, unique, sync)
-        self.query(sql_create_table)
-        if ttl != "":
-            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
-                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
-            self.query(sql_ttl)
-
-    def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        number_of_columns = self.get_number_of_columns(
-            pk_types, all_types, index, ttl)
-        for count in range(1, number_of_columns + 1):
-            self.create_insert(table_name, count, all_types,
-                               pk_types, index, ttl)
-
-    def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        insert_sql = f"""
-            INSERT INTO {table_name}(
-                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {f"ttl_{ttl}" if ttl != "" else ""}
-            )
-            VALUES(
-                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([format_sql_value(all_types[type_name](value), type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
-            );
-        """
-        self.query(insert_sql)
 
     def limit(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = self.create_types_for_all_select(
@@ -239,6 +210,17 @@ class TestDML(TestBase):
                                  rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
     def without(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        statements_without = []
+        for type in all_types.keys():
+            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
+                statements_without.append(f"col_{cleanup_type_name(type)}")
+        for type in pk_types.keys():
+            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
+                statements_without.append(f"pk_{cleanup_type_name(type)}")
+        for type in index.keys():
+            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
+                statements_without.append(f"col_index_{cleanup_type_name(type)}")
+                
         
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):

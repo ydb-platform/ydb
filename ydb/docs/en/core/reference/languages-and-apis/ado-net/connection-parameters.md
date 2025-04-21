@@ -1,4 +1,4 @@
-# ADO.NET Connection Parameters {#connection-parameters}
+# ADO.NET Connection Parameters
 
 To connect to a database, the application provides a connection string that specifies parameters such as the host, user, password, and so on. Connection strings have the form `keyword1=value; keyword2=value;`. For more information, [see the official doc page on connection strings](https://learn.microsoft.com/en-us/dotnet/framework/data/adonet/connection-strings).
 

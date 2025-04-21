@@ -92,6 +92,7 @@ public:
         }
         Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
         InitMonCounters(taskCounters);
+        static_cast<TDerived*>(this)->ExtraInitialize();
     }
 
     ~TInputTransformStreamLookupCommonBase() override {
@@ -215,6 +216,10 @@ private: //IDqComputeActorAsyncInput
         issues.AddIssue(issue);
         this->Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
+
+    void ExtraInitialize() {
+    }
+
 protected:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const NMiniKQL::THolderFactory& HolderFactory;
@@ -468,6 +473,7 @@ class TInputTransformStreamMultiLookupBase : public TInputTransformStreamLookupC
 {
     using TCommon = TInputTransformStreamLookupCommonBase<TInputTransformStreamMultiLookupBase>;
     friend TCommon;
+
 public:
     using TCommon::TCommon;
 
@@ -522,6 +528,26 @@ private: //events
         TCommon::Free();
     }
 
+    void ExtraInitialize() {
+        RightOutputColumns = 0;
+        for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
+            const auto& [source, index] = OutputRowColumnOrder[i];
+            switch (source) {
+                case EOutputRowItemSource::InputKey:
+                    break;
+                case EOutputRowItemSource::InputOther:
+                    break;
+                case EOutputRowItemSource::LookupKey:
+                case EOutputRowItemSource::LookupOther:
+                    ++RightOutputColumns;
+                    break;
+                case EOutputRowItemSource::None:
+                    break;
+            }
+        }
+    }
+
+public:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         auto startCycleCount = GetCycleCountFast();
@@ -561,7 +587,7 @@ private: //events
                         PayloadExtraSize += listLength * sizeof(NUdf::TUnboxedValue);
                     }
                 }
-                PayloadExtraSize += minKeyListLength * (LookupInputIndexes.size() + LookupPayloadType->GetMembersCount()) * sizeof(NUdf::TUnboxedValue);
+                PayloadExtraSize += minKeyListLength * RightOutputColumns * sizeof(NUdf::TUnboxedValue);
                 Cerr << " output ";
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
@@ -721,6 +747,7 @@ private:
     }
 
     TAwaitingQueue AwaitingQueue;
+    ui32 RightOutputColumns;
 };
 
 class TInputTransformStreamMultiLookupWide: public TInputTransformStreamMultiLookupBase {

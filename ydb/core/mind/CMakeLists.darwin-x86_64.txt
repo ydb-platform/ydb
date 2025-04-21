@@ -61,6 +61,7 @@ target_sources(ydb-core-mind PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__extend_lease.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__init_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__load_state.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__migrate_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__register_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__update_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/node_broker__update_config_subscription.cpp

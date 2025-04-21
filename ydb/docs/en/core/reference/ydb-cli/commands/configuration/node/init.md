@@ -27,7 +27,7 @@ Name | Description
 
 ## Examples {#examples}
 
-Initialize the node's configuration directory using a configuration file on the node:
+Initialize the node's configuration directory using the specified configuration file:
 
 ```bash
 ydb admin node config init --config-dir /opt/ydb/cfg-dir --from-config config.yaml

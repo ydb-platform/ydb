@@ -1,6 +1,6 @@
 # Configuration Management
 
-The YDB CLI provides commands for managing dynamic configuration at different levels of the system.
+The YDB CLI provides commands for managing the [dynamic configuration](../../../../maintenance/manual/dynamic-config.md) at different levels of the system.
 
 General command syntax:
 

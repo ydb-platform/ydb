@@ -1,10 +1,10 @@
 items:
-- name: Конфигурация v1
+- name: Конфигурация V1
   href: configuration-v1/index.md
   include:
     mode: link
     path: configuration-v1/toc_p.yaml
-- name: Конфигурация v2
+- name: Конфигурация V2
   href: configuration-v2/index.md
   include:
     mode: link

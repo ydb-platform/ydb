@@ -96,11 +96,13 @@ public:
 
         if (Finalized) {
             Self->Committed = Self->Dirty;
+            Self->SentVersion = Self->Committed.Epoch.Version;
             Self->Become(&TNodeBroker::StateWork);
             Self->SubscribeForConfigUpdates(ctx);
             Self->ScheduleEpochUpdate(ctx);
             Self->PrepareEpochCache();
-            Self->SignalTabletActive(ctx);
+            Self->PrepareUpdateNodesLog();
+            Self->SignalTabletActive(ctx, "1.0");
         } else {
             Self->Execute(Self->CreateTxMigrateState(std::move(DbChanges)));
         }

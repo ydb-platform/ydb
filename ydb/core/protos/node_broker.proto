@@ -141,3 +141,28 @@ message TSetConfigRequest {
 message TSetConfigResponse {
     optional TStatus Status = 1;
 }
+
+message TSubscribeNodesRequest {
+    optional uint64 CachedVersion = 1;
+}
+
+message TUpdateNode {
+    oneof UpdateType {
+        TNodeInfo Node = 1;
+        uint32 ExpiredNode = 2;
+        uint32 RemovedNode = 3;
+    }
+}
+
+message TUpdateNodes {
+    optional uint64 FromVersion = 1;
+    optional TEpoch Epoch = 2;
+    repeated TUpdateNode Updates = 3;
+}
+
+message TSyncNodesRequest {
+    optional uint64 CachedVersion = 1;
+}
+
+message TSyncNodesResponse {
+}

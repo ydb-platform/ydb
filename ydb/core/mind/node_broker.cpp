@@ -586,6 +586,36 @@ void TNodeBroker::PrepareEpochCache()
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
+void TNodeBroker::PrepareUpdateNodesLog()
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Preparing update nodes log for epoch #" << Committed.Epoch.ToString()
+                << " nodes=" << Committed.Nodes.size()
+                << " expired=" << Committed.ExpiredNodes.size()
+                << " removed=" << Committed.RemovedNodes.size());
+
+    UpdateNodesLog.clear();
+    UpdateNodesLogVersions.clear();
+
+    TVector<TVersionedNodeID> nodeIdsSortedByVersion;
+    for (auto &entry : Committed.Nodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    for (auto &entry : Committed.ExpiredNodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    for (auto &entry : Committed.RemovedNodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    std::sort(nodeIdsSortedByVersion.begin(), nodeIdsSortedByVersion.end(), TVersionedNodeID::TCmpByVersion());
+
+    for (const auto &id : nodeIdsSortedByVersion) {
+        const auto& node = *Committed.FindNode(id.NodeId);
+        AddNodeToUpdateNodesLog(node);
+    }
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
+}
+
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -615,11 +645,81 @@ void TNodeBroker::AddDeltaToEpochDeltasCache(const TString &delta, ui64 version)
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
+void TNodeBroker::AddNodeToUpdateNodesLog(const TNodeInfo &node)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Add node " << node.IdShortString() << " to update nodes log");
+
+    NKikimrNodeBroker::TUpdateNodes updateNodes;
+
+    switch (node.State) {
+        case ENodeState::Active:
+            FillNodeInfo(node, *updateNodes.AddUpdates()->MutableNode());
+            break;
+        case ENodeState::Expired:
+            updateNodes.AddUpdates()->SetExpiredNode(node.NodeId);
+            break;
+        case ENodeState::Removed:
+            updateNodes.AddUpdates()->SetRemovedNode(node.NodeId);
+            break;
+    }
+
+    TString delta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD updateNodes.SerializeToString(&delta);
+
+    Y_ENSURE(UpdateNodesLogVersions.empty() || UpdateNodesLogVersions.back().Version <= node.Version);
+    if (!UpdateNodesLogVersions.empty() && UpdateNodesLogVersions.back().Version == node.Version) {
+        UpdateNodesLog += delta;
+        UpdateNodesLogVersions.back().CacheEndOffset = UpdateNodesLog.size();
+    } else {
+        UpdateNodesLog += delta;
+        UpdateNodesLogVersions.emplace_back(node.Version, UpdateNodesLog.size());
+    }
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
+}
+
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
     ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
     ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
+}
+
+void TNodeBroker::SendUpdateNodes(const TActorContext &ctx)
+{
+    if (SentVersion >= Committed.Epoch.Version) {
+        return;
+    }
+
+    for (const auto& [_, subscriber] : ServerPipeToSubscriber) {
+        SendUpdateNodes(subscriber, SentVersion, ctx);
+    }
+    SentVersion = Committed.Epoch.Version;
+}
+
+void TNodeBroker::SendUpdateNodes(TActorId subscriber, ui64 version, const TActorContext &ctx)
+{
+    if (version >= Committed.Epoch.Version) {
+        return;
+    }
+
+    NKikimrNodeBroker::TUpdateNodes record;
+    record.SetFromVersion(version);
+    Committed.Epoch.Serialize(*record.MutableEpoch());
+    auto response = MakeHolder<TEvNodeBroker::TEvUpdateNodes>(record);
+
+    auto it = std::lower_bound(UpdateNodesLogVersions.begin(), UpdateNodesLogVersions.end(), version + 1);
+    if (it != UpdateNodesLogVersions.begin()) {
+        response->PreSerializedData = UpdateNodesLog.substr(std::prev(it)->CacheEndOffset);
+    } else {
+        response->PreSerializedData = UpdateNodesLog;
+    }
+
+    TabletCounters->Percentile()[COUNTER_UPDATE_NODES_BYTES].IncrementFor(response->GetCachedByteSize());
+    LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Send TEvUpdateNodes v" << version << " -> v" << Committed.Epoch.Version
+                << " to " << subscriber);
+    ctx.Send(subscriber, response.Release());
 }
 
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
@@ -1450,6 +1550,38 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     Execute(CreateTxUpdateConfig(ev), ctx);
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SUBSCRIBE_NODES_REQUESTS].Increment(1);
+
+    if (auto [_, inserted] = ServerPipeToSubscriber.emplace(ev->Recipient, ev->Sender); inserted) {
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                    "New subscriber " << ev->Sender << ", server pipe id: " << ev->Recipient
+                    << ", cached version: " << ev->Get()->Record.GetCachedVersion());
+        SendUpdateNodes(ev->Sender, ev->Get()->Record.GetCachedVersion(), ctx);
+    }
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SYNC_NODES_REQUESTS].Increment(1);
+    SendUpdateNodes(ev->Sender, ev->Get()->Record.GetCachedVersion(), ctx);
+    auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TNodeBroker::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    if (auto it = ServerPipeToSubscriber.find(ev->Get()->ServerId); it != ServerPipeToSubscriber.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                    "Unsubscribed " << it->second << ", server pipe id: " << it->first);
+        ServerPipeToSubscriber.erase(it);
+    }
 }
 
 void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,

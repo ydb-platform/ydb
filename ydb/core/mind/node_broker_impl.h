@@ -223,10 +223,12 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSubscribeNodesRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSyncNodesRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
+            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-            IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
@@ -251,10 +253,15 @@ private:
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
     void PrepareEpochCache();
+    void PrepareUpdateNodesLog();
     void AddNodeToEpochCache(const TNodeInfo &node);
     void AddDeltaToEpochDeltasCache(const TString& delta, ui64 version);
+    void AddNodeToUpdateNodesLog(const TNodeInfo &node);
 
     void SubscribeForConfigUpdates(const TActorContext &ctx);
+
+    void SendUpdateNodes(const TActorContext &ctx);
+    void SendUpdateNodes(TActorId subscriber, ui64 version, const TActorContext &ctx);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
@@ -276,6 +283,12 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev,
+                const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
@@ -288,10 +301,17 @@ private:
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
     TSchedulerCookieHolder EpochTimerCookieHolder;
-    TString EpochCache;
 
+    // old epoch protocol
+    TString EpochCache;
     TString EpochDeltasCache;
     TVector<TCacheVersion> EpochDeltasVersions;
+
+    // new delta protocol
+    TString UpdateNodesLog;
+    TVector<TCacheVersion> UpdateNodesLogVersions;
+    ui64 SentVersion;
+    THashMap<TActorId, TActorId> ServerPipeToSubscriber;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

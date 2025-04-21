@@ -1418,7 +1418,7 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
     const TExprNode::TListType& rightKeyColumnNodes, const std::vector<TStringBuf>& rightOutputColumns,
     const THashMap<TStringBuf, TString>& rightOutputColumnSources, const THashSet<TString>& rightUsedSourceColumns,
     const TStructExprType* outItemType, TExprNode::TPtr joinType, TPositionHandle pos, bool needPayload, bool isUniqueKey,
-    TExprContext& ctx
+    size_t rightRowCount, TExprContext& ctx
 ) {
     THashSet<TStringBuf> leftSourceKeyDrops;
     for (auto& keyColumnNode : leftKeyColumnNodes) {
@@ -1643,6 +1643,15 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
 
     if (joinType->Content() != "Cross") {
         auto indexSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
+        indexSettingsBuilder
+            .Add()
+                .Name()
+                    .Value("rowCount")
+                .Build()
+                .Value<TCoAtom>()
+                    .Value(rightRowCount)
+                .Build()
+            .Build();
         if (isUniqueKey) {
             indexSettingsBuilder
                 .Add()
@@ -2142,7 +2151,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
             joined = BuildBlockMapJoin(std::move(mapInput), std::move(tableContent),
                 leftKeyColumnNodes, leftOutputColumns, leftOutputColumnSources, leftUsedSourceColumns,
                 remappedMembers, rightOutputColumns, rightOutputColumnSources, rightUsedSourceColumns,
-                outItemType, joinType, pos, needPayload, isUniqueKey, ctx
+                outItemType, joinType, pos, needPayload, isUniqueKey, dictItemsCount, ctx
             );
         } else {
             if (!isCross) {

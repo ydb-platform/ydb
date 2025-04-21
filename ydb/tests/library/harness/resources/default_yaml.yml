@@ -266,6 +266,3 @@ query_service_config:
     - YT
     - Greenplum
     - MsSQLServer
-    - Oracle
-    - Logging
-    - Solomon

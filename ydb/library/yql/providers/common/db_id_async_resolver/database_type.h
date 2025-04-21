@@ -2,7 +2,6 @@
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
@@ -15,10 +14,7 @@ enum class EDatabaseType {
     YT,
     MySQL,
     Greenplum,
-    MsSQLServer,
-    Oracle,
-    Logging,
-    Solomon
+    MsSQLServer
 };
 
 std::set<TString> GetAllExternalDataSourceTypes();

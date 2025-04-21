@@ -1,7 +1,6 @@
 #include "db_async_resolver.h"
 
 #include <util/string/cast.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
@@ -14,10 +13,7 @@ std::set<TString> GetAllExternalDataSourceTypes() {
         ToString(NYql::EDatabaseType::Ydb),
         ToString(NYql::EDatabaseType::YT),
         ToString(NYql::EDatabaseType::Greenplum),
-        ToString(NYql::EDatabaseType::MsSQLServer),
-        ToString(NYql::EDatabaseType::Oracle),
-        ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon)
+        ToString(NYql::EDatabaseType::MsSQLServer)
     };
     return allTypes;
 }
@@ -36,10 +32,6 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
             return EDatabaseType::Greenplum;
         case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
           return EDatabaseType::MsSQLServer;
-        case NYql::EGenericDataSourceKind::ORACLE:
-          return EDatabaseType::Oracle;
-        case NYql::EGenericDataSourceKind::LOGGING:
-          return EDatabaseType::Logging;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }

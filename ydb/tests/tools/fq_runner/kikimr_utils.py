@@ -74,9 +74,6 @@ def enable_external_data_sources(qs_config):
     qs_config['available_external_data_sources'].append("YT")
     qs_config['available_external_data_sources'].append("Greenplum")
     qs_config['available_external_data_sources'].append("MsSQLServer")
-    qs_config['available_external_data_sources'].append("Oracle")
-    qs_config['available_external_data_sources'].append("Logging")
-    qs_config['available_external_data_sources'].append("Solomon")
 
 
 class AddFormatSizeLimitExtension(ExtensionPoint):

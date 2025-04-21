@@ -105,6 +105,8 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             TCoArgument existingRow = Build<TCoArgument>(ctx, node.Pos())
                 .Name("existing_row")
                 .Done();
+            TKqpStreamLookupSettings settings;
+            settings.Strategy = EStreamLookupStrategyType::LookupRows;
             auto prepareUpdateStage = Build<TDqStage>(ctx, pos)
                 .Inputs()
                     .Add(inputDictAndKeys.KeysPrecompute)
@@ -113,12 +115,13 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                 .Program()
                     .Args({"keys_list", "dict"})
                     .Body<TCoFlatMap>()
-                        .Input<TKqpLookupTable>()
+                        .Input<TKqlStreamLookupTable>()
                             .Table(returning.Table())
                             .LookupKeys<TCoIterator>()
                                 .List("keys_list")
                                 .Build()
                             .Columns(MakeColumnsList(columnsToLookup, ctx, pos))
+                            .Settings(settings.BuildNode(ctx, pos))
                             .Build()
                         .Lambda()
                             .Args({existingRow})

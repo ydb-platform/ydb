@@ -464,18 +464,22 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
 
     TMaybeNode<TDqStage> stage;
 
+
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     if (!RequireLookupPrecomputeStage(lookup)) {
         stage = Build<TDqStage>(ctx, lookup.Pos())
             .Inputs()
                 .Build()
             .Program()
                 .Args({})
-                .Body<TKqpLookupTable>()
+                .Body<TKqlStreamLookupTable>()
                     .Table(lookup.Table())
                     .LookupKeys<TCoIterator>()
                         .List(lookup.LookupKeys())
                         .Build()
                     .Columns(lookup.Columns())
+                    .Settings(settings.BuildNode(ctx, lookup.Pos()))
                     .Build()
                 .Build()
             .Settings().Build()
@@ -492,12 +496,13 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Program()
                 .Args({"keys_arg"})
-                .Body<TKqpLookupTable>()
+                .Body<TKqlStreamLookupTable>()
                     .Table(lookup.Table())
                     .LookupKeys<TCoIterator>()
                         .List("keys_arg")
                         .Build()
                     .Columns(lookup.Columns())
+                    .Settings(settings.BuildNode(ctx, lookup.Pos()))
                     .Build()
                 .Build()
             .Settings().Build()
@@ -578,129 +583,6 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
         .Build().Done();
 }
 
-NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx) {
-
-    Y_UNUSED(kqpCtx);
-
-    if (!node.Maybe<TDqStage>()) {
-        return node;
-    }
-
-    const auto& stage = node.Cast<TDqStage>();
-    TMaybeNode<TKqpLookupTable> maybeLookupTable;
-    VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
-        TExprBase expr(node);
-        if (expr.Maybe<TKqpLookupTable>()) {
-            maybeLookupTable = expr.Maybe<TKqpLookupTable>();
-            return false;
-        }
-
-        return true;
-    });
-
-    if (!maybeLookupTable) {
-        return node;
-    }
-
-    auto lookupTable = maybeLookupTable.Cast();
-    auto lookupKeys = lookupTable.LookupKeys();
-
-    YQL_ENSURE(lookupKeys.Maybe<TCoIterator>(), "Expected list iterator as LookupKeys, but got: "
-        << KqpExprToPrettyString(lookupKeys, ctx));
-
-    TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    TNodeOnNodeOwnedMap replaceMap;
-    TVector<TExprBase> newInputs;
-    TVector<TCoArgument> newArgs;
-    newInputs.reserve(stage.Inputs().Size() + 1);
-    newArgs.reserve(stage.Inputs().Size() + 1);
-
-    auto lookupKeysList = lookupKeys.Maybe<TCoIterator>().Cast().List();
-    TMaybeNode<TCoArgument> lookupKeysArg = lookupKeysList.Maybe<TCoArgument>();
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        const auto& input = stage.Inputs().Item(i);
-        const auto& inputArg = stage.Program().Args().Arg(i);
-
-        TCoArgument newArg{ctx.NewArgument(inputArg.Pos(), TStringBuilder() << "_kqp_input_arg_" << i)};
-        if (lookupKeysArg && lookupKeysArg.Cast().Raw() == inputArg.Raw()) {
-            YQL_ENSURE(input.Maybe<TDqPhyPrecompute>());
-            auto keysPrecompute = input.Maybe<TDqPhyPrecompute>().Cast();
-
-            auto cnStreamLookup = Build<TKqpCnStreamLookup>(ctx, node.Pos())
-                .Output()
-                    .Stage<TDqStage>()
-                        .Inputs()
-                            .Add(input)
-                            .Build()
-                        .Program()
-                            .Args({"stream_lookup_keys"})
-                            .Body<TCoToStream>()
-                                .Input("stream_lookup_keys")
-                                .Build()
-                            .Build()
-                        .Settings().Build()
-                        .Build()
-                    .Index().Build("0")
-                    .Build()
-                .Table(lookupTable.Table())
-                .Columns(lookupTable.Columns())
-                .InputType(ExpandType(node.Pos(), *keysPrecompute.Ref().GetTypeAnn(), ctx))
-                .Settings(settings.BuildNode(ctx, node.Pos()))
-                .Done();
-
-            newInputs.emplace_back(std::move(cnStreamLookup));
-            newArgs.push_back(newArg);
-            replaceMap[inputArg.Raw()] = newArg.Ptr();
-            replaceMap[lookupTable.Raw()] = newArg.Ptr();
-        } else {
-            newInputs.push_back(input);
-            newArgs.push_back(newArg);
-            replaceMap[inputArg.Raw()] = newArg.Ptr();
-        }
-    }
-
-    if (!lookupKeysArg) {  // lookupKeysList is pure expression
-        TCoArgument newArg{ctx.NewArgument(node.Pos(), TStringBuilder() << "_kqp_source_arg_" << newArgs.size())};
-
-        auto cnStreamLookup = Build<TKqpCnStreamLookup>(ctx, node.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs()
-                        .Build()
-                    .Program()
-                        .Args({})
-                        .Body<TCoToStream>()
-                            .Input(lookupKeysList)
-                            .Build()
-                        .Build()
-                    .Settings().Build()
-                    .Build()
-                .Index().Build("0")
-                .Build()
-            .Table(lookupTable.Table())
-            .Columns(lookupTable.Columns())
-            .InputType(ExpandType(node.Pos(), *lookupKeysList.Ref().GetTypeAnn(), ctx))
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
-
-        newInputs.emplace_back(std::move(cnStreamLookup));
-        newArgs.push_back(newArg);
-        replaceMap[lookupTable.Raw()] = newArg.Ptr();
-    }
-
-    return Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(newInputs)
-            .Build()
-        .Program<TCoLambda>()
-            .Args(newArgs)
-            .Body(TExprBase(ctx.ReplaceNodes(stage.Program().Body().Ptr(), replaceMap)))
-            .Build()
-        .Settings().Build()
-        .Done();
-}
 
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
     if (!node.Maybe<TKqlStreamLookupTable>()) {

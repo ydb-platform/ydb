@@ -195,18 +195,21 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& l
         keys = lookupKeys.Ptr();
     }
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     auto lookupStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(keys)
             .Build()
         .Program()
             .Args({"keys_stage_arg"})
-            .Body<TKqpLookupTable>()
+            .Body<TKqlStreamLookupTable>()
                 .Table(BuildTableMeta(table, pos, ctx))
                 .LookupKeys<TCoIterator>()
                     .List("keys_stage_arg")
                     .Build()
                 .Columns(lookupColumnsList)
+                .Settings(settings.BuildNode(ctx, pos))
                 .Build()
             .Build()
         .Settings().Build()

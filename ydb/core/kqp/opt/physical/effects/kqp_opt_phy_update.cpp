@@ -93,7 +93,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
 
     const bool isSink = NeedSinks(table, kqpCtx);
     const bool needPrecompute = !isSink;
-    
+
     if (needPrecompute) {
         auto payloadSelector = MakeRowsPayloadSelector(update.Columns(), table, update.Pos(), ctx);
         auto condenseResult = CondenseInputToDictByPk(update.Input(), table, payloadSelector, ctx);
@@ -102,7 +102,8 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
         }
 
         auto inputDictAndKeys = PrecomputeDictAndKeys(*condenseResult, update.Pos(), ctx);
-
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         auto prepareUpdateStage = Build<TDqStage>(ctx, update.Pos())
             .Inputs()
                 .Add(inputDictAndKeys.KeysPrecompute)
@@ -111,12 +112,13 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Program()
                 .Args({"keys_list", "dict"})
                 .Body<TCoFlatMap>()
-                    .Input<TKqpLookupTable>()
+                    .Input<TKqlStreamLookupTable>()
                         .Table(update.Table())
                         .LookupKeys<TCoIterator>()
                             .List("keys_list")
                             .Build()
                         .Columns(BuildColumnsList(table.Metadata->KeyColumnNames, update.Pos(), ctx))
+                        .Settings(settings.BuildNode(ctx, update.Pos()))
                         .Build()
                     .Lambda()
                         .Args({"existingKey"})

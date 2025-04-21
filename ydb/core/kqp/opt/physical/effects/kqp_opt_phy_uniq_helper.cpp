@@ -83,6 +83,8 @@ private:
             .Done()
             .Ptr();
 
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         auto stage = Build<TDqStage>(ctx, pos)
             .Inputs()
                 .Add(inputs)
@@ -91,13 +93,14 @@ private:
                 .Args(args)
                 .Body<TCoFlatMap>()
                     .Input<TCoTake>()
-                        .Input<TKqpLookupTable>()
+                        .Input<TKqlStreamLookupTable>()
                             .Table(BuildTableMeta(*meta, pos, ctx))
                             .LookupKeys<TCoIterator>()
                                 .List(args)
                                 .Build()
                             .Columns()
                                 .Build()
+                            .Settings(settings.BuildNode(ctx, pos))
                             .Build()
                         .Count<TCoUint64>()
                             .Literal().Build("1")
@@ -204,6 +207,8 @@ private:
             .Done()
             .Ptr();
 
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         auto stage = Build<TDqStage>(ctx, pos)
             .Inputs()
                 .Add(inputs)
@@ -212,7 +217,7 @@ private:
                 .Args(args)
                 .Body<TCoFlatMap>()
                     .Input<TCoTake>()
-                        .Input<TKqpLookupTable>()
+                        .Input<TKqlStreamLookupTable>()
                             .Table(BuildTableMeta(*meta, pos, ctx))
                             .LookupKeys<TCoIterator>()
                                 .List(args[0])
@@ -220,6 +225,7 @@ private:
                             .Columns<TCoAtomList>()
                                 .Add(columnsToSelect)
                                 .Build()
+                            .Settings(settings.BuildNode(ctx, pos))
                             .Build()
                         .Count<TCoUint64>()
                             .Literal().Build("1")

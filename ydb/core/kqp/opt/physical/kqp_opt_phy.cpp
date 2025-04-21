@@ -129,7 +129,6 @@ public:
 
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
-        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
         AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
         AddHandler(2, &TKqlDeleteRows::Match, HNDL(RewriteReturningDelete));
 
@@ -217,12 +216,6 @@ protected:
     TMaybeNode<TExprBase> RewriteKqpReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteKqpReadTable", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> RewriteKqpLookupTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRewriteLookupTablePhy(node, ctx, KqpCtx);
-        DumpAppliedRule("RewriteKqpLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -350,7 +350,6 @@ private:
         bool UpdateMainNodesTable = false;
         TVector<ui32> NewVersionUpdateNodes;
         TVector<ui32> UpdateNodes;
-        bool Finalized = false;
 
         void Merge(const TDbChanges &other);
         bool HasNodeUpdates() const;

@@ -41,7 +41,7 @@ public:
             Self->Dirty.DbApplyStateDiff(diff, txc);
         }
 
-        DbChanges.Finalized = true;
+        Finalized = true;
     }
 
     void ProcessMigrationBatch(TTransactionContext &txc, const TActorContext &ctx)
@@ -83,9 +83,8 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxMigrateState Execute");
 
-        if (DbChanges.HasNodeUpdates()) {
-            ProcessMigrationBatch(txc, ctx);
-        } else {
+        ProcessMigrationBatch(txc, ctx);
+        if (!DbChanges.HasNodeUpdates()) {
             FinalizeMigration(txc, ctx);
         }
         return true;
@@ -95,7 +94,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxMigrateState Complete");
 
-        if (DbChanges.Finalized) {
+        if (Finalized) {
             Self->Committed = Self->Dirty;
             Self->Become(&TNodeBroker::StateWork);
             Self->SubscribeForConfigUpdates(ctx);
@@ -109,6 +108,7 @@ public:
 
 private:
     TDbChanges DbChanges;
+    bool Finalized = false;
 };
 
 ITransaction *TNodeBroker::CreateTxMigrateState(TDbChanges&& dbChanges)

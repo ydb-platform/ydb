@@ -273,7 +273,6 @@ private:
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
-    std::pair<TString, bool> ValidatePartitionOperation(const NKikimrPQ::TPartitionOperation& operation);
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 

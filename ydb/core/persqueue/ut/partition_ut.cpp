@@ -21,6 +21,11 @@
 
 #include "make_config.h"
 
+template<>
+void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
+    out << NKikimrPQ::TEvProposeTransactionResult::EStatus_Name(v);
+}
+
 namespace NKikimr::NPQ {
 
 namespace NHelpers {
@@ -1007,7 +1012,7 @@ void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransaction
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT(*matcher.Status == event->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Status, event->Record.GetStatus());
     }
 }
 

@@ -97,11 +97,9 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            Cerr << ">>>>>> BEGIN" << Endl << Flush;
             auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
             UNIT_ASSERT_VALUES_EQUAL(2, GetCommittedOffset(setup, 0));
-            Cerr << ">>>>>> END" << Endl << Flush;
         }
     }
 

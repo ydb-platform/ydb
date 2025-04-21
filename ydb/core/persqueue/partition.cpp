@@ -2343,67 +2343,6 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-std::pair<TString, bool> TPartition::ValidatePartitionOperation(const NKikimrPQ::TPartitionOperation& operation) {
-    const TString& consumer = operation.GetConsumer();
-
-    if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
-        PQ_LOG_D("Partition " << Partition <<
-                " Consumer '" << consumer << "' has been removed");
-        return {TStringBuilder() << "Consumer '" << consumer << "' has been removed", false};
-    }
-
-    if (!UsersInfoStorage->GetIfExists(consumer)) {
-        PQ_LOG_D("Partition " << Partition <<
-                    " Unknown consumer '" << consumer << "'");
-        return {TStringBuilder() << "Unknown consumer '" << consumer << "'", false};
-    }
-
-    TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
-
-    if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
-        if (!IsActive() && operation.GetCommitOffsetsEnd() >= EndOffset && userInfo.Offset == i64(EndOffset)) {
-            return {"", false};
-        }
-        PQ_LOG_D("Partition " << Partition <<
-            " Consumer '" << consumer << "'" <<
-            " Bad request (session already dead) " <<
-            " RequestSessionId '" << operation.GetReadSessionId() <<
-            "' CurrentSessionId '" << userInfo.Session <<
-            "'");
-        return {"Bad request (session already dead)", false};
-    } else if (operation.GetOnlyCheckCommitedToFinish()) {
-        if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
-            return {TStringBuilder() << "There are uncommitted messages in partition " << Partition.OriginalPartitionId, false};
-        } else {
-            return {"", false};
-        }
-    } else {
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (invalid range) " <<
-                        " Begin " << operation.GetCommitOffsetsBegin() <<
-                        " End " << operation.GetCommitOffsetsEnd());
-            return {"Bad request (invalid range)", true};
-        } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (gap) " <<
-                        " Offset " << userInfo.Offset <<
-                        " Begin " << operation.GetCommitOffsetsBegin());
-            return {"Bad request (gap)", true};
-        } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (behind the last offset) " <<
-                        " EndOffset " << EndOffset <<
-                        " End " << operation.GetCommitOffsetsEnd());
-            return {"Bad request (behind the last offset", true};
-        }
-        return {"", true};
-    }
-}
-
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
 {
     if (tx.ForcePredicateFalse) {
@@ -2422,22 +2361,68 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             return EProcessResult::Blocked;
         }
 
-        auto [error, needCheckConsumer] = ValidatePartitionOperation(operation);
-        result = error.empty();
+        if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
+            PQ_LOG_D("Partition " << Partition <<
+                    " Consumer '" << consumer << "' has been removed");
+            result = false;
+            break;
+        }
 
-        if (needCheckConsumer) {
+        if (!UsersInfoStorage->GetIfExists(consumer)) {
+            PQ_LOG_D("Partition " << Partition <<
+                        " Unknown consumer '" << consumer << "'");
+            result = false;
+            break;
+        }
+
+        bool isAffectedConsumer = AffectedUsers.contains(consumer);
+        TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
+
+        if (operation.GetOnlyCheckCommitedToFinish()) {
+            if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
+               result = false;
+            }
+        } else if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || userInfo.Offset != i64(EndOffset)) {
+                PQ_LOG_D("Partition " << Partition <<
+                    " Consumer '" << consumer << "'" <<
+                    " Bad request (session already dead) " <<
+                    " RequestSessionId '" << operation.GetReadSessionId() <<
+                    " CurrentSessionId '" << userInfo.Session <<
+                    "'");
+                result = false;
+            }
+        } else {
+            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (invalid range) " <<
+                            " Begin " << operation.GetCommitOffsetsBegin() <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                result = false;
+            } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (gap) " <<
+                            " Offset " << userInfo.Offset <<
+                            " Begin " << operation.GetCommitOffsetsBegin());
+                result = false;
+            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (behind the last offset) " <<
+                            " EndOffset " << EndOffset <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                result = false;
+            }
+
             if (!result) {
-                bool isAffectedConsumer = AffectedUsers.contains(consumer);
-
                 if (!isAffectedConsumer) {
                     AffectedUsers.erase(consumer);
                 }
                 break;
             }
             consumers.insert(consumer);
-        }
-        if (!result) {
-            break;
         }
     }
 
@@ -2932,18 +2917,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
             return EProcessResult::ContinueDrop;
         }
 
-        auto [error, needCheckConsumer] = ValidatePartitionOperation(operation);
-        if (!error.empty()) {
-            ScheduleReplyPropose(tx,
-                NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
-                NKikimrPQ::TError::BAD_REQUEST,
-                error);
-            return EProcessResult::ContinueDrop;
-        }
-
-        if (needCheckConsumer) {
-            consumers.insert(user);
-        }
+        consumers.insert(user);
     }
     SetOffsetAffectedConsumers.insert(consumers.begin(), consumers.end());
     WriteKeysSizeEstimate += consumers.size();

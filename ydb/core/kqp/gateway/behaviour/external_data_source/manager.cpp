@@ -92,7 +92,8 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "unexpected_type_display_mode", // mongodb
         "unsupported_type_display_mode", // mongodb
         "grpc_location", // solomon
-        "cloud_id" // solomon
+        "project", // solomon
+        "cluster" // solomon
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

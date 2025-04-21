@@ -70,19 +70,23 @@ public:
                 if (source.GetGrpcEndpoint().empty()) {
                     source.SetGrpcEndpoint(clusterDesc->GetCluster());
                 }
-                source.SetProject(soReadObject.Object().Project().StringValue());
+
                 source.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
                 source.SetUseSsl(clusterDesc->GetUseSsl());
 
+                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+                    source.SetProject(clusterDesc->GetPath().GetProject());
+                    source.SetCluster(clusterDesc->GetPath().GetCluster());
+                } else {
+                    source.SetProject(soReadObject.Object().Project().StringValue());
+                }
+                
                 auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
                 if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    selectors["cluster"] = source.GetProject();
+                    selectors["cluster"] = source.GetCluster();
+                    selectors["service"] = soReadObject.Object().Project().StringValue();
                 } else {
                     selectors["project"] = source.GetProject();
-                }
-
-                if (clusterDesc->HasPath()) {
-                    source.SetCloudId(clusterDesc->GetPath().GetProject());
                 }
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");

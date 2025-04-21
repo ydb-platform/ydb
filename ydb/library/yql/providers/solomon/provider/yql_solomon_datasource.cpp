@@ -39,13 +39,13 @@ public:
         TSolomonClusterConfig cluster;
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
-        cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
         cluster.SetToken(token);
         cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
 
-        if (auto value = properties.Value("cloud_id", ""); !value.empty()) {
-            cluster.MutablePath()->SetProject(value);
+        if (!properties.Value("project", "").empty() && !properties.Value("cluster", "").empty()) {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+            cluster.MutablePath()->SetProject(properties.Value("project", ""));
+            cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
         } else {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
         }

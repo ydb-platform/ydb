@@ -281,11 +281,17 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
         NSo::NProto::TDqSolomonSource source;
         source.SetHttpEndpoint(clusterDesc->GetCluster());
-        source.SetProject(settings.Project().StringValue());
         source.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
         source.SetUseSsl(clusterDesc->GetUseSsl());
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
+        
+        if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+            source.SetProject(clusterDesc->GetPath().GetProject());
+            source.SetCluster(clusterDesc->GetPath().GetCluster());
+        } else {
+            source.SetProject(settings.Project().StringValue());
+        }
 
         for (const auto& attr : clusterDesc->settings()) {
             if (attr.name() == "grpc_location"sv) {
@@ -296,10 +302,6 @@ public:
         if (source.GetGrpcEndpoint().empty()) {
             source.SetGrpcEndpoint(clusterDesc->GetCluster());
         }
-
-        if (clusterDesc->HasPath()) {
-            source.SetCloudId(clusterDesc->GetPath().GetProject());
-        }
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
@@ -307,7 +309,8 @@ public:
             source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
             
             if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                source.MutableSelectors()->insert({ "cluster", source.GetProject() });
+                source.MutableSelectors()->insert({ "service", settings.Project().StringValue() });
+                source.MutableSelectors()->insert({ "cluster", source.GetCluster() });
             } else {
                 source.MutableSelectors()->insert({ "project", source.GetProject() });
             }

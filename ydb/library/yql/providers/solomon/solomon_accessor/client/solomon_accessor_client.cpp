@@ -418,11 +418,7 @@ private:
         builder.AddPathComponent("api");
         builder.AddPathComponent("v2");
         builder.AddPathComponent("projects");
-        if (Settings.GetClusterType() == NProto::CT_MONITORING) {
-            builder.AddPathComponent(Settings.GetCloudId());
-        } else {
-            builder.AddPathComponent(Settings.GetProject());
-        }
+        builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
@@ -438,11 +434,7 @@ private:
         builder.AddPathComponent("api");
         builder.AddPathComponent("v2");
         builder.AddPathComponent("projects");
-        if (Settings.GetClusterType() == NProto::CT_MONITORING) {
-            builder.AddPathComponent(Settings.GetCloudId());
-        } else {
-            builder.AddPathComponent(Settings.GetProject());
-        }
+        builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
@@ -459,11 +451,7 @@ private:
         builder.AddPathComponent("api");
         builder.AddPathComponent("v2");
         builder.AddPathComponent("projects");
-        if (Settings.GetClusterType() == NProto::CT_MONITORING) {
-            builder.AddPathComponent(Settings.GetCloudId());
-        } else {
-            builder.AddPathComponent(Settings.GetProject());
-        }
+        builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
 
@@ -499,7 +487,7 @@ private:
         if (Settings.GetClusterType() == NProto::CT_SOLOMON) {
             request.mutable_container()->set_project_id(Settings.GetProject());
         } else {
-            request.mutable_container()->set_folder_id(Settings.GetProject());
+            request.mutable_container()->set_folder_id(Settings.GetCluster());
         }
         *request.mutable_from_time() = NProtoInterop::CastToProto(from);
         *request.mutable_to_time() = NProtoInterop::CastToProto(to);

@@ -412,8 +412,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size());
         auto firstColumnTypeId = columns[tableDesc.GetKeyColumnIds(0)]->GetTypeId();
         try {
-            Format(tablePath, tableDesc.GetCdcStreams(0), persQueues, firstColumnTypeId);
-            for (int i = 1; i < tableDesc.GetCdcStreams().size(); i++) {
+            for (int i = 0; i < tableDesc.GetCdcStreams().size(); i++) {
                 Format(tablePath, tableDesc.GetCdcStreams(i), persQueues, firstColumnTypeId);
             }
         } catch (const TFormatFail& ex) {
@@ -425,14 +424,13 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     if (!tableDesc.GetSequences().empty()) {
         try {
-            Format(fullPath, tableDesc.GetSequences(0), sequences);
-            for (int i = 1; i < tableDesc.GetSequences().size(); i++) {
+            for (int i = 0; i < tableDesc.GetSequences().size(); i++) {
                 Format(fullPath, tableDesc.GetSequences(i), sequences);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
-            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, e.what());
         }
     }
 

@@ -39,9 +39,9 @@ namespace NKikimr::NKqp {
         PostgreSQL,
         ClickHouse,
         Ydb,
-        IcebergHiveBasic,
-        IcebergHiveSa,
-        IcebergHiveToken,
+        IcebergHiveMetastoreBasic,
+        IcebergHiveMetastoreSa,
+        IcebergHiveMetastoreToken,
         IcebergHadoopBasic,
         IcebergHadoopSa,
         IcebergHadoopToken,
@@ -55,12 +55,12 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::Ydb:
                 return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
-            case EProviderType::IcebergHiveBasic:
-                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHive();
-            case EProviderType::IcebergHiveSa:
-                return NTestUtils::CreateIcebergSa().CreateDataSourceForHive();
-            case EProviderType::IcebergHiveToken:
-                return NTestUtils::CreateIcebergToken().CreateDataSourceForHive();
+            case EProviderType::IcebergHiveMetastoreBasic:
+                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreSa:
+                return NTestUtils::CreateIcebergSa().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreToken:
+                return NTestUtils::CreateIcebergToken().CreateDataSourceForHiveMetastore();
             case EProviderType::IcebergHadoopBasic:
                 return NTestUtils::CreateIcebergBasic().CreateDataSourceForHadoop();
             case EProviderType::IcebergHadoopSa:
@@ -78,15 +78,15 @@ namespace NKikimr::NKqp {
                 return CreateClickHouseExternalDataSource(kikimr);
             case EProviderType::Ydb:
                 return CreateYdbExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveBasic:
+            case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveSa:
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreSa:
                 return NTestUtils::CreateIcebergSa()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
-            case EProviderType::IcebergHiveToken:
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreToken:
                 return NTestUtils::CreateIcebergToken()
-                    .ExecuteCreateHiveExternalDataSource(kikimr);
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
             case EProviderType::IcebergHadoopBasic:
                 return NTestUtils::CreateIcebergBasic()
                     .ExecuteCreateHadoopExternalDataSource(kikimr);
@@ -239,15 +239,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveBasic);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveSa);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectAll) {
-            TestSelectAllFields(EProviderType::IcebergHiveToken);
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectAll) {
@@ -354,15 +354,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveBasic);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveSa);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectConstant) {
-            TestSelectConstant(EProviderType::IcebergHiveToken);
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectConstant) {
@@ -465,15 +465,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveBasic);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveSa);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenSelectCount) {
-            TestSelectCount(EProviderType::IcebergHiveToken);
+            TestSelectCount(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicSelectCount) {
@@ -601,15 +601,15 @@ namespace NKikimr::NKqp {
         }
 
         Y_UNIT_TEST(IcebergHiveBasicFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveBasic);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreBasic);
         }
 
         Y_UNIT_TEST(IcebergHiveSaFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveSa);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreSa);
         }
 
         Y_UNIT_TEST(IcebergHiveTokenFilterPushdown) {
-            TestFilterPushdown(EProviderType::IcebergHiveToken);
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreToken);
         }
 
         Y_UNIT_TEST(IcebergHadoopBasicFilterPushdown) {

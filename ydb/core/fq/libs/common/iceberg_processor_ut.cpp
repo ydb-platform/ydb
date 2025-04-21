@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(IcebergClusterProcessor) {
         SubstGlobal(ddlProperties, " ", "");
         SubstGlobal(ddlProperties, "\n", "");
 
-        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"true\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"s3a://iceberg-bucket/storage\",catalog_type=\"hive\",catalog_hive_uri=\"hive_metastore_uri\",database_name=\"hive_metastore_db\"");
+        UNIT_ASSERT_VALUES_EQUAL(ddlProperties, "source_type=\"Iceberg\",use_tls=\"true\",warehouse_type=\"s3\",warehouse_s3_region=\"ru-central1\",warehouse_s3_endpoint=\"s3endpoint\",warehouse_s3_uri=\"s3a://iceberg-bucket/storage\",catalog_type=\"hive_metastore\",catalog_hive_metastore_uri=\"hive_metastore_uri\",database_name=\"hive_metastore_db\"");
     }
 
     // Test parsing for FederatedQuery::IcebergCluster without warehouse

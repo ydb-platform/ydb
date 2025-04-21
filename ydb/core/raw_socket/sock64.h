@@ -130,7 +130,9 @@ protected:
             SetSockOpt(s, SOL_SOCKET, IPV6_V6ONLY, (int)false);
         }
         SetSockOpt(s, SOL_SOCKET, SO_REUSEADDR, (int)true);
+#ifdef SO_REUSEPORT
         SetSockOpt(s, SOL_SOCKET, SO_REUSEPORT, (int)true);
+#endif
 
         TSocketHolder sock(s);
         sock.Swap(*this);

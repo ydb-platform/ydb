@@ -329,20 +329,25 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
     TActorId ConnectionId;
     TString DatabasePath;
 };
+struct TTxnProducerState {
+    i64 Id;
+    i32 Epoch;
+
+    bool operator==(TTxnProducerState const&) const = default;
+    bool operator!=(TTxnProducerState const&) const = default;
+};
 
 /* 
 Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
  */
 struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
-    TEvSaveTxnProducerRequest(const TString& transactionalId, const i64 producerId, const i16 producerEpoch) :
-        TransactionalId(std::move(transactionalId)),
-        ProducerId(producerId),
-        ProducerEpoch(producerEpoch)
+    TEvSaveTxnProducerRequest(const TString& transactionalId, const TTxnProducerState& producerState) :
+        TransactionalId(transactionalId),
+        ProducerState(producerState)
     {}
 
     const TString TransactionalId;
-    const i64 ProducerId;
-    const i16 ProducerEpoch;
+    const TTxnProducerState ProducerState;
 };
 
 /* 
@@ -368,15 +373,13 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 };
 
 struct TEvTransactionActorDied : public NActors::TEventLocal<TEvTransactionActorDied, EvTransactionActorDied> {
-    TEvTransactionActorDied(const TString& transactionalId, const i64 producerId, const i16 producerEpoch) :
-        TransactionalId(std::move(transactionalId)),
-        ProducerId(producerId),
-        ProducerEpoch(producerEpoch)
+    TEvTransactionActorDied(const TString& transactionalId, const TTxnProducerState& producerState) :
+        TransactionalId(transactionalId),
+        ProducerState(producerState)
     {}
 
     const TString TransactionalId;
-    const i64 ProducerId;
-    const i16 ProducerEpoch;
+    const TTxnProducerState ProducerState;
 };
 }; // struct TEvKafka
 

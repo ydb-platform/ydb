@@ -12,8 +12,8 @@ namespace NKafka {
 
         auto it = ProducersByTransactionalId.find(request->TransactionalId);
         if (it != ProducersByTransactionalId.end()) {
-            TProducerState& currentProducerState = it->second;
-            TProducerState newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
+            TEvKafka::TTxnProducerState& currentProducerState = it->second;
+            const TEvKafka::TTxnProducerState& newProducerState = request->ProducerState;
 
             if (NewProducerStateIsOutdated(currentProducerState, newProducerState)) {
                 TString message = GetProducerIsOutdatedError(request->TransactionalId, currentProducerState, newProducerState);
@@ -21,10 +21,9 @@ namespace NKafka {
                 return;
             } 
 
-            currentProducerState.Id = request->ProducerId;
-            currentProducerState.Epoch = request->ProducerEpoch;
+            it->second = std::move(newProducerState);
         } else {
-            ProducersByTransactionalId[request->TransactionalId] = TProducerState(request->ProducerId, request->ProducerEpoch);
+            ProducersByTransactionalId.insert(std::make_pair(request->TransactionalId, request->ProducerState));
         }
         
         ctx.Send(ev->Sender, new TEvKafka::TEvSaveTxnProducerResponse(TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK, ""));
@@ -48,15 +47,15 @@ namespace NKafka {
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext&) {
         auto it = ProducersByTransactionalId.find(ev->Get()->TransactionalId);
-        TProducerState currentProducerState = ProducersByTransactionalId[ev->Get()->TransactionalId];
+        const TEvKafka::TTxnProducerState& deadActorProducerState = ev->Get()->ProducerState;
 
-        if (it == ProducersByTransactionalId.end() || it->second != currentProducerState) {
+        if (it == ProducersByTransactionalId.end() || it->second != deadActorProducerState) {
             // new actor was already registered, we can just ignore this event
             KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
         } else {
             KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
-                << " and producerId " << ev->Get()->ProducerId 
-                << " and producerEpoch " << ev->Get()->ProducerEpoch
+                << " and producerId " << ev->Get()->ProducerState.Id 
+                << " and producerEpoch " << ev->Get()->ProducerState.Epoch
                 << ". Erasing info about this actor.");
             // erase info about actor to prevent future zombie requests from this producer
             TxnActorByTransactionalId.erase(ev->Get()->TransactionalId);
@@ -88,7 +87,7 @@ namespace NKafka {
         // create helper struct to simplify methods interaction
         auto txnRequest = TTransactionalRequest(
             ev->Request->TransactionalId->c_str(),
-            TProducerState(ev->Request->ProducerId, ev->Request->ProducerEpoch),
+            TEvKafka::TTxnProducerState(ev->Request->ProducerId, ev->Request->ProducerEpoch),
             ev->CorrelationId,
             ev->ConnectionId
         );
@@ -123,7 +122,7 @@ namespace NKafka {
         KAFKA_LOG_D(TStringBuilder() << "Forwarded message to TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
     };
 
-    bool TKafkaTransactionsCoordinator::NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState) {
+    bool TKafkaTransactionsCoordinator::NewProducerStateIsOutdated(const TEvKafka::TTxnProducerState& currentProducerState, const TEvKafka::TTxnProducerState& newProducerState) {
         bool producerIdAlreadyGreater = currentProducerState.Id > newProducerState.Id;
         bool producerIdsAreEqual = currentProducerState.Id == newProducerState.Id;
         bool epochAlreadyGreater = currentProducerState.Epoch > newProducerState.Epoch;
@@ -142,7 +141,7 @@ namespace NKafka {
         }
     };
 
-    TString TKafkaTransactionsCoordinator::GetProducerIsOutdatedError(const TString& transactionalId, const TProducerState& currentProducerState, const TProducerState& newProducerState) {
+    TString TKafkaTransactionsCoordinator::GetProducerIsOutdatedError(const TString& transactionalId, const TEvKafka::TTxnProducerState& currentProducerState, const TEvKafka::TTxnProducerState& newProducerState) {
         return TStringBuilder() << "Producer with transactional id " << transactionalId <<
                     "is outdated. Current producer id is " << currentProducerState.Id << 
                     " and producer epoch is " << currentProducerState.Epoch << ". Requested producer id is " << newProducerState.Id << 

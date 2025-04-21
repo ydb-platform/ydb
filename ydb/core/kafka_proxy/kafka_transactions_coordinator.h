@@ -16,18 +16,10 @@ namespace NKafka {
     class TKafkaTransactionsCoordinator : public NActors::TActorBootstrapped<TKafkaTransactionsCoordinator> {
 
         using TBase = NActors::TActorBootstrapped<TKafkaTransactionsCoordinator>;
-    
-        struct TProducerState {
-            i64 Id;
-            i32 Epoch;
-
-            bool operator==(TProducerState const&) const = default;
-            bool operator!=(TProducerState const&) const = default;
-        };
 
         struct TTransactionalRequest {
             TString TransactionalId;
-            TProducerState ProducerState;
+            TEvKafka::TTxnProducerState ProducerState;
             ui64 CorrelationId;
             TActorId ConnectionId;
         };
@@ -76,11 +68,11 @@ namespace NKafka {
             template<class EventType> 
             void ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
 
-            bool NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState);
+            bool NewProducerStateIsOutdated(const TEvKafka::TTxnProducerState& currentProducerState, const TEvKafka::TTxnProducerState& newProducerState);
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
-            TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerState& currentProducerState, const TProducerState& newProducerState);
+            TString GetProducerIsOutdatedError(const TString& transactionalId, const TEvKafka::TTxnProducerState& currentProducerState, const TEvKafka::TTxnProducerState& newProducerState);
 
-            std::unordered_map<TString, TProducerState> ProducersByTransactionalId;
+            std::unordered_map<TString, TEvKafka::TTxnProducerState> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 

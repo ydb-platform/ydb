@@ -658,8 +658,8 @@ namespace {
 
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->TransactionalId, TransactionalId);
-            UNIT_ASSERT_VALUES_EQUAL(response->ProducerId, ProducerId);
-            UNIT_ASSERT_VALUES_EQUAL(response->ProducerEpoch, ProducerEpoch);
+            UNIT_ASSERT_VALUES_EQUAL(response->ProducerState.Id, ProducerId);
+            UNIT_ASSERT_VALUES_EQUAL(response->ProducerState.Epoch, ProducerEpoch);
         }
     }
 } // namespace

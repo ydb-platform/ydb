@@ -637,6 +637,12 @@ private: //events
             return usedSpace;
         }
     }
+
+    bool IsFinished() const {
+        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
+    }
+
+private:
     struct TAwaitingRow {
         NUdf::TUnboxedValue OutputRow;
         NUdf::TUnboxedValue* OutputRowItems;
@@ -645,11 +651,6 @@ private: //events
         std::vector<std::pair<NUdf::TUnboxedValue, ui32>> MissingKeysAndIndexes;
     };
     using TAwaitingQueue = std::deque<TAwaitingRow, NKikimr::NMiniKQL::TMKQLAllocator<TAwaitingRow>>;
-    TAwaitingQueue AwaitingQueue;
-
-    bool IsFinished() const {
-        return NUdf::EFetchStatus::Finish == InputFlowFetchStatus && AwaitingQueue.empty();
-    }
 
     void MakeOutputRow(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, ui32 listLength, TAwaitingRow& output, bool nullsInKey) {
         NUdf::TUnboxedValue* outputRowItems;
@@ -704,7 +705,7 @@ private: //events
                 case EOutputRowItemSource::LookupKey:
                     outputListItems[i][subRowIdx] = lookupSubKey.GetElement(index);
                     break;
-                case EOutputRowItemSource::LookupOther: 
+                case EOutputRowItemSource::LookupOther:
                     {
                         auto& item = outputListItems[i][subRowIdx] = lookupPayload.GetElement(index);
                         if (item.IsString()) {
@@ -718,6 +719,8 @@ private: //events
             }
         }
     }
+
+    TAwaitingQueue AwaitingQueue;
 };
 
 class TInputTransformStreamMultiLookupWide: public TInputTransformStreamMultiLookupBase {

@@ -559,7 +559,7 @@ private:
         PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx) {
             exportInfo->PendingDropItems.push_back(itemIdx);
             isContinued = true;
-            AllocateTxId(exportInfo);
+            AllocateTxId(exportInfo, itemIdx);
         });
         if (!isContinued) {
             AllocateTxId(exportInfo);
@@ -760,7 +760,7 @@ private:
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.WaitTxId == InvalidTxId) {
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.State <= EState::Transferring) {
                         pendingTables.emplace_back(itemIdx);
                     } else {
                         UploadScheme(exportInfo, itemIdx, ctx);

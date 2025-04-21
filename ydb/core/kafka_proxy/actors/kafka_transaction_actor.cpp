@@ -162,7 +162,7 @@ namespace NKafka {
             << ", producerId=" << kafkaRequest->ProducerId 
             << ", producerEpoch=" << kafkaRequest->ProducerEpoch
         );
-        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::UNKNOWN_SERVER_ERROR);
+        auto response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::UNKNOWN_SERVER_ERROR);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::UNKNOWN_SERVER_ERROR));
     }
 
@@ -174,7 +174,7 @@ namespace NKafka {
             KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode);
         }
 
-        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(evHandle->Get()->Request, errorCode);
+        auto response = NKafkaTransactions::BuildResponse<ErrorResponseType>(evHandle->Get()->Request, errorCode);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, errorCode));
     }
 

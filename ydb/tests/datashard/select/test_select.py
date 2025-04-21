@@ -11,17 +11,18 @@ from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format
 FROM AS_TABLE +
 FROM SELECT +
 DISTINCT +
-UNIQUE DISTINCT
+UNIQUE DISTINCT does not work
 UNION +
-WITH
-WITHOUT
+WITH -
+WITHOUT +
 WHERE DMLOperations+
-ORDER BY
-ASSUME ORDER BY
+ORDER BY +
+ASSUME ORDER BY -
 LIMIT OFFSET +
-SAMPLE
-TABLESAMPLE
+SAMPLE +
+TABLESAMPLE +
 """
+
 
 class TestDML(TestBase):
     @pytest.mark.parametrize(
@@ -62,12 +63,15 @@ class TestDML(TestBase):
     def test_select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types,
-                          index, ttl, unique, sync)
+                         index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
+        self.order_by(table_name, all_types, pk_types, index, ttl)
         self.limit(table_name, all_types, pk_types, index, ttl)
         self.from_select(table_name, all_types, pk_types, index, ttl)
         self.distinct(table_name, all_types, pk_types, index, ttl)
         self.union(table_name, all_types, pk_types, index, ttl)
+        self.without(table_name, all_types, pk_types, index, ttl)
+        self.tablesample_sample(table_name, all_types, pk_types, index, ttl)
 
     def limit(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = self.create_types_for_all_select(
@@ -144,6 +148,7 @@ class TestDML(TestBase):
             assert str(values_from_rows) == str(key[type](values)), f"{type}"
 
     def distinct(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        # del type != "DyNumber" and type != "UUID" after https://github.com/ydb-platform/ydb/issues/17484
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64'\
                     and type != "DyNumber" and type != "UUID" and type != "Json" and type != "JsonDocument" and type != "Yson":
@@ -211,17 +216,103 @@ class TestDML(TestBase):
 
     def without(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements_without = []
-        for type in all_types.keys():
-            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
-                statements_without.append(f"col_{cleanup_type_name(type)}")
-        for type in pk_types.keys():
-            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
-                statements_without.append(f"pk_{cleanup_type_name(type)}")
-        for type in index.keys():
-            if type == "Date32" or type == "Datetime64" or type == "Timestamp64" or type == 'Interval64':
-                statements_without.append(f"col_index_{cleanup_type_name(type)}")
-                
-        
+        for type_name in all_types.keys():
+            if type_name == "Date32" or type_name == "Datetime64" or type_name == "Timestamp64" or type_name == 'Interval64':
+                statements_without.append(
+                    f"col_{cleanup_type_name(type_name)}")
+        for type_name in pk_types.keys():
+            if type_name == "Date32" or type_name == "Datetime64" or type_name == "Timestamp64" or type_name == 'Interval64':
+                statements_without.append(f"pk_{cleanup_type_name(type_name)}")
+        for type_name in index.keys():
+            if type_name == "Date32" or type_name == "Datetime64" or type_name == "Timestamp64" or type_name == 'Interval64':
+                statements_without.append(
+                    f"col_index_{cleanup_type_name(type_name)}")
+
+        for type_name in all_types.keys():
+            if type_name != "Date32" and type_name != "Datetime64" and type_name != "Timestamp64" and type_name != 'Interval64':
+                self.create_without(
+                    table_name, statements_without, f"col_{cleanup_type_name(type_name)}")
+        for type_name in pk_types.keys():
+            if type_name != "Date32" and type_name != "Datetime64" and type_name != "Timestamp64" and type_name != 'Interval64':
+                self.create_without(
+                    table_name, statements_without, f"pk_{cleanup_type_name(type_name)}")
+        for type_name in index.keys():
+            if type_name != "Date32" and type_name != "Datetime64" and type_name != "Timestamp64" and type_name != 'Interval64':
+                self.create_without(
+                    table_name, statements_without, f"col_index_{cleanup_type_name(type_name)}")
+        if ttl != "":
+            self.create_without(table_name, statements_without,
+                                f"ttl_{cleanup_type_name(ttl)}")
+
+    def create_without(self, table_name, statements_without, without):
+        rows = self.query(f"select * without {", ".join(statements_without)}, {without} from {table_name}")
+        for col_name in rows[0].keys():
+            assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
+
+    def tablesample_sample(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        statements = self.create_types_for_all_select(
+            all_types, pk_types, index, ttl)
+        for i in range(1, 100):
+            rows = self.query(f"select {", ".join(statements)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
+            for line in range(len(rows)):
+                numb = rows[line]["pk_Int64"]
+                self.assert_type_after_select(
+                    numb, line, rows, all_types, pk_types, index, ttl)
+
+            rows = self.query(f"select {", ".join(statements)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})")
+            for line in range(len(rows)):
+                numb = rows[line]["pk_Int64"]
+                self.assert_type_after_select(
+                    numb, line, rows, all_types, pk_types, index, ttl)
+
+            rows = self.query(f"select {", ".join(statements)} from {table_name} SAMPLE 1.0 / {i}")
+            for line in range(len(rows)):
+                numb = rows[line]["pk_Int64"]
+                self.assert_type_after_select(
+                    numb, line, rows, all_types, pk_types, index, ttl)
+
+    def order_by(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        statements = self.create_types_for_all_select(
+            all_types, pk_types, index, ttl)
+        for statement in statements:
+            if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
+                rows = self.query(f"select {", ".join(statements)} from {table_name} ORDER BY {statement} ASC")
+                if "String" not in statement and "Utf8" not in statement:
+                    for line in range(len(rows)):
+                        self.assert_type_after_select(
+                            line + 1, line, rows, all_types, pk_types, index, ttl)
+                else:
+                    line = 0
+                    for i in range(len(rows)//10):
+                        self.assert_type_after_select(
+                            i + 1, line, rows, all_types, pk_types, index, ttl)
+                        line += 1
+                        for j in range(10):
+                            if (i+1) * 10 + j > len(rows):
+                                break
+                            self.assert_type_after_select(
+                                (i + 1) * 10 + j, line, rows, all_types, pk_types, index, ttl)
+                            line += 1
+
+                rows = self.query(f"select {", ".join(statements)} from {table_name} ORDER BY {statement} DESC")
+
+                if "Bool" not in statement:
+                    if "String" not in statement and "Utf8" not in statement:
+                        for line in range(len(rows)):
+                            self.assert_type_after_select(
+                                len(rows) - line, line, rows, all_types, pk_types, index, ttl)
+                    else:
+                        line = 0
+                        for i in range(len(rows)//10, 0):
+                            for j in range(10):
+                                if i * 10 + (9 - j) > len(rows):
+                                    break
+                                self.assert_type_after_select(
+                                    i * 10 + (9 - j), line, rows, all_types, pk_types, index, ttl)
+                                line += 1
+                            self.assert_type_after_select(
+                                i, line, rows, all_types, pk_types, index, ttl)
+                            line += 1
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -243,10 +334,6 @@ class TestDML(TestBase):
                 );
         """
         rows = self.query(f"""
-                   {list_sql}
-                   select * from AS_TABLE($data);
-                   """)
-        print(f"""
                    {list_sql}
                    select * from AS_TABLE($data);
                    """)

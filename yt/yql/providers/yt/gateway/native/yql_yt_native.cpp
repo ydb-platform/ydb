@@ -2855,7 +2855,7 @@ private:
 
         const auto entry = execCtx->GetEntry();
 
-        toRemove = entry->FilterTablesToDeleteAtFinalize(toRemove);
+        toRemove = entry->AssumeAsDeletedAtFinalize(toRemove);
         if (toRemove.empty()) {
             return MakeFuture();
         }

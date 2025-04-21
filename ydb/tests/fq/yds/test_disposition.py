@@ -32,7 +32,7 @@ class TestContinueMode(TestYdsBase):
             write_stream(self.input_topic, input)
 
             if query_id is None:
-                result: fq.CreateBindingResult = client.create_query(
+                result: fq.CreateQueryResult = client.create_query(
                     name=query_name,
                     text=sql,
                     type=fq.QueryContent.QueryType.STREAMING,
@@ -78,7 +78,7 @@ class TestContinueMode(TestYdsBase):
             write_stream(self.input_topic, input)
 
             if query_id is None:
-                result: fq.CreateBindingResult = client.create_query(
+                result: fq.CreateQueryResult = client.create_query(
                     name=query_name,
                     text=sql,
                     type=fq.QueryContent.QueryType.STREAMING,
@@ -125,7 +125,7 @@ class TestContinueMode(TestYdsBase):
             write_stream(self.input_topic, input)
 
             if query_id is None:
-                result: fq.CreateBindingResult = client.create_query(
+                result: fq.CreateQueryResult = client.create_query(
                     name=query_name,
                     text=sql,
                     type=fq.QueryContent.QueryType.STREAMING,
@@ -172,7 +172,7 @@ class TestContinueMode(TestYdsBase):
             write_stream(self.input_topic, input)
 
             if query_id is None:
-                result: fq.CreateBindingResult = client.create_query(
+                result: fq.CreateQueryResult = client.create_query(
                     name=query_name,
                     text=sql,
                     type=fq.QueryContent.QueryType.STREAMING,

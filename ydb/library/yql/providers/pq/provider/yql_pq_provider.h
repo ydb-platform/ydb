@@ -62,7 +62,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode = false,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
-    NPq::NProto::StreamingDisposition disposition = {}
+    const NPq::NProto::StreamingDisposition& disposition = {}
 );
 
 } // namespace NYql

@@ -156,7 +156,7 @@ namespace NKafka {
     // Response senders
     template<class ErrorResponseType, class EventType>
     void TKafkaTransactionActor::SendInvalidTransactionActorStateResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
-        auto kafkaRequest = evHandle->Get()->Request;
+        auto& kafkaRequest = evHandle->Get()->Request;
         KAFKA_LOG_CRIT(TStringBuilder() << "Recieved invalid request. Got: "
             << "transactionalId=" << kafkaRequest->TransactionalId->c_str() 
             << ", producerId=" << kafkaRequest->ProducerId 

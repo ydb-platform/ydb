@@ -215,7 +215,7 @@ class LoadSuiteBase:
             fail_hosts.add(node.host)
         cls.__nodes_state = None
         if len(node_errors) == 0:
-            return[]
+            return []
 
         core_hashes = cls.__get_core_hashes_by_pod(fail_hosts, result.start_time, end_time)
         ooms = cls.__get_hosts_with_omms(fail_hosts, result.start_time, end_time)

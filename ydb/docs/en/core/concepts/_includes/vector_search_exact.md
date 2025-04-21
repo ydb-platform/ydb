@@ -4,6 +4,6 @@ The foundation of the exact method is the calculation of the distance from the q
 
 Main advantages:
 
-* no need for additional data structures, such as specialized [vector indexes](../../concepts/glossary.md#vector-index);
-* full support for [transactions](../../concepts/glossary.md#transactions), including in strict consistency mode;
-* instant execution of data modification operations: insertion, update, deletion.
+* No need for additional data structures, such as specialized [vector indexes](../../concepts/glossary.md#vector-index).
+* Full support for [transactions](../../concepts/glossary.md#transactions), including in strict consistency mode.
+* Instant execution of data modification operations: insertion, update, deletion.

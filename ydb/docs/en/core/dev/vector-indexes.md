@@ -16,21 +16,21 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
 
 1. Hierarchical clustering:
 
-    * the index builds multiple levels of k-means clusters;
-    * at each level, vectors are distributed across a predefined number of clusters raised to the power of the level;
-    * the first level clusters the entire dataset;
-    * subsequent levels recursively cluster the contents of each parent cluster.
+    * the index builds multiple levels of k-means clusters
+    * at each level, vectors are distributed across a predefined number of clusters raised to the power of the level
+    * the first level clusters the entire dataset
+    * subsequent levels recursively cluster the contents of each parent cluster
 
 2. Search process:
 
-    * search proceeds recursively from the first level to the subsequent ones;
-    * during queries, the index analyzes only the most promising clusters;
-    * such search space pruning avoids complete enumeration of all vectors.
+    * search proceeds recursively from the first level to the subsequent ones
+    * during queries, the index analyzes only the most promising clusters
+    * such search space pruning avoids complete enumeration of all vectors
 
 3. Parameters:
 
-    * `levels`: number of levels in the tree, defining search depth (recommended 1-3);
-    * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
+    * `levels`: number of levels in the tree, defining search depth (recommended 1-3)
+    * `clusters`: number of clusters in k-means, defining search width (recommended 64-512)
 
 Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md).
 
@@ -99,7 +99,7 @@ Vector indexes can be created:
 
 ## Using Vector Indexes {#select}
 
-Queries to vector indexes are executed using the `VIEW` syntax in YQL. For prefixed indexes, specify the prefix columns in the WHERE clause:
+Queries to vector indexes are executed using the `VIEW` syntax in YQL. For prefixed indexes, specify the prefix columns in the `WHERE` clause:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
@@ -124,7 +124,7 @@ It is recommended to check the optimality of the written query using [query stat
 
 Currently not supported:
 
-* modifying rows in tables with vector indexes;
-* using bit vectors.
+* modifying rows in tables with vector indexes
+* using bit vectors
 
 These limitations may be removed in future versions.

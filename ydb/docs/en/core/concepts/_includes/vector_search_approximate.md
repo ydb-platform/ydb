@@ -10,5 +10,5 @@ Scalar quantization reduces the time required for reading and writing data by de
 
 Main advantages:
 
-* full support for [transactions](../../concepts/glossary.md#transactions), including in strict consistency mode;
-* instant application of data modification operations: insertion, update, deletion.
+* Full support for [transactions](../../concepts/glossary.md#transactions), including in strict consistency mode.
+* Instant application of data modification operations: insertion, update, deletion.

@@ -6,21 +6,21 @@
 
 Vector search is actively used in the following areas:
 
-* recommendation systems;
-* semantic search;
-* search for similar images;
-* anomaly detection;
-* classification systems.
+* recommendation systems
+* semantic search
+* search for similar images
+* anomaly detection
+* classification systems
 
 In addition, **vector search** in {{ ydb-short-name }} is widely applied in machine learning (ML) and artificial intelligence (AI) tasks. It is particularly useful in Retrieval-Augmented Generation (RAG) approaches, which utilize vector search to retrieve relevant information from large volumes of data, significantly enhancing the quality of generative models.
 
 Methods for solving vector search tasks can be divided into three major categories:
 
-* [exact methods](#vector-search-exact);
-* [approximate methods without index](#vector-search-approximate);
-* [approximate methods with index](#vector-search-index).
+* [exact methods](#vector-search-exact)
+* [approximate methods without index](#vector-search-approximate)
+* [approximate methods with index](#vector-search-index)
 
-The choice of method depends on the number of vectors and the nature of the workload. Exact methods search slowly but update quickly, whereas indexes do the opposite.
+The choice of a method depends on the number of vectors and the nature of the workload. Exact methods search slowly but update quickly, whereas indexes do the opposite.
 
 ## Exact vector search {#vector-search-exact}
 
@@ -40,9 +40,9 @@ When the data volume significantly increases, non-index approaches cease to work
 
 Main advantage:
 
-* ability to work with a large number of vectors.
+* ability to work with a large number of vectors
 
 Disadvantages:
 
-* index construction may take considerable time;
-* in the current version, data modification operations such as insertion, update, and deletion are not supported.
+* index construction may take considerable time
+* in the current version, data modification operations such as insertion, update, and deletion are not supported

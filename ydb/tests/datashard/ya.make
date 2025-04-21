@@ -4,5 +4,5 @@ RECURSE(
     dump_restore
     lib
     split_merge
-    S3
+    s3
 )

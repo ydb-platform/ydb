@@ -494,7 +494,7 @@ private: //events
             auto& output = AwaitingQueue.front();
             for (auto& [subKey, subIndex] : output.MissingKeysAndIndexes) {
                 auto lookupPayload = lookupResult->find(subKey);
-                if (lookupPayload == lookupResult->end() || !lookupPayload->second) {
+                if (lookupPayload == lookupResult->end()) {
                     continue;
                 }
                 FillOutputRow(output.OutputListItems, subIndex, lookupPayload->first, lookupPayload->second);

@@ -38,15 +38,23 @@ class TestInsert(BaseTestSet):
         for i in range(rows_count):
             for c in range(10):
                 try:
-                    sth.execute_query(
+                    result = sth.execute_query(
                         yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
                     )
+                    if result == 1:
+                        if c >= 9:
+                            raise Exception('Insert failed table {}'.format(table))
+                        else:
+                            time.sleep(1)
+                            continue
+
                     break
                 except Exception:
                     if ignore_read_errors:
                         pass
                     else:
-                        raise
+                        if c >= 9:
+                            raise
                 time.sleep(1)
 
     def scenario_read_data_during_bulk_upsert(self, ctx: TestContext):
@@ -55,7 +63,7 @@ class TestInsert(BaseTestSet):
         log_table_name: str = "log"
         batches_count = int(get_external_param("batches_count", "10"))
         rows_count = int(get_external_param("rows_count", "1000"))
-        inserts_count = int(get_external_param("inserts_count", "200"))
+        inserts_count = int(get_external_param("inserts_count", str(self.def_inserts_count)))
         tables_count = int(get_external_param("tables_count", "1"))
         ignore_read_errors = external_param_is_true("ignore_read_errors")
         for table in range(tables_count):

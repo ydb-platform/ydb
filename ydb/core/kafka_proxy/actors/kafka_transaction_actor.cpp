@@ -5,6 +5,7 @@
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <util/generic/cast.h>
 #include <regex>
 
 #define VALIDATE_PRODUCER_IN_REQUEST(ErrorResponseType) \
@@ -388,8 +389,8 @@ namespace NKafka {
     
         NYdb::TResultSetParser parser(response.Record.GetResponse().GetYdbResults(NKafkaTransactionSql::CONSUMER_STATES_REQUEST_INDEX));
         while (parser.TryNextRow()) {
-            TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();;
-            i32 generation = (i32)parser.ColumnParser("generation").GetUint64();
+            TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();
+            i32 generation = IntegerCast<i32>(parser.ColumnParser("generation").GetUint64());
             generationByConsumerName.emplace(consumerName, generation);
         }
     

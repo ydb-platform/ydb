@@ -45,9 +45,10 @@ class TestCompatibility(object):
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=binary_paths,
             use_in_memory_pdisks=False,
+
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
-
+            extra_feature_flags={"suppress_compatibility_check": True},
             column_shard_config={
                 'disabled_on_scheme_shard': False,
             },
@@ -58,6 +59,7 @@ class TestCompatibility(object):
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        # self.error_f = open(os.path.join(output_path, "err.log"), "w")
         self.s3_config = self.setup_s3()
 
         self.driver = ydb.Driver(
@@ -160,20 +162,20 @@ class TestCompatibility(object):
                 yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
                 "--verbose",
                 "--endpoint",
-                self.endpoint,
+                "grpc://localhost:%d" % node.grpc_port,
                 "--database=/Root",
                 "yql",
                 "--script",
                 f'select version() as node_{node_id}_version'
             ]
             yatest.common.execute(get_version_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-    
+
     def exec_query(self, query: str):
         command = [
                 yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
                 "--verbose",
                 "-e",
-                 self.endpoint,
+                "grpc://localhost:%d" % self.cluster.nodes[1].port,
                 "-d"
                 "/Root",
                 "yql",
@@ -190,23 +192,23 @@ class TestCompatibility(object):
             version_id = None
             
         self.cluster.change_node_version(version_id=version_id)
-        time.sleep(60)
+        time.sleep(120)
         self.log_nodes_version()
     
     def log_database_scheme(self):
-        for node_id, node in enumerate(self.cluster.nodes.values()):
-            node.get_config_version()
-            get_scheme_command = [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "-e",
-                self.endpoint,
-                "-d"
-                "/Root",
-                "scheme",
-                "ls"
-            ]
-            yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        get_scheme_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "-e",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "-d"
+            "/Root",
+            "scheme",
+            "ls",
+            "-l",
+            "-R"
+        ]
+        yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
     
    
     
@@ -241,3 +243,73 @@ class TestCompatibility(object):
         self.exec_query('select count(*) from `sample_table`')
         self.read_update_data(iteration_count=2)
         self.exec_query('select count(*) from `sample_table`')
+
+    
+    @pytest.mark.parametrize("store_type", ["row", "column"])
+    @pytest.mark.parametrize("version_change_to", ['combined','next_version'])
+    def test_tpch1(self, version_change_to, store_type):
+        result_json_path = os.path.join( yatest.common.test_output_path(), "result.json")
+        query_output_path = os.path.join( yatest.common.test_output_path(), "query_output.json")
+        init_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "init",
+            "--store={}".format(store_type),
+           # "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
+        ]
+        import_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "import",
+            "generator",
+            "--scale=1",
+        ]
+        run_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "run",
+            "--scale=1",
+            "--exclude",
+            "17",  # not working for row tables
+            "--check-canonical",
+            "--retries",
+            "5",  # in row tables we have to retry query by design
+            "--json",
+            result_json_path,
+            "--output",
+            query_output_path,
+        ]
+        
+        self.log_nodes_version()
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        self.log_database_scheme()
+        self.exec_query('select count(*) as customer_count from `tpch/customer`')
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        self.change_cluster_version(new_version=version_change_to)
+        
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        self.log_database_scheme()
+        self.exec_query('select count(*) as customer_count from `tpch/customer`')

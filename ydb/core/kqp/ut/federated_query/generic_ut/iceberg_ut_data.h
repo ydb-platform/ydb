@@ -28,9 +28,9 @@ public:
 
     NYql::TGenericDataSourceInstance CreateDataSourceForHadoop();
 
-    NYql::TGenericDataSourceInstance CreateDataSourceForHive();
+    NYql::TGenericDataSourceInstance CreateDataSourceForHiveMetastore();
 
-    void ExecuteCreateHiveExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr);
+    void ExecuteCreateHiveMetastoreExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr);
 
     void ExecuteCreateHadoopExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr);
 

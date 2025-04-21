@@ -499,10 +499,10 @@ namespace NYql {
             if (VALUE_HADOOP == catalogType) {
                 // hadoop nothing yet
                 catalog.mutable_hadoop();
-            } else if (VALUE_HIVE == catalogType) {
-                auto hiveUri = GetOptionValue(clusterOptions, CATALOG_HIVE_URI);
+            } else if (VALUE_HIVE_METASTORE == catalogType) {
+                auto uri = GetOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
 
-                catalog.mutable_hive()->set_uri(hiveUri);
+                catalog.mutable_hive_metastore()->set_uri(uri);
             } else {
                 throw yexception() << "Unexpected catalog type: " << catalogType;
             }

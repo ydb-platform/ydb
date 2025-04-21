@@ -5,10 +5,10 @@
 
 namespace NTestUtils {
 
-constexpr char VALUE_HIVE_URI[]     = "hive_uri";
-constexpr char VALUE_S3_URI[]       = "s3_uri";
-constexpr char VALUE_S3_ENDPOINT[]  = "s3_endpoint";
-constexpr char VALUE_S3_REGION[]    = "s3_region";
+constexpr char VALUE_HIVE_METASTORE_URI[] = "hive_metastore_uri";
+constexpr char VALUE_S3_URI[]             = "s3_uri";
+constexpr char VALUE_S3_ENDPOINT[]        = "s3_endpoint";
+constexpr char VALUE_S3_REGION[]          = "s3_region";
 
 constexpr char VALUE_IAM[] = "IAM";
 
@@ -74,10 +74,10 @@ NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHadoop() {
     return data.Result_;
 }
 
-NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHive() {
+NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHiveMetastore() {
     TTestData data(this);
-    auto& hive = *data.Catalog_.mutable_hive();
-    hive.set_uri(VALUE_HIVE_URI);
+    auto& h = *data.Catalog_.mutable_hive_metastore();
+    h.set_uri(VALUE_HIVE_METASTORE_URI);
     return data.Result_;
 }
 
@@ -156,18 +156,18 @@ void TIcebergTestData::ExecuteQuery(const std::shared_ptr<NKikimr::NKqp::TKikimr
 }
 
 
-void TIcebergTestData::ExecuteCreateHiveExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr) {
+void TIcebergTestData::ExecuteCreateHiveMetastoreExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr) {
     using namespace fmt::literals;
 
-    TString hiveCatalog = fmt::format(R"(
+    TString hiveMetastoreCatalog = fmt::format(R"(
         CATALOG_TYPE="{type}",
-        CATALOG_HIVE_URI="{uri}"
+        CATALOG_HIVE_METASTORE_URI="{uri}"
     )",
-        "type"_a = NKikimr::NExternalSource::NIceberg::VALUE_HIVE, 
-        "uri"_a  = VALUE_HIVE_URI
+        "type"_a = NKikimr::NExternalSource::NIceberg::VALUE_HIVE_METASTORE,
+        "uri"_a  = VALUE_HIVE_METASTORE_URI
     );
 
-    ExecuteQuery(kikimr, CreateQuery(hiveCatalog));
+    ExecuteQuery(kikimr, CreateQuery(hiveMetastoreCatalog));
 }
 
 void TIcebergTestData::ExecuteCreateHadoopExternalDataSource(const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr) {

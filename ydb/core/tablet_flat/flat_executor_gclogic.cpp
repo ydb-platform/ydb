@@ -5,6 +5,12 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+namespace {
+    constexpr ui64 GCErrorInitialBackoffMs = 20;
+    constexpr ui64 GCErrorMaxBackoffMs = 10000;
+    constexpr ui64 GCMaxErrors = 20;  // ~3.33 min in total
+}
+
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : TabletStorageInfo(std::move(info))
     , Cookies(cookies)
@@ -186,6 +192,19 @@ bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
     return false;
 }
 
+TDuration TExecutorGCLogic::TryScheduleGcRequestRetries(ui32 channel, bool needRetryFailed) {
+    if (auto* channelInfo = ChannelInfo.FindPtr(channel)) {
+        return channelInfo->TryScheduleGcRequestRetries(needRetryFailed);
+    }
+    return TDuration{};
+}
+
+void TExecutorGCLogic::RetryGcRequests(ui32 channel, const TActorContext& ctx) {
+    if (auto* channelInfo = ChannelInfo.FindPtr(channel)) {
+        channelInfo->RetryGcRequests(TabletStorageInfo.Get(), channel, Generation, ctx);
+    }
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
@@ -204,6 +223,9 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
 TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
+    , TryCounter(0)
+    , BackoffTimer(GCErrorInitialBackoffMs, GCErrorMaxBackoffMs)
+    , RetryIsScheduled(false)
 {
 }
 
@@ -468,6 +490,28 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
 void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
     CollectSent.Clear();
     --GcWaitFor;
+}
+
+TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries(bool needRetryFailed) {
+    if (GcWaitFor == 0) {  // all channel's GC completed
+        if (CommitedGcBarrier == KnownGcBarrier && TryCounter > 0) {  // all GC requests succeeded and we must reset try counter
+            TryCounter = 0;
+            BackoffTimer.Reset();
+        } else if (needRetryFailed) {  // at least one GC request failed and we must retry
+            if (!RetryIsScheduled && ++TryCounter < GCMaxErrors) {
+                RetryIsScheduled = true;
+                return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
+            }
+        }
+    }
+    return TDuration{};
+}
+
+void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
+    RetryIsScheduled = false;
+    if (GcWaitFor == 0 && CommitedGcBarrier < KnownGcBarrier) {  // all channel's GC requests completed and at least one is failed
+        SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
+    }
 }
 
 }

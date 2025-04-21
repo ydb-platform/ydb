@@ -3172,6 +3172,16 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     GcLogic->OnCollectGarbageResult(ev);
     DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
+
+    const bool needRetryFailed = DataCleanupLogic->NeedGC();
+    const auto channel = ev->Get()->Channel;
+    if (auto retryDelay = GcLogic->TryScheduleGcRequestRetries(channel, needRetryFailed)) {
+        Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(channel));
+    }
+}
+
+void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {
+    GcLogic->RetryGcRequests(ev->Get()->Channel, ctx);
 }
 
 void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
@@ -4148,6 +4158,7 @@ STFUNC(TExecutor::StateWork) {
         cFunc(TEvPrivate::EvCheckYellow, UpdateYellow);
         cFunc(TEvPrivate::EvUpdateCompactions, UpdateCompactions);
         HFunc(TEvPrivate::TEvLeaseExtend, Handle);
+        HFunc(TEvPrivate::TEvRetryGcRequest, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvents::TEvFlushLog, Handle);
         hFunc(NSharedCache::TEvResult, Handle);

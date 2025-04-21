@@ -333,6 +333,7 @@ class TExecutor
             EvBrokenTransaction,
             EvLeaseExtend,
             EvActivateLowExecution,
+            EvRetryGcRequest,
 
             EvEnd
         };
@@ -347,6 +348,15 @@ class TExecutor
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+
+        struct TEvRetryGcRequest : public TEventLocal<TEvRetryGcRequest, EvRetryGcRequest> {
+            const ui32 Channel;
+
+            explicit TEvRetryGcRequest(ui32 channel)
+                : Channel(channel)
+            {}
+        };
+
     };
 
     enum class ETxMode {
@@ -566,6 +576,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
+    void Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);

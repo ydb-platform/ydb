@@ -6,6 +6,7 @@
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -51,6 +52,8 @@ public:
     void FollowersSyncComplete(bool isBoot);
     void SendCollectGarbage(const TActorContext& executor);
     bool HasGarbageBefore(TGCTime snapshotTime);
+    TDuration TryScheduleGcRequestRetries(ui32 channel, bool needRetryFailed);
+    void RetryGcRequests(ui32 channel, const TActorContext& ctx);
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -90,11 +93,18 @@ protected:
         ui32 GcCounter;
         ui32 GcWaitFor;
 
+        // retry failed GC logic
+        ui32 TryCounter;
+        TBackoffTimer BackoffTimer;
+        bool RetryIsScheduled;
+
         inline TChannelInfo();
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();
         void OnCollectGarbageFailure();
+        TDuration TryScheduleGcRequestRetries(bool needRetryFailed);
+        void RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx);
     };
 
     ui32 SnapshotStep;

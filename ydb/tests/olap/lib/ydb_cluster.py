@@ -37,8 +37,9 @@ class YdbCluster:
         def __init__(self, desc: dict):
             ss = desc.get('SystemState', {})
             self.host: str = ss.get('Host', '')
+            ports = {e.get('Name', ''): int(e.get('Address', '0').split(':')[-1]) for e in ss.get('Endpoints', [])}
+            self.ic_port: int = ports.get('ic', 0)
             self.disconnected: bool = desc.get('Disconnected', False)
-            self.cluster_name: str = ss.get('ClusterName', '')
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))
             if 'Storage' in ss.get('Roles', []):
@@ -110,21 +111,14 @@ class YdbCluster:
     def get_cluster_info(cls):
         if cls._cluster_info is None:
             version = ''
-            cluster_name = ''
-            nodes_wilcard = ''
             nodes = cls.get_cluster_nodes(db_only=True)
             for node in nodes:
-                if not cluster_name:
-                    cluster_name = node.cluster_name
                 if not version:
                     version = node.version
-                if not nodes_wilcard and node.role == YdbCluster.Node.Role.COMPUTE:
-                    nodes_wilcard = node.host.split('.')[0].rstrip('0123456789')
             cls._cluster_info = {
                 'database': cls.ydb_database,
                 'version': version,
-                'name': cluster_name,
-                'nodes_wilcard': nodes_wilcard,
+                'name': cls.ydb_database.strip('/').split('/')[0],
             }
         return deepcopy(cls._cluster_info)
 

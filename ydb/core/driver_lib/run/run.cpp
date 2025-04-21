@@ -1527,7 +1527,7 @@ void TKikimrRunner::InitializeActorSystem(
     }
 }
 
-TIntrusivePtr<TServiceInitializersList> TKikimrRunner::PR reev(
+TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
     const TKikimrRunConfig& runConfig,
     const TBasicKikimrServicesMask& serviceMask) {
 

@@ -1,3 +1,4 @@
+import "ydb/core/protos/subdomains.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrNodeBroker;
@@ -21,6 +22,19 @@ message TNodeInfo {
     optional NActorsInterconnect.TNodeLocation Location = 6;
     optional uint64 Expire = 7;
     optional string Name = 8;
+}
+
+message TNodeInfoSchema {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional string ResolveHost = 3;
+    optional string Address = 4;
+    optional uint32 Lease = 5;
+    optional uint64 Expire = 6;
+    optional NActorsInterconnect.TNodeLocation Location = 7;
+    optional NKikimrSubDomains.TDomainKey ServicedSubDomain = 8;
+    optional uint32 SlotIndex = 9;
+    optional bool AuthorizedByCertificate = 10;
 }
 
 message TEpoch {

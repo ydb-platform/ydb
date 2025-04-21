@@ -2986,6 +2986,16 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
+        if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || pendingUserInfo.Offset != i64(EndOffset)) {
+                ScheduleReplyPropose(record,
+                            NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
+                            NKikimrPQ::TError::BAD_REQUEST,
+                            "session already dead");
+                return;
+            }
+        }
+
         if ((i64)operation.GetCommitOffsetsEnd() < pendingUserInfo.Offset && !operation.GetReadSessionId().empty()) {
             continue; // this is stale request, answer ok for it
         }

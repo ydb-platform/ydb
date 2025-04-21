@@ -459,6 +459,10 @@ namespace NPDisk {
             app.Icb.emplace_back(new TControlBoard);
         }
 
+        while (app.DynamicControlBoard.size() < runtime.GetNodeCount()) {
+            app.DynamicControlBoard.emplace_back(new TDynamicControlBoard());
+        }
+
         NSharedCache::TSharedCacheConfig defaultSharedCacheConfig;
         defaultSharedCacheConfig.SetMemoryLimit(32_MB);
 

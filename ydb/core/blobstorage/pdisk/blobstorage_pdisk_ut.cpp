@@ -1254,75 +1254,77 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
-    Y_UNIT_TEST(TestStartEncryptedRestartPlain) {
-        TActorTestContext testCtx({
-            .PlainDataChunks = false,
-        });
-        TVDiskMock vdisk(&testCtx);
-
-        vdisk.InitFull();
-        vdisk.ReserveChunk();
-        vdisk.CommitReservedChunks();
-        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
-        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
-
-        ui32 logBuffSize = 250;
-        ui32 chunkBuffSize = 128_KB;
-
-        for (ui32 testCase = 0; testCase < 8; testCase++) {
-            Cerr << "testCase# " << testCase << Endl;
-            auto cfg = testCtx.GetPDiskConfig();
-            cfg->PlainDataChunks = testCase & 1;
-            Cerr << "plainDataChunk# " << cfg->PlainDataChunks  << Endl;
-            testCtx.UpdateConfigRecreatePDisk(cfg);
+    Y_UNIT_TEST(TestStartEncryptedOrPlainAndRestart) {
+        for (ui32 plain = 0; plain <= 1; ++plain) {
+            TActorTestContext testCtx({
+                .PlainDataChunks = static_cast<bool>(plain),
+            });
+            TVDiskMock vdisk(&testCtx);
 
             vdisk.InitFull();
-            for (ui32 i = 0; i < 100; ++i) {
-                testCtx.Send(new NPDisk::TEvLog(
-                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(logBuffSize)), vdisk.GetLsnSeg(), nullptr));
-                auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(chunkBuffSize));
-                testCtx.Send(new NPDisk::TEvChunkWrite(
-                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                    chunk, 0, parts, nullptr, false, 0));
-                testCtx.Send(new NPDisk::TEvChunkRead(
-                    vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                    chunk, 0, chunkBuffSize, 0, nullptr));
+            vdisk.ReserveChunk();
+            vdisk.CommitReservedChunks();
+            UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
+            auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+            ui32 logBuffSize = 250;
+            ui32 chunkBuffSize = 128_KB;
+
+            for (ui32 testCase = 0; testCase < 4; testCase++) {
+                Cerr << "testCase# " << testCase << Endl;
+                auto cfg = testCtx.GetPDiskConfig();
+                cfg->PlainDataChunks = testCase & 1;
+                Cerr << "plainDataChunk# " << cfg->PlainDataChunks  << Endl;
+                testCtx.UpdateConfigRecreatePDisk(cfg);
+
+                vdisk.InitFull();
+                for (ui32 i = 0; i < 100; ++i) {
+                    testCtx.Send(new NPDisk::TEvLog(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(logBuffSize)), vdisk.GetLsnSeg(), nullptr));
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(chunkBuffSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, chunkBuffSize, 0, nullptr));
+                }
+
+                if (testCase & 2) {
+                    Cerr << "restart" << Endl;
+                    testCtx.RestartPDiskSync();
+                }
+
+                for (ui32 i = 0; i < 100; ++i) {
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                }
+                Cerr << "all chunk reads are received" << Endl;
+
+                for (ui32 i = 0; i < 100; ++i) {
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+                }
+                Cerr << "all chunk writes are received" << Endl;
+
+                for (ui32 i = 0; i < 100;) {
+                    auto result = testCtx.Recv<NPDisk::TEvLogResult>();
+                    i += result->Results.size();
+                }
+                Cerr << "all log writes are received" << Endl;
             }
 
-            if (testCase & 2) {
-                Cerr << "restart" << Endl;
-                testCtx.RestartPDiskSync();
-            }
+            Cerr << "reformat" << Endl;
+            auto cfg = testCtx.GetPDiskConfig();
+            cfg->PlainDataChunks = true;
+            testCtx.Settings.PlainDataChunks = true;
+            testCtx.UpdateConfigRecreatePDisk(cfg, true);
+            testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead( vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, chunkBuffSize, 0, nullptr),
+                NKikimrProto::CORRUPTED);
 
-            for (ui32 i = 0; i < 100; ++i) {
-                auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
-            }
-            Cerr << "all chunk reads are received" << Endl;
-
-            for (ui32 i = 0; i < 100; ++i) {
-                auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
-            }
-            Cerr << "all chunk writes are received" << Endl;
-
-            for (ui32 i = 0; i < 100;) {
-                auto result = testCtx.Recv<NPDisk::TEvLogResult>();
-                i += result->Results.size();
-            }
-            Cerr << "all log writes are received" << Endl;
+            TVDiskMock vdisk2(&testCtx);
+            vdisk2.InitFull();
         }
-
-        Cerr << "reformat" << Endl;
-        auto cfg = testCtx.GetPDiskConfig();
-        cfg->PlainDataChunks = true;
-        testCtx.Settings.PlainDataChunks = true;
-        testCtx.UpdateConfigRecreatePDisk(cfg, true);
-        testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
-            new NPDisk::TEvChunkRead( vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                chunk, 0, chunkBuffSize, 0, nullptr),
-            NKikimrProto::CORRUPTED);
-
-        TVDiskMock vdisk2(&testCtx);
-        vdisk2.InitFull();
     }
 }
 

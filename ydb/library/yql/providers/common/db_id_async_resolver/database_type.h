@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -19,9 +21,9 @@ enum class EDatabaseType {
 
 std::set<TString> GetAllExternalDataSourceTypes();
 
-EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind);
+EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind);
 
-NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType);
+NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType);
 
 TString DatabaseTypeLowercase(EDatabaseType databaseType);
 

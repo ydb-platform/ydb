@@ -2,6 +2,8 @@
 
 #include <util/string/cast.h>
 
+#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+
 namespace NYql {
 
 std::set<TString> GetAllExternalDataSourceTypes() {
@@ -18,43 +20,39 @@ std::set<TString> GetAllExternalDataSourceTypes() {
     return allTypes;
 }
 
-EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {
+EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
     switch (dataSourceKind) {
-        case NYql::EGenericDataSourceKind::POSTGRESQL:
+        case NConnector::NApi::EDataSourceKind::POSTGRESQL:
             return EDatabaseType::PostgreSQL;
-        case NYql::EGenericDataSourceKind::CLICKHOUSE:
+        case NConnector::NApi::EDataSourceKind::CLICKHOUSE:
             return EDatabaseType::ClickHouse;
-        case NYql::EGenericDataSourceKind::YDB:
+        case NConnector::NApi::EDataSourceKind::YDB:
             return EDatabaseType::Ydb;
-        case NYql::EGenericDataSourceKind::MYSQL:
+        case NConnector::NApi::EDataSourceKind::MYSQL:
             return EDatabaseType::MySQL;
-        case NYql::EGenericDataSourceKind::GREENPLUM:
+        case NConnector::NApi::EDataSourceKind::GREENPLUM:
             return EDatabaseType::Greenplum;
-        case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
+        case NConnector::NApi::EDataSourceKind::MS_SQL_SERVER:
           return EDatabaseType::MsSQLServer;
         default:
-            ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
+            ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
 }
 
-NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
+NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
     switch (databaseType) {
         case EDatabaseType::PostgreSQL:
-            return  NYql::EGenericDataSourceKind::POSTGRESQL;
+            return NConnector::NApi::EDataSourceKind::POSTGRESQL;
         case EDatabaseType::ClickHouse:
-            return  NYql::EGenericDataSourceKind::CLICKHOUSE;
+            return NConnector::NApi::EDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
-            return  NYql::EGenericDataSourceKind::YDB;
+            return NConnector::NApi::EDataSourceKind::YDB;
         case EDatabaseType::MySQL:
-            return NYql::EGenericDataSourceKind::MYSQL;
+            return NConnector::NApi::EDataSourceKind::MYSQL;
         case EDatabaseType::Greenplum:
-            return  NYql::EGenericDataSourceKind::GREENPLUM;
+            return NConnector::NApi::EDataSourceKind::GREENPLUM;
         case EDatabaseType::MsSQLServer:
-            return NYql::EGenericDataSourceKind::MS_SQL_SERVER;
-        case EDatabaseType::Oracle:
-            return NYql::EGenericDataSourceKind::ORACLE;
-        case EDatabaseType::Logging:
-            return NYql::EGenericDataSourceKind::LOGGING;
+            return NConnector::NApi::EDataSourceKind::MS_SQL_SERVER;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

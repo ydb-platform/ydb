@@ -51,6 +51,18 @@ Y_UNIT_TEST_SUITE(TLangVerTests) {
         UNIT_ASSERT(IsAvalableLangVersion(MakeLangVersion(2025,2),MakeLangVersion(2025,2)));
         UNIT_ASSERT(!IsAvalableLangVersion(MakeLangVersion(2025,3),MakeLangVersion(2025,2)));
     }
+
+    Y_UNIT_TEST(MaxReleasedLangVersionIsValid) {
+        UNIT_ASSERT(IsValidLangVersion(GetMaxReleasedLangVersion()));
+    }
+
+    Y_UNIT_TEST(MaxLangVersionIsValid) {
+        UNIT_ASSERT(IsValidLangVersion(GetMaxLangVersion()));
+    }
+
+    Y_UNIT_TEST(MaxVersionIsAboveThanReleased) {
+        UNIT_ASSERT(GetMaxLangVersion() > GetMaxReleasedLangVersion());
+    }
 }
 
 }

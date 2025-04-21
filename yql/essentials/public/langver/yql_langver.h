@@ -48,6 +48,9 @@ constexpr inline bool IsUnsupportedLangVersion(TLangVersion ver, TLangVersion ma
 
 constexpr TLangVersion MinLangVersion = MakeLangVersion(2025, 1);
 
+TLangVersion GetMaxReleasedLangVersion();
+TLangVersion GetMaxLangVersion();
+
 constexpr ui32 LangVersionBufferSize = 4 + 1 + 2 + 1; // year.minor\0
 using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
 

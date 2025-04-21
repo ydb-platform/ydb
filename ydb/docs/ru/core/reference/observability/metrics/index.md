@@ -202,3 +202,16 @@
 `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, штуки | Текущее число одновременно работающих запросов. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.
 `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, штуки | Размер очереди запросов, ожидающих выполнения.
 `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, штуки | Количество запросов, ожидающих в очереди на выполнение. Отображаются только для пулов с включенным `CONCURRENT_QUERY_LIMIT` или `DATABASE_LOAD_CPU_THRESHOLD`.
+
+## Метрики процесса очистки данных {#data_erasure}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`SchemeShard.DataErasureQueueSize`<br/>`RATE`, штуки | Количество баз данных, ожидающих очистки.
+`SchemeShard.DataErasureQueueRunning`<br/>`RATE`, штуки | Количество баз данных, для которых очистка производится в данный момент.
+`SchemeShard.TenantDataErasureQueueSize`<br/>`RATE`, штуки | Количество таблеток в базе данных, ожидающих очистки.
+`SchemeShard.TenantDataErasureQueueRunning`<br/>`RATE`, штуки | Количество таблеток в базе данных, для которых очистка производится в данный момент.
+`SchemeShard.DataErasureOK`<br/>`RATE`, штуки | Количество баз данных, в которых завершена очистка в таблетках.
+`SchemeShard.DataErasureTimeout`<br/>`RATE`, штуки | Количество баз данных. для которых истекло время ожидания очистки в таблетках.
+`SchemeShard.TenantDataErasureOK`<br/>`RATE`, штуки | Количество таблеток в конкретной базе, завершивших очистку.
+`SchemeShard.TenantDataErasureTimeout`<br/>`RATE`, штуки | Количество таблеток, которые не успели завершить очистку за отведенное время.

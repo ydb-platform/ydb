@@ -63,7 +63,7 @@ class TestInsert(BaseTestSet):
         log_table_name: str = "log"
         batches_count = int(get_external_param("batches_count", "10"))
         rows_count = int(get_external_param("rows_count", "1000"))
-        inserts_count = int(get_external_param("inserts_count", "200"))
+        inserts_count = int(get_external_param("inserts_count", str(self.def_inserts_count)))
         tables_count = int(get_external_param("tables_count", "1"))
         ignore_read_errors = external_param_is_true("ignore_read_errors")
         for table in range(tables_count):

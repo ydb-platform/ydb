@@ -82,7 +82,8 @@ class BaseTestSet:
     def test_multi(self, ctx: TestContext):
         if self.__class__.__name__ != 'TestInsert':
             return
-        num_threads = int(get_external_param("num_threads", "2"))
+        self.def_inserts_count = 50
+        num_threads = int(get_external_param("num_threads", "10"))
         threads = []
         exit_codes = [None] * num_threads
         for p in range(num_threads):
@@ -94,6 +95,7 @@ class BaseTestSet:
         assert exit_codes == [0] * num_threads, exit_codes
 
     def test(self, ctx: TestContext):
+        self.def_inserts_count = 200
         exit_codes = [None]
         self._test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
 

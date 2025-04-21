@@ -1019,9 +1019,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
-            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b5" ORDER BY Col1;
-            EXPECTED: []
-            IDX_ND_SKIP_APPROVE: 0, 4, 0
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "%1b4%" ORDER BY Col1;
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1

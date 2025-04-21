@@ -432,6 +432,18 @@ private:
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo->Id);
     }
 
+    void PrepareAutoDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
+        bool isContinued = false;
+        PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx) {
+            exportInfo->PendingDropItems.push_back(itemIdx);
+            isContinued = true;
+            AllocateTxId(exportInfo);
+        });
+        if (!isContinued) {
+            AllocateTxId(exportInfo);
+        }
+    }
+
     void SubscribeTx(TTxId txId) {
         Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
@@ -1015,8 +1027,7 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareDropping(Self, exportInfo, db, true);
-                AllocateTxId(exportInfo);
+                PrepareAutoDropping(Self, exportInfo, db);
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1145,8 +1156,7 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareDropping(Self, exportInfo, db, true);
-                AllocateTxId(exportInfo);
+                PrepareAutoDropping(Self, exportInfo, db);
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);
@@ -1163,7 +1173,7 @@ private:
                 item.WaitTxId = InvalidTxId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                if (exportInfo->AllItemsAreDropped() || exportInfo->State == EState::AutoDropping) {
+                if (exportInfo->AllItemsAreDropped()) {
                     AllocateTxId(exportInfo);
                 }
             } else {

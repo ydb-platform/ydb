@@ -1212,7 +1212,7 @@ partitioning_settings {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition0(runtime, [](auto&& ev) {
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(runtime, [](auto&& ev) {
             return ev->Get()->Request.GetKey() == "/data_01.csv";
         });
 
@@ -1248,7 +1248,7 @@ partitioning_settings {
         )", port));
         
 
-        runtime.WaitFor("put object request from 01 partition", [&]{ return blockPartition0.size() >= 1; });
+        runtime.WaitFor("put object request from 01 partition", [&]{ return blockPartition01.size() >= 1; });
         bool isCompleted = false;
 
         while (!isCompleted) {
@@ -1266,8 +1266,8 @@ partitioning_settings {
             }
         }
 
-        blockPartition0.Stop();
-        blockPartition0.Unblock();
+        blockPartition01.Stop();
+        blockPartition01.Unblock();
         
         env.TestWaitNotification(runtime, txId);
 

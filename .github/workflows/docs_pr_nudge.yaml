@@ -88,24 +88,28 @@ jobs:
               `draft:false`
             ].join(' ');
             const { data: { items: docsPRs } } = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
-  
+            console.log(`Found ${docsPRs.length} documentation PR(s)`);
+
             // 2) fetch primary-docs-reviewers
             const members = await github.paginate(
               github.rest.teams.listMembersInOrg,
               { org: owner, team_slug: 'primary-docs-reviewers', per_page: 100 }
             );
             const reviewerLogins = members.map(u => u.login);
-  
+            console.log(`Loaded ${reviewerLogins.length} reviewer(s) from team`);
+
             for (const prItem of docsPRs) {
               const prNum = prItem.number;
+              console.log(`\n→ Processing PR #${prNum}`);
               const pr    = (await github.rest.pulls.get({ owner, repo, pull_number: prNum })).data;
-  
+
               // assign reviewer if none assigned
               if (!pr.assignees.some(a => reviewerLogins.includes(a.login))) {
                 const pick = reviewerLogins[Math.floor(Math.random() * reviewerLogins.length)];
                 await github.rest.issues.addAssignees({
                   owner, repo, issue_number: prNum, assignees: [pick]
                 });
+                console.log(`Assigned reviewer @${pick} to PR #${prNum}`);
               }
   
               // collect all events
@@ -143,24 +147,25 @@ jobs:
               const lastNudgeTime = nudgeTimes.length ? new Date(Math.max(...nudgeTimes)) : new Date(0);
   
               // RULE 1: nudge reviewers
-              const msSinceAuthor   = businessMsBetween(lastAuthorActivity,   now);
-              const hoursSinceAuthor= Math.floor(msSinceAuthor / 3600e3);
-              const msSinceLastRevNudge = businessMsBetween(lastNudgeTime, now);
+              const msSinceAuthor      = businessMsBetween(lastAuthorActivity, now);
+              const hoursSinceAuthor   = Math.floor(msSinceAuthor / 3600e3);
+              const msSinceLastRevNudge= businessMsBetween(lastNudgeTime, now);
   
               if (
                 lastAuthorActivity > lastReviewerActivity &&
                 msSinceAuthor > authorThresholdH * 3600e3 &&
                 msSinceLastRevNudge > reviewerCooldownH * 3600e3
               ) {
-                await github.rest.issues.createComment({
+                const { data: comment } = await github.rest.issues.createComment({
                   owner, repo, issue_number: prNum,
-                  body: `Hey ${assignees.map(a=>`@${a}`).join(', ')}, it has been ${hoursSinceAuthor} business‑hours since the author's last update, could you please review? ${BOT_MARKER}`
+                  body: `Hey ${assignees.map(a=>`@${a}`).join(', ')}, it has been ${hoursSinceAuthor} business‑hours since the author's last update, could you please review? ${BOT_MARKER}`
                 });
+                console.log(`Comment posted on PR #${prNum}: ${comment.html_url}`);
                 continue;
               }
   
               // RULE 2: nudge author
-              const daysSinceReviewer = businessDaysBetween(lastReviewerActivity, now);
+              const daysSinceReviewer    = businessDaysBetween(lastReviewerActivity, now);
               const daysSinceLastAuthNudge = businessDaysBetween(lastNudgeTime, now);
   
               if (
@@ -168,9 +173,10 @@ jobs:
                 daysSinceReviewer > reviewerThresholdD &&
                 daysSinceLastAuthNudge > authorCooldownD
               ) {
-                await github.rest.issues.createComment({
+                const { data: comment } = await github.rest.issues.createComment({
                   owner, repo, issue_number: prNum,
-                  body: `Heads‑up: it's been ${daysSinceReviewer} business‑days since a reviewer comment. @${author}, any updates? ${assignees.map(a=>`@${a}`).join(' ')}, please check the status with the author. ${BOT_MARKER}`
+                  body: `Heads‑up: it's been ${daysSinceReviewer} business‑days since a reviewer comment. @${author}, any updates? ${assignees.map(a=>`@${a}`).join(' ')}, please check the status with the author. ${BOT_MARKER}`
                 });
+                console.log(`Comment posted on PR #${prNum}: ${comment.html_url}`);
               }
             }

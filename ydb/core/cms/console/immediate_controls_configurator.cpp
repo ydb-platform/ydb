@@ -229,7 +229,7 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
                 AddControl(board, fieldDesc, prefix, true);
             }
             auto controlId = board->GetStaticControlId(name);
-            Y_ENSURE_S(!!controlId);
+            Y_VERIFY_S(!!controlId, "Unknown Control Id for " << name);
             if (reflection->HasField(cfg, fieldDesc) && controlId) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)

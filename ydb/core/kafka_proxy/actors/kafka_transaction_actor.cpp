@@ -7,15 +7,19 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <regex>
 
+#define VALIDATE_PRODUCER_IN_REQUEST(ErrorResponseType) \
+if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
+    SendInvalidTransactionActorStateResponse<ErrorResponseType>(ev); \
+    Die(ctx); \
+    return; \
+} \
+
 namespace NKafka {
 
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         KAFKA_LOG_D("Receieved ADD_PARTITIONS_TO_TXN request");
-        if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TAddPartitionsToTxnResponseData>(ev);
-            Die(ctx);
-            return;
-        }
+        VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
+
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
                 PartitionsInTxn.emplace(GetFullTopicPath(topicInRequest.Name->c_str()), static_cast<ui32>(partitionInRequest));
@@ -29,21 +33,14 @@ namespace NKafka {
     // Thus we can just ignore this request.
     void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Receieved ADD_OFFSETS_TO_TXN request");
-        if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TAddOffsetsToTxnResponseData>(ev);
-            Die(ctx);
-            return;
-        }
+        VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
     void TKafkaTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Receieved TXN_OFFSET_COMMIT request");
-        if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TTxnOffsetCommitResponseData>(ev);
-            Die(ctx);
-            return;
-        }
+        VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
+
         // save offsets for future use
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
@@ -78,11 +75,7 @@ namespace NKafka {
     */
     void TKafkaTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         KAFKA_LOG_D("Receieved END_TXN request");
-        if (!ProducerInRequestIsValid(ev->Get()->Request)) {
-            SendInvalidTransactionActorStateResponse<TEndTxnResponseData>(ev);
-            Die(ctx);
-            return;
-        }
+        VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
@@ -199,7 +192,7 @@ namespace NKafka {
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
-        Send(TxnCoordinatorActorId, new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerId, ProducerEpoch));
+        Send(TxnCoordinatorActorId, new TEvKafka::TEvTransactionActorDied(TransactionalId, {ProducerId, ProducerEpoch}));
         TBase::Die(ctx);
     }
 

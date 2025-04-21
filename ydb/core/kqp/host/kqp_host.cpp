@@ -1973,6 +1973,9 @@ private:
                 || settingName == "TimeOrderRecoverAhead"
                 || settingName == "TimeOrderRecoverRowLimit"
                 || settingName == "MatchRecognizeStream"
+                || settingName == "OptimizerFlags"
+                || settingName == "FuseEquiJoinsInputMultiLabels"
+                || settingName == "PullUpFlatMapOverJoinMultipleLabels"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);

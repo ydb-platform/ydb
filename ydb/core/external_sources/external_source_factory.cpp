@@ -72,13 +72,13 @@ IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnam
         // Catalog type is a required field and can be equal only to "hive" or "hadoop"
         .Property(
             CATALOG_TYPE,
-            GetIsInListValidator({VALUE_HIVE, VALUE_HADOOP}, true)
+            GetIsInListValidator({VALUE_HIVE_METASTORE, VALUE_HADOOP}, true)
         )
         // If catalog type is equal to "hive" the field "hive_uri" is required
         .Property(
-            CATALOG_HIVE_URI,
+            CATALOG_HIVE_METASTORE_URI,
             GetRequiredValidator(),
-            GetHasSettingCondition(CATALOG_TYPE,VALUE_HIVE)
+            GetHasSettingCondition(CATALOG_TYPE, VALUE_HIVE_METASTORE)
         )
         .HostnamePatterns(hostnamePatternsRegEx)
         .Build();

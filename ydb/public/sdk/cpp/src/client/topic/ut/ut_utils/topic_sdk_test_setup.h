@@ -32,7 +32,9 @@ public:
 
         std::vector<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent> StartPartitionSessionEvents;
     };
-    ReadResult Read(const std::string& topic, const std::string& consumer, std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler, const TDuration timeout = TDuration::Seconds(5));
+    ReadResult Read(const std::string& topic, const std::string& consumer,
+        std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
+        std::optional<size_t> partition = std::nullopt, const TDuration timeout = TDuration::Seconds(5));
     TStatus Commit(const std::string& path, const std::string& consumerName, size_t partitionId, size_t offset, std::optional<std::string> sessionId = std::nullopt);
 
     TString GetEndpoint() const;

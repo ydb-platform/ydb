@@ -273,7 +273,6 @@ private:
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
-
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 

@@ -1,6 +1,4 @@
 import pytest
-import math
-from datetime import datetime, timedelta
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
@@ -65,15 +63,16 @@ class TestDML(TestBase):
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
-        self.order_by(table_name, all_types, pk_types, index, ttl)
-        self.limit(table_name, all_types, pk_types, index, ttl)
-        self.from_select(table_name, all_types, pk_types, index, ttl)
-        self.distinct(table_name, all_types, pk_types, index, ttl)
-        self.union(table_name, all_types, pk_types, index, ttl)
+        self.order_by(table_name, all_types, pk_types, index, ttl, dml)
+        self.limit(table_name, all_types, pk_types, index, ttl, dml)
+        self.from_select(table_name, all_types, pk_types, index, ttl, dml)
+        self.distinct(table_name, all_types, pk_types, index, ttl, dml)
+        self.union(table_name, all_types, pk_types, index, ttl, dml)
         self.without(table_name, all_types, pk_types, index, ttl)
-        self.tablesample_sample(table_name, all_types, pk_types, index, ttl)
+        self.tablesample_sample(table_name, all_types,
+                                pk_types, index, ttl, dml)
 
-    def limit(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def limit(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = self.create_types_for_all_select(
             all_types, pk_types, index, ttl)
 
@@ -83,7 +82,7 @@ class TestDML(TestBase):
         for offset in range(number_of_columns):
             rows = self.query(f"select {", ".join(statements)} from {table_name} limit 1 OFFSET {offset}")
             self.assert_type_after_select(
-                offset+1, 0, rows, all_types, pk_types, index, ttl)
+                offset+1, 0, rows, all_types, pk_types, index, ttl, dml)
 
     def create_types_for_all_select(self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = []
@@ -101,53 +100,34 @@ class TestDML(TestBase):
             statements.append(f"ttl_{cleanup_type_name(ttl)}")
         return statements
 
-    def assert_type_after_select(self, value, line, rows, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def assert_type_after_select(self, value, line, rows, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         count = 0
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                self.assert_type(all_types, type, value, rows[line][count])
+                dml.assert_type(all_types, type, value, rows[line][count])
                 count += 1
         for type in pk_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                self.assert_type(pk_types, type, value, rows[line][count])
+                dml.assert_type(pk_types, type, value, rows[line][count])
                 count += 1
         for type in index.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64':
-                self.assert_type(index, type, value, rows[line][count])
+                dml.assert_type(index, type, value, rows[line][count])
                 count += 1
         if ttl != "":
-            self.assert_type(ttl_types, ttl, value, rows[line][count])
+            dml.assert_type(ttl_types, ttl, value, rows[line][count])
             count += 1
 
-    def from_select(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def from_select(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = self.create_types_for_all_select(
             all_types, pk_types, index, ttl)
 
         rows = self.query(f"from {table_name} select {", ".join(statements)}")
         for i in range(len(rows)):
             self.assert_type_after_select(
-                i+1, i, rows, all_types, pk_types, index, ttl)
+                i+1, i, rows, all_types, pk_types, index, ttl, dml)
 
-    def assert_type(self, key, type: str, values: int, values_from_rows):
-        if type == "String" or type == "Yson":
-            assert values_from_rows.decode(
-                "utf-8") == key[type](values), f"{type}"
-        elif type == "Float" or type == "DyNumber":
-            assert math.isclose(float(values_from_rows), float(
-                key[type](values)), rel_tol=1e-3), f"{type}"
-        elif type == "Interval" or type == "Interval64":
-            assert values_from_rows == timedelta(
-                microseconds=key[type](values)), f"{type}"
-        elif type == "Timestamp" or type == "Timestamp64":
-            assert values_from_rows == datetime.fromtimestamp(
-                key[type](values)/1_000_000 - 3*60*60), f"{type}"
-        elif type == "Json" or type == "JsonDocument":
-            assert str(values_from_rows).replace(
-                "'", "\"") == str(key[type](values)), f"{type}"
-        else:
-            assert str(values_from_rows) == str(key[type](values)), f"{type}"
-
-    def distinct(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def distinct(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         # del type != "DyNumber" and type != "UUID" after https://github.com/ydb-platform/ydb/issues/17484
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64'\
@@ -155,26 +135,26 @@ class TestDML(TestBase):
                 rows_distinct = self.query(
                     f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
                 for i in range(len(rows_distinct)):
-                    self.assert_type(all_types, type, i+1, rows_distinct[i][0])
+                    dml.assert_type(all_types, type, i+1, rows_distinct[i][0])
         for type in pk_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64' and type != "DyNumber" and type != "UUID":
                 rows_distinct = self.query(
                     f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
                 for i in range(len(rows_distinct)):
-                    self.assert_type(pk_types, type, i+1, rows_distinct[i][0])
+                    dml.assert_type(pk_types, type, i+1, rows_distinct[i][0])
         for type in index.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64' and type != "DyNumber" and type != "UUID":
                 rows_distinct = self.query(
                     f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
                 for i in range(len(rows_distinct)):
-                    self.assert_type(index, type, i+1, rows_distinct[i][0])
+                    dml.assert_type(index, type, i+1, rows_distinct[i][0])
         if ttl != "" and ttl != "DyNumber":
             rows_distinct = self.query(
                 f"SELECT DISTINCT ttl_{cleanup_type_name(ttl)} from {table_name}")
             for i in range(len(rows_distinct)):
-                self.assert_type(ttl_types, ttl, i+1, rows_distinct[i][0])
+                dml.assert_type(ttl_types, ttl, i+1, rows_distinct[i][0])
 
-    def union(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def union(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = []
         for type in all_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64'\
@@ -197,22 +177,22 @@ class TestDML(TestBase):
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64'\
                     and type != "DyNumber" and type != "UUID" and type != "Json" and type != "JsonDocument" and type != "Yson":
                 for line in range(len(rows)):
-                    self.assert_type(all_types, type, line+1,
-                                     rows[line][f"col_{cleanup_type_name(type)}"])
+                    dml.assert_type(all_types, type, line+1,
+                                    rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64' and type != "DyNumber" and type != "UUID":
                 for line in range(len(rows)):
-                    self.assert_type(pk_types, type, line+1,
-                                     rows[line][f"pk_{cleanup_type_name(type)}"])
+                    dml.assert_type(pk_types, type, line+1,
+                                    rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
             if type != "Date32" and type != "Datetime64" and type != "Timestamp64" and type != 'Interval64' and type != "DyNumber" and type != "UUID":
                 for line in range(len(rows)):
-                    self.assert_type(
+                    dml.assert_type(
                         index, type, line+1, rows[line][f"col_index_{cleanup_type_name(type)}"])
         if ttl != "" and ttl != "DyNumber":
             for line in range(len(rows)):
-                self.assert_type(ttl_types, ttl, line+1,
-                                 rows[line][f"ttl_{cleanup_type_name(ttl)}"])
+                dml.assert_type(ttl_types, ttl, line+1,
+                                rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
     def without(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements_without = []
@@ -249,7 +229,7 @@ class TestDML(TestBase):
         for col_name in rows[0].keys():
             assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
 
-    def tablesample_sample(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def tablesample_sample(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = self.create_types_for_all_select(
             all_types, pk_types, index, ttl)
         for i in range(1, 100):
@@ -257,21 +237,21 @@ class TestDML(TestBase):
             for line in range(len(rows)):
                 numb = rows[line]["pk_Int64"]
                 self.assert_type_after_select(
-                    numb, line, rows, all_types, pk_types, index, ttl)
+                    numb, line, rows, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(f"select {", ".join(statements)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})")
             for line in range(len(rows)):
                 numb = rows[line]["pk_Int64"]
                 self.assert_type_after_select(
-                    numb, line, rows, all_types, pk_types, index, ttl)
+                    numb, line, rows, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(f"select {", ".join(statements)} from {table_name} SAMPLE 1.0 / {i}")
             for line in range(len(rows)):
                 numb = rows[line]["pk_Int64"]
                 self.assert_type_after_select(
-                    numb, line, rows, all_types, pk_types, index, ttl)
+                    numb, line, rows, all_types, pk_types, index, ttl, dml)
 
-    def order_by(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def order_by(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = self.create_types_for_all_select(
             all_types, pk_types, index, ttl)
         for statement in statements:
@@ -280,18 +260,18 @@ class TestDML(TestBase):
                 if "String" not in statement and "Utf8" not in statement:
                     for line in range(len(rows)):
                         self.assert_type_after_select(
-                            line + 1, line, rows, all_types, pk_types, index, ttl)
+                            line + 1, line, rows, all_types, pk_types, index, ttl, dml)
                 else:
                     line = 0
                     for i in range(len(rows)//10):
                         self.assert_type_after_select(
-                            i + 1, line, rows, all_types, pk_types, index, ttl)
+                            i + 1, line, rows, all_types, pk_types, index, ttl, dml)
                         line += 1
                         for j in range(10):
                             if (i+1) * 10 + j > len(rows):
                                 break
                             self.assert_type_after_select(
-                                (i + 1) * 10 + j, line, rows, all_types, pk_types, index, ttl)
+                                (i + 1) * 10 + j, line, rows, all_types, pk_types, index, ttl, dml)
                             line += 1
 
                 rows = self.query(f"select {", ".join(statements)} from {table_name} ORDER BY {statement} DESC")
@@ -300,7 +280,7 @@ class TestDML(TestBase):
                     if "String" not in statement and "Utf8" not in statement:
                         for line in range(len(rows)):
                             self.assert_type_after_select(
-                                len(rows) - line, line, rows, all_types, pk_types, index, ttl)
+                                len(rows) - line, line, rows, all_types, pk_types, index, ttl, dml)
                     else:
                         line = 0
                         for i in range(len(rows)//10, 0):
@@ -308,10 +288,10 @@ class TestDML(TestBase):
                                 if i * 10 + (9 - j) > len(rows):
                                     break
                                 self.assert_type_after_select(
-                                    i * 10 + (9 - j), line, rows, all_types, pk_types, index, ttl)
+                                    i * 10 + (9 - j), line, rows, all_types, pk_types, index, ttl, dml)
                                 line += 1
                             self.assert_type_after_select(
-                                i, line, rows, all_types, pk_types, index, ttl)
+                                i, line, rows, all_types, pk_types, index, ttl, dml)
                             line += 1
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
@@ -322,6 +302,7 @@ class TestDML(TestBase):
         return number_of_columns
 
     def test_as_table(self):
+        dml = DMLOperations(self)
         all_types = {**pk_types, **non_pk_types}
         statements = []
         for type_name in all_types.keys():
@@ -340,8 +321,8 @@ class TestDML(TestBase):
         for type_name in all_types.keys():
             if type_name != "Date32" and type_name != "Datetime64" and type_name != "Timestamp64" and type_name != 'Interval64':
                 if type_name == "Utf8":
-                    self.assert_type(
+                    dml.assert_type(
                         all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"].decode("utf-8"))
                 else:
-                    self.assert_type(
+                    dml.assert_type(
                         all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"])

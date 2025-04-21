@@ -162,5 +162,27 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupTest, TBackupTestFixture)
             };
             UNIT_ASSERT_VALUES_EQUAL(keys, expectedKeys);
         }
+
+        {
+            NImport::TImportFromS3Settings importSettings;
+            importSettings
+                .Endpoint(S3Endpoint())
+                .Bucket(bucketName)
+                .Scheme(NYdb::ES3Scheme::HTTP)
+                .AccessKey("minio")
+                .SecretKey("minio123")
+                .SourcePrefix("EncryptedExport")
+                .DestinationPath("/local/EncryptedExportAndImport/RestoredExport")
+                .SymmetricKey("Cool random key!");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        {
+            auto res = YdbQueryClient().ExecuteQuery(R"sql(
+                SELECT * FROM `/local/EncryptedExportAndImport/RestoredExport/dir1/dir2/EncryptedExportAndImportTable`
+            )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetStatus() << ": " << res.GetIssues().ToString());
+        }
     }
 }

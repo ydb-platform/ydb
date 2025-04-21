@@ -46,7 +46,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
-        if (IsS3Import) {
+        if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
 
@@ -72,7 +72,7 @@ public:
         }
 
         const auto& settings = request.settings();
-        if (IsS3Import) {
+        if constexpr (IsS3Import) {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
             if (!encryptedExportFeatureFlag) {

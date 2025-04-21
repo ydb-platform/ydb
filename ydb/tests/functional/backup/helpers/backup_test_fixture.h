@@ -76,7 +76,7 @@ public:
         } else {
             TMaybe<NYdb::TOperation> op = res;
             WaitOp<TResponseType>(op);
-            UNIT_ASSERT_C(op->Status().IsSuccess(), "Status: " << int(op->Status().GetStatus()) << ". Issues: " << op->Status().GetIssues().ToString());
+            UNIT_ASSERT_C(op->Status().IsSuccess(), "Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }
     }

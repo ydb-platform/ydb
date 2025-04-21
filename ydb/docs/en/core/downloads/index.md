@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} downloads
+# {{ ydb-short-name }} Downloads
 
 This section provides instructions for downloading various {{ ydb-short-name }} builds and related tools:
 

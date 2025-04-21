@@ -76,6 +76,15 @@ public:
         }
     }
 
+    STFUNC(StateCollectTableSettings) {
+        switch (ev->GetTypeRewrite()) {
+             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleCollectTableSettings);
+             default:
+                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
+                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+        }
+    }
+
 private:
 
     void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) override {
@@ -160,6 +169,63 @@ private:
         }
     }
 
+    void StartCollectTableSettings(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary) {
+        CollectTableSettingsState = MakeHolder<TCollectTableSettingsState>();
+        CollectTableSettingsState->TablePath = tablePath;
+        CollectTableSettingsState->TableDescription = tableDesc;
+        CollectTableSettingsState->Temporary = temporary;
+
+        for (const auto& cdcStream: tableDesc.GetCdcStreams()) {
+            std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
+            navigateRequest->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+            NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+
+            auto persQueuePath = JoinPath({Path, cdcStream.GetName(), "streamImpl"});
+
+            CollectTableSettingsState->PersQueues[JoinPath({tablePath, cdcStream.GetName(), "streamImpl"})] = nullptr;
+
+            record->SetPath(persQueuePath);
+            record->MutableOptions()->SetReturnBoundaries(true);
+            record->MutableOptions()->SetShowPrivateTable(true);
+            record->MutableOptions()->SetReturnIndexTableBoundaries(true);
+            record->MutableOptions()->SetReturnPartitionConfig(true);
+            record->MutableOptions()->SetReturnPartitioningInfo(false);
+
+            Send(MakeTxProxyID(), navigateRequest.release());
+        }
+    }
+
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TString& path, const TString& statement) {
+        TVector<TCell> cells;
+        for (auto column : Columns) {
+            switch (column.Tag) {
+                case Schema::ShowCreate::Path::ColumnId: {
+                    cells.emplace_back(TCell(path.data(), path.size()));
+                    break;
+                }
+                case Schema::ShowCreate::PathType::ColumnId: {
+                    cells.emplace_back(TCell(PathType.data(), PathType.size()));
+                    break;
+                }
+                case Schema::ShowCreate::Statement::ColumnId: {
+                    cells.emplace_back(TCell(statement.data(), statement.size()));
+                    break;
+                }
+                default:
+                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected column tag");
+                    return;
+            }
+        }
+
+        Y_ENSURE(cells.size() == 3);
+        TArrayRef<const TCell> resultRow(cells);
+        batch.Rows.emplace_back(TOwnedCellVec::Make(resultRow));
+        batch.Finished = true;
+    }
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
@@ -197,8 +263,14 @@ private:
                             temporary = true;
                         }
 
+                        if (!tableDesc.GetCdcStreams().empty()) {
+                            StartCollectTableSettings(tablePath, tableDesc, temporary);
+                            Become(&TShowCreate::StateCollectTableSettings);
+                            return;
+                        }
+
                         TCreateTableFormatter formatter;
-                        auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
+                        auto formatterResult = formatter.Format(tablePath, tableDesc, temporary, {});
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
                             statement = formatterResult.ExtractOut();
@@ -277,31 +349,94 @@ private:
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
-        TVector<TCell> cells;
-        for (auto column : Columns) {
-            switch (column.Tag) {
-                case Schema::ShowCreate::Path::ColumnId: {
-                    cells.emplace_back(TCell(path.value().data(), path.value().size()));
-                    break;
+        FillBatch(*batch, path.value(), statement.value());
+
+        SendBatch(std::move(batch));
+    }
+
+    void HandleCollectTableSettings(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        Y_ENSURE(CollectTableSettingsState);
+        const auto& record = ev->Get()->GetRecord();
+        const auto status = record.GetStatus();
+        std::optional<TString> path;
+        std::optional<TString> statement;
+        switch (status) {
+            case NKikimrScheme::StatusSuccess: {
+                auto currentPath = record.GetPath();
+                const auto& pathDescription = record.GetPathDescription();
+
+                std::pair<TString, TString> pathPair;
+                {
+                    TString error;
+                    if (!TrySplitPathByDb(currentPath, Database, pathPair, error)) {
+                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
+                        return;
+                    }
                 }
-                case Schema::ShowCreate::PathType::ColumnId: {
-                    cells.emplace_back(TCell(PathType.data(), PathType.size()));
-                    break;
+
+                switch (pathDescription.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup: {
+                        const auto& description = pathDescription.GetPersQueueGroup();
+
+                        auto it = CollectTableSettingsState->PersQueues.find(pathPair.second);
+                        if (it == CollectTableSettingsState->PersQueues.end() || it->second) {
+                            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected topic path");
+                        }
+                        it->second = MakeHolder<NKikimrSchemeOp::TPersQueueGroupDescription>(description);
+                        CollectTableSettingsState->CurrentPersQueuesNumber++;
+
+                        if (CollectTableSettingsState->CurrentPersQueuesNumber != CollectTableSettingsState->PersQueues.size()) {
+                            return;
+                        }
+
+                        TCreateTableFormatter formatter;
+                        auto formatterResult = formatter.Format(
+                            CollectTableSettingsState->TablePath,
+                            CollectTableSettingsState->TableDescription,
+                            CollectTableSettingsState->Temporary,
+                            CollectTableSettingsState->PersQueues
+                        );
+                        if (formatterResult.IsSuccess()) {
+                            path = CollectTableSettingsState->TablePath;
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                            return;
+                        }
+                        break;
+                    }
+                    default: {
+                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                            << "Unsupported path type");
+                    }
                 }
-                case Schema::ShowCreate::Statement::ColumnId: {
-                    cells.emplace_back(TCell(statement.value().data(), statement.value().size()));
-                    break;
-                }
-                default:
-                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected column tag");
-                    return;
+                break;
+            }
+            case NKikimrScheme::StatusPathDoesNotExist:
+            case NKikimrScheme::StatusSchemeError: {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, record.GetReason());
+                return;
+            }
+            case NKikimrScheme::StatusAccessDenied: {
+                ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, record.GetReason());
+                return;
+            }
+            case NKikimrScheme::StatusNotAvailable: {
+                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, record.GetReason());
+                return;
+            }
+            default: {
+                ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.GetReason());
+                return;
             }
         }
 
-        Y_ENSURE(cells.size() == 3);
-        TArrayRef<const TCell> resultRow(cells);
-        batch->Rows.emplace_back(TOwnedCellVec::Make(resultRow));
-        batch->Finished = true;
+        Y_ENSURE(path.has_value());
+        Y_ENSURE(statement.has_value());
+
+        auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
+
+        FillBatch(*batch, path.value(), statement.value());
 
         SendBatch(std::move(batch));
     }
@@ -311,6 +446,15 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString Path;
     TString PathType;
+
+    struct TCollectTableSettingsState {
+        TString TablePath;
+        NKikimrSchemeOp::TTableDescription TableDescription;
+        bool Temporary;
+        THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>> PersQueues;
+        ui32 CurrentPersQueuesNumber = 0;
+    };
+    THolder<TCollectTableSettingsState> CollectTableSettingsState;
 };
 
 }

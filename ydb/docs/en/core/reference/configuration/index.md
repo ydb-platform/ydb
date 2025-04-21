@@ -621,6 +621,26 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
+### Account lockout after unsuccessful password attempts {#account-lockout}
+
+{{ ydb-short-name }} allows for the blocking of user authentication after unsuccessful password entry attempts. Lockout rules are configured in the `account_lockout` section.
+
+Syntax of the `account_lockout` section:
+
+```yaml
+auth_config:
+  ...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  ...
+```
+
+| Parameter | Description | Default value |
+| :--- | :--- | :---: |
+| `attempt_threshold` | The maximum number of unsuccessful password entry attempts. After `attempt_threshold` unsuccessful attempts, the user will be locked out for the duration specified in the `attempt_reset_duration` parameter. A zero value for the `attempt_threshold` parameter indicates no restrictions on the number of password entry attempts. After successful authentication (correct username and password), the counter for unsuccessful attempts is reset to 0. | 4 |
+| `attempt_reset_duration` | The duration of the user lockout period. During this period, the user will not be able to authenticate in the system even if the correct username and password are entered. The lockout period starts from the moment of the last incorrect password attempt. If a zero ("0s" - a notation equivalent to 0 seconds) lockout period is set, the user will be considered locked out indefinitely. In this case, the system administrator must lift the lockout.<br/><br/>The minimum lockout duration is 1 second.<br/>Supported time units:<ul><li>Seconds: `30s`</li><li>Minutes: `20m`</li><li>Hours: `5h`</li><li>Days: `3d`</li></ul>It is not allowed to combine time units in one entry. For example, the entry "1d12h" is incorrect. It should be replaced with an equivalent, such as "36h". | "1h" |
+
 ### Configuring LDAP authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.

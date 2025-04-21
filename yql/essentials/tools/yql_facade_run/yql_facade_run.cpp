@@ -650,13 +650,13 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             Cerr << "udf-resolver path must be specified when use 'scan-udfs'";
             return -1;
         }
-
         udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {});
 
         udfIndex = new TUdfIndex();
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
+            THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 

@@ -130,5 +130,25 @@ class TestTpcds100(TpcdsSuiteBase):
 
 class TestTpcds1000(TpcdsSuiteBase):
     scale: int = 1000
-    iterations: int = 2
-    timeout = max(TpcdsSuiteBase.timeout, 3*3600.)
+    iterations: int = 1
+    timeout = max(TpcdsSuiteBase.timeout, 3600.)
+    tables_size: dict[str, int] = {
+        'call_center': 42,
+        'catalog_page': 30000,
+        'catalog_returns': 143996756,
+        'catalog_sales': 1439980416,
+        'customer': 12000000,
+        'customer_address': 6000000,
+        'inventory': 783000000,
+        'item': 300000,
+        'promotion': 1500,
+        'reason': 65,
+        'store': 1002,
+        'store_returns': 287999764,
+        'store_sales': 2879987999,
+        'warehouse': 20,
+        'web_page': 3000,
+        'web_returns': 71997522,
+        'web_sales': 720000376,
+        'web_site': 54,
+    }

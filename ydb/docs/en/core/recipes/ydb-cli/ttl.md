@@ -25,7 +25,7 @@ To enable data eviction, an [external data source](../../concepts/datamodel/exte
 The example below shows how to enable data eviction by executing a YQL-query from {{ ydb-short-name }} CLI. Rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours.
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> table query execute -q '
+$ {{ ydb-cli }} -e <endpoint> -d <database> sql -s '
     ALTER TABLE `mytable` SET (
         TTL =
             Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,

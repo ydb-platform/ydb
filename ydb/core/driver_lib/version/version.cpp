@@ -731,7 +731,7 @@ TString TCompatibilityInfo::PrintHumanReadable(const NKikimrConfig::TCurrentComp
     }
     str << "\n";
 
-    if (NResource::Has("interanal_breakpad_about")) {
+    if (NResource::Has("internal_breakpad_about")) {
         str << "    HasInternalBreakpad: true" << Endl;
     }
 

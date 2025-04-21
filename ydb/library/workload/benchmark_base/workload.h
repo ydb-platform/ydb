@@ -53,6 +53,7 @@ protected:
     virtual TString GetTablesYaml() const = 0;
     virtual TSpecialDataTypes GetSpecialDataTypes() const = 0;
     NJson::TJsonValue GetTablesJson() const;
+    virtual ui32 GetDefaultPartitionsCount(const TString& tableName) const;
 
     THolder<TGeneratorStateProcessor> StateProcessor;
 private:

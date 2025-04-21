@@ -40,6 +40,7 @@ target_sources(client-federated_topic-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federation_observer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_deferred_commit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_read_session.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_write_session.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h

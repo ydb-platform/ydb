@@ -333,8 +333,7 @@ struct TProducerInstanceId {
     i64 Id;
     i32 Epoch;
 
-    bool operator==(TProducerInstanceId const&) const = default;
-    bool operator!=(TProducerInstanceId const&) const = default;
+    auto operator<=>(TProducerInstanceId const&) const = default;
 };
 
 /* 

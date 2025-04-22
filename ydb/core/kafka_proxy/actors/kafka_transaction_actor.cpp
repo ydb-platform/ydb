@@ -185,15 +185,15 @@ namespace NKafka {
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
-        Send(TxnCoordinatorActorId, new TEvKafka::TEvTransactionActorDied(TransactionalId, {ProducerId, ProducerEpoch}));
+        Send(TxnCoordinatorActorId, new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerInstanceId));
         TBase::Die(ctx);
     }
 
     template<class EventType>
     bool TKafkaTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
         return kafkaRequest->TransactionalId->c_str() == TransactionalId 
-            && kafkaRequest->ProducerId == ProducerId 
-            && kafkaRequest->ProducerEpoch == ProducerEpoch;
+            && kafkaRequest->ProducerId == ProducerInstanceId.Id 
+            && kafkaRequest->ProducerEpoch == ProducerInstanceId.Epoch;
     }
 
     TString TKafkaTransactionActor::GetFullTopicPath(const TString& topicName) {
@@ -251,8 +251,8 @@ namespace NKafka {
 
         auto* kafkaApiOperations = ev->Record.MutableRequest()->MutableKafkaApiOperations();
         kafkaApiOperations->set_transactionalid(TransactionalId);
-        kafkaApiOperations->set_producerid(ProducerId);
-        kafkaApiOperations->set_producerepoch(ProducerEpoch);
+        kafkaApiOperations->set_producerid(ProducerInstanceId.Id);
+        kafkaApiOperations->set_producerepoch(ProducerInstanceId.Epoch);
 
         for (auto& partition : PartitionsInTxn) {
             auto* partitionInRequest = kafkaApiOperations->AddPartitionsInTxn();
@@ -360,7 +360,7 @@ namespace NKafka {
     TMaybe<TString> TKafkaTransactionActor::GetErrorInProducerState(const TMaybe<TProducerState>& producerState) {
         if (!producerState) {
             return "No producer state found. May be it has expired";
-        } else if (producerState->TransactionalId != TransactionalId || producerState->ProducerId != ProducerId || producerState->ProducerEpoch != ProducerEpoch) {
+        } else if (producerState->TransactionalId != TransactionalId || producerState->ProducerId != ProducerInstanceId.Id || producerState->ProducerEpoch != ProducerInstanceId.Epoch) {
             return TStringBuilder() << "Producer state in producers_state table is different from the one in this actor. Producer state in table: "
             << "transactionalId=" << producerState->TransactionalId 
             << ", producerId=" << producerState->ProducerId

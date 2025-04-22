@@ -21,9 +21,9 @@ namespace NKafka {
                 return;
             } 
 
-            it->second = std::move(newProducerState);
+            currentProducerState = std::move(newProducerState);
         } else {
-            ProducersByTransactionalId.insert(std::make_pair(request->TransactionalId, request->ProducerState));
+            ProducersByTransactionalId.emplace(request->TransactionalId, request->ProducerState);
         }
         
         ctx.Send(ev->Sender, new TEvKafka::TEvSaveTxnProducerResponse(TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK, ""));
@@ -123,10 +123,7 @@ namespace NKafka {
     };
 
     bool TKafkaTransactionsCoordinator::NewProducerStateIsOutdated(const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState) {
-        bool producerIdAlreadyGreater = currentProducerState.Id > newProducerState.Id;
-        bool producerIdsAreEqual = currentProducerState.Id == newProducerState.Id;
-        bool epochAlreadyGreater = currentProducerState.Epoch > newProducerState.Epoch;
-        return producerIdAlreadyGreater || (producerIdsAreEqual && epochAlreadyGreater);
+        return currentProducerState > newProducerState;
     };
 
     TMaybe<TString> TKafkaTransactionsCoordinator::GetTxnRequestError(const TTransactionalRequest& request) {

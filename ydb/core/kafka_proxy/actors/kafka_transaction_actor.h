@@ -51,14 +51,13 @@ namespace NKafka {
             TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
                 TActor<TKafkaTransactionActor>(&TKafkaTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
-                ProducerId(producerId),
-                ProducerEpoch(producerEpoch),
+                ProducerInstanceId({producerId, producerEpoch}),
                 DatabasePath(DatabasePath),
                 TxnCoordinatorActorId(txnCoordinatorActorId),
                 KqpActorId(kqpActorId) {};
 
             TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerId << "; ProducerEpoch=" << ProducerEpoch << "}: ";
+                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
             }
         
         private:
@@ -123,8 +122,9 @@ namespace NKafka {
             std::unordered_map<TTopicPartition, TPartitionCommit, TopicPartitionHashFn> OffsetsToCommit = {};
             std::unordered_set<TTopicPartition, TopicPartitionHashFn> PartitionsInTxn = {};
             const TString TransactionalId;
-            const i64 ProducerId;
-            const i16 ProducerEpoch;
+            const TEvKafka::TProducerInstanceId ProducerInstanceId;
+            // const i64 ProducerId;
+            // const i16 ProducerEpoch;
 
             // helper fields
             const TString DatabasePath;
@@ -135,7 +135,7 @@ namespace NKafka {
             const TActorId TxnCoordinatorActorId;
 
             // communication with KQP
-            std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
+            std::unique_ptr<TKqpTxHelper> Kqp;
             TActorId KqpActorId;
             TString KqpSessionId;
             ui64 KqpCookie = 0;

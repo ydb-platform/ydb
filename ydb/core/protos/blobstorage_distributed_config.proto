@@ -33,9 +33,6 @@ message TStorageConfig { // contents of storage metadata
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 16;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageBoardConfig = 17;
-    optional NKikimrConfig.TDomainsConfig.TStateStorage NewSchemeBoardConfig = 18;
 }
 
 message TPDiskMetadataRecord {

@@ -682,7 +682,8 @@ namespace NKikimr::NYaml {
         if (!domainsConfig.StateStorageSize()) {
             auto& stateStorage = *domainsConfig.AddStateStorage();
             stateStorage.SetSSId(1);
-            auto& ring = *stateStorage.MutableRing();
+            auto& ringGroup = *stateStorage.AddRingGroups(); 
+            auto& ring = *ringGroup.MutableRing();
             ring.AddNode(1);
             ring.SetNToSelect(1);
         }

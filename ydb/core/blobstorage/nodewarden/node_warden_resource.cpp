@@ -168,7 +168,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 #define FETCH_CONFIG(PART, PREFIX, PROTO) \
     Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
     char PART##Prefix[TActorId::MaxServiceIDLength] = PREFIX; \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config(), StorageConfig.HasNew##PROTO##Config() ? &StorageConfig.GetNew##PROTO##Config() : nullptr);
+    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config());
 
     FETCH_CONFIG(stateStorage, "ssr", StateStorage)
     FETCH_CONFIG(board, "ssb", StateStorageBoard)

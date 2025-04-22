@@ -528,8 +528,6 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig) {
-        auto *ring = ss->MutableRing();
-
         THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>> nodesByDataCenter;
 
         for (const auto& node : baseConfig.GetAllNodes()) {
@@ -571,6 +569,8 @@ namespace NKikimr::NStorage {
             auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
             nodes.insert(nodes.end(), r.begin(), r.end());
         }
+        auto *ringGroup = ss->AddRingGroups();
+        auto *ring = ringGroup->MutableRing();
 
         for (ui32 nodeId : nodes) {
             ring->AddNode(nodeId);

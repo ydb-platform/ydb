@@ -741,7 +741,7 @@ TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
                 << ", seqNo: " << seqNo
                 << ", server pipe id: " << pipeServerId);
 
-    auto& pipeServer = PipeServers[pipeServerId];
+    auto& pipeServer = PipeServers.at(pipeServerId);
     auto res = Subscribers.emplace(subscriberId, TSubscriberInfo(subscriberId, seqNo, &pipeServer));
     Y_VERIFY_DEBUG_S(res.second, "Subscription already exists for " << subscriberId);
     pipeServer.Subscribers.insert(subscriberId);

@@ -59,6 +59,9 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_describe_configs_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_balance_actor_sql.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_balancer_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/txn_actor_response_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_transaction_actor_sql.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_transaction_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp

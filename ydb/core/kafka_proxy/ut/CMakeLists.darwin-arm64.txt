@@ -53,6 +53,7 @@ target_sources(ydb-core-kafka_proxy-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_serialization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/metarequest_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_transaction_coordinator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_transaction_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/actors_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/kafka_test_client.h
 )

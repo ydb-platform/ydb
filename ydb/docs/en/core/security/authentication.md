@@ -32,7 +32,7 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 ## Authenticating by username and password {#static-credentials}
 
 This access type implies that each database user has a username and password.
-Only digits and lowercase Latin letters can be used in usernames. Passwords are not restricted; even empty passwords are allowed.
+Only digits and lowercase Latin letters can be used in usernames. Allow to set various [criteria](#password-complexity) to password complexity.
 
 The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
@@ -47,6 +47,10 @@ Authentication by username and password includes the following steps:
 To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
+
+### Password complexity {#password-complexity}
+
+{{ ydb-short-name }} allows for additional configuration of user password policies. Passwords specified in commands such as CREATE USER and ALTER USER must comply with the current password policy. By default, the following restrictions apply to passwords: passwords of any length are accepted, including empty strings; passwords can contain any number of digits, letters in various cases, and special characters from the list `!@#$%^&*()_+{}|<>?=`. To impose restrictions on password complexity, you need to configure the password_complexity section in the [configuration](../reference/configuration/index.md#password-complexity).
 
 ### Protection against password brute force
 

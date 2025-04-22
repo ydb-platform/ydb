@@ -8,8 +8,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17394:Added counters to the spilling IO queue to track number of waiting operations. [#17394](https://github.com/ydb-platform/ydb/pull/17394) ([Filitov Mikhail](https://github.com/lll-phill-lll))
 * 17362: Add support for [google breakpad](https://chromium.googlesource.com/breakpad/breakpad) inside YDB. Now you can set minidumps path through an environment variable.
 [#17362](https://github.com/ydb-platform/ydb/pull/17362) ([Олег](https://github.com/iddqdex))
-* 17148:YDB FQ: Add support `Prometheus` as an external data source [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
-* 17007:YQ: Add support of an iceberg data source [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
+* 17148:Extended federated query capabilities to support new external data source [`Prometheus`](https://en.wikipedia.org/wiki/Prometheus_(software)). [#17148](https://github.com/ydb-platform/ydb/pull/17148) ([Stepan](https://github.com/pstpn))
+* 17007:Extended federated query capabilities to support new external data source [iceberg](https://iceberg.apache.org). [#17007](https://github.com/ydb-platform/ydb/pull/17007) ([Slusarenko Igor](https://github.com/buhtr))
 * 16982:Add predicate selectivity with Histogram (#14564)... [#16982](https://github.com/ydb-platform/ydb/pull/16982) ([Denis Khalikov](https://github.com/denis0x0D))
 * 16076:Automatic deletion of temporary tables and directories during export [#16076](https://github.com/ydb-platform/ydb/pull/16076) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 

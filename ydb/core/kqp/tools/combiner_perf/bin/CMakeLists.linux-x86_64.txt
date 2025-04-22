@@ -28,10 +28,13 @@ target_link_libraries(combiner_perf PUBLIC
   cpp-lfalloc-alloc_profiler
   library-cpp-dwarf_backtrace
   cpp-dwarf_backtrace-registry
+  library-cpp-getopt
+  library-cpp-json
 )
 
 target_allocator(combiner_perf
-  cpp-lfalloc-dbg
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 
 target_link_options(combiner_perf PRIVATE

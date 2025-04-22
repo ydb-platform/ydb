@@ -47,9 +47,11 @@ target_link_libraries(kqp-tools-combiner_perf PUBLIC
 target_sources(kqp-tools-combiner_perf PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/converters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/factories.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/printout.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/simple.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/simple_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/simple_last.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/subprocess.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/streams.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/tpch_last.cpp
 )

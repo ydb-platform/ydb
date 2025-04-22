@@ -184,7 +184,7 @@ class LoadSuiteBase:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
         end = datetime.fromtimestamp(end_time, tz).strftime("%Y-%m-%d %H:%M:%S")
-        oom_cmd = f'sudo journalctl -k -q --no-pager -S {start} -U {end} --grep "Out of memory: Kill process"'
+        oom_cmd = f'sudo journalctl -k -q --no-pager -S {start} -U {end} --grep "Out of memory: Kill" --case-sensitive=false'
         ooms = set()
         for h in hosts:
             exec = cls.__execute_ssh(h, oom_cmd)
@@ -287,6 +287,10 @@ class LoadSuiteBase:
 
         if result.stderr is not None:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
+        allure_test_description(
+            cls.suite(), test, refference_set=cls.refference,
+            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
+        )
         stats = result.get_stats(test)
         for p in ['Mean']:
             if p in stats:
@@ -295,10 +299,6 @@ class LoadSuiteBase:
         if os.getenv('NO_KUBER_LOGS') is None and not result.success:
             cls.__attach_logs(start_time=result.start_time, attach_name='kikimr')
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
-        allure_test_description(
-            cls.suite(), test, refference_set=cls.refference,
-            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
-        )
         if upload:
             ResultsProcessor.upload_results(
                 kind='Load',

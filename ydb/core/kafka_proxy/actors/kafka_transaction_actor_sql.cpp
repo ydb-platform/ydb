@@ -19,10 +19,11 @@ namespace NKafka {
             WHERE database = $Database 
             AND transactional_id = $TransactionalId;
 
-            SELECT consumer_group, generation FROM `<consumer_state_table_name>`
+            SELECT consumer_group, MAX(generation) FROM `<consumer_state_table_name>`
             VIEW PRIMARY KEY
             WHERE database = $Database
-            AND consumer_group IN COMPACT ($ConsumerGroups);
+            AND consumer_group IN COMPACT ($ConsumerGroups)
+            GROUP BY consumer_group;
         )sql";
 
     } // namespace NInitProducerIdSql

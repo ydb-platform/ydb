@@ -278,6 +278,11 @@ message TDomainsConfig {
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
+
+    // then these configs are set, they override the default StateStorage config for each kind of entity
+    optional TStateStorage ExplicitStateStorageConfig = 8;
+    optional TStateStorage ExplicitStateStorageBoardConfig = 9;
+    optional TStateStorage ExplicitSchemeBoardConfig = 10;
 }
 
 message TBlobStorageConfig {
@@ -343,6 +348,10 @@ message TSelfManagementConfig {
     // some extra settings
     optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
     optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
+    optional bool AutomaticStaticGroupManagement = 23; // whether distconf/SelfHeal can change static group on its behalf
+    optional bool AutomaticStateStorageManagement = 24; // the same for state storage
+    optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
+    optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
 }
 
 message TBlobStorageFormatConfig {

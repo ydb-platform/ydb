@@ -495,7 +495,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("sqs_config")
             self.yaml_config.pop("table_service_config")
             self.yaml_config.pop("kqpconfig")
- 
+
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config

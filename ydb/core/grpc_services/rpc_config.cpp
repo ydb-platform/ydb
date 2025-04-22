@@ -524,7 +524,6 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
         using TBase::TBase;
 
         void Bootstrap(const TActorContext& ctx) {
-            Cerr << "DoBootstrapCluster: 321" << Endl; 
             TBase::Bootstrap(ctx);
             Become(&TBootstrapClusterRequest::StateFunc);
 
@@ -533,7 +532,7 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
                 Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
                 return;
             }
-            Cerr << "DoBootstrapCluster: 330" << Endl; 
+
             const auto& request = *GetProtoRequest();
 
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
@@ -541,12 +540,10 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
             auto *cmd = record.MutableBootstrapCluster();
             cmd->SetSelfAssemblyUUID(request.self_assembly_uuid());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-            Cerr << "DoBootstrapCluster: 338" << Endl; 
         }
 
         void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev, const TActorContext& ctx) {
             auto& record = ev->Get()->Record;
-            Cerr << "DoBootstrapCluster: 343" << Endl; 
             switch (record.GetStatus()) {
                 case NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK:
                     Reply(Ydb::StatusIds::SUCCESS, ctx);

@@ -10,8 +10,6 @@ from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
 import subprocess
-import requests
-from requests.exceptions import RequestException
 
 from six.moves.queue import Queue
 
@@ -62,7 +60,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.data_center = data_center
         self.__config_path = config_path
         self.__cluster_name = cluster_name
-        logger.debug("Config: %s", configurator.yaml_config)
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
         self.__binary_path = binary_path
@@ -110,14 +107,13 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
-        
+
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""
         try:
             cmd = ["netstat", "-tuln"]
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = result.stdout.decode()
-            
             port_lines = [line for line in output.split('\n') if str(port) in line]
             if port_lines:
                 for line in port_lines:
@@ -126,12 +122,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             else:
                 logger.info(f"Port {port} is not found in netstat output")
                 is_listening = False
-            
             return is_listening
         except Exception as e:
             logger.error(f"Error checking port {port}: {e}")
             return False
-        
+
     def check_ports(self):
         """Check if all allocated ports are listening"""
         ports_status = {
@@ -139,16 +134,16 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             "mon_port": self.is_port_listening(self.mon_port),
             "ic_port": self.is_port_listening(self.ic_port)
         }
-        
+
         if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
             ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
-        
+
         if hasattr(self, 'pgwire_port') and self.pgwire_port:
             ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
-        
+
         if hasattr(self, 'sqs_port') and self.sqs_port:
             ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
-        
+
         return ports_status
 
     @property
@@ -455,18 +450,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         """
         self.__format_disks(node_id)
         self._nodes[node_id].start()
-        
-        time.sleep(3)
-        ports_status = self._nodes[node_id].check_ports()
-        logger.info(f"Node {node_id} port status after start: {ports_status}")
-        
-        if not ports_status["grpc_port"]:
-            logger.warning(f"Node {node_id} grpc port {self._nodes[node_id].grpc_port} is not listening!")
-        if not ports_status["mon_port"]:
-            logger.warning(f"Node {node_id} mon port {self._nodes[node_id].mon_port} is not listening!")
-        if not ports_status["ic_port"]:
-            logger.warning(f"Node {node_id} ic port {self._nodes[node_id].ic_port} is not listening!")
-            
         return self._nodes[node_id]
 
     def __register_node(self, configurator=None):
@@ -750,6 +733,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
                 if retries == 0:
                     raise
+
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

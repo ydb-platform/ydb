@@ -9,6 +9,7 @@ def kikimr_driver_path():
 
     return yatest.common.binary_path("kikimr/driver/kikimr")
 
+
 def ydb_cli_path():
     if os.getenv("YDB_CLI_BINARY"):
         return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))

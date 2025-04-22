@@ -340,8 +340,19 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
             resultsTtl = Min(operationTtl, resultsTtl);
         }
 
+        const auto& eventProto = Event->Get()->Record;
+        const TKqpRunScriptActorSettings settings = {
+            .Database = eventProto.GetRequest().GetDatabase(),
+            .ExecutionId = ExecutionId,
+            .LeaseGeneration = 1,
+            .LeaseDuration = LeaseDuration,
+            .ResultsTtl = resultsTtl,
+            .ProgressStatsPeriod = Event->Get()->ProgressStatsPeriod,
+            .Counters = Counters,
+        };
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, Event->Get()->ProgressStatsPeriod, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto, settings, QueryServiceConfig));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 

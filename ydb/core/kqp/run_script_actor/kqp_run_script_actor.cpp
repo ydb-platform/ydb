@@ -87,16 +87,16 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, TDuration progressStatsPeriod, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
-        : ExecutionId(executionId)
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
+        : ExecutionId(settings.ExecutionId)
         , Request(request)
-        , Database(database)
-        , LeaseGeneration(leaseGeneration)
-        , LeaseDuration(leaseDuration)
-        , ResultsTtl(resultsTtl)
-        , ProgressStatsPeriod(progressStatsPeriod)
-        , QueryServiceConfig(queryServiceConfig)
-        , Counters(counters)
+        , Database(settings.Database)
+        , LeaseGeneration(settings.LeaseGeneration)
+        , LeaseDuration(settings.LeaseDuration)
+        , ResultsTtl(settings.ResultsTtl)
+        , ProgressStatsPeriod(settings.ProgressStatsPeriod)
+        , QueryServiceConfig(std::move(queryServiceConfig))
+        , Counters(settings.Counters)
     {
         UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
     }
@@ -715,8 +715,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, TDuration progressStatsPeriod, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, progressStatsPeriod, std::move(queryServiceConfig), counters);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(request, settings, std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

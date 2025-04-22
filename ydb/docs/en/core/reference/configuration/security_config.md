@@ -149,7 +149,7 @@ The list includes groups and their members.
 
 {% note warning %}
 
-These groups are created in the [root database](../../concepts/glossary.md#root-database) for the entire {{ ydb-short-name }} cluster.
+These groups are created for the entire {{ ydb-short-name }} cluster.
 
 {% endnote %}
 

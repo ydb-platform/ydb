@@ -47,6 +47,7 @@ target_link_options(core-blobstorage-ut_blobstorage-ut_replication PRIVATE
 target_sources(core-blobstorage-ut_blobstorage-ut_replication PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/replication_huge.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/ut_helpers.cpp
 )
 
 

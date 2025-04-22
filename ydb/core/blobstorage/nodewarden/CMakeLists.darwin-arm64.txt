@@ -38,7 +38,6 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
 target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_audit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_binding.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_console.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_dynamic.cpp
@@ -66,7 +65,6 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_audit.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_events.h

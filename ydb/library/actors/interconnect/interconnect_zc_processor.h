@@ -23,8 +23,8 @@ public:
     // Enables ability to use ZC for given socket
     void ApplySocketOption(TStreamSocket& socket);
 
-    // Perform send as ZC if front message is sutiable for ZC transfer.
-    // Othervise send us usial number of messages to leave ZC ready for next call 
+    // Perform ZC send if front message is suitable for ZC transfer.
+    // Otherwise, send usual number of messages to prepare for ZC send for next call
     ssize_t ProcessSend(std::span<TConstIoVec> wbuf, TStreamSocket& socket, std::span<TOutgoingStream::TBufController> ctrl);
 
     // Process notification queue to track actual send position

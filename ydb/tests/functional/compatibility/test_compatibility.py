@@ -26,10 +26,11 @@ all_binary_combinations = [
 all_binary_combinations_ids = [
     "last_stable_to_current",
     "last_stable_to_current_mixed",
-     "current_to_last_stable"
-    ]
+    "current_to_last_stable"
+]
 
 logger = logging.getLogger(__name__)
+
 
 class TestCompatibility(object):
     @pytest.fixture(autouse=True, params=all_binary_combinations, ids=all_binary_combinations_ids)
@@ -40,9 +41,10 @@ class TestCompatibility(object):
             binary_paths=[self.all_binary_paths[0]],
             use_in_memory_pdisks=False,
 
-            # uncomment for 64 datetime in tpc-h/tpc-ds
-            # extra_feature_flags={"enable_table_datetime64": True},
-            extra_feature_flags={"suppress_compatibility_check": True},
+            extra_feature_flags={
+                "suppress_compatibility_check": True,
+                # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
+                },
             column_shard_config={
                 'disabled_on_scheme_shard': False,
             },
@@ -79,7 +81,7 @@ class TestCompatibility(object):
         bucket.objects.all().delete()
 
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
-    
+
     def change_cluster_version(self, new_binary_paths):
         binary_path_before = self.config.get_binary_paths()
         versions_on_before = self.get_nodes_version()
@@ -112,7 +114,7 @@ class TestCompatibility(object):
                 '--format',
                 'json-unicode'
             ]
-            result =  yatest.common.execute(get_version_command, wait=True)
+            result = yatest.common.execute(get_version_command, wait=True)
             result_data = json.loads(result.std_out.decode('utf-8'))
             logger.debug(f'node_{node_id}_version": {result_data}')
             node_version_key = f"node_{node_id}_version"
@@ -123,9 +125,6 @@ class TestCompatibility(object):
                 print(f"Key {node_version_key} not found in the result.")
         return versions
 
-
-
-
     def check_table_exists(driver, table_path):
         try:
             driver.scheme_client.describe_table(table_path)
@@ -135,21 +134,21 @@ class TestCompatibility(object):
                 return False
             else:
                 raise
+
     def exec_query(self, query: str):
         command = [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "-e",
-                "grpc://localhost:%d" % self.cluster.nodes[1].port,
-                "-d"
-                "/Root",
-                "yql",
-                "--script",
-                f"{query}"
-            ]
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "-e",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "-d",
+            "/Root",
+            "yql",
+            "--script",
+            f"{query}"
+        ]
         yatest.common.execute(command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        
-    
+
     def execute_scan_query(self, query_body):
         query = ydb.ScanQuery(query_body, {})
         it = self.driver.table_client.scan_query(query)
@@ -164,14 +163,13 @@ class TestCompatibility(object):
 
         return result_set
 
-
     def log_database_scheme(self):
         get_scheme_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
             "-e",
             "grpc://localhost:%d" % self.cluster.nodes[1].port,
-            "-d"
+            "-d",
             "/Root",
             "scheme",
             "ls",
@@ -179,11 +177,10 @@ class TestCompatibility(object):
             "-R"
         ]
         yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-    
+
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
         def read_update_data(self, iteration_count=1, start_index=0):
-            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
             self.get_nodes_version()
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
@@ -224,7 +221,6 @@ class TestCompatibility(object):
                         except StopIteration:
                             break
 
-
                     for row in result_set:
                         print(" ".join([str(x) for x in list(row.values())]))
 
@@ -235,7 +231,6 @@ class TestCompatibility(object):
                     assert result[0]['sum_value'] == upsert_count * iteration_count + start_index
 
         def create_table_column(self):
-            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
@@ -243,24 +238,23 @@ class TestCompatibility(object):
                     )
 
         def create_table_row(self):
-            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
                         "create table `sample_table` (id Uint64, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
-                        )
+                    )
 
         create_table_row(self) if store_type == "row" else create_table_column(self)
         read_update_data(self)
         self.change_cluster_version(self.all_binary_paths[1])
-        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, f'Expected 200 rows after update version'
+        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, 'Expected 200 rows after update version'
         read_update_data(self, iteration_count=2, start_index=100)
-        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, f'Expected 500 rows: update 100-200 rows and added 300 rows'
+        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_tpch1(self, store_type):
-        result_json_path = os.path.join( yatest.common.test_output_path(), "result.json")
-        query_output_path = os.path.join( yatest.common.test_output_path(), "query_output.json")
+        result_json_path = os.path.join(yatest.common.test_output_path(), "result.json")
+        query_output_path = os.path.join(yatest.common.test_output_path(), "query_output.json")
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -273,7 +267,7 @@ class TestCompatibility(object):
             "tpch",
             "init",
             "--store={}".format(store_type),
-           # "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
         ]
         import_command = [
@@ -315,7 +309,7 @@ class TestCompatibility(object):
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)  
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         self.change_cluster_version(self.all_binary_paths[1])
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 

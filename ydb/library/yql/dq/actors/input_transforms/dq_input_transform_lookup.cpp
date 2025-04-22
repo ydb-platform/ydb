@@ -5,7 +5,6 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
-#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/mkql_key_payload_value_lru_cache.h>
 
@@ -80,10 +79,6 @@ public:
         , LastLruSize(0)
     {
         Y_ABORT_UNLESS(Alloc);
-        Cerr << "LookupKeyType " << NMiniKQL::PrintNode(lookupKeyType, true) << Endl;
-        Cerr << "LookupPayloadType " << NMiniKQL::PrintNode(lookupPayloadType, true) << Endl;
-        Cerr << "InputRowType " << NMiniKQL::PrintNode(inputRowType, true) << Endl;
-        Cerr << "OutputRowType " << NMiniKQL::PrintNode(outputRowType, true) << Endl;
         for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
             Y_DEBUG_ABORT_UNLESS(LookupInputIndexes[i] < InputRowType->GetElementsCount());
         }
@@ -574,10 +569,8 @@ public:
                 NUdf::TUnboxedValue other = HolderFactory.CreateDirectArrayHolder(OtherInputIndexes.size(), otherItems);
                 bool nullsInKey = false;
                 ui32 minKeyListLength = std::numeric_limits<ui32>::max();
-                Cerr << "inputKeys ";
                 for (size_t i = 0; i != LookupInputIndexes.size(); ++i) {
                     auto& key = keyItems[i] = inputRowItems[LookupInputIndexes[i]];
-                    Cerr << ' ' << key;
                     if (!key) {
                         nullsInKey = true;
                         minKeyListLength = 0;
@@ -588,20 +581,14 @@ public:
                     }
                 }
                 PayloadExtraSize += minKeyListLength * RightOutputColumns * sizeof(NUdf::TUnboxedValue);
-                Cerr << " output ";
                 for (size_t i = 0; i != OtherInputIndexes.size(); ++i) {
                     otherItems[i] = inputRowItems[OtherInputIndexes[i]];
-                    Cerr << ' ' << otherItems[i];
                 }
                 auto& output = AwaitingQueue.emplace_back();
-                Cerr
-                    << " nullsInKey = " << nullsInKey
-                    << " minKeyListLength = " << minKeyListLength << Endl;
                 MakeOutputRow(key, other, minKeyListLength, output, nullsInKey);
                 for (ui32 subKeyIdx = 0; subKeyIdx != minKeyListLength; ++subKeyIdx) {
                     NUdf::TUnboxedValue* subKeyItems;
                     NUdf::TUnboxedValue subKey = HolderFactory.CreateDirectArrayHolder(LookupInputIndexes.size(), subKeyItems);
-                    Cerr << "subKey[" << subKeyIdx << "]";
                     bool nullsInSubKey = false;
                     for (ui32 columnIdx = 0; columnIdx != LookupInputIndexes.size(); ++columnIdx) {
                         auto& key = subKeyItems[columnIdx] = keyItems[columnIdx].GetElement(subKeyIdx);
@@ -609,9 +596,7 @@ public:
                             nullsInSubKey = true;
                             break;
                         }
-                        Cerr << ' ' << key;
                     }
-                    Cerr << Endl;
 
                     if (nullsInSubKey) {
                         // do nothing, right side is nulls
@@ -717,7 +702,6 @@ private:
     }
 
     void FillOutputRow(std::vector<NUdf::TUnboxedValue*>& outputListItems, ui32 subRowIdx, const NUdf::TUnboxedValue& lookupSubKey, NUdf::TUnboxedValue& lookupPayload) {
-        Cerr << "Fill: " << lookupSubKey << '=' << lookupPayload << Endl;
         if (!lookupPayload) {
             return;
         }

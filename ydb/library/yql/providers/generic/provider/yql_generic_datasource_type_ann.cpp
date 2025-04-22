@@ -122,15 +122,11 @@ namespace NYql {
                 return filterAnnotationStatus;
             }
 
-            //bool isListify = false;
             if (input->ChildrenSize() > TGenSourceSettings::idx_Listify) {
                 auto listify = input->Child(TGenSourceSettings::idx_Listify);
                 if (listify->IsAtom({"listify"sv})) {
-                    //isListify = true;
                 } else if (listify->IsCallable(TCoVoid::CallableName())) {
                 } else {
-                    Cerr << "Not recognized " << listify->Dump() << Endl;
-                    // TODO
                     return TStatus::Error;
                 }
             }
@@ -194,8 +190,6 @@ namespace NYql {
                     isListify = true;
                 } else if (listify->IsCallable(TCoVoid::CallableName())) {
                 } else {
-                    Cerr << "Not recognized " << listify->Dump() << Endl;
-                    // TODO
                     return TStatus::Error;
                 }
             }

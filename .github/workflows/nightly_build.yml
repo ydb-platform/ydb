@@ -1,17 +1,9 @@
 name: Nightly-Build  # workflow used to upload built binaries to s3
 on:
   schedule:
-    - cron: "0 3 * * *"  # At 01:00 every day
+    - cron: "0 3 * * *"  # At 03:00 every day
   workflow_dispatch:
     inputs:
-      runner_label:
-        type: string
-        default: "auto-provisioned"
-        description: "runner label"
-      commit_sha:
-        type: string
-        default: ""
-        description: "specific commit SHA to build (optional)"
       use_default_branches:
         description: 'If true, run on main and all current stable branches. If false, run only on the current branch.'
         type: boolean
@@ -19,12 +11,26 @@ on:
         default: true
 
 jobs:
+  determine_branches:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.set-branches.outputs.branches }}
+    steps:
+      - id: set-branches
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_default_branches }}" == "true" ]]; then
+            echo "branches=['main', 'stable-25-1', 'stable-24-4', 'stable-25-1-1', 'stable-25-1-analytics']" >> $GITHUB_OUTPUT
+          else
+            echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
+          fi
+
   build_and_test:
+    needs: determine_branches
     strategy:
       fail-fast: false
       matrix:
         build_preset: ["release", "relwithdebinfo", "release-asan"]
-        branch: ${{ fromJSON((inputs.use_default_branches == true || github.event_name == 'schedule') && '["main", "stable-25-1", "stable-24-4", "stable-25-1-1", "stable-25-1-analytics"]' || format('["{}"]', github.ref_name)) }}
+        branch: ${{ fromJSON(needs.determine_branches.outputs.branches) }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:

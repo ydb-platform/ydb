@@ -842,7 +842,13 @@ void CheckUpdateNodesLog(TTestActorRuntime &runtime,
     static ui32 seqNo = 1;
     TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
     SubscribeToNodesUpdates(runtime, sender, pipe, version, ++seqNo);
-    CheckNodesUpdate(runtime, updates, seqNo, epoch);
+    if (epoch.GetVersion() != version) {
+        CheckNodesUpdate(runtime, updates, seqNo, epoch);
+    } else {
+        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT(block.empty());
+    }
     runtime.ClosePipe(pipe, sender, 0);
 }
 
@@ -4261,7 +4267,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
     }
 
-    Y_UNIT_TEST(SubscribeToNodesUpdate)
+    Y_UNIT_TEST(SubscribeToNodes)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 3);
@@ -4269,56 +4275,57 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         TActorId pipe1 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
 
         // Subscribe to node updates and check initial update
-        ui64 cachedVersion1 = 0;
-        ui64 seqNo1 = 1;
-        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion1, seqNo1);
-        CheckNodesUpdate(runtime, {}, seqNo1, GetEpoch(runtime, sender));
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 0;
+        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
 
         // Check updates after registration
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1);
-        CheckNodesUpdate(runtime, { NODE1 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
 
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE2);
-        CheckNodesUpdate(runtime, { NODE2 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
 
         CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE3);
-        CheckNodesUpdate(runtime, { NODE3 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
 
         // Check update after epoch change
         auto epoch = WaitForEpochUpdate(runtime, sender);
-        CheckNodesUpdate(runtime, {}, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
 
         // Check update after lease extension
         CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
-        CheckNodesUpdate(runtime, { NODE1 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
 
         CheckLeaseExtension(runtime, sender, NODE2, TStatus::OK, epoch);
-        CheckNodesUpdate(runtime, { NODE2 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
 
         // Check update after epoch change that expires NODE3
         epoch = WaitForEpochUpdate(runtime, sender);
-        CheckNodesUpdate(runtime, { E(NODE3) }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { E(NODE3) }, seqNo, GetEpoch(runtime, sender));
         CheckNodesList(runtime, sender, {NODE1, NODE2}, {NODE3}, epoch.GetId());
 
         CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
-        CheckNodesUpdate(runtime, { NODE1 }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
 
         // Connect new client and check initial update
         ui64 cachedVersion2 = 0;
-        ui64 seqNo2 = 1;
-        auto pipe2 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
-        SubscribeToNodesUpdates(runtime, sender, pipe2, cachedVersion2, seqNo2);
-        CheckNodesUpdate(runtime, { NODE1, NODE2, E(NODE3), NODE1 }, seqNo2, GetEpoch(runtime, sender));
+        ui64 seqNo2 = 0;
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        auto pipe2 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender2, 0, GetPipeConfigWithRetries());
+        SubscribeToNodesUpdates(runtime, sender2, pipe2, cachedVersion2, seqNo2);
+        CheckNodesUpdate(runtime, { NODE1, NODE2, E(NODE3), NODE1 }, seqNo2, GetEpoch(runtime, sender2));
 
         // Check update after epoch change that expires NODE2 and removes NODE3
         epoch = WaitForEpochUpdate(runtime, sender);
-        CheckNodesUpdate(runtime, { E(NODE2), R(NODE3) }, seqNo1, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { E(NODE2), R(NODE3) }, seqNo, GetEpoch(runtime, sender));
         CheckNodesUpdate(runtime, { E(NODE2), R(NODE3) }, seqNo2, GetEpoch(runtime, sender));
         CheckNodesList(runtime, sender, {NODE1}, {NODE2}, epoch.GetId());
-        cachedVersion1 = epoch.GetVersion();
+        cachedVersion = epoch.GetVersion();
         cachedVersion2 = epoch.GetVersion();
 
         // Shift ID range
@@ -4331,19 +4338,20 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
         // Reconnect and check update after shift range ID
         pipe1 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
-        ++seqNo1;
-        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion1, seqNo1);
-        CheckNodesUpdate(runtime, { R(NODE2) }, seqNo1, GetEpoch(runtime, sender));
+        ++seqNo;
+        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { R(NODE2) }, seqNo, GetEpoch(runtime, sender));
 
         // Connect new client and check initial update
         ui64 cachedVersion3 = 0;
-        ui64 seqNo3 = 1;
-        auto pipe3 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
-        SubscribeToNodesUpdates(runtime, sender, pipe3, cachedVersion3, seqNo3);
-        CheckNodesUpdate(runtime, { NODE1, R(NODE3), R(NODE2) }, seqNo3, GetEpoch(runtime, sender));
+        ui64 seqNo3 = 0;
+        TActorId sender3 = runtime.AllocateEdgeActor();
+        auto pipe3 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender3, 0, GetPipeConfigWithRetries());
+        SubscribeToNodesUpdates(runtime, sender3, pipe3, cachedVersion3, seqNo3);
+        CheckNodesUpdate(runtime, { NODE1, R(NODE3), R(NODE2) }, seqNo3, GetEpoch(runtime, sender2));
     }
 
-    Y_UNIT_TEST(NodeUpdatesSubscriberDisconnect)
+    Y_UNIT_TEST(NodesSubscriberDisconnect)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4);
@@ -4367,6 +4375,9 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Check empty sync nodes
         CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
 
+        // Update cached version
+        cachedVersion = GetEpoch(runtime, sender).GetVersion();
+
         // Close pipe
         runtime.ClosePipe(pipe, sender, 0);
 
@@ -4387,10 +4398,72 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE4);
         CheckNodesUpdate(runtime, { NODE4 }, seqNo, GetEpoch(runtime, sender));
-        cachedVersion = GetEpoch(runtime, sender).GetVersion();
 
         // Check empty sync nodes
         CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+    }
+
+    Y_UNIT_TEST(SeveralNodesSubscribersPerPipe)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Subscribe to node updates and check initial update
+        TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 1;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        // Subscribe another client to node updates using the same pipe and check initial update
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        ui64 cachedVersion2 = 0;
+        ui64 seqNo2 = 1;
+        SubscribeToNodesUpdates(runtime, sender2, pipe, cachedVersion2, seqNo2);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo2, GetEpoch(runtime, sender));
+
+        // Check empty sync nodes
+        CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+        CheckSyncNodes(runtime, sender2, {}, seqNo2, pipe, GetEpoch(runtime, sender));
+
+        // Delay updates
+        {
+            TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+            CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4, TStatus::OK, NODE2);
+            runtime.WaitFor("updates are sent", [&]{ return block.size() >= 2; });
+            block.Unblock();
+        }
+
+        // Check sync nodes
+        CheckSyncNodes(runtime, sender, { NODE2 }, seqNo, pipe, GetEpoch(runtime, sender));
+        CheckSyncNodes(runtime, sender2, { NODE2 }, seqNo2, pipe, GetEpoch(runtime, sender));
+
+        // Update cached version
+        cachedVersion = GetEpoch(runtime, sender).GetVersion();
+        cachedVersion2 = GetEpoch(runtime, sender).GetVersion();
+
+        // Close pipe
+        runtime.ClosePipe(pipe, sender, 0);
+
+        // Check no updates were sent
+        {
+            TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+            CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4, TStatus::OK, NODE3);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(block.empty(), "updates were sent");
+        }
+
+        // Resubcribe only one client and check updates
+        pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ++seqNo;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
     }
 }
 

@@ -472,11 +472,11 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOutdated,
             StatusUnavailable,
         };
-
+ 
         ui32 Sz;
         TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
-
+        
         TSelection()
             : Sz(0)
         {}

@@ -8,13 +8,15 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
     void FillStateStorageInfo(TStateStorageInfo *info, ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
-        info->NToSelect = nToSelect;
-
-        info->Rings.resize(replicas);
+        info->RingGroups.resize(info->RingGroups.size() + 1);
+        auto& group = info->RingGroups.back();
+        group.writeOnly = false;
+        group.NToSelect = nToSelect;
+        group.Rings.resize(replicas);
         for (ui32 i : xrange(replicas)) {
             for (ui32 j : xrange(replicasInRing)) {
-                info->Rings[i].Replicas.push_back(TActorId(i, i, i + j, i));
-                info->Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
+                group.Rings[i].Replicas.push_back(TActorId(i, i, i + j, i));
+                group.Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
             }
         }
     }

@@ -13,7 +13,12 @@ concurrency:
 jobs:
   ping:
     if: contains(github.event.pull_request.labels.*.name, 'documentation')
+    permissions:
+      issues: write
+      pull-requests: read
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
     steps:
       - uses: actions/github-script@v7
         with:

@@ -123,9 +123,6 @@ public:
                 || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
 
-        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            || tableServiceConfig.GetEnableKqpDataQueryStreamLookup());
-
         ReadOnlyTx = IsReadOnlyTx();
     }
 
@@ -1637,7 +1634,7 @@ private:
             shardTasks.emplace(shardId, task.Id);
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, task);
+            BuildSinks(stage, stageInfo, task);
 
             return task;
         };

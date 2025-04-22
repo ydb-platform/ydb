@@ -286,8 +286,8 @@ void MultiStep(TQueryClient client) {
         }
 
         // Get the active transaction id
-        auto txId = resultValue.GetTransaction()->GetId();
-        
+        auto tx = *resultValue.GetTransaction();
+
         // Processing the request result
         TResultSetParser parser(resultValue.GetResultSet(0));
         parser.TryNextRow();
@@ -328,7 +328,7 @@ void MultiStep(TQueryClient client) {
         // and commit it at the end of the second query execution.
         auto result2 = session.ExecuteQuery(
             query2,
-            TTxControl::Tx(txId).CommitTx(),
+            TTxControl::Tx(tx).CommitTx(),
             params2).GetValueSync();
         
         if (!result2.IsSuccess()) {
@@ -381,7 +381,7 @@ void ExplicitTcl(TQueryClient client) {
         // Execute query.
         // Transaction control settings continues active transaction (tx)
         auto updateResult = session.ExecuteQuery(query,
-            TTxControl::Tx(tx.GetId()),
+            TTxControl::Tx(tx),
             params).GetValueSync();
 
         if (!updateResult.IsSuccess()) {

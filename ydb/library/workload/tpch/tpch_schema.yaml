@@ -81,6 +81,8 @@ tables:
     primary_key:
       - l_orderkey
       - l_linenumber
+    partition_by:
+      - l_orderkey
 
   - name: nation
     columns:

@@ -1,6 +1,7 @@
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -85,18 +86,20 @@ namespace {
                                                                                         \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define STROKA_UDF(udfName, function)                                   \
-    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0)                                    \
-        const TString input(args[0].AsStringRef());                     \
-        try {                                                           \
-            TUtf16String wide = UTF8ToWide(input);                      \
-            function(wide);                                             \
-            return valueBuilder->NewString(WideToUTF8(wide));           \
-        } catch (yexception&) {                                         \
-            return TUnboxedValue();                                     \
-        }                                                               \
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them
+SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
+    builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1))) {
+    EMPTY_RESULT_ON_EMPTY_ARG(0)
+    const TString input(args[0].AsStringRef());
+    try {
+        TUtf16String wide = UTF8ToWide(input);
+        ReverseInPlace(wide);
+        return valueBuilder->NewString(WideToUTF8(wide));
+    } catch (yexception&) {
+        return TUnboxedValue();
     }
+}
 
 #define STROKA_CASE_UDF(udfName, function)                              \
     SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
@@ -876,7 +879,6 @@ namespace {
 
     STRING_UDF_MAP(STRING_UDF)
     STRING_UNSAFE_UDF_MAP(STRING_UNSAFE_UDF)
-    STROKA_UDF_MAP(STROKA_UDF)
     STROKA_CASE_UDF_MAP(STROKA_CASE_UDF)
     STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF)
     STROKA_FIND_UDF_MAP(STROKA_FIND_UDF)
@@ -902,6 +904,7 @@ namespace {
         STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        TReverse,
         TCollapseText,
         TReplaceAll,
         TReplaceFirst,

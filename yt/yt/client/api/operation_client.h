@@ -217,6 +217,8 @@ struct TListJobsOptions
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
 
+    std::optional<THashSet<TString>> Attributes;
+
     std::optional<TString> ContinuationToken;
 
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();
@@ -394,8 +396,11 @@ struct TJob
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;
-
     std::optional<bool> IsStale;
+
+    // Service flags which are used to compute "is_stale" attribute in "list_jobs".
+    bool PresentInArchive = false;
+    bool PresentInControllerAgent = false;
 
     std::optional<NJobTrackerClient::EJobState> GetState() const;
 };

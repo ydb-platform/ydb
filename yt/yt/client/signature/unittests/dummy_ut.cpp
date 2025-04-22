@@ -25,7 +25,7 @@ TEST(TDummySignatureGeneratorTest, Generate)
 {
     auto generator = CreateDummySignatureGenerator();
     auto signature = ConvertTo<TSignaturePtr>(YsonSignature);
-    generator->Resign(signature);;
+    generator->Resign(signature);
     EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text).ToString(), YsonSignature.ToString());
 }
 

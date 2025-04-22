@@ -19,6 +19,11 @@
             "uri": "file://test.test_ExtractInsertHints_/results.txt"
         }
     ],
+    "test.test[ExtractKeywords]": [
+        {
+            "uri": "file://test.test_ExtractKeywords_/results.txt"
+        }
+    ],
     "test.test[ExtractPragmas]": [
         {
             "uri": "file://test.test_ExtractPragmas_/results.txt"

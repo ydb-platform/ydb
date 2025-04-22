@@ -75,6 +75,7 @@ PEERDIR(
     yql/essentials/protos
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
+    yql/essentials/public/langver
     yql/essentials/sql/settings
     yql/essentials/sql
     yql/essentials/utils
@@ -103,6 +104,7 @@ RECURSE(
     dqs_expr_nodes
     file_storage
     issue
+    langver
     minsketch
     pg_ext
     pg_settings

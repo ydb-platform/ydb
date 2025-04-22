@@ -12,6 +12,7 @@
 
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/table_partition_reader.h>
+#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
@@ -223,6 +224,16 @@ ITransactionPtr TClient::AttachTransaction(
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
         "Transaction attached");
+}
+
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    static_cast<TPrerequisiteAttachOptions&>(attachOptions) = options;
+
+    return AttachTransaction(prerequisiteId, attachOptions);
 }
 
 TFuture<void> TClient::MountTable(
@@ -475,6 +486,10 @@ TFuture<void> TClient::AlterTableReplica(
 
     YT_OPTIONAL_SET_PROTO(req, enable_replicated_table_tracker, options.EnableReplicatedTableTracker);
     YT_OPTIONAL_TO_PROTO(req, replica_path, options.ReplicaPath);
+
+    if (options.Force) {
+        req->set_force(true);
+    }
 
     ToProto(req->mutable_mutating_options(), options);
 
@@ -1470,6 +1485,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.ContinuationToken) {
         req->set_continuation_token(*options.ContinuationToken);
+    }
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes()->mutable_keys(), *options.Attributes);
     }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
@@ -2712,6 +2730,30 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
         return TGetFlowViewResult{
             .FlowViewPart = TYsonString(rsp->flow_view_part()),
+        };
+    }));
+}
+
+TFuture<TFlowExecuteResult> TClient::FlowExecute(
+    const NYPath::TYPath& pipelinePath,
+    const TString& command,
+    const NYson::TYsonString& argument,
+    const TFlowExecuteOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FlowExecute();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_command(command);
+    if (argument) {
+        req->set_argument(argument.ToString());
+    }
+
+    return req->Invoke().Apply(BIND([](const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
+        return TFlowExecuteResult{
+            .Result = rsp->has_result() ? TYsonString(rsp->result()) : TYsonString{},
         };
     }));
 }

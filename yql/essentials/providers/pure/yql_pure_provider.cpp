@@ -116,7 +116,7 @@ public:
 
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), State_->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry);
+        TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, false, State_->Types->LangVer);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
         NCommon::TMkqlBuildContext mkqlCtx(compiler, pgmBuilder, ctx);
@@ -145,7 +145,7 @@ public:
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
         const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
             *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-            NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get());
+            NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

@@ -167,11 +167,13 @@ private:
 
     struct TScope
     {
-        size_t ScopeNameLength;
+        size_t NameLength;
+        bool FilterMatch;
         char* CurrentChecksumPtr;
         TChecksum CurrentChecksum = {};
     };
 
+    TSerializationDumpScopeFilter ScopeFilter_;
     std::vector<TScope> ScopeStack_;
     std::string CurrentScopePath_;
 
@@ -181,6 +183,7 @@ private:
     void UpdateScopesChecksum();
     void UpdateScopesCurrentChecksumPtr();
 
+    void ConfigureScopeFilter(TSerializationDumpScopeFilter scopeFilter);
     void BeginScope(TStringBuf name);
     void EndScope();
 };
@@ -201,10 +204,14 @@ public:
 
     TLoadContextStream* GetInput();
 
+    void ConfigureDump(
+        ESerializationDumpMode mode,
+        TSerializationDumpScopeFilter scopeFilter = {});
     void BeginScope(TStringBuf name);
     void EndScope();
 
 protected:
+    bool DumpConfigured_ = false;
     TLoadContextStream Input_;
 };
 

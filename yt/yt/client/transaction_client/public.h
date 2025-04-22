@@ -53,6 +53,7 @@ YT_DEFINE_ERROR_ENUM(
     ((UnknownClockClusterTag)           (11014))
     ((ClockClusterTagMismatch)          (11015))
     ((ChaosCoordinatorsAreNotAvailable) (11016))
+    ((NeedLockDynamicTablesBeforeCommit)(11017))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

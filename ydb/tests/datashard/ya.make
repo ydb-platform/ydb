@@ -1,4 +1,6 @@
 RECURSE(
-    lib
+    async_replication
     dml
+    lib
+    dump_restore
 )

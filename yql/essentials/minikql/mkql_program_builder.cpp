@@ -338,10 +338,12 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap) {
     return ValidateBlockItems(wideComponents, unwrap);
 }
 
-TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects)
+TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry,
+    bool voidWithEffects, NYql::TLangVersion langver)
     : TTypeBuilder(env)
     , FunctionRegistry(functionRegistry)
     , VoidWithEffects(voidWithEffects)
+    , LangVer(langver)
 {}
 
 const TTypeEnvironment& TProgramBuilder::GetTypeEnvironment() const {
@@ -4097,7 +4099,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry.FindFunctionTypeInfo(
-        Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+        LangVer, Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
 
     auto runConfigType = funcInfo.RunConfigType;
@@ -5756,25 +5758,30 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode stream, TType* returnType) {
-    if constexpr (RuntimeVersion < 59U) {
+TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode list, TType* returnType) {
+    if constexpr (RuntimeVersion < 62U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
-    ValidateBlockStreamType(stream.GetStaticType());
+    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expected List as input type");
+    const auto listType = AS_TYPE(TListType, list.GetStaticType());
+
+    MKQL_ENSURE(listType->GetItemType()->IsStruct(), "Expected List of Struct as input type");
+    const auto itemBlockStructType = AS_TYPE(TStructType, listType->GetItemType());
+    ValidateBlockStructType(itemBlockStructType);
 
     MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
     auto returnResourceType = AS_TYPE(TResourceType, returnType);
     MKQL_ENSURE(returnResourceType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
-    callableBuilder.Add(stream);
+    callableBuilder.Add(list);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType) {
-    if constexpr (RuntimeVersion < 59U) {
+TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType) {
+    if constexpr (RuntimeVersion < 62U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
@@ -5782,7 +5789,9 @@ TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType
     auto blockStorageType = AS_TYPE(TResourceType, blockStorage.GetStaticType());
     MKQL_ENSURE(blockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
 
-    ValidateBlockType(streamItemType);
+    MKQL_ENSURE(listItemType->IsStruct(), "Expected Struct as an item type");
+    const auto itemBlockStructType = AS_TYPE(TStructType, listItemType);
+    ValidateBlockStructType(itemBlockStructType);
 
     MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
     auto returnResourceType = AS_TYPE(TResourceType, returnType);
@@ -5797,18 +5806,18 @@ TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(blockStorage);
-    callableBuilder.Add(TRuntimeNode(streamItemType, true));
+    callableBuilder.Add(TRuntimeNode(listItemType, true));
     callableBuilder.Add(NewTuple(keyColumnsNodes));
     callableBuilder.Add(NewDataLiteral((bool)any));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
     const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
     const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
 ) {
-    if constexpr (RuntimeVersion < 59U) {
+    if constexpr (RuntimeVersion < 62U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
@@ -5831,8 +5840,11 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
-    ValidateBlockType(rightStreamItemType);
     ValidateBlockStreamType(returnType);
+
+    MKQL_ENSURE(rightListItemType->IsStruct(), "Expected Struct as an right item type");
+    const auto rightItemBlockStructType = AS_TYPE(TStructType, rightListItemType);
+    ValidateBlockStructType(rightItemBlockStructType);
 
     TRuntimeNode::TList leftKeyColumnsNodes;
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
@@ -5865,7 +5877,7 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
     callableBuilder.Add(rightBlockStorage);
-    callableBuilder.Add(TRuntimeNode(rightStreamItemType, true));
+    callableBuilder.Add(TRuntimeNode(rightListItemType, true));
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftKeyDropsNodes));

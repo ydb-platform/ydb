@@ -123,33 +123,29 @@ struct TTenantsTestSettings : TKikimrTestSettings {
 namespace {
 
 #define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
-    template <ENUM_TYPE Value> \
     struct TTestCase##N : public TCurrentTestCase { \
-        TString ParametrizedTestName = #N "-" + ENUM_TYPE##_Name(Value); \
+        ENUM_TYPE Value; \
+        TString ParametrizedTestName; \
 \
-        TTestCase##N() : TCurrentTestCase() { \
+        TTestCase##N(ENUM_TYPE value) : TCurrentTestCase(), Value(value), ParametrizedTestName(#N "-" + ENUM_TYPE##_Name(Value)) { \
             Name_ = ParametrizedTestName.c_str(); \
         } \
 \
-        static THolder<NUnitTest::TBaseTestCase> Create()  { return ::MakeHolder<TTestCase##N<Value>>();  } \
+        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value) { return ::MakeHolder<TTestCase##N>(value); } \
         void Execute_(NUnitTest::TTestContext&) override; \
     }; \
     struct TTestRegistration##N { \
-        template <int I, int End> \
-        static constexpr void AddTestsForEnumRange() { \
-            if constexpr (I < End) { \
-                TCurrentTest::AddTest(TTestCase##N<static_cast<ENUM_TYPE>(I)>::Create); \
-                AddTestsForEnumRange<I + 1, End>(); \
-            } \
-        } \
-\
         TTestRegistration##N() { \
-            AddTestsForEnumRange<0, ENUM_TYPE##_ARRAYSIZE>(); \
+            const auto* enumDescriptor = google::protobuf::GetEnumDescriptor<ENUM_TYPE>(); \
+            for (int i = 0; i < enumDescriptor->value_count(); ++i) { \
+                const auto* valueDescriptor = enumDescriptor->value(i); \
+                const auto value = static_cast<ENUM_TYPE>(valueDescriptor->number()); \
+                TCurrentTest::AddTest([value] { return TTestCase##N::Create(value); }); \
+            } \
         } \
     }; \
     static TTestRegistration##N testRegistration##N; \
-    template <ENUM_TYPE Value> \
-    void TTestCase##N<Value>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
+    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -812,7 +808,7 @@ void TestViewDependentOnAnotherViewIsRestored(
     CompareResults(GetTableContent(session, dependentView), originalContent);
 }
 
-std::pair<std::vector<TString>, std::vector<TString>> 
+std::pair<std::vector<TString>, std::vector<TString>>
 GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
     auto describeChangefeeds = DescribeChangefeeds(session, table);
     const auto vectorSize = describeChangefeeds.size();
@@ -836,7 +832,7 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
         );
         return protoStr;
     });
-    
+
     return {changefeedsStr, topicsStr};
 }
 
@@ -1209,6 +1205,200 @@ void TestExternalTableSettingsArePreserved(
     );
 }
 
+// transform the type to the string usable in CREATE TABLE YQL statement
+std::string_view GetYqlType(Ydb::Type::PrimitiveTypeId type) {
+    switch (type) {
+        case Ydb::Type_PrimitiveTypeId_BOOL: return "Bool";
+        case Ydb::Type_PrimitiveTypeId_INT8: return "Int8";
+        case Ydb::Type_PrimitiveTypeId_UINT8: return "Uint8";
+        case Ydb::Type_PrimitiveTypeId_INT16: return "Int16";
+        case Ydb::Type_PrimitiveTypeId_UINT16: return "Uint16";
+        case Ydb::Type_PrimitiveTypeId_INT32: return "Int32";
+        case Ydb::Type_PrimitiveTypeId_UINT32: return "Uint32";
+        case Ydb::Type_PrimitiveTypeId_INT64: return "Int64";
+        case Ydb::Type_PrimitiveTypeId_UINT64: return "Uint64";
+        case Ydb::Type_PrimitiveTypeId_FLOAT: return "Float";
+        case Ydb::Type_PrimitiveTypeId_DOUBLE: return "Double";
+        case Ydb::Type_PrimitiveTypeId_DATE: return "Date";
+        case Ydb::Type_PrimitiveTypeId_DATETIME: return "Datetime";
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP: return "Timestamp";
+        case Ydb::Type_PrimitiveTypeId_INTERVAL: return "Interval";
+        case Ydb::Type_PrimitiveTypeId_TZ_DATE: return "TzDate";
+        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME: return "TzDatetime";
+        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP: return "TzTimestamp";
+        case Ydb::Type_PrimitiveTypeId_DATE32: return "Date32";
+        case Ydb::Type_PrimitiveTypeId_DATETIME64: return "Datetime64";
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP64: return "Timestamp64";
+        case Ydb::Type_PrimitiveTypeId_INTERVAL64: return "Interval64";
+        case Ydb::Type_PrimitiveTypeId_STRING: return "String";
+        case Ydb::Type_PrimitiveTypeId_UTF8: return "Utf8";
+        case Ydb::Type_PrimitiveTypeId_YSON: return "Yson";
+        case Ydb::Type_PrimitiveTypeId_JSON: return "Json";
+        case Ydb::Type_PrimitiveTypeId_UUID: return "Uuid";
+        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return "JsonDocument";
+        case Ydb::Type_PrimitiveTypeId_DYNUMBER: return "DyNumber";
+        case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
+            UNIT_FAIL("Unimplemented");
+            return "";
+    }
+}
+
+// sample values to insert into a table
+std::string_view GetSampleValue(Ydb::Type::PrimitiveTypeId type) {
+    // date types need type casts
+    #define TYPE_CAST(Type, Initializer) "CAST(" #Initializer " AS " #Type ")"
+    #define TYPE_CONSTRUCTOR(Type, Initializer) #Type "(" #Initializer ")"
+    switch (type) {
+        case Ydb::Type_PrimitiveTypeId_BOOL: return "false";
+        case Ydb::Type_PrimitiveTypeId_INT8: return "0";
+        case Ydb::Type_PrimitiveTypeId_UINT8: return "0";
+        case Ydb::Type_PrimitiveTypeId_INT16: return "0";
+        case Ydb::Type_PrimitiveTypeId_UINT16: return "0";
+        case Ydb::Type_PrimitiveTypeId_INT32: return "0";
+        case Ydb::Type_PrimitiveTypeId_UINT32: return "0";
+        case Ydb::Type_PrimitiveTypeId_INT64: return "0";
+        case Ydb::Type_PrimitiveTypeId_UINT64: return "0";
+        case Ydb::Type_PrimitiveTypeId_FLOAT: return "0.0f";
+        case Ydb::Type_PrimitiveTypeId_DOUBLE: return "0.0";
+        case Ydb::Type_PrimitiveTypeId_DATE: return TYPE_CAST(Date, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_DATETIME: return TYPE_CAST(Datetime, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP: return TYPE_CAST(Timestamp, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_INTERVAL: return TYPE_CAST(Interval, "P1H");
+        case Ydb::Type_PrimitiveTypeId_TZ_DATE: return TYPE_CAST(TzDate, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME: return TYPE_CAST(TzDatetime, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP: return TYPE_CAST(TzTimestamp, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_DATE32: return TYPE_CAST(Date32, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_DATETIME64: return TYPE_CAST(Datetime64, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP64: return TYPE_CAST(Timestamp64, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_INTERVAL64: return TYPE_CAST(Interval64, "P1H");
+        case Ydb::Type_PrimitiveTypeId_STRING: return "\"foo\"";
+        case Ydb::Type_PrimitiveTypeId_UTF8: return "\"foo\"u";
+        case Ydb::Type_PrimitiveTypeId_YSON: return TYPE_CONSTRUCTOR(Yson, "{ foo = bar }");
+        case Ydb::Type_PrimitiveTypeId_JSON: return TYPE_CONSTRUCTOR(Json, "{ \"foo\": \"bar\" }");
+        case Ydb::Type_PrimitiveTypeId_UUID: return "RandomUuid(1)";
+        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT: return TYPE_CONSTRUCTOR(JsonDocument, "{ \"foo\": \"bar\" }");
+        case Ydb::Type_PrimitiveTypeId_DYNUMBER: return TYPE_CONSTRUCTOR(DyNumber, "1");
+        case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
+            UNIT_FAIL("Unimplemented");
+            return "";
+    }
+    #undef TYPE_CAST
+    #undef TYPE_CONSTRUCTOR
+}
+
+bool CanBePrimaryKey(Ydb::Type::PrimitiveTypeId type) {
+    switch (type) {
+        case Ydb::Type_PrimitiveTypeId_BOOL:
+        case Ydb::Type_PrimitiveTypeId_INT8:
+        case Ydb::Type_PrimitiveTypeId_UINT8:
+        case Ydb::Type_PrimitiveTypeId_INT16:
+        case Ydb::Type_PrimitiveTypeId_UINT16:
+        case Ydb::Type_PrimitiveTypeId_INT32:
+        case Ydb::Type_PrimitiveTypeId_UINT32:
+        case Ydb::Type_PrimitiveTypeId_INT64:
+        case Ydb::Type_PrimitiveTypeId_UINT64:
+        case Ydb::Type_PrimitiveTypeId_DATE:
+        case Ydb::Type_PrimitiveTypeId_DATETIME:
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP:
+        case Ydb::Type_PrimitiveTypeId_INTERVAL:
+        case Ydb::Type_PrimitiveTypeId_TZ_DATE:
+        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME:
+        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP:
+        case Ydb::Type_PrimitiveTypeId_DATE32:
+        case Ydb::Type_PrimitiveTypeId_DATETIME64:
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP64:
+        case Ydb::Type_PrimitiveTypeId_INTERVAL64:
+        case Ydb::Type_PrimitiveTypeId_STRING:
+        case Ydb::Type_PrimitiveTypeId_UTF8:
+        case Ydb::Type_PrimitiveTypeId_UUID:
+        case Ydb::Type_PrimitiveTypeId_DYNUMBER:
+            return true;
+        case Ydb::Type_PrimitiveTypeId_FLOAT:
+        case Ydb::Type_PrimitiveTypeId_DOUBLE:
+        case Ydb::Type_PrimitiveTypeId_YSON:
+        case Ydb::Type_PrimitiveTypeId_JSON:
+        case Ydb::Type_PrimitiveTypeId_JSON_DOCUMENT:
+            return false;
+        case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
+            UNIT_FAIL("Unimplemented");
+            return false;
+    }
+}
+
+bool DontTestThisType(Ydb::Type::PrimitiveTypeId type) {
+    switch (type) {
+        case Ydb::Type_PrimitiveTypeId_TZ_DATE:
+        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME:
+        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP:
+            // CREATE TABLE with a column of this type is not supported by storage
+            return true;
+        case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
+            // helper types
+            return true;
+        default:
+            return false;
+    }
+}
+
+auto GetTableName(std::string_view yqlType, std::string_view database = "/Root/") {
+    return std::format("{}{}Table", database, yqlType);
+}
+
+void TestPrimitiveType(
+    Ydb::Type::PrimitiveTypeId type, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    const auto yqlType = GetYqlType(type);
+    const auto tableName = GetTableName(yqlType);
+    const auto sampleValue = GetSampleValue(type);
+
+    std::string_view key = sampleValue;
+    std::string_view value = "1";
+    if (CanBePrimaryKey(type)) {
+        ExecuteQuery(session, std::format(R"(
+                CREATE TABLE `{}` (Key {}, Value Int32, PRIMARY KEY (Key));
+            )", tableName, yqlType
+        ), true);
+    } else {
+        {
+            // test if the type cannot in fact be a primary key to future-proof the test suite
+            const auto result = session.ExecuteQuery(std::format(R"(
+                    CREATE TABLE `{}` (Key {}, Value Int32, PRIMARY KEY (Key));
+                )", tableName, yqlType
+            ), NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+        ExecuteQuery(session, std::format(R"(
+                CREATE TABLE `{}` (Key Int32, Value {}, PRIMARY KEY (Key));
+            )", tableName, yqlType
+        ), true);
+        std::swap(key, value);
+    }
+    ExecuteQuery(session, std::format(R"(
+            UPSERT INTO `{}` (Key, Value) VALUES ({}, {});
+        )", tableName, key, value
+    ));
+    const auto originalTableContent = GetTableContent(session, tableName.c_str());
+
+    backup();
+
+    ExecuteQuery(session, std::format(R"(
+            DROP TABLE `{}`;
+        )", tableName
+    ), true);
+
+    restore();
+
+    CompareResults(GetTableContent(session, tableName.c_str()), originalTableContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -1370,6 +1560,79 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         ));
         UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
             [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
+    }
+
+    Y_UNIT_TEST(BackupUuid) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uuid,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            table
+        ));
+
+        std::vector<std::string> uuids = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe",
+            "706cca52-b00a-4cbd-a21e-6538de188271",
+            "81b1e345-f2ae-4c9e-8d1a-75447be314f2",
+            "be2765f2-9f4c-4a22-8d2c-a1b77d84f4fb",
+            "d3f9e0a2-5871-4afe-a23a-8db160b449cd",
+            "d3f9e0a2-0000-0000-0000-8db160b449cd"
+        };
+
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value)
+                VALUES
+                    (Uuid("%s"), "one"),
+                    (Uuid("%s"), "two"),
+                    (Uuid("%s"), "three"),
+                    (Uuid("%s"), "four"),
+                    (Uuid("%s"), "five"),
+                    (Uuid("%s"), "six");
+            )", table, uuids[0].c_str(), uuids[1].c_str(), uuids[2].c_str(), uuids[3].c_str(), uuids[4].c_str(), uuids[5].c_str()
+        ));
+
+        const auto originalContent = GetTableContent(session, table);
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Check that backup file contains all uuids as strings, making sure we stringify UUIDs correctly in backups
+        TString backupFileContent = TFileInput(pathToBackup.GetPath() + "/table/data_00.csv").ReadAll();
+        for (const auto& uuid : uuids) {
+            UNIT_ASSERT_C(backupFileContent.find(uuid) != TString::npos, "UUID not found in backup file");
+        }
+
+        for (auto backupMode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData, NDump::TRestoreSettings::EMode::Yql}) {
+            auto opts = NDump::TRestoreSettings().Mode(backupMode);
+
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ));
+
+            auto result = backupClient.Restore(pathToBackup, dbPath, opts);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto newContent = GetTableContent(session, table);
+
+            CompareResults(newContent, originalContent);
+        }
     }
 
     // TO DO: test index impl table split boundaries restoration from a backup
@@ -1858,6 +2121,25 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(PrefixedVectorIndex) {
         TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId) {
+        if (DontTestThisType(Value)) {
+            return;
+        }
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        TestPrimitiveType(
+            Value,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
     }
 }
 
@@ -2378,5 +2660,19 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     Y_UNIT_TEST(PrefixedVectorIndex) {
         TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId) {
+        if (DontTestThisType(Value)) {
+            return;
+        }
+        TS3TestEnv testEnv;
+
+        TestPrimitiveType(
+            Value,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { GetTableName(GetYqlType(Value), "") } )
+        );
     }
 }

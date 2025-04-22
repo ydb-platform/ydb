@@ -124,12 +124,8 @@ namespace NKikimr {
         }
     };
 
-// TODO: use this iterator
-//    template <>
-//    class TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator {
-    namespace NTemp {
-
-    class TMemIterator {
+    template <>
+    class TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator {
     protected:
         typedef ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TLevelSegment;
 
@@ -168,7 +164,7 @@ namespace NKikimr {
         void Next() {
             Y_DEBUG_ABORT_UNLESS(Valid());
             ++Low;
-            if (Low == Segment->IndexLow.begin() + High->LowRangeEndIndex) {
+            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->LowRangeEndIndex)) {
                 ++High;
                 LowRangeBegin = Low;
             }
@@ -176,13 +172,12 @@ namespace NKikimr {
 
         void Prev() {
             Y_DEBUG_ABORT_UNLESS(Segment && Low
-                    && Low > Segment->IndexLow.begin() && Low <= Segment->IndexLow.end());
+                    && Low >= Segment->IndexLow.begin() && Low <= Segment->IndexLow.end());
 
-            if (Low == LowRangeBegin) {
-                Y_DEBUG_ABORT_UNLESS(High > Segment->IndexHigh.begin());
+            if (Y_UNLIKELY(Low == LowRangeBegin)) {
                 --High;
                 LowRangeBegin = Segment->IndexLow.begin() +
-                        (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
+                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
             }
             --Low;
         }
@@ -273,8 +268,6 @@ namespace NKikimr {
             return Segment->GetOutbound();
         }
     };
-
-    } // namespace NTemp
 
     ////////////////////////////////////////////////////////////////////////////
     // TLevelSegment methods

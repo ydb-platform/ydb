@@ -1548,8 +1548,8 @@ private:
         dqConfiguration->FallbackPolicy = EFallbackPolicy::Never;
 
         bool enableCheckpointCoordinator =
-            Params.QueryType == FederatedQuery::QueryContent::STREAMING && 
-            Params.Config.GetCheckpointCoordinator().GetEnabled() && 
+            Params.QueryType == FederatedQuery::QueryContent::STREAMING &&
+            Params.Config.GetCheckpointCoordinator().GetEnabled() &&
             !dqConfiguration->DisableCheckpoints.Get().GetOrElse(false);
 
         ExecuterId = Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), enableCheckpointCoordinator));
@@ -1995,7 +1995,27 @@ private:
         {
             auto pqGateway = Params.PqGatewayFactory->CreatePqGateway();
             pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            switch (Params.StreamingDisposition.GetDispositionCase()) {
+                case FederatedQuery::StreamingDisposition::kOldest:
+                    *disposition.mutable_oldest() = Params.StreamingDisposition.oldest();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFresh:
+                    *disposition.mutable_fresh() = Params.StreamingDisposition.fresh();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFromTime:
+                    *disposition.mutable_from_time()->mutable_timestamp() = Params.StreamingDisposition.from_time().timestamp();
+                    break;
+                case FederatedQuery::StreamingDisposition::kTimeAgo:
+                    *disposition.mutable_time_ago()->mutable_duration() = Params.StreamingDisposition.time_ago().duration();
+                    break;
+                case FederatedQuery::StreamingDisposition::kFromLastCheckpoint:
+                    disposition.mutable_from_last_checkpoint()->set_force(Params.StreamingDisposition.from_last_checkpoint().force());
+                    break;
+                case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
+                    break;
+            }
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition)));
         }
 
         {

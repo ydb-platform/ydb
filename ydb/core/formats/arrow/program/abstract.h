@@ -13,6 +13,47 @@ class TAccessorsCollection;
 
 namespace NKikimr::NArrow::NSSA {
 
+class IMemoryCalculationPolicy {
+public:
+    enum class EStage {
+        Accessors = 0 /* "ACCESSORS" */,
+        Filter = 1 /* "FILTER" */,
+        Fetching = 2 /* "FETCHING" */,
+        Merge = 3 /* "MERGE" */
+    };
+
+    virtual ~IMemoryCalculationPolicy() = default;
+
+    virtual EStage GetStage() const = 0;
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const = 0;
+};
+
+class TFilterCalculationPolicy: public IMemoryCalculationPolicy {
+public:
+    virtual EStage GetStage() const override {
+        return EStage::Filter;
+    }
+    virtual ui64 GetReserveMemorySize(
+        const ui64 blobsSize, const ui64 /*rawSize*/, const std::optional<ui32> /*limit*/, const ui32 /*recordsCount*/) const override {
+        return blobsSize;
+    }
+};
+
+class TFetchingCalculationPolicy: public IMemoryCalculationPolicy {
+public:
+    virtual EStage GetStage() const override {
+        return EStage::Fetching;
+    }
+    virtual ui64 GetReserveMemorySize(const ui64 blobsSize, const ui64 rawSize, const std::optional<ui32> limit, const ui32 recordsCount) const override {
+        if (limit) {
+            return std::max<ui64>(blobsSize, rawSize * (1.0 * *limit) / recordsCount);
+        } else {
+            return std::max<ui64>(blobsSize, rawSize);
+        }
+    }
+};
+
 class TIndexCheckOperation {
 public:
     enum class EOperation : ui32 {
@@ -214,7 +255,8 @@ enum class EProcessorType {
     AssembleOriginalData,
     CheckIndexData,
     CheckHeaderData,
-    StreamLogic
+    StreamLogic,
+    ReserveMemory
 };
 
 class TFetchingInfo {
@@ -301,6 +343,13 @@ public:
             AFL_VERIFY(i.GetColumnId() != resourceId);
         }
         Input.emplace_back(TColumnChainInfo(resourceId));
+    }
+
+    void AddOutput(const ui32 resourceId) {
+        for (auto&& i : Output) {
+            AFL_VERIFY(i.GetColumnId() != resourceId);
+        }
+        Output.emplace_back(TColumnChainInfo(resourceId));
     }
 
     void RemoveInput(const ui32 resourceId) {

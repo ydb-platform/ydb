@@ -10,6 +10,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
+#include <util/string/ascii.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -150,9 +151,9 @@ public:
                 (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
         } else {
             LowerStringBuffer.Clear();
-            LowerStringBuffer.Reserve(dataSize);
+            LowerStringBuffer.Resize(dataSize);
             for (ui32 i = 0; i < dataSize; ++i) {
-                LowerStringBuffer.Append(std::tolower(data[i]));
+                LowerStringBuffer.Data()[i] = AsciiToLower(data[i]);
             }
             THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
                 (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
@@ -184,8 +185,7 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(
-        const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
+    void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
         if (CaseSensitive) {
             BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
         } else {

@@ -38,9 +38,11 @@ int Run(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
+    TString inQueryText;
     TString freqFileName;
     TMaybe<ui64> pos;
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
+    opts.AddLongOption('q', "query", "input query text").RequiredArgument("query").StoreResult(&inQueryText);
     opts.AddLongOption('f', "freq", "frequences file").StoreResult(&freqFileName);
     opts.AddLongOption('p', "pos", "position").StoreResult(&pos);
     opts.SetFreeArgsNum(0);
@@ -48,12 +50,21 @@ int Run(int argc, char* argv[]) {
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
-    THolder<TUnbufferedFileInput> inFile;
-    if (!inFileName.empty()) {
-        inFile.Reset(new TUnbufferedFileInput(inFileName));
+    if (res.Has("input") && res.Has("query")) {
+        ythrow yexception() << "use either 'input' or 'query', not both";
     }
-    IInputStream& in = inFile ? *inFile.Get() : Cin;
-    auto queryString = in.ReadAll();
+
+    TString queryString;
+    if (res.Has("query")) {
+        queryString = std::move(inQueryText);
+    } else {
+        THolder<TUnbufferedFileInput> inFile;
+        if (!inFileName.empty()) {
+            inFile.Reset(new TUnbufferedFileInput(inFileName));
+        }
+        IInputStream& in = inFile ? *inFile.Get() : Cin;
+        queryString = in.ReadAll();
+    }
 
     NSQLComplete::IRanking::TPtr ranking;
     if (freqFileName.empty()) {

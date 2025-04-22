@@ -1,21 +1,22 @@
 #pragma once
 
-#include "connection.h"
 #include "accounting_client.h"
 #include "admin_client.h"
+#include "connection.h"
 #include "cypress_client.h"
 #include "distributed_table_client.h"
 #include "etc_client.h"
 #include "file_client.h"
+#include "flow_client.h"
 #include "journal_client.h"
 #include "operation_client.h"
-#include "security_client.h"
-#include "transaction_client.h"
-#include "table_client.h"
-#include "queue_client.h"
+#include "prerequisite_client.h"
 #include "query_tracker_client.h"
-#include "flow_client.h"
+#include "queue_client.h"
+#include "security_client.h"
 #include "shuffle_client.h"
+#include "table_client.h"
+#include "transaction_client.h"
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
@@ -60,6 +61,7 @@ DEFINE_REFCOUNTED_TYPE(IClientBase)
  */
 struct IClient
     : public virtual IClientBase
+    , public IPrerequisiteClient
     , public ITransactionClient
     , public ITableClient
     , public IQueueClient

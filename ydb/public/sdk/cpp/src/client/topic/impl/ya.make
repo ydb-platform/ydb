@@ -33,6 +33,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
     ydb/public/sdk/cpp/src/client/proto

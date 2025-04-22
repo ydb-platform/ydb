@@ -15,7 +15,7 @@ class AllureFileLogger:
     def __init__(self, report_dir, clean=False):
         self._report_dir = Path(report_dir).absolute()
         if self._report_dir.is_dir() and clean:
-            shutil.rmtree(self._report_dir)
+            shutil.rmtree(self._report_dir, ignore_errors=True)
         self._report_dir.mkdir(parents=True, exist_ok=True)
 
     def _report_item(self, item):

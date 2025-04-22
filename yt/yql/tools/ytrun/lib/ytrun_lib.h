@@ -12,8 +12,6 @@
 
 namespace NYql {
 
-constexpr TStringBuf FastMapReduceGatewayName = "fmr";
-
 class TYtRunTool: public TFacadeRunner {
 public:
     TYtRunTool(TString name = "ytrun");
@@ -36,6 +34,7 @@ protected:
     NFmr::IFmrWorker::TPtr FmrWorker_;
     TString FmrCoordinatorServerUrl_;
     bool DisableLocalFmrWorker_ = false;
+    TString FmrOperationSpecFilePath_;
 };
 
 } // NYql

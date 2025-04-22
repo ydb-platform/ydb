@@ -29,6 +29,10 @@ namespace NKikimr::NBlobDepot {
                 doForward = ev->Get<TEvBlobStorage::TEvRange>()->Decommission;
                 Y_ABORT_UNLESS(!doForward || !ev->Get<TEvBlobStorage::TEvRange>()->MustRestoreFirst);
                 break;
+
+            case TEvBlobStorage::EvCollectGarbage:
+                doForward = ev->Get<TEvBlobStorage::TEvCollectGarbage>()->Decommission;
+                break;
         }
 
         if (doForward) {

@@ -322,7 +322,12 @@ Returns `true` for a list of Boolean values, if:
 * `ListAny`: At least one element is `true`.
 * `ListAll`: All elements are `true`.
 
-Otherwise, it returns false.
+Otherwise, it returns `false`.
+
+Results on an empty list:
+
+* `ListAny` returns `false`;
+* `ListAll` returns `true`.
 
 #### Examples
 

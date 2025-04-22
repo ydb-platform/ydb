@@ -6,10 +6,6 @@ on:
     # starts as soon as the label is added, then on every push.
     types: [synchronize, labeled]
 
-permissions:
-  issues: write
-  pull-requests: read
-
 concurrency:
   group: pr-${{ github.event.pull_request.number }}-doc-notify
   cancel-in-progress: true

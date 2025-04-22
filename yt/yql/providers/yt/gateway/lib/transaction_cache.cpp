@@ -18,7 +18,7 @@ using namespace NYT;
 
 void TTransactionCache::TEntry::DeleteAtFinalizeUnlocked(const TString& table, bool isInternal)
 {
-    auto inserted = TablesToDeleteAtFinalize.insert(table);
+    auto inserted = TablesToDeleteAtFinalize.emplace(table, false);
     if (!isInternal && inserted.second) {
         if (++ExternalTempTablesCount > InflightTempTablesLimit) {
             YQL_LOG_CTX_THROW yexception() << "Too many temporary tables registered - limit is " << InflightTempTablesLimit;
@@ -28,14 +28,28 @@ void TTransactionCache::TEntry::DeleteAtFinalizeUnlocked(const TString& table, b
 
 bool TTransactionCache::TEntry::CancelDeleteAtFinalizeUnlocked(const TString& table, bool isInternal)
 {
-    auto erased = TablesToDeleteAtFinalize.erase(table);
-    if (!isInternal) {
-        YQL_ENSURE(erased <= ExternalTempTablesCount);
-        ExternalTempTablesCount -= erased;
+    auto it = TablesToDeleteAtFinalize.find(table);
+    bool present = it != TablesToDeleteAtFinalize.end();
+    if (present) {
+        if (!isInternal && !it->second) {
+            YQL_ENSURE(ExternalTempTablesCount > 0);
+            ExternalTempTablesCount--;
+        }
+        TablesToDeleteAtFinalize.erase(it);
     }
-    return erased != 0;
+    return present;
 }
 
+bool TTransactionCache::TEntry::AssumeAsDeletedAtFinalizeUnlocked(const TString& table) {
+    auto it = TablesToDeleteAtFinalize.find(table);
+    bool present = it != TablesToDeleteAtFinalize.end();
+    if (present && !it->second) {
+        YQL_ENSURE(ExternalTempTablesCount > 0);
+        ExternalTempTablesCount--;
+        it->second = true;
+    }
+    return present;
+}
 
 void TTransactionCache::TEntry::RemoveInternal(const TString& table) {
     bool existed;
@@ -57,7 +71,7 @@ void TTransactionCache::TEntry::DoRemove(const TString& table) {
 void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
     NYT::ITransactionPtr binarySnapshotTx;
     decltype(SnapshotTxs) snapshotTxs;
-    THashSet<TString> toDelete;
+    THashMap<TString, bool> toDelete;
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
     with_lock(Lock_) {
@@ -86,7 +100,7 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
         item.second->Abort();
     }
 
-    for (auto i : toDelete) {
+    for (auto& [i, _] : toDelete) {
         DoRemove(i);
     }
 

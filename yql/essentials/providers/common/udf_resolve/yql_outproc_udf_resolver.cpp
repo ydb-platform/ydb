@@ -218,6 +218,8 @@ public:
             if (udf->UserType) {
                 udfRequest->SetUserType(WriteTypeToYson(udf->UserType));
             }
+
+            udfRequest->SetLangVer(udf->LangVer);
         }
 
         TResolveResult response;
@@ -368,6 +370,8 @@ private:
                 }
                 udf->SupportsBlocks = udfRes.GetSupportsBlocks();
                 udf->IsStrict = udfRes.GetIsStrict();
+                udf->MinLangVer = udfRes.GetMinLangVer();
+                udf->MaxLangVer = udfRes.GetMaxLangVer();
                 for (const auto& m : udfRes.GetMessages()) {
                     udf->Messages.push_back(m);
                 }

@@ -211,7 +211,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 logLevel);
 
             TFunctionTypeInfo funcInfo;
-            auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
+            auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, env, typeInfoHelper, nullptr,
                 udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(),
                 logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
@@ -236,6 +236,8 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             udf.SupportsBlocks = funcInfo.SupportsBlocks;
             udf.IsStrict = funcInfo.IsStrict;
+            udf.MinLangVer = funcInfo.MinLangVer;
+            udf.MaxLangVer = funcInfo.MaxLangVer;
         } catch (const std::exception& e) {
             auto issue = TIssue(udf.Pos, TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.Name

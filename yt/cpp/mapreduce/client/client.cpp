@@ -1516,10 +1516,14 @@ TYtPoller& TClient::GetYtPoller()
 
 void TClient::Shutdown()
 {
-    auto g = Guard(Lock_);
-
-    if (!Shutdown_.exchange(true) && YtPoller_) {
-        YtPoller_->Stop();
+    std::unique_ptr<TYtPoller> poller;
+    with_lock(Lock_) {
+        if (!Shutdown_.exchange(true) && YtPoller_) {
+            poller = std::move(YtPoller_);
+        }
+    }
+    if (poller) {
+        poller->Stop();
     }
 }
 

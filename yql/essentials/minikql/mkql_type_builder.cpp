@@ -1716,6 +1716,7 @@ void TArrowType::Export(ArrowSchema* out) const {
 // TFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
 TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
+        NYql::TLangVersion langver,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
@@ -1723,7 +1724,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
         const NUdf::TSourcePosition& pos,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider)
-    : Env_(env)
+    : LangVer_(langver)
+    , Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
     , UserType_(Env_.GetTypeOfVoidLazy())
@@ -1828,6 +1830,18 @@ NUdf::TLoggerPtr TFunctionTypeInfoBuilder::MakeLogger(bool synchronized) const {
     }
 
     return ret;
+}
+
+void TFunctionTypeInfoBuilder::SetMinLangVer(ui32 langver) {
+    MinLangVer_ = langver;
+
+}
+void TFunctionTypeInfoBuilder::SetMaxLangVer(ui32 langver) {
+    MaxLangVer_ = langver;
+}
+
+ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
+    return LangVer_;
 }
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
@@ -1948,6 +1962,8 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
     funcInfo->SupportsBlocks = SupportsBlocks_;
     funcInfo->IsStrict = IsStrict_;
+    funcInfo->MinLangVer = MinLangVer_;
+    funcInfo->MaxLangVer = MaxLangVer_;
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const

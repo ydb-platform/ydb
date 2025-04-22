@@ -80,6 +80,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/core/extract_predicate
+    yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/sql

@@ -73,9 +73,9 @@ public:
     {}
 
     TOutputChannelReadResult Read() {
-        if (SpillingStorageInfo) {
-            return ReadWithSpilling();
-        }
+        // if (SpillingStorageInfo) {
+        //     return ReadWithSpilling();
+        // }
         return ReadDirectly();
     }
 
@@ -147,6 +147,12 @@ private:
             changed = changed || hasData || (isChanFinished != WasFinished);
             if (hasData) {
                 spillingStorage->Put(SpillingStorageInfo->NextStoredId++, SaveForSpilling(std::move(data)), Cookie);
+            }
+            if (spillingStorage->IsFull()) {
+                result.IsFinished = isChanFinished;
+                result.IsChanged = changed;
+                result.HasData = hasData;
+                return result;
             }
         }
 
@@ -580,6 +586,8 @@ private:
         auto& inputs = ev->Get()->Task.GetInputs();
         auto& outputs = ev->Get()->Task.GetOutputs();
         auto startTime = TInstant::Now();
+
+        std::cerr << std::format("MISHA task: {}, input channels: {}, output channels: {}\n", taskId, inputs.size(), outputs.size());
         ExecCtx = ev->Get()->ExecCtx;
         auto* actorSystem = TActivationContext::ActorSystem();
 

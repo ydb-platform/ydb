@@ -12,34 +12,4 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(read_from_topic_in_transaction)
-
-
-target_link_libraries(read_from_topic_in_transaction PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  src-client-topic
-  src-client-query
-  library-cpp-getopt
-)
-
-target_allocator(read_from_topic_in_transaction
-  system_allocator
-)
-
-target_link_options(read_from_topic_in_transaction PRIVATE
-  -Wl,-platform_version,macos,11.0,11.0
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-)
-
-target_sources(read_from_topic_in_transaction PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/application.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/main.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/options.cpp
-)
-
-
-vcs_info(read_from_topic_in_transaction)
+add_subdirectory(transaction)

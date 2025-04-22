@@ -12,39 +12,32 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(read_from_topic_in_transaction)
+add_executable(topic_writer_transaction)
 
 
-target_link_libraries(read_from_topic_in_transaction PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(topic_writer_transaction PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   src-client-topic
   src-client-query
-  library-cpp-getopt
 )
 
-target_allocator(read_from_topic_in_transaction
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
+target_allocator(topic_writer_transaction
+  system_allocator
 )
 
-target_link_options(read_from_topic_in_transaction PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
+target_link_options(topic_writer_transaction PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -lrt
-  -ldl
+  -framework
+  CoreFoundation
 )
 
-target_sources(read_from_topic_in_transaction PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/application.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/main.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/options.cpp
+target_sources(topic_writer_transaction PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_writer/transaction/main.cpp
 )
 
 
-vcs_info(read_from_topic_in_transaction)
+vcs_info(topic_writer_transaction)

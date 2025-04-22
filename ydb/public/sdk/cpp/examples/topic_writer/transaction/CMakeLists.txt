@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(read_from_topic_in_transaction)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-
-target_link_libraries(read_from_topic_in_transaction PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  src-client-topic
-  src-client-query
-  library-cpp-getopt
-)
-
-target_allocator(read_from_topic_in_transaction
-  system_allocator
-)
-
-target_link_options(read_from_topic_in_transaction PRIVATE
-  -Wl,-platform_version,macos,11.0,11.0
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-)
-
-target_sources(read_from_topic_in_transaction PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/application.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/main.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/transaction/options.cpp
-)
-
-
-vcs_info(read_from_topic_in_transaction)

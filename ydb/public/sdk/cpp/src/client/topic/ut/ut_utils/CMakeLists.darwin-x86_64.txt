@@ -29,7 +29,6 @@ target_link_libraries(topic-ut-ut_utils PUBLIC
   sdk-library-persqueue-topic_parser_public-v3
   src-client-driver
   src-client-topic
-  src-client-table
 )
 
 target_sources(topic-ut-ut_utils PRIVATE

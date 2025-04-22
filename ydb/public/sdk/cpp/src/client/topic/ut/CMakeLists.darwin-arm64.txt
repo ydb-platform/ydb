@@ -45,9 +45,12 @@ target_link_libraries(ydb-public-sdk-cpp-src-client-topic-ut PUBLIC
   src-client-persqueue_public
   client-persqueue_public-impl
   persqueue_public-ut-ut_utils
+  src-client-query
+  src-client-table
   client-topic-common
   client-topic-impl
   topic-ut-ut_utils
+  src-library-issue
   tx-schemeshard-ut_helpers
   persqueue-ut-common
   library-cpp-resource

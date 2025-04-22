@@ -20,6 +20,7 @@ target_link_libraries(read_from_topic_in_transaction PUBLIC
   yutil
   library-cpp-cpuid_check
   src-client-topic
+  src-client-query
   library-cpp-getopt
 )
 

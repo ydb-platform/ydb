@@ -727,7 +727,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            if (++pathIt->second > (GroupInfo->NToSelect / 2)) {
+            auto ringGroup = GroupInfo->RingGroups[0];
+            if (++pathIt->second > (ringGroup.NToSelect / 2)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie

@@ -1514,7 +1514,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     char fromPrefix[TActorId::MaxServiceIDLength] = {0};
                     auto toInfo = BuildStateStorageInfo(toPrefix, *to);
                     auto fromInfo = BuildStateStorageInfo(fromPrefix, from);
-                    if (toInfo->NToSelect != fromInfo->NToSelect || toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
+                    if (toInfo->RingGroups[0].NToSelect != fromInfo->RingGroups[0].NToSelect || toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
                         *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
                             << " from# " << SingleLineProto(from)
                             << " to# " << SingleLineProto(*to);

@@ -496,11 +496,15 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 ContentHash() const;
     };
 
-    ui32 NToSelect;
-    TVector<TRing> Rings;
+    struct TRingGroup {
+        bool writeOnly = false;
+        ui32 NToSelect = 0;
+        TVector<TRing> Rings;
 
-    ui32 NewNToSelect;
-    TVector<TRing> NewRings;
+        TString ToString() const;
+    };
+
+    TVector<TRingGroup> RingGroups;
 
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
@@ -510,8 +514,7 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 ContentHash() const;
 
     TStateStorageInfo()
-        : NToSelect(0)
-        , Hash(Max<ui64>())
+        : Hash(Max<ui64>())
     {}
 
     TString ToString() const;

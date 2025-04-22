@@ -1357,7 +1357,7 @@ public:
             auto path = GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
             table = Self->Tables.at(path->PathId);
 
-            if (!path.IsLocked()) { // lock is needed to prevent table shards from beeing split
+            if (!path.IsLocked()) { // lock is needed to prevent table shards from being split
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::LockBuild);
                 Progress(buildInfo.Id);
                 return false;

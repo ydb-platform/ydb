@@ -153,17 +153,36 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
         }                                                              \
     }
 
-#define STRING_TWO_ARGS_UDF(udfName, function)                          \
-    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
-        Y_UNUSED(valueBuilder);                                         \
-        if (args[0]) {                                                  \
-            const TString haystack(args[0].AsStringRef());              \
-            const TString needle(args[1].AsStringRef());                \
-            return TUnboxedValuePod(function(haystack, needle));        \
-        } else {                                                        \
-            return TUnboxedValuePod(false);                             \
-        }                                                               \
-    }
+#define STRING_TWO_ARGS_UDF(udfName, function)                                 \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, bool(TOptional<char*>, char*)) { \
+        Y_UNUSED(valueBuilder);                                                \
+        if (args[0]) {                                                         \
+            const TString haystack(args[0].AsStringRef());                     \
+            const TString needle(args[1].AsStringRef());                       \
+            return TUnboxedValuePod(function(haystack, needle));               \
+        } else {                                                               \
+            return TUnboxedValuePod(false);                                    \
+        }                                                                      \
+    }                                                                          \
+                                                                               \
+    struct T##udfName##KernelExec                                              \
+        : public TBinaryKernelExec<T##udfName##KernelExec>                     \
+    {                                                                          \
+        template <typename TSink>                                              \
+        static void Process(const IValueBuilder*, TBlockItem arg1,             \
+                            TBlockItem arg2, const TSink& sink)                \
+        {                                                                      \
+            if (arg1) {                                                        \
+                const TString haystack(arg1.AsStringRef());                    \
+                const TString needle(arg2.AsStringRef());                      \
+                sink(TBlockItem(function(haystack, needle)));                  \
+            } else {                                                           \
+                sink(TBlockItem(false));                                       \
+            }                                                                  \
+        }                                                                      \
+    };                                                                         \
+                                                                               \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define IS_ASCII_UDF(function)                                                           \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {                \
@@ -361,9 +380,6 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
     XX(HasPrefix, StartsWith)   \
     XX(HasSuffix, EndsWith)
 
-// NOTE: The functions below are marked as deprecated, so block implementation
-// is not required for them. Hence, STRING_TWO_ARGS_UDF provides only the
-// scalar one at the moment.
 #define STRING_TWO_ARGS_UDF_MAP(XX)                    \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
     XX(EndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \

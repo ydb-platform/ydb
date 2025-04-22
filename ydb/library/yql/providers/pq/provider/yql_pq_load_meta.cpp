@@ -124,7 +124,7 @@ private:
         // todo: return TFuture
         try {
             auto future = State_->Gateway->DescribePath(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
-            NPq::NConfigurationManager::TDescribePathResult description = future.GetValueSync();
+            ::NPq::NConfigurationManager::TDescribePathResult description = future.GetValueSync();
             if (!description.IsTopic()) {
                 ctx.IssueManager.RaiseIssue(TIssue{TStringBuilder() << "Path '" << topic << "' is not a topic"});
                 return {};

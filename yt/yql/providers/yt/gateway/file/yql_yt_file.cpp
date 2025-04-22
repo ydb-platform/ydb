@@ -164,9 +164,10 @@ struct TSession {
 struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
-        const NUdf::ISecureParamsProvider* secureParamsProvider)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        TLangVersion langver)
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver)
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -445,7 +446,8 @@ public:
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
-                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -773,7 +775,8 @@ public:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -819,7 +822,8 @@ public:
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles), nullptr);
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
+                nullptr, UnknownLangVersion);
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -1252,7 +1256,8 @@ private:
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
-            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1331,7 +1336,8 @@ private:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
+                externalFiles), secureParamsProvider.get(), options.LangVer());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);

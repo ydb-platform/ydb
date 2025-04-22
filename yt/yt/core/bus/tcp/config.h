@@ -129,7 +129,7 @@ DEFINE_REFCOUNTED_TYPE(TBusConfig)
 struct TBusDynamicConfig
     : public NYTree::TYsonStruct
 {
-    bool NeedRejectConnectionDueMemoryOvercommit;
+    bool NeedRejectConnectionOnMemoryOvercommit;
 
     REGISTER_YSON_STRUCT(TBusDynamicConfig);
 

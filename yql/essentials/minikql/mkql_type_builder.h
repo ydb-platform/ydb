@@ -3,8 +3,10 @@
 #include "mkql_node.h"
 
 #include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
@@ -103,6 +105,8 @@ struct TFunctionTypeInfo
     bool Deterministic = true;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -121,13 +125,14 @@ class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder
 {
 public:
     TFunctionTypeInfoBuilder(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            const TStringBuf& moduleName,
-            NUdf::ICountersProvider* countersProvider,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
-            const NUdf::ILogProvider* logProvider = nullptr);
+        NYql::TLangVersion langver,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        const TStringBuf& moduleName,
+        NUdf::ICountersProvider* countersProvider,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+        const NUdf::ILogProvider* logProvider = nullptr);
 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
             NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
@@ -209,8 +214,12 @@ public:
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
     NUdf::TLoggerPtr MakeLogger(bool synchronized) const override;
+    void SetMinLangVer(ui32 langver) override;
+    void SetMaxLangVer(ui32 langver) override;
+    ui32 GetCurrentLangVer() const override;
 
 private:
+    const NYql::TLangVersion LangVer_;
     const TTypeEnvironment& Env_;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
     const TType* ReturnType_;
@@ -232,6 +241,8 @@ private:
     TString IRFunctionName_;
     bool SupportsBlocks_ = false;
     bool IsStrict_ = false;
+    ui32 MinLangVer_ = NYql::UnknownLangVersion;
+    ui32 MaxLangVer_ = NYql::UnknownLangVersion;
 };
 
 class TTypeInfoHelper : public NUdf::ITypeInfoHelper

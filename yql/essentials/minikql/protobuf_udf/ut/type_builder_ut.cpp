@@ -31,7 +31,7 @@ struct TSetup {
         , Env(Alloc)
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {})
+        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {})
         , PgmBuilder(Env, *FunctionRegistry)
     {
     }

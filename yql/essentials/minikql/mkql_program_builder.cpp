@@ -338,10 +338,12 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap) {
     return ValidateBlockItems(wideComponents, unwrap);
 }
 
-TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects)
+TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry,
+    bool voidWithEffects, NYql::TLangVersion langver)
     : TTypeBuilder(env)
     , FunctionRegistry(functionRegistry)
     , VoidWithEffects(voidWithEffects)
+    , LangVer(langver)
 {}
 
 const TTypeEnvironment& TProgramBuilder::GetTypeEnvironment() const {
@@ -4097,7 +4099,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry.FindFunctionTypeInfo(
-        Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+        LangVer, Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
 
     auto runConfigType = funcInfo.RunConfigType;

@@ -113,6 +113,7 @@ DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
 DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 
 class TBloomFilterBuilder;
 class TBloomFilter;

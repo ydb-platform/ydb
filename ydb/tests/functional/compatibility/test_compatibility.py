@@ -1,45 +1,69 @@
 # -*- coding: utf-8 -*-
 import boto3
-
-import os
-
+import time
+import pytest
+import logging
 import yatest
+import os
+import json
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+from decimal import Decimal
+
+
+last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+current_binary_path = kikimr_driver_path()
+
+all_binary_combinations = [
+    [last_stable_binary_path, current_binary_path],
+    [last_stable_binary_path, [last_stable_binary_path, current_binary_path]],
+    [current_binary_path, last_stable_binary_path],
+]
+all_binary_combinations_ids = [
+    "last_stable_to_current",
+    "last_stable_to_current_mixed",
+     "current_to_last_stable"
+    ]
+
+logger = logging.getLogger(__name__)
 
 class TestCompatibility(object):
-    @classmethod
-    def setup_class(cls):
-        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
-        binary_paths = [kikimr_driver_path(), last_stable_path]
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC, binary_paths=binary_paths))
-        cls.cluster.start()
-        cls.endpoint = "%s:%s" % (
-            cls.cluster.nodes[1].host, cls.cluster.nodes[1].port
+    @pytest.fixture(autouse=True, params=all_binary_combinations, ids=all_binary_combinations_ids)
+    def setup(self, request):
+        self.all_binary_paths = request.param
+        self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            binary_paths=[self.all_binary_paths[0]],
+            use_in_memory_pdisks=False,
+
+            # uncomment for 64 datetime in tpc-h/tpc-ds
+            # extra_feature_flags={"enable_table_datetime64": True},
+            extra_feature_flags={"suppress_compatibility_check": True},
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            },
         )
-        cls.driver = ydb.Driver(
+
+        self.cluster = KiKiMR(self.config)
+        self.cluster.start()
+        self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+        output_path = yatest.common.test_output_path()
+        self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        self.s3_config = self.setup_s3()
+
+        self.driver = ydb.Driver(
             ydb.DriverConfig(
                 database='/Root',
-                endpoint=cls.endpoint
+                endpoint=self.endpoint
             )
         )
-        cls.driver.wait()
-        output_path = yatest.common.test_output_path()
-        cls.output_f = open(os.path.join(output_path, "out.log"), "w")
-
-        cls.s3_config = cls.setup_s3()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'driver'):
-            cls.driver.stop()
-
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop(kill=True)  # TODO fix
+        self.driver.wait()
+        yield
+        self.cluster.stop()
 
     @staticmethod
     def setup_s3():
@@ -55,49 +79,246 @@ class TestCompatibility(object):
         bucket.objects.all().delete()
 
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
+    
+    def change_cluster_version(self, new_binary_paths):
+        binary_path_before = self.config.get_binary_path()
+        versions_on_before = self.get_nodes_version()
+        if isinstance(new_binary_paths, str):
+            new_binary_paths = [new_binary_paths]
+        elif not isinstance(new_binary_paths, list):
+            raise ValueError("binary_paths must be a string or a list of strings")
+        logger.debug("Bin before: " + self.config.get_binary_path(0))
+        self.config.set_binary_paths(new_binary_paths)
+        self.cluster.change_node_version(self.config)
+        time.sleep(60)
+        versions_on_after = self.get_nodes_version()
+        if binary_path_before != new_binary_paths:
+            assert versions_on_before != versions_on_after, f'Versions on before and after should be different: {versions_on_before} {versions_on_after}'
+        else:
+            assert versions_on_before == versions_on_after, f'Versions on before and after should be the same: {versions_on_before} {versions_on_after}'
 
-    def test_simple(self):
-        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+    def get_nodes_version(self):
+        versions = []
+        for node_id, node in enumerate(self.cluster.nodes.values()):
+            node.get_config_version()
+            get_version_command = [
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                "--verbose",
+                "--endpoint",
+                "grpc://localhost:%d" % node.grpc_port,
+                "--database=/Root",
+                "yql",
+                "--script",
+                f'select version() as node_{node_id}_version',
+                '--format',
+                'json-unicode'
+            ]
+            result =  yatest.common.execute(get_version_command, wait=True)
+            result_data = json.loads(result.std_out.decode('utf-8'))
+            logger.debug(f'node_{node_id}_version": {result_data}')
+            node_version_key = f"node_{node_id}_version"
+            if node_version_key in result_data:
+                node_version = result_data[node_version_key]
+                versions.append(node_version)
+            else:
+                print(f"Key {node_version_key} not found in the result.")
+        return versions
 
-        with ydb.SessionPool(self.driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `sample_table` (id Uint64, value Uint64, payload Utf8, PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
-                )
-                id_ = 0
 
-                upsert_count = 200
-                iteration_count = 1
-                for i in range(iteration_count):
-                    rows = []
-                    for j in range(upsert_count):
-                        row = {}
-                        row["id"] = id_
-                        row["value"] = 1
-                        row["payload"] = "DEADBEEF" * 1024 * 16  # 128 kb
-                        rows.append(row)
-                        id_ += 1
 
-                    column_types = ydb.BulkUpsertColumns()
-                    column_types.add_column("id", ydb.PrimitiveType.Uint64)
-                    column_types.add_column("value", ydb.PrimitiveType.Uint64)
-                    column_types.add_column("payload", ydb.PrimitiveType.Utf8)
-                    self.driver.table_client.bulk_upsert(
-                        "Root/sample_table", rows, column_types
+
+    def check_table_exists(driver, table_path):
+        try:
+            driver.scheme_client.describe_table(table_path)
+            return True
+        except ydb.SchemeError as e:
+            if e.issue_code == ydb.IssueCode.SCHEME_ERROR_NO_SUCH_TABLE:
+                return False
+            else:
+                raise
+    def exec_query(self, query: str):
+        command = [
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                "--verbose",
+                "-e",
+                "grpc://localhost:%d" % self.cluster.nodes[1].port,
+                "-d"
+                "/Root",
+                "yql",
+                "--script",
+                f"{query}"
+            ]
+        yatest.common.execute(command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        
+    
+    def execute_scan_query(self, query_body):
+        query = ydb.ScanQuery(query_body, {})
+        it = self.driver.table_client.scan_query(query)
+        result_set = []
+
+        try:
+            while True:
+                result = next(it)
+                result_set.extend(result.result_set.rows)
+        except StopIteration:
+            pass
+
+        return result_set
+
+
+    def log_database_scheme(self):
+        get_scheme_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "-e",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "-d"
+            "/Root",
+            "scheme",
+            "ls",
+            "-l",
+            "-R"
+        ]
+        yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+    
+    @pytest.mark.parametrize("store_type", ["row", "column"])
+    def test_simple(self, store_type):
+        def read_update_data(self, iteration_count=1, start_index=0):
+            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+            self.get_nodes_version()
+            with ydb.SessionPool(self.driver, size=1) as pool:
+                with pool.checkout() as session:
+                    id_ = start_index
+
+                    upsert_count = 200
+                    iteration_count = iteration_count
+                    for i in range(iteration_count):
+                        rows = []
+                        for j in range(upsert_count):
+                            row = {}
+                            row["id"] = id_
+                            row["value"] = 1
+                            row["payload"] = "DEADBEEF" * 1024 * 16  # 128 kb
+                            row["income"] = Decimal("123.001").quantize(Decimal('0.000000000'))
+
+                            rows.append(row)
+                            id_ += 1
+
+                        column_types = ydb.BulkUpsertColumns()
+                        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+                        column_types.add_column("value", ydb.PrimitiveType.Uint64)
+                        column_types.add_column("payload", ydb.PrimitiveType.Utf8)
+                        column_types.add_column("income", ydb.DecimalType())
+                        self.driver.table_client.bulk_upsert(
+                            "Root/sample_table", rows, column_types
+                        )
+
+                    query_body = "SELECT SUM(value) as sum_value from `sample_table`"
+                    query = ydb.ScanQuery(query_body, {})
+                    it = self.driver.table_client.scan_query(query)
+                    result_set = []
+
+                    while True:
+                        try:
+                            result = next(it)
+                            result_set = result_set + result.result_set.rows
+                        except StopIteration:
+                            break
+
+
+                    for row in result_set:
+                        print(" ".join([str(x) for x in list(row.values())]))
+
+                    assert len(result_set) == 1
+                    assert len(result_set[0]) == 1
+                    result = list(result_set)
+                    assert len(result) == 1
+                    assert result[0]['sum_value'] == upsert_count * iteration_count + start_index
+
+        def create_table_column(self):
+            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+            with ydb.SessionPool(self.driver, size=1) as pool:
+                with pool.checkout() as session:
+                    session.execute_scheme(
+                        "create table `sample_table` (id Uint64 NOT NULL, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (STORE = COLUMN,AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
                     )
 
-                query = "SELECT SUM(value) from sample_table"
-                result_sets = session.transaction().execute(
-                    query, commit_tx=True
-                )
-                for row in result_sets[0].rows:
-                    print(" ".join([str(x) for x in list(row.values())]))
+        def create_table_row(self):
+            session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+            with ydb.SessionPool(self.driver, size=1) as pool:
+                with pool.checkout() as session:
+                    session.execute_scheme(
+                        "create table `sample_table` (id Uint64, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
+                        )
 
-                assert len(result_sets) == 1
-                assert len(result_sets[0].rows) == 1
-                result = list(result_sets[0].rows[0].values())
-                assert len(result) == 1
-                assert result[0] == upsert_count * iteration_count
+        create_table_row(self) if store_type == "row" else create_table_column(self)
+        read_update_data(self)
+        self.change_cluster_version(self.all_binary_paths[1])
+        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, f'Expected 200 rows after update version'
+        read_update_data(self, iteration_count=2, start_index=100)
+        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, f'Expected 500 rows: update 100-200 rows and added 300 rows'
+
+    @pytest.mark.parametrize("store_type", ["row", "column"])
+    def test_tpch1(self, store_type):
+        result_json_path = os.path.join( yatest.common.test_output_path(), "result.json")
+        query_output_path = os.path.join( yatest.common.test_output_path(), "query_output.json")
+        init_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "init",
+            "--store={}".format(store_type),
+           # "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
+        ]
+        import_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "import",
+            "generator",
+            "--scale=1",
+        ]
+        run_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "-p",
+            "tpch",
+            "run",
+            "--scale=1",
+            "--exclude",
+            "17",  # not working for row tables
+            "--check-canonical",
+            "--retries",
+            "5",  # in row tables we have to retry query by design
+            "--json",
+            result_json_path,
+            "--output",
+            query_output_path,
+        ]
+
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)  
+        self.change_cluster_version(self.all_binary_paths[1])
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     def test_export(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config

@@ -81,13 +81,12 @@ class TestCompatibility(object):
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
     
     def change_cluster_version(self, new_binary_paths):
-        binary_path_before = self.config.get_binary_path()
+        binary_path_before = self.config.get_binary_paths()
         versions_on_before = self.get_nodes_version()
         if isinstance(new_binary_paths, str):
             new_binary_paths = [new_binary_paths]
         elif not isinstance(new_binary_paths, list):
             raise ValueError("binary_paths must be a string or a list of strings")
-        logger.debug("Bin before: " + self.config.get_binary_path(0))
         self.config.set_binary_paths(new_binary_paths)
         self.cluster.change_node_version(self.config)
         time.sleep(60)

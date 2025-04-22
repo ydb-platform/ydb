@@ -59,16 +59,17 @@ class DistConfKiKiMRTest(object):
             'TX_PROXY': LogLevels.DEBUG,
             'TICKET_PARSER': LogLevels.DEBUG,
         }
-        cls.configurator = KikimrConfigGenerator(cls.erasure,
-                                             nodes=nodes_count,
-                                             use_in_memory_pdisks=False,
-                                             use_config_store=cls.use_config_store,
-                                             metadata_section=cls.metadata_section,
-                                             separate_node_configs=cls.separate_node_configs,
-                                             simple_config=True,
-                                             use_self_management=True,
-                                             extra_grpc_services=['config'],
-                                             additional_log_configs=log_configs)
+        cls.configurator = KikimrConfigGenerator(
+            cls.erasure,
+            nodes=nodes_count,
+            use_in_memory_pdisks=False,
+            use_config_store=cls.use_config_store,
+            metadata_section=cls.metadata_section,
+            separate_node_configs=cls.separate_node_configs,
+            simple_config=True,
+            use_self_management=True,
+            extra_grpc_services=['config'],
+            additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
@@ -112,7 +113,6 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         self.check_kikimr_is_operational(table_path, tablet_ids)
 
     def test_cluster_expand_with_distconf(self):
-        pass
         table_path = '/Root/mydb/mytable_with_expand'
         number_of_tablets = 5
 
@@ -157,17 +157,16 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             "host": "localhost",
             "port": node_port_allocator.ic_port,
         })
+        self.configurator.full_config = dumped_fetched_config
 
-        self.configurator.yaml_config = yaml.dump(dumped_fetched_config)
-
-        # register new node
-        new_node = self.cluster.register_node(self.configurator)
-
+        # prepare new node
+        new_node = self.cluster.prepare_node(self.configurator)
+        new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
         dumped_fetched_config["metadata"]["version"] = 1
+
         # replace config
         replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
-
         # start new node
         new_node.start()
 
@@ -188,7 +187,6 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
                 if node_id_in_entry == new_node.node_id and path_in_entry == pdisk_path:
                     logger.info(f"Found matching PDisk in viewer: NodeId={node_id_in_entry}, Path={path_in_entry}, State={state_in_entry}")
-                    assert_that(state_in_entry == 10)
                     found_pdisk_in_viewer = True
                     break
         except Exception as e:

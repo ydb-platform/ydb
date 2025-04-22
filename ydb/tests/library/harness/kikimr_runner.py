@@ -581,9 +581,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
-    def register_node(self, configurator=None):
+    def prepare_node(self, configurator=None):
         try:
-            new_node_object = self._KiKiMR__register_node(configurator)
+            new_node_object = self.__register_node(configurator)
+            self.__write_node_config(new_node_object.node_id, configurator)
             logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
             return new_node_object
         except Exception as e:
@@ -608,13 +609,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return self.__config_base_path
         return self.__config_path
 
+    def __write_node_config(self, node_id, configurator=None):
+        configurator = configurator or self.__configurator
+        node_config_path = ensure_path_exists(
+            os.path.join(self.__config_base_path, "node_{}".format(node_id))
+        )
+        logger.info(f"Writing node config to {node_config_path}")
+        logger.info(f"Config: {configurator.yaml_config}")
+        configurator.write_proto_configs(node_config_path)
+
     def __write_configs(self):
         if self.__configurator.separate_node_configs:
             for node_id in self.__configurator.all_node_ids():
-                node_config_path = ensure_path_exists(
-                    os.path.join(self.__config_base_path, "node_{}".format(node_id))
-                )
-                self.__configurator.write_proto_configs(node_config_path)
+                self.__write_node_config(node_id)
         else:
             self.__configurator.write_proto_configs(self.__config_path)
 

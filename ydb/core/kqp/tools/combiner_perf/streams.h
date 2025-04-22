@@ -3,6 +3,7 @@
 #pragma once
 
 #include "converters.h"
+#include "run_params.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
@@ -11,10 +12,10 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 using T6464Samples = std::vector<std::pair<ui64, ui64>>;
-T6464Samples MakeKeyed6464Samples(const size_t numSamples, const unsigned int maxKey);
+T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey);
 
 using TString64Samples = std::vector<std::pair<std::string, ui64>>;
-TString64Samples MakeKeyedString64Samples(const size_t numSamples, const unsigned int maxKey, const bool longStrings);
+TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings);
 
 struct IWideStream : public NUdf::TBoxedValue
 {
@@ -75,7 +76,33 @@ public:
 };
 
 template<typename K, typename V>
-std::unordered_map<K, V> ComputeSumReferenceResult(IWideStream& referenceStream)
+std::unordered_map<K, V> ComputeStreamSumResult(const NUdf::TUnboxedValue& wideStream)
+{
+    std::unordered_map<K, V> expects;
+    NUdf::TUnboxedValue resultValues[2];
+
+    Y_ENSURE(wideStream.IsBoxed());
+
+    size_t numFetches = 0;
+    NUdf::EFetchStatus status;
+
+    while ((status = wideStream.WideFetch(resultValues, 2)) != NUdf::EFetchStatus::Finish) {
+        if (status != NUdf::EFetchStatus::Ok) {
+            continue; // spilling combiners do yield sometimes
+        }
+        const K key = UnboxedToNative<K>(resultValues[0]);
+        const V value = UnboxedToNative<V>(resultValues[1]);
+        expects[key] += value;
+        ++numFetches;
+    }
+
+    Cerr << "ComputeStreamSumResult: " << numFetches << " WideFetch calls, " << expects.size() << " keys" << Endl;
+    return expects;
+}
+
+// Direct version without the BoxedValueAccessor
+template<typename K, typename V>
+std::unordered_map<K, V> ComputeStreamSumResult(IWideStream& referenceStream)
 {
     std::unordered_map<K, V> expects;
     {
@@ -89,27 +116,68 @@ std::unordered_map<K, V> ComputeSumReferenceResult(IWideStream& referenceStream)
 }
 
 template<typename K, typename V>
-void VerifyListVsUnorderedMap(const NUdf::TUnboxedValue& pairList, const std::unordered_map<K, V>& map)
+void VerifyMapsAreEqual(const std::unordered_map<K, V> computedMap, const std::unordered_map<K, V>& refMap)
 {
-    UNIT_ASSERT_VALUES_EQUAL(pairList.GetListLength(), map.size());
+    UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), refMap.size());
 
+    for (const auto referencePair : refMap) {
+        const auto ii = computedMap.find(referencePair.first);
+        UNIT_ASSERT(ii != computedMap.end());
+        UNIT_ASSERT_VALUES_EQUAL(referencePair.second, ii->second);
+    }
+}
+
+template<typename K, typename V>
+void VerifyStreamVsUnorderedMap(const NUdf::TUnboxedValue& wideStream, const std::unordered_map<K, V>& refMap)
+{
+    std::unordered_map<K, V> resultMap = ComputeStreamSumResult<K, V>(wideStream);
+    VerifyMapsAreEqual(resultMap, refMap);
+}
+
+template<typename K, typename V>
+void VerifyListVsUnorderedMap(const NUdf::TUnboxedValue& pairList, const std::unordered_map<K, V>& refMap)
+{
+    std::unordered_map<K, V> resultMap;
     const auto ptr = pairList.GetElements();
-    for (size_t i = 0ULL; i < map.size(); ++i) {
+    for (size_t i = 0; i < pairList.GetListLength(); ++i) {
         const auto elements = ptr[i].GetElements();
         const auto key = UnboxedToNative<K>(elements[0]);
         const auto value = UnboxedToNative<V>(elements[1]);
-        const auto ii = map.find(key);
-        UNIT_ASSERT(ii != map.end());
-        UNIT_ASSERT_VALUES_EQUAL(value, ii->second);
+        resultMap[key] += value;
     }
+
+    VerifyMapsAreEqual(resultMap, refMap);
+}
+
+template<size_t Width>
+size_t CountWideStreamOutputs(const NUdf::TUnboxedValue& wideStream)
+{
+    NUdf::TUnboxedValue resultValues[Width];
+
+    Y_ENSURE(wideStream.IsBoxed());
+
+    size_t lineCount = 0;
+    NUdf::EFetchStatus fetchStatus;
+    while ((fetchStatus = wideStream.WideFetch(resultValues, Width)) != NUdf::EFetchStatus::Finish) {
+        if (fetchStatus == NUdf::EFetchStatus::Ok) {
+            ++lineCount;
+        }
+    }
+
+    return lineCount;
 }
 
 class IDataSampler
 {
+public:
+    virtual ~IDataSampler() {};
+
     virtual THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const = 0;
     virtual TType* GetKeyType(TProgramBuilder& pb) const = 0;
     virtual void ComputeReferenceResult(IWideStream& referenceStream) = 0;
+
     virtual void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const = 0;
+    virtual void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const = 0;
     virtual std::string Describe() const = 0;
 };
 
@@ -121,8 +189,8 @@ public:
 
     size_t StreamNumIters = 0;
 
-    T6464DataSampler(size_t numSamples, size_t maxKey, size_t numIters)
-        : Samples(MakeKeyed6464Samples(numSamples, maxKey))
+    T6464DataSampler(ui64 seed, size_t numSamples, size_t maxKey, size_t numIters)
+        : Samples(MakeKeyed6464Samples(seed, numSamples, maxKey))
         , StreamNumIters(numIters)
     {
     }
@@ -141,7 +209,12 @@ public:
     {
         Y_ENSURE(Expects.empty());
 
-        Expects = ComputeSumReferenceResult<ui64, ui64>(referenceStream);
+        Expects = ComputeStreamSumResult<ui64, ui64>(referenceStream);
+    }
+
+    void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override
+    {
+        VerifyStreamVsUnorderedMap(wideStream, Expects);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override
@@ -164,8 +237,8 @@ public:
     size_t StreamNumIters = 0;
     bool LongStrings = false;
 
-    TString64DataSampler(size_t numSamples, size_t maxKey, size_t numIters, bool longStrings)
-        : Samples(MakeKeyedString64Samples(numSamples, maxKey, longStrings))
+    TString64DataSampler(ui64 seed, size_t numSamples, size_t maxKey, size_t numIters, bool longStrings)
+        : Samples(MakeKeyedString64Samples(seed, numSamples, maxKey, longStrings))
         , StreamNumIters(numIters)
         , LongStrings(longStrings)
     {
@@ -189,7 +262,12 @@ public:
     {
         Y_ENSURE(Expects.empty());
 
-        Expects = ComputeSumReferenceResult<std::string, ui64>(referenceStream);
+        Expects = ComputeStreamSumResult<std::string, ui64>(referenceStream);
+    }
+
+    void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override
+    {
+        VerifyStreamVsUnorderedMap(wideStream, Expects);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override
@@ -205,10 +283,11 @@ public:
 
 
 template<typename K, typename V>
-struct TBlockKVStream : public IWideStream {
+class TBlockKVStream : public IWideStream {
+public:
     using TSamples = std::vector<std::pair<K, V>>;
 
-    TBlockKVStream(TComputationContext& ctx, const TSamples& samples, size_t iterations, size_t blockSize, const std::vector<TType*> types)
+    TBlockKVStream(const TComputationContext& ctx, const TSamples& samples, size_t iterations, size_t blockSize, const std::vector<TType*> types)
         : Context(ctx)
         , Samples(samples)
         , End(Samples.end())
@@ -221,7 +300,7 @@ struct TBlockKVStream : public IWideStream {
     }
 
 private:
-    TComputationContext& Context;
+    const TComputationContext& Context;
     const TSamples& Samples;
     const TSamples::const_iterator End;
     const size_t MaxIterations;
@@ -285,6 +364,25 @@ public:
         }
     }
 };
+
+class IBlockSampler
+{
+public:
+    virtual ~IBlockSampler() {};
+
+    virtual THolder<IWideStream> MakeStream(const TComputationContext& ctx) const = 0;
+    virtual TType* BuildKeyType(const TTypeEnvironment& env) const = 0;
+    virtual TType* BuildValueType(const TTypeEnvironment& env) const = 0;
+
+    virtual void ComputeRawResult() = 0;
+    virtual void ComputeReferenceResult(TComputationContext& ctx) = 0;
+
+    virtual void VerifyReferenceResultAgainstRaw() = 0;
+    virtual void VerifyGraphResultAgainstReference(const NUdf::TUnboxedValue& blockList) = 0;
+};
+
+THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params);
+THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params);
 
 }
 }

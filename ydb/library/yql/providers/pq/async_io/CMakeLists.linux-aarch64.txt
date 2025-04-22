@@ -23,6 +23,7 @@ target_link_libraries(providers-pq-async_io PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-protobuf-interop
   libs-graph_params-proto
   fq-libs-protos
   fq-libs-row_dispatcher

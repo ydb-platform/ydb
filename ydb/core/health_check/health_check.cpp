@@ -196,6 +196,9 @@ public:
     bool ReturnHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
+    struct TBuilderContext;
+    TIntrusivePtr<TBuilderContext> ResultBuilders;
+
     bool IsSpecificDatabaseFilter() const {
         return FilterDatabase && FilterDatabase != DomainPath;
     }
@@ -1153,25 +1156,19 @@ public:
         }
     }
 
-    static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
-        if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
-            if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
-            } else if (poolStats.usage() >= 0.95) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 95%", ETags::OverloadState);
-            } else {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-            }
-        } else {
-            if (poolStats.usage() >= 0.99) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 99%", ETags::OverloadState);
-            } else {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-            }
-        }
-    }
+template<typename TContext>
+class TBuilderSystemTablets : public TBuilderBase<TBuilderSystemTablets<TContext>> {
+   TIntrusivePtr<TContext> Builders;
+    TTabletRequestsState& TabletRequests;
+    ui32 TimeoutMs;
 
-    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TDatabaseState& databaseState, TSelfCheckContext context) {
+public:
+    TBuilderSystemTablets(TIntrusivePtr<TContext> builders, TTabletRequestsState& tabletRequests, ui32 timeoutMs)
+        : Builders(builders)
+        , TabletRequests(tabletRequests)
+        , TimeoutMs(timeoutMs)
+    {}
+    Ydb::Monitoring::StatusFlag::Status FillImpl(TDatabaseState& databaseState, TSelfCheckContext context) {
         TString databaseId = context.Location.database().name();
         for (auto& [tabletId, tablet] : TabletRequests.TabletStates) {
             if (tablet.Database == databaseId) {
@@ -1179,15 +1176,14 @@ public:
                 if (tabletIt != databaseState.MergedTabletState.end()) {
                     auto nodeId = tabletIt->second->GetNodeID();
                     if (nodeId) {
-                        FillNodeInfo(nodeId, context.Location.mutable_node());
+                        Builders->Node->Fill(nodeId, context.Location.mutable_node());
                     }
                 }
 
                 context.Location.mutable_compute()->clear_tablet();
                 auto& protoTablet = *context.Location.mutable_compute()->mutable_tablet();
-                auto timeoutMs = Timeout.MilliSeconds();
-                auto orangeTimeout = timeoutMs / 2;
-                auto yellowTimeout = timeoutMs / 10;
+                auto orangeTimeout = TimeoutMs / 2;
+                auto yellowTimeout = TimeoutMs / 10;
                 if (tablet.IsUnresponsive || tablet.MaxResponseTime >= TDuration::MilliSeconds(yellowTimeout)) {
                     if (tablet.Type != TTabletTypes::Unknown) {
                         protoTablet.set_type(TTabletTypes::EType_Name(tablet.Type));
@@ -1205,8 +1201,18 @@ public:
         }
         return context.GetOverallStatus();
     }
+};
 
-    Ydb::Monitoring::StatusFlag::Status FillTablets(TDatabaseState& databaseState,
+template<typename TContext>
+class TBuilderTablets : public TBuilderBase<TBuilderTablets<TContext>> {
+   TIntrusivePtr<TContext> Builders;
+
+public:
+    TBuilderTablets(TIntrusivePtr<TContext> builders)
+        : Builders(builders)
+    {}
+
+    Ydb::Monitoring::StatusFlag::Status FillImpl(TDatabaseState& databaseState,
                                                     TNodeId nodeId,
                                                     google::protobuf::RepeatedPtrField<Ydb::Monitoring::ComputeTabletStatus>& parent,
                                                     TSelfCheckContext& context) {
@@ -1218,7 +1224,7 @@ public:
                 if (count.Count > 0) {
                     TSelfCheckContext tabletContext(&tabletsContext, "TABLET");
                     auto& protoTablet = *tabletContext.Location.mutable_compute()->mutable_tablet();
-                    FillNodeInfo(nodeId, tabletContext.Location.mutable_node());
+                    Builders->Node->Fill(nodeId, tabletContext.Location.mutable_node());
                     protoTablet.set_type(TTabletTypes::EType_Name(count.Type));
                     protoTablet.set_count(count.Count);
                     if (!count.Identifiers.empty()) {
@@ -1261,8 +1267,17 @@ public:
         }
         return tabletsStatus;
     }
+};
 
-    void FillNodeInfo(TNodeId nodeId, Ydb::Monitoring::LocationNode* node) {
+class TBuilderNode : public TBuilderBase<TBuilderNode> {
+    const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& MergedNodeInfo;
+
+public:
+    TBuilderNode(const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& mergedNodeInfo)
+        : MergedNodeInfo(mergedNodeInfo)
+    {}
+
+    void FillImpl(TNodeId nodeId, Ydb::Monitoring::LocationNode* node) {
         const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
         auto itNodeInfo = MergedNodeInfo.find(nodeId);
         if (itNodeInfo != MergedNodeInfo.end()) {
@@ -1276,9 +1291,45 @@ public:
             node->set_port(nodeInfo->Port);
         }
     }
+};
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
-        FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
+template<typename TContext>
+class TBuilderComputeNode : public TBuilderBase<TBuilderComputeNode<TContext>> {
+   TIntrusivePtr<TContext> Builders;
+
+    const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+
+    const THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*>& MergedNodeSystemState;
+
+public:
+    TBuilderComputeNode(TIntrusivePtr<TContext> builders,
+                        const NKikimrConfig::THealthCheckConfig& healthCheckConfig,
+                        const THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*>& mergedNodeSystemState)
+        : Builders(builders)
+        , HealthCheckConfig(healthCheckConfig)
+        , MergedNodeSystemState(mergedNodeSystemState)
+    {}
+
+    static void Check(TSelfCheckResult& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
+        if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
+            if (poolStats.usage() >= 0.99) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
+            } else if (poolStats.usage() >= 0.95) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 95%", ETags::OverloadState);
+            } else {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            }
+        } else {
+            if (poolStats.usage() >= 0.99) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Pool usage is over 99%", ETags::OverloadState);
+            } else {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+            }
+        }
+    }
+
+    void FillImpl(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+        Builders->Node->Fill(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsOrange()) {
@@ -1349,8 +1400,18 @@ public:
         computeNodeStatus.set_id(ToString(nodeId));
         computeNodeStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void FillComputeDatabaseStatus(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+
+class TBuilderComputeDatabase : public TBuilderBase<TBuilderComputeDatabase> {
+    const THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>>& DescribeByPath;
+
+public:
+    TBuilderComputeDatabase(const THashMap<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>>& describeByPath)
+        : DescribeByPath(describeByPath)
+    {}
+
+    void FillImpl(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         auto itDescribe = DescribeByPath.find(databaseState.Path);
         if (itDescribe != DescribeByPath.end() && itDescribe->second.IsOk()) {
             const auto& domain(itDescribe->second->GetRecord().GetPathDescription().GetDomainDescription());
@@ -1382,8 +1443,34 @@ public:
             }
         }
     }
+};
 
-    void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+template<typename TContext>
+class TBuilderCompute : public TBuilderBase<TBuilderCompute<TContext>> {
+    TIntrusivePtr<TContext> Builders;
+
+    const THashMap<TSubDomainKey, TString>& FilterDomainKey;
+    const THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*>& MergedNodeSystemState;
+    THashMap<TString, TDatabaseState>& DatabaseState;
+    const bool ReturnHints;
+    THashMap<TString, THintOverloadedShard> OverloadedShardHints;
+
+public:
+    TBuilderCompute(TIntrusivePtr<TContext> builders,
+                    const THashMap<TSubDomainKey, TString>& filterDomainKey,
+                    const THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*>& mergedNodeSystemState,
+                    THashMap<TString, TDatabaseState>& databaseState,
+                    const bool returnHints,
+                    THashMap<TString, THintOverloadedShard>& overloadedShardHints)
+        : Builders(builders)
+        , FilterDomainKey(filterDomainKey)
+        , MergedNodeSystemState(mergedNodeSystemState)
+        , DatabaseState(databaseState)
+        , ReturnHints(returnHints)
+        , OverloadedShardHints(overloadedShardHints)
+    {}
+
+    void FillImpl(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
         if (databaseState.ResourcePathId
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
@@ -1413,14 +1500,14 @@ public:
             }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
+                Builders->ComputeNode->Fill(databaseState, nodeId, computeNode, TSelfCheckContext(&context, "COMPUTE_NODE"));
             }
         }
-        Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets(databaseState, {&context, "SYSTEM_TABLET"});
+        Ydb::Monitoring::StatusFlag::Status systemStatus = Builders->SystemTablets->Fill(databaseState, TSelfCheckContext(&context, "SYSTEM_TABLET"));
         if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
             context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
         }
-        FillComputeDatabaseStatus(databaseState, computeStatus, {&context, "COMPUTE_QUOTA"});
+        Builders->ComputeDatabase->Fill(databaseState, computeStatus, TSelfCheckContext(&context, "COMPUTE_QUOTA"));
         context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
         context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
         context.ReportWithMaxChildStatus("Compute quota usage", ETags::ComputeState, {ETags::QuotaUsage});
@@ -1428,7 +1515,7 @@ public:
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         computeNodeIds->push_back(0); // for tablets without node
         for (TNodeId nodeId : *computeNodeIds) {
-            tabletsStatus = MaxStatus(tabletsStatus, FillTablets(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
+            tabletsStatus = MaxStatus(tabletsStatus, Builders->Tablets->Fill(databaseState, nodeId, *computeStatus.mutable_tablets(), context));
         }
         if (tabletsStatus != Ydb::Monitoring::StatusFlag::GREEN) {
             context.ReportStatus(tabletsStatus, "Compute has issues with tablets", ETags::ComputeState, {ETags::TabletState});
@@ -1455,8 +1542,18 @@ public:
         }
         computeStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
+
+class TBuilderPDisk : public TBuilderBase<TBuilderPDisk> {
+    std::unordered_map<TString, const NKikimrSysView::TPDiskEntry*> PDisksMap;
+
+public:
+    TBuilderPDisk(std::unordered_map<TString, const NKikimrSysView::TPDiskEntry*>& pdisksMap)
+        : PDisksMap(pdisksMap)
+    {}
+
+    void FillImpl(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // PDisks are shared between groups
@@ -1520,6 +1617,7 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::ORANGE);
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
+};
 
     static Ydb::Monitoring::StatusFlag::Status GetFlagFromBSPDiskSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E flag) {
         switch (flag) {
@@ -1540,7 +1638,20 @@ public:
         }
     }
 
-    void FillVDiskStatus(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
+template<typename TContext>
+class TBuilderVDisk : public TBuilderBase<TBuilderVDisk<TContext>> {
+    TIntrusivePtr<TContext> Builders;
+
+    const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& MergedNodeInfo;
+
+public:
+    TBuilderVDisk(TIntrusivePtr<TContext> builders,
+                         const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& mergedNodeInfo)
+        : Builders(builders)
+        , MergedNodeInfo(mergedNodeInfo)
+    {}
+
+    void FillImpl(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
 
@@ -1578,7 +1689,7 @@ public:
 
         if (vSlot->GetKey().HasPDiskId()) {
             TString pDiskId = GetPDiskId(vSlot->GetKey());
-            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
+            Builders->PDisk->Fill(pDiskId, *storageVDiskStatus.mutable_pdisk(), TSelfCheckContext(&context, "PDISK"));
         }
 
         if (status->number() == NKikimrBlobStorage::ERROR) {
@@ -1613,6 +1724,7 @@ public:
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }
+};
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
@@ -1659,7 +1771,18 @@ public:
         RequestDone("TEvBSGroupStateResponse");
     }
 
-    void FillPDiskStatusWithWhiteboard(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
+class TBuilderPDiskFallback : public TBuilderBase<TBuilderPDiskFallback> {
+    THashMap<TNodeId, const TEvInterconnect::TNodeInfo*> MergedNodeInfo;
+    THashSet<TNodeId> UnavailableStorageNodes;
+
+public:
+    TBuilderPDiskFallback(THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& mergedNodeInfo,
+                                        THashSet<TNodeId>& unavailableStorageNodes)
+        : MergedNodeInfo(mergedNodeInfo)
+        , UnavailableStorageNodes(unavailableStorageNodes)
+    {}
+
+    void FillImpl(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_pdisk();
@@ -1746,8 +1869,21 @@ public:
 
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void FillVDiskStatusWithWhiteboard(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
+template<typename TContext>
+class TBuilderVDiskFallback : public TBuilderBase<TBuilderVDiskFallback<TContext>> {
+    TIntrusivePtr<TContext> Builders;
+
+    std::unordered_map<TString, const NKikimrWhiteboard::TPDiskStateInfo*>& MergedPDiskState;
+public:
+    TBuilderVDiskFallback(TIntrusivePtr<TContext> builders,
+                                       std::unordered_map<TString, const NKikimrWhiteboard::TPDiskStateInfo*>& mergedPDiskState)
+        : Builders(builders)
+        , MergedPDiskState(mergedPDiskState)
+    {}
+
+    void FillImpl(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id();
         }
@@ -1757,7 +1893,7 @@ public:
         TString pDiskId = GetPDiskId(vDiskInfo);
         auto itPDisk = MergedPDiskState.find(pDiskId);
         if (itPDisk != MergedPDiskState.end()) {
-            FillPDiskStatusWithWhiteboard(pDiskId, *itPDisk->second, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
+            Builders->PDiskFallback->Fill(pDiskId, *itPDisk->second, *storageVDiskStatus.mutable_pdisk(), TSelfCheckContext(&context, "PDISK"));
         }
 
         if (!vDiskInfo.HasVDiskState()) {
@@ -1828,9 +1964,25 @@ public:
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void FillGroupStatusWithWhiteboard(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
-        if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
+template<typename TContext>
+class TBuilderStorageGroupFallback : public TBuilderBase<TBuilderStorageGroupFallback<TContext>> {
+    TIntrusivePtr<TContext> Builders;
+    std::unordered_map<TString, const NKikimrWhiteboard::TVDiskStateInfo*>& MergedVDiskState;
+    const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& MergedNodeInfo;
+
+public:
+    TBuilderStorageGroupFallback(TIntrusivePtr<TContext> builders,
+                                       std::unordered_map<TString, const NKikimrWhiteboard::TVDiskStateInfo*>& mergedVDiskState,
+                                       const THashMap<TNodeId, const TEvInterconnect::TNodeInfo*>& mergedNodeInfo)
+        : Builders(builders)
+        , MergedVDiskState(mergedVDiskState)
+        , MergedNodeInfo(mergedNodeInfo)
+    {}
+
+    void FillImpl(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
+       if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
@@ -1858,7 +2010,7 @@ public:
                 context.Location.mutable_storage()->mutable_node()->clear_port();
             }
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
-            FillVDiskStatusWithWhiteboard(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"});
+            Builders->VDiskFallback->Fill(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, TSelfCheckContext(&context, "VDISK"));
             checker.AddVDiskStatus(vDiskStatus.overall(), protoVDiskId.ring());
         }
 
@@ -1869,9 +2021,24 @@ public:
         BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
+};
 
+template<typename TContext>
+class TBuilderStorageGroup : public TBuilderBase<TBuilderStorageGroup<TContext>> {
+    TIntrusivePtr<TContext> Builders;
 
-    void FillGroupStatus(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
+    THashMap<ui32, TGroupState>& GroupState;
+    std::unordered_map<TString, Ydb::Monitoring::StatusFlag::Status>& VDiskStatuses;
+
+public:
+    TBuilderStorageGroup(TIntrusivePtr<TContext> builders, THashMap<ui32, TGroupState>& groupState,
+                         std::unordered_map<TString, Ydb::Monitoring::StatusFlag::Status>& vDiskStatuses)
+        : Builders(builders)
+        , GroupState(groupState)
+        , VDiskStatuses(vDiskStatuses)
+    {}
+
+    void FillImpl(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id(ToString(groupId));
         storageGroupStatus.set_id(ToString(groupId));
@@ -1891,7 +2058,7 @@ public:
             auto [statusIt, inserted] = VDiskStatuses.emplace(slotId, Ydb::Monitoring::StatusFlag::UNSPECIFIED);
             if (inserted) {
                 Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
-                FillVDiskStatus(slot, vDiskStatus, {&context, "VDISK"});
+                Builders->VDisk->Fill(slot, vDiskStatus, TSelfCheckContext(&context, "VDISK"));
                 statusIt->second = vDiskStatus.overall();
             }
             checker.AddVDiskStatus(statusIt->second, slotInfo.GetFailRealm());
@@ -1903,10 +2070,32 @@ public:
 
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void MergeRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
+template<typename TContext>
+class TBuilderStoragePool : public TBuilderBase<TBuilderStoragePool<TContext>> {
+   TIntrusivePtr<TContext> Builders;
+
+    bool HaveAllBSControllerInfo;
+    THashSet<TNodeId>& UnknownStaticGroups;
+    std::unordered_map<TGroupId, const NKikimrWhiteboard::TBSGroupStateInfo*>& MergedBSGroupState;
+    bool NeedMergeRecords; // Request->Request.merge_records()
+
+public:
+    TBuilderStoragePool(TIntrusivePtr<TContext> builders, bool haveAllBSControllerInfo,
+                        THashSet<TNodeId>& unknownStaticGroups,
+                        std::unordered_map<TGroupId, const NKikimrWhiteboard::TBSGroupStateInfo*>& mergedBSGroupState,
+                        bool needMergeRecords)
+        : Builders(builders)
+        , HaveAllBSControllerInfo(haveAllBSControllerInfo)
+        , UnknownStaticGroups(unknownStaticGroups)
+        , MergedBSGroupState(mergedBSGroupState)
+        , NeedMergeRecords(needMergeRecords)
+    {}
+
+    void MergeRecords(TList<TSelfCheckResult::TIssueRecord>& records) {
         TMergeIssuesContext mergeContext(records);
-        if (Request->Request.merge_records()) {
+        if (NeedMergeRecords) {
             mergeContext.MergeLevelRecords(ETags::GroupState);
             mergeContext.MergeLevelRecords(ETags::VDiskState, ETags::GroupState);
             mergeContext.MergeLevelRecords(ETags::PDiskState, ETags::VDiskState);
@@ -1914,17 +2103,16 @@ public:
         mergeContext.FillRecords(records);
     }
 
-    void FillPoolStatus(const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckContext context) {
+    void FillImpl(const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckContext context) {
         context.Location.mutable_storage()->mutable_pool()->set_name(pool.Name);
         storagePoolStatus.set_id(pool.Name);
-        bool haveInfo = HaveAllBSControllerInfo();
         for (auto groupId : pool.Groups) {
-            if (haveInfo && !UnknownStaticGroups.contains(groupId)) {
-                FillGroupStatus(groupId, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
+            if (HaveAllBSControllerInfo && !UnknownStaticGroups.contains(groupId)) {
+                Builders->StorageGroup->Fill(groupId, *storagePoolStatus.add_groups(), TSelfCheckContext(&context, "STORAGE_GROUP"));
             } else if (IsStaticGroup(groupId)) {
                 auto itGroup = MergedBSGroupState.find(groupId);
                 if (itGroup != MergedBSGroupState.end()) {
-                    FillGroupStatusWithWhiteboard(groupId, *itGroup->second, *storagePoolStatus.add_groups(), {&context, "STORAGE_GROUP"});
+                    Builders->StorageGroupFallback->Fill(groupId, *itGroup->second, *storagePoolStatus.add_groups(), TSelfCheckContext(&context, "STORAGE_GROUP"));
                 }
             }
         }
@@ -1948,16 +2136,42 @@ public:
         }
         storagePoolStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
-        if (HaveAllBSControllerInfo() && databaseState.StoragePools.empty()) {
+template<typename TContext>
+class TBuilderStorage : public TBuilderBase<TBuilderStorage<TContext>> {
+public:
+   TIntrusivePtr<TContext> Builders;
+
+    bool HaveAllBSControllerInfo;
+    THashMap<ui64, TStoragePoolState>& StoragePoolState;
+    THashSet<ui64>& StoragePoolSeen;
+    THashMap<TString, TStoragePoolState>& StoragePoolStateByName;
+    THashSet<TString>& StoragePoolSeenByName;
+
+    TBuilderStorage(TIntrusivePtr<TContext> builders,
+                    bool haveAllBSControllerInfo,
+                    THashMap<ui64, TStoragePoolState>& storagePoolState,
+                    THashSet<ui64>& storagePoolSeen,
+                    THashMap<TString, TStoragePoolState>& storagePoolStateByName,
+                    THashSet<TString>& storagePoolSeenByName)
+        : Builders(builders)
+        , HaveAllBSControllerInfo(haveAllBSControllerInfo)
+        , StoragePoolState(storagePoolState)
+        , StoragePoolSeen(storagePoolSeen)
+        , StoragePoolStateByName(storagePoolStateByName)
+        , StoragePoolSeenByName(storagePoolSeenByName)
+    {}
+
+    void FillImpl(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
+        if (HaveAllBSControllerInfo && databaseState.StoragePools.empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
-            if (HaveAllBSControllerInfo()) {
+            if (HaveAllBSControllerInfo) {
                 for (const ui64 poolId : databaseState.StoragePools) {
                     auto itStoragePoolState = StoragePoolState.find(poolId);
                     if (itStoragePoolState != StoragePoolState.end() && itStoragePoolState->second.Groups) {
-                        FillPoolStatus(itStoragePoolState->second, *storageStatus.add_pools(), {&context, "STORAGE_POOL"});
+                        Builders->StoragePool->Fill(itStoragePoolState->second, *storageStatus.add_pools(), TSelfCheckContext(&context, "STORAGE_POOL"));
                         StoragePoolSeen.emplace(poolId);
                     }
                 }
@@ -1965,7 +2179,7 @@ public:
                 for (const TString& poolName : databaseState.StoragePoolNames) {
                     auto itStoragePoolState = StoragePoolStateByName.find(poolName);
                     if (itStoragePoolState != StoragePoolStateByName.end()) {
-                        FillPoolStatus(itStoragePoolState->second, *storageStatus.add_pools(), {&context, "STORAGE_POOL"});
+                        Builders->StoragePool->Fill(itStoragePoolState->second, *storageStatus.add_pools(), TSelfCheckContext(&context, "STORAGE_POOL"));
                         StoragePoolSeenByName.emplace(poolName);
                     }
                 }
@@ -1985,7 +2199,7 @@ public:
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                     break;
             }
-            if (!HaveAllBSControllerInfo()) {
+            if (!HaveAllBSControllerInfo) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::StorageState);
             }
         }
@@ -2001,67 +2215,30 @@ public:
         }
         storageStatus.set_overall(context.GetOverallStatus());
     }
+};
 
-    struct TOverallStateContext {
-        Ydb::Monitoring::SelfCheckResult* Result;
-        Ydb::Monitoring::StatusFlag::Status Status = Ydb::Monitoring::StatusFlag::GREY;
-        bool HasDegraded = false;
-        std::unordered_set<std::pair<TString, TString>> IssueIds;
+template<typename TContext>
+class TBuilderDatabase : public TBuilderBase<TBuilderDatabase<TContext>> {
+    TIntrusivePtr<TContext> Builders;
 
-        TOverallStateContext(Ydb::Monitoring::SelfCheckResult* result) {
-            Result = result;
-        }
+    bool IsSpecificDatabaseFilter;
 
-        void FillSelfCheckResult() {
-            switch (Status) {
-            case Ydb::Monitoring::StatusFlag::GREEN:
-                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
-                break;
-            case Ydb::Monitoring::StatusFlag::YELLOW:
-                if (HasDegraded) {
-                    Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
-                } else {
-                    Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
-                }
-                break;
-            case Ydb::Monitoring::StatusFlag::BLUE:
-                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
-                break;
-            case Ydb::Monitoring::StatusFlag::ORANGE:
-                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
-                break;
-            case Ydb::Monitoring::StatusFlag::RED:
-                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::EMERGENCY);
-                break;
-            default:
-                break;
-            }
-        }
+public:
+    TBuilderDatabase(TIntrusivePtr<TContext> builders, const bool isSpecificDatabaseFilter)
+        : Builders(builders)
+        , IsSpecificDatabaseFilter(isSpecificDatabaseFilter)
+    {}
 
-        void UpdateMaxStatus(Ydb::Monitoring::StatusFlag::Status status) {
-            Status = MaxStatus(Status, status);
-        }
-
-        void AddIssues(TList<TSelfCheckResult::TIssueRecord>& issueRecords) {
-            for (auto& issueRecord : issueRecords) {
-                std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
-                if (IssueIds.emplace(key).second) {
-                    Result->mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
-                }
-            }
-        }
-    };
-
-    void FillDatabaseResult(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
+    void FillImpl(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
         Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
         TSelfCheckResult dbContext;
         dbContext.Type = "DATABASE";
-        if (!IsSpecificDatabaseFilter()) {
+        if (!IsSpecificDatabaseFilter) {
             dbContext.Location.mutable_database()->set_name(path);
         }
         databaseStatus.set_name(path);
-        FillCompute(state, *databaseStatus.mutable_compute(), {&dbContext, "COMPUTE"});
-        FillStorage(state, *databaseStatus.mutable_storage(), {&dbContext, "STORAGE"});
+        Builders->Compute->Fill(state, *databaseStatus.mutable_compute(), TSelfCheckContext(&dbContext, "COMPUTE"));
+        Builders->Storage->Fill(state, *databaseStatus.mutable_storage(), TSelfCheckContext(&dbContext, "STORAGE"));
         if (databaseStatus.compute().overall() != Ydb::Monitoring::StatusFlag::GREEN
                 && databaseStatus.storage().overall() != Ydb::Monitoring::StatusFlag::GREEN) {
             dbContext.ReportStatus(MaxStatus(databaseStatus.compute().overall(), databaseStatus.storage().overall()),
@@ -2078,13 +2255,54 @@ public:
             context.HasDegraded = true;
         }
     }
+};
+
+struct TBuilderContext: public TThrRefBase {
+public:
+    THolder<TBuilderDatabase<TBuilderContext>> Database;
+    THolder<TBuilderCompute<TBuilderContext>> Compute;
+    THolder<TBuilderComputeDatabase> ComputeDatabase;
+    THolder<TBuilderComputeNode<TBuilderContext>> ComputeNode;
+    THolder<TBuilderSystemTablets<TBuilderContext>> SystemTablets;
+    THolder<TBuilderTablets<TBuilderContext>> Tablets;
+    THolder<TBuilderStorage<TBuilderContext>> Storage;
+    THolder<TBuilderStoragePool<TBuilderContext>> StoragePool;
+    THolder<TBuilderStorageGroup<TBuilderContext>> StorageGroup;
+    THolder<TBuilderVDisk<TBuilderContext>> VDisk;
+    THolder<TBuilderPDisk> PDisk;
+    THolder<TBuilderStorageGroupFallback<TBuilderContext>> StorageGroupFallback;
+    THolder<TBuilderVDiskFallback<TBuilderContext>> VDiskFallback;
+    THolder<TBuilderPDiskFallback> PDiskFallback;
+    THolder<TBuilderNode> Node;
+};
+
+    void MakeResultBuilders() {
+        ResultBuilders = MakeIntrusive<TBuilderContext>();
+        ResultBuilders->Database = MakeHolder<TBuilderDatabase<TBuilderContext>>(ResultBuilders, IsSpecificDatabaseFilter());
+        ResultBuilders->Compute = MakeHolder<TBuilderCompute<TBuilderContext>>(ResultBuilders, FilterDomainKey, MergedNodeSystemState,
+                                                            DatabaseState, ReturnHints, OverloadedShardHints);
+        ResultBuilders->ComputeDatabase = MakeHolder<TBuilderComputeDatabase>(DescribeByPath);
+        ResultBuilders->ComputeNode = MakeHolder<TBuilderComputeNode<TBuilderContext>>(ResultBuilders, HealthCheckConfig, MergedNodeSystemState);
+        ResultBuilders->SystemTablets = MakeHolder<TBuilderSystemTablets<TBuilderContext>>(ResultBuilders, TabletRequests, Timeout.MilliSeconds());
+        ResultBuilders->Tablets = MakeHolder<TBuilderTablets<TBuilderContext>>(ResultBuilders);
+        ResultBuilders->Storage = MakeHolder<TBuilderStorage<TBuilderContext>>(ResultBuilders, HaveAllBSControllerInfo(), StoragePoolState, StoragePoolSeen,
+                                                            StoragePoolStateByName, StoragePoolSeenByName);
+        ResultBuilders->StoragePool = MakeHolder<TBuilderStoragePool<TBuilderContext>>(ResultBuilders, HaveAllBSControllerInfo(), UnknownStaticGroups, MergedBSGroupState, Request->Request.merge_records());
+        ResultBuilders->StorageGroup = MakeHolder<TBuilderStorageGroup<TBuilderContext>>(ResultBuilders, GroupState, VDiskStatuses);
+        ResultBuilders->VDisk = MakeHolder<TBuilderVDisk<TBuilderContext>>(ResultBuilders, MergedNodeInfo);
+        ResultBuilders->PDisk = MakeHolder<TBuilderPDisk>(PDisksMap);
+        ResultBuilders->StorageGroupFallback = MakeHolder<TBuilderStorageGroupFallback<TBuilderContext>>(ResultBuilders, MergedVDiskState, MergedNodeInfo);
+        ResultBuilders->VDiskFallback = MakeHolder<TBuilderVDiskFallback<TBuilderContext>>(ResultBuilders, MergedPDiskState);
+        ResultBuilders->PDiskFallback = MakeHolder<TBuilderPDiskFallback>(MergedNodeInfo, UnavailableStorageNodes);
+        ResultBuilders->Node = MakeHolder<TBuilderNode>(MergedNodeInfo);
+    }
 
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
-            FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
+            ResultBuilders->Database->Fill(context, FilterDatabase, DatabaseState[FilterDatabase]);
         } else {
             for (auto& [path, state] : DatabaseState) {
-                FillDatabaseResult(context, path, state);
+                ResultBuilders->Database->Fill(context, path, state);
             }
         }
         if (DatabaseState.empty()) {
@@ -2094,7 +2312,7 @@ public:
             databaseStatus.set_name(DomainPath);
             {
                 TDatabaseState databaseState;
-                FillSystemTablets(databaseState, {&tabletContext, "SYSTEM_TABLET"});
+                ResultBuilders->SystemTablets->Fill(databaseState, TSelfCheckContext(&tabletContext, "SYSTEM_TABLET"));
                 context.UpdateMaxStatus(tabletContext.GetOverallStatus());
             }
         }
@@ -2119,7 +2337,7 @@ public:
             if (fillUnknownDatabase) {
                 Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
                 TSelfCheckResult storageContext;
-                FillStorage(unknownDatabase, *databaseStatus.mutable_storage(), {&storageContext, "STORAGE"});
+                ResultBuilders->Storage->Fill(unknownDatabase, *databaseStatus.mutable_storage(), TSelfCheckContext(&storageContext, "STORAGE"));
                 databaseStatus.set_overall(storageContext.GetOverallStatus());
                 context.UpdateMaxStatus(storageContext.GetOverallStatus());
                 context.AddIssues(storageContext.IssueRecords);
@@ -2179,10 +2397,11 @@ public:
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
         }
 
+        MakeResultBuilders();
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
 
-        FillNodeInfo(SelfId().NodeId(), result.mutable_location());
+        ResultBuilders->Node->Fill(SelfId().NodeId(), result.mutable_location());
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last

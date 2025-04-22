@@ -403,6 +403,8 @@ struct TSelfCheckContext : TSelfCheckResult {
     }
 
     TSelfCheckContext(const TSelfCheckContext&) = delete;
+    TSelfCheckContext(TSelfCheckContext&&) = default;
+    TSelfCheckContext& operator=(TSelfCheckContext&&) = default;
 
     ~TSelfCheckContext() {
         if (Upper) {
@@ -516,4 +518,65 @@ struct TRequestResponse {
         }
     }
 };
+
+struct TOverallStateContext {
+    Ydb::Monitoring::SelfCheckResult* Result;
+    Ydb::Monitoring::StatusFlag::Status Status = Ydb::Monitoring::StatusFlag::GREY;
+    bool HasDegraded = false;
+    std::unordered_set<std::pair<TString, TString>> IssueIds;
+
+    TOverallStateContext(Ydb::Monitoring::SelfCheckResult* result) {
+        Result = result;
+    }
+
+    void FillSelfCheckResult() {
+        switch (Status) {
+        case Ydb::Monitoring::StatusFlag::GREEN:
+            Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+            break;
+        case Ydb::Monitoring::StatusFlag::YELLOW:
+            if (HasDegraded) {
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
+            } else {
+                Result->set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+            }
+            break;
+        case Ydb::Monitoring::StatusFlag::BLUE:
+            Result->set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
+            break;
+        case Ydb::Monitoring::StatusFlag::ORANGE:
+            Result->set_self_check_result(Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
+            break;
+        case Ydb::Monitoring::StatusFlag::RED:
+            Result->set_self_check_result(Ydb::Monitoring::SelfCheck::EMERGENCY);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void UpdateMaxStatus(Ydb::Monitoring::StatusFlag::Status status) {
+        Status = MaxStatus(Status, status);
+    }
+
+    void AddIssues(TList<TSelfCheckResult::TIssueRecord>& issueRecords) {
+        for (auto& issueRecord : issueRecords) {
+            std::pair<TString, TString> key{issueRecord.IssueLog.location().database().name(), issueRecord.IssueLog.id()};
+            if (IssueIds.emplace(key).second) {
+                Result->mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
+            }
+        }
+    }
+};
+
+
+template <typename Derived>
+class TBuilderBase {
+public:
+    template <typename... TArgs>
+    decltype(auto) Fill(TArgs&&... args) {
+        return static_cast<Derived*>(this)->FillImpl(std::forward<TArgs>(args)...);
+    }
+};
+
 }; // NKikimr::NHealthCheck

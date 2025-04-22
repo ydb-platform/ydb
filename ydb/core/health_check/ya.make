@@ -1,12 +1,8 @@
 LIBRARY()
 
 SRCS(
-    group_checker.h
-    health_check_structs.h
-    health_check_utils.h
     health_check.cpp
     health_check.h
-    merge_issues.h
 )
 
 PEERDIR(

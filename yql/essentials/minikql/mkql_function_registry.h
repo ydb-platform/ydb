@@ -2,6 +2,7 @@
 
 #include "mkql_function_metadata.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/public/udf/udf_registrator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
@@ -60,17 +61,18 @@ public:
     virtual void AllowUdfPatch() = 0;
 
     virtual TStatus FindFunctionTypeInfo(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            NUdf::ICountersProvider* countersProvider,
-            const TStringBuf& name,
-            TType* userType,
-            const TStringBuf& typeConfig,
-            ui32 flags,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider,
-            const NUdf::ILogProvider* logProvider,
-            TFunctionTypeInfo* funcInfo) const = 0;
+        NYql::TLangVersion langver,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        NUdf::ICountersProvider* countersProvider,
+        const TStringBuf& name,
+        TType* userType,
+        const TStringBuf& typeConfig,
+        ui32 flags,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider,
+        TFunctionTypeInfo* funcInfo) const = 0;
 
     virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0;
 

@@ -28,6 +28,7 @@ namespace NYql {
             NKikimr::NUdf::ICountersProvider* CountersProvider_;
             ETranslationMode TranslationMode_;
             ui16 SyntaxVersion_;
+            TLangVersion LangVer_;
             ui64 NativeYtTypeFlags_;
             TMaybe<ui64> DeterministicTimeProviderSeed_;
             bool UseSystemColumns;
@@ -49,6 +50,7 @@ namespace NYql {
                 NKikimr::NUdf::ICountersProvider* CountersProvider,
                 ETranslationMode translationMode,
                 ui16 syntaxVersion,
+                TLangVersion langver,
                 ui64 nativeYtTypeFlags,
                 TMaybe<ui64> deterministicTimeProviderSeed,
                 bool useSystemColumns,
@@ -69,6 +71,7 @@ namespace NYql {
                 , CountersProvider_(CountersProvider)
                 , TranslationMode_(translationMode)
                 , SyntaxVersion_(syntaxVersion)
+                , LangVer_(langver)
                 , NativeYtTypeFlags_(nativeYtTypeFlags)
                 , DeterministicTimeProviderSeed_(deterministicTimeProviderSeed)
                 , UseSystemColumns(useSystemColumns)
@@ -129,6 +132,7 @@ namespace NYql {
                 ETranslationMode mode,
                 IModuleResolver::TPtr moduleResolver,
                 ui16 syntaxVersion,
+                NYql::TLangVersion langver,
                 const THashMap<TString, TString>& modules,
                 const TInputSpecBase& inputSpec,
                 const TOutputSpecBase& outputSpec,

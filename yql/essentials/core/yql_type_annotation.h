@@ -339,6 +339,8 @@ struct TUdfCachedInfo {
     const TTypeAnnotationNode* NormalizedUserType = nullptr;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";

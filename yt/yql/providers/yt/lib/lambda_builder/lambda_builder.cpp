@@ -23,7 +23,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         NKikimr::NMiniKQL::IStatsRegistry* jobStats,
         NKikimr::NUdf::ICountersProvider* counters,
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
-        const NKikimr::NUdf::ILogProvider* logProvider)
+        const NKikimr::NUdf::ILogProvider* logProvider,
+        TLangVersion langVer)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -32,6 +33,7 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , Counters(counters)
     , SecureParamsProvider(secureParamsProvider)
     , LogProvider(logProvider)
+    , LangVer(langVer)
     , Env(env)
 {
 }
@@ -52,7 +54,7 @@ const NKikimr::NMiniKQL::TTypeEnvironment* TLambdaBuilder::CreateTypeEnv() const
 TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, const TExprNode::TPtr& lambdaNode,
     TExprContext& exprCtx, TArgumentsMap&& arguments) const
 {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, lambdaNode->UniqueId(), std::move(arguments));
     return MkqlBuildExpr(*lambdaNode, ctx);
 }
@@ -184,7 +186,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
     patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
         optLLVM, graphPerProcess, JobStats, Counters,
-        SecureParamsProvider, LogProvider);
+        SecureParamsProvider, LogProvider, LangVer);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -206,13 +208,13 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider);
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }
 
 TRuntimeNode TLambdaBuilder::MakeTuple(const TVector<TRuntimeNode>& items) const {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     return pgmBuilder.NewTuple(items);
 }
 

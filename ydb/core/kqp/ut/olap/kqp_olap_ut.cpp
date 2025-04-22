@@ -3556,5 +3556,65 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[20u]])");
         }
     }
+
+    Y_UNIT_TEST(DateCastThanFilter) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        Tests::NCommon::TLoggerInit(*kikimr).Initialize();
+        auto client = kikimr->GetQueryClient();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                id Uint64 NOT NULL,
+                time Uint64,
+                date Date,
+                datetime Datetime,
+                timestamp Timestamp,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )";
+
+        auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        {
+            auto prepareData = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ColumnShard` (id, date, time, datetime, timestamp) VALUES (42, CAST('2001-01-01' AS Date), 123, CAST('2001-01-01T01:02:03Z' AS Datetime), CAST('2024-12-03T01:00:00.000000Z' AS Timestamp));
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT(prepareData.IsSuccess());;
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard`
+                WHERE time <= CAST('123' as Uint64)
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard`
+                WHERE date <= CAST('2081-01-01' as Date)
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard`
+                WHERE datetime <= CAST('2081-01-01T01:02:03Z' as Datetime)
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        {
+            auto it = client.ExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard`
+                WHERE timestamp <= CAST('2024-12-03T01:00:00.000000Z' AS Timestamp)
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
 }
 }

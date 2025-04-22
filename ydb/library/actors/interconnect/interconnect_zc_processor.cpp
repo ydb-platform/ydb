@@ -130,7 +130,7 @@ static TProcessErrQueueResult DoProcessErrQueue(NInterconnect::TStreamSocket& so
 
 #endif
 
-// returns nunmber of buffers which should be sended to find ZC ready buffer on the firest place
+// returns number of buffers which should be sent to find ZC ready buffer on the first place
 size_t AdjustLen(std::span<const TConstIoVec> wbuf, std::span<const TOutgoingStream::TBufController> ctrl, ui64 threshold)
 {
     size_t l = wbuf.size();

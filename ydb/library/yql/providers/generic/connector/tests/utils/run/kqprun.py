@@ -144,6 +144,14 @@ QueryServiceConfig {
         {% endif %}
     }
   }
+  AvailableExternalDataSources: "ObjectStorage"
+  AvailableExternalDataSources: "ClickHouse"
+  AvailableExternalDataSources: "PostgreSQL"
+  AvailableExternalDataSources: "MySQL"
+  AvailableExternalDataSources: "Ydb"
+  AvailableExternalDataSources: "YT"
+  AvailableExternalDataSources: "Greenplum"
+  AvailableExternalDataSources: "MsSQLServer"
 }
 
 '''

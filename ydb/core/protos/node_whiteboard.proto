@@ -232,6 +232,8 @@ message TVDiskStateInfo {
     optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
+
+    optional NKikimrBlobStorage.TPDiskSlotSizeUnits.E SlotSizeUnits = 32 [(DefaultField) = true];
 }
 
 message TEvVDiskStateRequest {
@@ -265,7 +267,7 @@ message TBSGroupStateInfo {
     optional uint64 BlobDepotId = 21 [(DefaultField) = true]; // if set, then this is virtual group
     optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
     optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
-    optional NKikimrBlobStorage.TPDiskSlotSizeUnits DefaultSlotSizeUnits = 24;
+    optional NKikimrBlobStorage.TPDiskSlotSizeUnits.E SlotSizeUnits = 24 [(DefaultField) = true];
 }
 
 message TEvBSGroupStateRequest {

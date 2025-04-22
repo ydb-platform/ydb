@@ -678,9 +678,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     if (group.HasDecommitStatus()) {
         res->DecommitStatus = group.GetDecommitStatus();
     }
-    if (group.HasSlotSizeUnits()) {
-        res->SlotSizeUnits = group.GetSlotSizeUnits().GetValue();
-    }
+    res->SlotSizeUnits = group.GetSlotSizeUnits();
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());

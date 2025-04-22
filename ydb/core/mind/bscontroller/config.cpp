@@ -1193,9 +1193,7 @@ namespace NKikimr::NBsController {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
 
-            if (groupInfo.SlotSizeUnits.Defined()) {
-                group->MutableSlotSizeUnits()->SetValue(*groupInfo.SlotSizeUnits.Get());
-            }
+            group->SetSlotSizeUnits(*groupInfo.SlotSizeUnits.Get());
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

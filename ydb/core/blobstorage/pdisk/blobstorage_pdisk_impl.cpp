@@ -1490,6 +1490,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
         pdiskState.SetNumActiveSlots(TotalOwners);
+        pdiskState.SetSlotSizeUnits(Cfg->SlotSizeUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }

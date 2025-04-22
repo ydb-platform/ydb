@@ -10,14 +10,18 @@
 
 #define VALIDATE_PRODUCER_IN_REQUEST(ErrorResponseType) \
 if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
-    SendInvalidTransactionActorStateResponse<ErrorResponseType>(ev); \
-    Die(ctx); \
-    return; \
+    auto& kafkaRequest = ev->Get()->Request; \
+    TString message = TStringBuilder() << "Recieved invalid request. Got: " \
+            << "transactionalId=" << kafkaRequest->TransactionalId->c_str() \
+            << ", producerId=" << kafkaRequest->ProducerId \
+            << ", producerEpoch=" << kafkaRequest->ProducerEpoch; \
+    SendFailResponse<ErrorResponseType>(ev, EKafkaErrors::UNKNOWN_SERVER_ERROR, message); \
+    throw yexception() << message; \
 } \
 
 namespace NKafka {
 
-    void TKafkaTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
+    void TKafkaTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
         KAFKA_LOG_D("Receieved ADD_PARTITIONS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
@@ -32,13 +36,13 @@ namespace NKafka {
     // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but 
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
-    void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
+    void TKafkaTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
         KAFKA_LOG_D("Receieved ADD_OFFSETS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
-    void TKafkaTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
+    void TKafkaTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
         KAFKA_LOG_D("Receieved TXN_OFFSET_COMMIT request");
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
@@ -155,18 +159,6 @@ namespace NKafka {
     }
     
     // Response senders
-    template<class ErrorResponseType, class EventType>
-    void TKafkaTransactionActor::SendInvalidTransactionActorStateResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
-        auto& kafkaRequest = evHandle->Get()->Request;
-        KAFKA_LOG_CRIT(TStringBuilder() << "Recieved invalid request. Got: "
-            << "transactionalId=" << kafkaRequest->TransactionalId->c_str() 
-            << ", producerId=" << kafkaRequest->ProducerId 
-            << ", producerEpoch=" << kafkaRequest->ProducerEpoch
-        );
-        auto response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::UNKNOWN_SERVER_ERROR);
-        Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::UNKNOWN_SERVER_ERROR));
-    }
-
     template<class ErrorResponseType, class EventType>
     void TKafkaTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {

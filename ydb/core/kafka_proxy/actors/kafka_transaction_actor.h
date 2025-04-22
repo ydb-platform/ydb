@@ -63,14 +63,19 @@ namespace NKafka {
         
         private:
             STFUNC(StateFunc) {
-                switch (ev->GetTypeRewrite()) {
-                    HFunc(TEvKafka::TEvAddPartitionsToTxnRequest, Handle);
-                    HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);
-                    HFunc(TEvKafka::TEvTxnOffsetCommitRequest, Handle);
-                    HFunc(TEvKafka::TEvEndTxnRequest, Handle);
-                    HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
-                    HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-                    HFunc(TEvents::TEvPoison, Handle);
+                try {
+                    switch (ev->GetTypeRewrite()) {
+                        HFunc(TEvKafka::TEvAddPartitionsToTxnRequest, Handle);
+                        HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);
+                        HFunc(TEvKafka::TEvTxnOffsetCommitRequest, Handle);
+                        HFunc(TEvKafka::TEvEndTxnRequest, Handle);
+                        HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+                        HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                        HFunc(TEvents::TEvPoison, Handle);
+                    }
+                } catch (const yexception& y) {
+                    KAFKA_LOG_CRIT(TStringBuilder() << "Critical error happened. Reason: " << y.what());
+                    Die(ActorContext());
                 }
             }
 
@@ -92,8 +97,6 @@ namespace NKafka {
             void SendCommitTxnRequest(const TString& kqpTransactionId);
 
             // Response senders
-            template<class ErrorResponseType, class EventType>
-            void SendInvalidTransactionActorStateResponse(TAutoPtr<TEventHandle<EventType>>& evHandle);
             template<class ErrorResponseType, class EventType>
             void SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage = {});
             template<class ResponseType, class EventType>

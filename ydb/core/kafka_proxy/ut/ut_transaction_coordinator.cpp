@@ -31,7 +31,7 @@ namespace {
             }
 
             THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
-                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TTxnProducerState{producerId, producerEpoch});
+                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TProducerInstanceId{producerId, producerEpoch});
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);

@@ -347,7 +347,7 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 
 {{ ydb-short-name }} has the following types of users depending on their source:
 
-- internal users in {{ ydb-short-name }} databases
+- local users in {{ ydb-short-name }} databases
 - external users from third-party directory services
 
 {{ ydb-short-name }} users are identified by their [SIDs](#access-sid).

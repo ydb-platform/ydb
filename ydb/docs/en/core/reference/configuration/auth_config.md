@@ -2,35 +2,35 @@
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-## Configuring internal {{ ydb-short-name }} user authentication {#internal-auth-config}
+## Configuring local {{ ydb-short-name }} user authentication {#local-auth-config}
 
-For more information about the authentication of [internal {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
+For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
 || use_login_provider
-| Indicates whether to allow the authentication of internal users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
+| Indicates whether to allow the authentication of local users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
 
 Default value: `true`
     ||
 || enable_login_authentication
-| Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating authentication tokens after an internal user enters a username and password.
+| Indicates whether to allow adding local users to {{ ydb-short-name }} databases and generating authentication tokens after an local user enters a username and password.
 
 Default value: `true`
     ||
 || domain_login_only
-| Determines the scope of internal user access rights in a {{ ydb-short-name }} cluster.
+| Determines the scope of local user access rights in a {{ ydb-short-name }} cluster.
 
 Valid values:
 
-- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [databases](../../concepts/glossary.md#database).
+- `true` — local users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [databases](../../concepts/glossary.md#database).
 
-- `false` — internal users can exist either at the cluster or database level. The scope of access rights for internal users created at the database level is limited to the database, in which they are created.
+- `false` — local users can exist either at the cluster or database level. The scope of access rights for local users created at the database level is limited to the database, in which they are created.
 
 Default value: `true`
     ||
 || login_token_expire_time
-| Specifies the expiration time of the authentication token created when an internal user logs in to {{ ydb-short-name }}.
+| Specifies the expiration time of the authentication token created when an local user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
     ||
@@ -71,7 +71,7 @@ Default value: `1h`
 
 ### Configuring password complexity requirements {#password-complexity}
 
-{{ ydb-short-name }} allows internal users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [internal users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows local users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [local users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
 
 Example of the `password_complexity` section:
 

@@ -55,7 +55,7 @@ By default, a superuser is the `root` user with an empty password.
 
 ## A group for all users {#all-users-group}
 
-The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all internal [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
+The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all local [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
 
 For more information about managing groups and users, see [{#T}](../security/authorization.md).
 

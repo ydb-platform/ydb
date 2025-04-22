@@ -372,7 +372,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 ### Auth users {#users}
 
-The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
+The `auth_users` view lists local {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 
 This view can be fully accessed by administrators, while regular users can only view their own details.
 

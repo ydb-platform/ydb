@@ -31,7 +31,7 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 
 ## Authenticating by username and password {#static-credentials}
 
-Authentication by username and password using the YDB server is available only to [internal users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
+Authentication by username and password using the YDB server is available only to [local users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
 
 This access type implies that each database user has a username and password.
 Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.

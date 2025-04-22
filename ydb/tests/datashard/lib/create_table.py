@@ -48,3 +48,4 @@ def create_vector_index_sql_request(table_name:str, embedding:str):
         ON ({embedding})
         WITH (distance=cosine, vector_type="float", vector_dimension=256, levels=1, clusters=200);
     """
+    return create_vector_index

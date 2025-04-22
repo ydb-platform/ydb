@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   ping:
+    if: contains(github.event.pull_request.labels.*.name, 'documentation')
     permissions:
       issues: write
       pull-requests: read

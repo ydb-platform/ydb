@@ -181,67 +181,77 @@ class TestCompatibility(object):
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
         def read_update_data(self, iteration_count=1, start_index=0):
-            self.get_nodes_version()
-            with ydb.SessionPool(self.driver, size=1) as pool:
-                with pool.checkout() as session:
-                    id_ = start_index
+            id_ = start_index
 
-                    upsert_count = 200
-                    iteration_count = iteration_count
-                    for i in range(iteration_count):
-                        rows = []
-                        for j in range(upsert_count):
-                            row = {}
-                            row["id"] = id_
-                            row["value"] = 1
-                            row["payload"] = "DEADBEEF" * 1024 * 16  # 128 kb
-                            row["income"] = Decimal("123.001").quantize(Decimal('0.000000000'))
+            upsert_count = 200
+            iteration_count = iteration_count
+            for i in range(iteration_count):
+                rows = []
+                for j in range(upsert_count):
+                    row = {}
+                    row["id"] = id_
+                    row["value"] = 1
+                    row["payload"] = "DEADBEEF" * 1024 * 16  # 128 kb
+                    row["income"] = Decimal("123.001").quantize(Decimal('0.000000000'))
 
-                            rows.append(row)
-                            id_ += 1
+                    rows.append(row)
+                    id_ += 1
 
-                        column_types = ydb.BulkUpsertColumns()
-                        column_types.add_column("id", ydb.PrimitiveType.Uint64)
-                        column_types.add_column("value", ydb.PrimitiveType.Uint64)
-                        column_types.add_column("payload", ydb.PrimitiveType.Utf8)
-                        column_types.add_column("income", ydb.DecimalType())
-                        self.driver.table_client.bulk_upsert(
-                            "Root/sample_table", rows, column_types
-                        )
+                column_types = ydb.BulkUpsertColumns()
+                column_types.add_column("id", ydb.PrimitiveType.Uint64)
+                column_types.add_column("value", ydb.PrimitiveType.Uint64)
+                column_types.add_column("payload", ydb.PrimitiveType.Utf8)
+                column_types.add_column("income", ydb.DecimalType())
+                self.driver.table_client.bulk_upsert(
+                    "Root/sample_table", rows, column_types
+                )
 
-                    query_body = "SELECT SUM(value) as sum_value from `sample_table`"
-                    query = ydb.ScanQuery(query_body, {})
-                    it = self.driver.table_client.scan_query(query)
-                    result_set = []
+            query_body = "SELECT SUM(value) as sum_value from `sample_table`"
+            query = ydb.ScanQuery(query_body, {})
+            it = self.driver.table_client.scan_query(query)
+            result_set = []
 
-                    while True:
-                        try:
-                            result = next(it)
-                            result_set = result_set + result.result_set.rows
-                        except StopIteration:
-                            break
+            while True:
+                try:
+                    result = next(it)
+                    result_set = result_set + result.result_set.rows
+                except StopIteration:
+                    break
 
-                    for row in result_set:
-                        print(" ".join([str(x) for x in list(row.values())]))
+            for row in result_set:
+                print(" ".join([str(x) for x in list(row.values())]))
 
-                    assert len(result_set) == 1
-                    assert len(result_set[0]) == 1
-                    result = list(result_set)
-                    assert len(result) == 1
-                    assert result[0]['sum_value'] == upsert_count * iteration_count + start_index
+            assert len(result_set) == 1
+            assert len(result_set[0]) == 1
+            result = list(result_set)
+            assert len(result) == 1
+            assert result[0]['sum_value'] == upsert_count * iteration_count + start_index
 
         def create_table_column(self):
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
-                        "create table `sample_table` (id Uint64 NOT NULL, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (STORE = COLUMN,AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
+                        """create table `sample_table` (
+                            id Uint64 NOT NULL, value Uint64,
+                            payload Utf8, income Decimal(22,9),
+                            PRIMARY KEY(id)
+                            ) WITH (
+                            STORE = COLUMN,
+                            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
                     )
 
         def create_table_row(self):
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(
-                        "create table `sample_table` (id Uint64, value Uint64, payload Utf8, income Decimal(22,9), PRIMARY KEY(id)) WITH (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"
+                        """create table `sample_table` (
+                            id Uint64, value Uint64,
+                            payload Utf8, income Decimal(22,9),
+                            PRIMARY KEY(id)
+                            ) WITH (
+                            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
                     )
 
         create_table_row(self) if store_type == "row" else create_table_column(self)
@@ -267,7 +277,7 @@ class TestCompatibility(object):
             "tpch",
             "init",
             "--store={}".format(store_type),
-            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            # "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
         ]
         import_command = [
@@ -306,12 +316,25 @@ class TestCompatibility(object):
             "--output",
             query_output_path,
         ]
+        clean_command = [
+            yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].port,
+            "--database=/Root",
+            "workload",
+            "tpch",
+            "clean",
+            "-p",
+            "tpch",
+        ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         self.change_cluster_version(self.all_binary_paths[1])
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(clean_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     def test_export(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config

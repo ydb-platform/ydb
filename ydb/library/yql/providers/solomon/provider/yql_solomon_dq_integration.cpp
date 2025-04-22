@@ -279,29 +279,11 @@ public:
         const auto& cluster = dqSource.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
         const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
-        NSo::NProto::TDqSolomonSource source;
-        source.SetHttpEndpoint(clusterDesc->GetCluster());
-        source.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
-        source.SetUseSsl(clusterDesc->GetUseSsl());
+
+        NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, settings.Project().StringValue());
+        
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        
-        if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-            source.SetProject(clusterDesc->GetPath().GetProject());
-            source.SetCluster(clusterDesc->GetPath().GetCluster());
-        } else {
-            source.SetProject(settings.Project().StringValue());
-        }
-
-        for (const auto& attr : clusterDesc->settings()) {
-            if (attr.name() == "grpc_location"sv) {
-                source.SetGrpcEndpoint(attr.value());
-            }
-        }
-
-        if (source.GetGrpcEndpoint().empty()) {
-            source.SetGrpcEndpoint(clusterDesc->GetCluster());
-        }
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {

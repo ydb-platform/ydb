@@ -59,27 +59,7 @@ public:
             auto& settings = soReadObject.Object().Settings().Ref();
 
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
-                NSo::NProto::TDqSolomonSource source;
-                source.SetHttpEndpoint(clusterDesc->GetCluster());
-                for (const auto& attr : clusterDesc->settings()) {
-                    if (attr.name() == "grpc_location"sv) {
-                        source.SetGrpcEndpoint(attr.value());
-                    }
-                }
-        
-                if (source.GetGrpcEndpoint().empty()) {
-                    source.SetGrpcEndpoint(clusterDesc->GetCluster());
-                }
-
-                source.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
-                source.SetUseSsl(clusterDesc->GetUseSsl());
-
-                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    source.SetProject(clusterDesc->GetPath().GetProject());
-                    source.SetCluster(clusterDesc->GetPath().GetCluster());
-                } else {
-                    source.SetProject(soReadObject.Object().Project().StringValue());
-                }
+                NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
                 
                 auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
                 if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {

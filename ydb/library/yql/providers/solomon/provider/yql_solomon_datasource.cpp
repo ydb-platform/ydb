@@ -42,7 +42,7 @@ public:
         cluster.SetToken(token);
         cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
 
-        if (!properties.Value("project", "").empty() && !properties.Value("cluster", "").empty()) {
+        if (properties.Value("project", "") && properties.Value("cluster", "")) {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
             cluster.MutablePath()->SetProject(properties.Value("project", ""));
             cluster.MutablePath()->SetCluster(properties.Value("cluster", ""));
@@ -50,7 +50,7 @@ public:
             cluster.SetClusterType(TSolomonClusterConfig::SCT_SOLOMON);
         }
 
-        if (auto value = properties.Value("grpc_location", ""); !value.empty()) {
+        if (auto value = properties.Value("grpc_location", "")) {
             auto grpcPort = cluster.MutableSettings()->Add();
             *grpcPort->MutableName() = "grpc_location";
             *grpcPort->MutableValue() = value;

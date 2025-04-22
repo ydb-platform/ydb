@@ -131,11 +131,14 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     }
 
     const auto pagesInfo = json["page"];
-    if (!pagesInfo.IsMap() || !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger()) {
+    if (!pagesInfo.IsMap() || 
+        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
+        !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
         return TListMetricsResponse("Invalid paging info from monitoring api");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
+    result.TotalCount = pagesInfo["totalCount"].GetInteger();
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {

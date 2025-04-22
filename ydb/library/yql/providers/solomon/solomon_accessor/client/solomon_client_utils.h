@@ -48,6 +48,7 @@ using TGetLabelsResponse = TSolomonClientResponse<TGetLabelsResult>;
 struct TListMetricsResult {
     std::vector<TMetric> Metrics;
     ui64 PagesCount;
+    ui64 TotalCount;
 };
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
 

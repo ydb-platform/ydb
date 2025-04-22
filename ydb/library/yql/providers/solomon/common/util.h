@@ -9,4 +9,6 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
 
 std::map<TString, TString> ExtractSelectorValues(const TString& selectors);
 
+NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project);
+
 } // namespace NYql::NSo

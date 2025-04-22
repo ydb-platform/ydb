@@ -3,6 +3,8 @@
 #include "sentinel.h"
 #include "sentinel_impl.h"
 
+#include <ranges>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/domain.h>

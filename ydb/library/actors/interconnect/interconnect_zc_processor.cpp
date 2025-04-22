@@ -165,8 +165,8 @@ void TInterconnectZcProcessor::DoProcessNotification(NInterconnect::TStreamSocke
         ZcState = ZC_OK;
     }
 
-    // There are no reliable way to check is both side of tcp connection
-    // place on the same host (consider different namespaces is the same host too).
+    // There is no reliable way to check if both side of tcp connection
+    // are on the same host (consider different namespaces as the same host too).
     // So we check that each transfer has hidden copy during some period.
     if (ZcState == ZC_OK && ConfirmedWithCopy == Confirmed && Confirmed > 10) {
         AddErr("Hidden copy during ZC operation");

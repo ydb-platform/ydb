@@ -1,6 +1,9 @@
 #include "import.h"
 
 #include <util/stream/format.h>
+#include <util/stream/input.h>
+#include <util/stream/multi.h>
+#include <util/stream/mem.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -53,6 +56,22 @@ namespace NConsoleClient {
 namespace {
 
 constexpr ui64 rowsToAnalyze = 100000;
+
+std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input) {
+    char bom[3];
+    size_t read = input->Read(bom, 3);
+    if (read == 3 && bom[0] == '\xEF' && bom[1] == '\xBB' && bom[2] == '\xBF') {
+        return nullptr; // BOM found and skipped, return nullptr to use original stream
+    }
+    TString bomData(bom, read);
+    auto bomStream = std::make_shared<TMemoryInput>(bomData.data(), bomData.size());
+
+    // Create a multiInput that will use the streams and manage the lifetime of bomStream and bomData
+    return std::shared_ptr<IInputStream>(
+        new TMultiInput(bomStream.get(), input),
+        [bomStream, bomData](IInputStream* ptr) { delete ptr; }
+    );
+}
 
 inline
 TStatus MakeStatus(EStatus code = EStatus::SUCCESS, const TString& error = {}) {
@@ -670,6 +689,19 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                 fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
             }
 
+            // Original input stream
+            std::shared_ptr<IInputStream> inputStream;
+            if (fileInput) {
+                inputStream = std::shared_ptr<IInputStream>(std::move(fileInput));
+            } else {
+                inputStream = std::make_shared<TFileInput>(TFile(GetStdinFileno()));
+            }
+
+            // If a stream had BOM, returns null. It means we can use original stream -- it has no BOM anymore
+            // If a stream had no BOM, returns combined stream with 3 bytes already read from it and the original stream
+            std::shared_ptr<IInputStream> noBomStream = SkipBOMIfPresent(inputStream.get());
+            IInputStream& input = noBomStream ? *noBomStream : *inputStream;
+
             ProgressCallbackFunc progressCallback;
 
             if (isStdoutInteractive) {
@@ -684,8 +716,6 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                     }
                 };
             }
-
-            IInputStream& input = fileInput ? *fileInput : Cin;
 
             try {
                 switch (Settings.Format_) {

@@ -342,6 +342,7 @@ public:
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableDataErasure = false;
+    bool EnableExternalSourceSchemaInference = false;
 
     TShardDeleter ShardDeleter;
 

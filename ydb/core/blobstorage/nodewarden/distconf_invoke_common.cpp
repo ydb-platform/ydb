@@ -1,5 +1,7 @@
-#include "distconf_audit.h"
 #include "distconf_invoke.h"
+
+#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/util/address_classifier.h>
 
 namespace NKikimr::NStorage {
 
@@ -191,20 +193,43 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
-        TStringBuilder oldConfig;
-        oldConfig << Self->MainConfigYaml << (Self->StorageConfigYaml ? *Self->StorageConfigYaml : "");
-        TStringBuilder newConfig;
-        newConfig << *NewYaml << (NewStorageYaml ? *NewStorageYaml : "");
-        NACLib::TUserToken userToken = NACLib::TUserToken{replaceConfig.GetUserToken()};
-        AuditLogReplaceConfig(
-            /* peer = */ replaceConfig.GetPeerName(),
-            /* userSID = */ userToken.GetUserSID(),
-            /* sanitizedToken = */ userToken.GetSanitizedToken(),
-            /* oldConfig = */ oldConfig,
-            /* newConfig = */ newConfig,
-            /* reason = */ {},
-            /* success = */ true);
+        if (const auto& record = Event->Get()->Record; record.HasReplaceStorageConfig()) {
+            AUDIT_LOG(
+                const auto& replaceConfig = record.GetReplaceStorageConfig();
+
+                const TString oldConfig = TStringBuilder()
+                    << Self->MainConfigYaml
+                    << Self->StorageConfigYaml.value_or("");
+
+                TStringBuilder newConfig;
+                if (replaceConfig.HasYAML()) {
+                    newConfig << replaceConfig.GetYAML();
+                } else {
+                    newConfig << Self->MainConfigYaml;
+                }
+                if (replaceConfig.HasStorageYAML()) {
+                    newConfig << replaceConfig.GetStorageYAML();
+                } else if (replaceConfig.HasSwitchDedicatedStorageSection() && !replaceConfig.GetSwitchDedicatedStorageSection()) {
+                    // dedicated storage YAML is switched off by this operation -- no storage config will be set
+                } else if (Self->StorageConfigYaml) {
+                    newConfig << *Self->StorageConfigYaml;
+                }
+
+                NACLib::TUserToken userToken(replaceConfig.GetUserToken());
+
+                auto wrapEmpty = [](const TString& value) { return value ? value : TString("{none}"); };
+
+                AUDIT_PART("component", TString("distconf"))
+                AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
+                AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
+                AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
+                AUDIT_PART("status", TString("SUCCESS"))
+                AUDIT_PART("reason", TString(), false)
+                AUDIT_PART("operation", TString("REPLACE CONFIG"))
+                AUDIT_PART("old_config", oldConfig)
+                AUDIT_PART("new_config", newConfig)
+            );
+        }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
 

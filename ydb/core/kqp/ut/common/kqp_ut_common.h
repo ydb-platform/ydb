@@ -403,5 +403,39 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
 
+class TTestExtEnv {
+public:
+    struct TEnvSettings {
+        size_t StaticNodeCount = 1;
+        size_t DynamicNodeCount = 1;
+        TString PoolName = "hdd1";
+        bool UseRealThreads = true;
+        NKikimrConfig::TFeatureFlags FeatureFlags;
+    };
+
+    TTestExtEnv(TEnvSettings envSettings);
+    ~TTestExtEnv();
+
+    NYdb::TDriver& GetDriver() const {
+        return *Driver;
+    }
+
+    void CreateDatabase(const TString& databaseName);
+
+private:
+    TPortManager PortManager;
+
+    Tests::TServerSettings::TPtr Settings;
+    Tests::TServer::TPtr Server;
+    THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
+
+    TString Endpoint;
+    NYdb::TDriverConfig DriverConfig;
+    THolder<NYdb::TDriver> Driver;
+
+    TEnvSettings EnvSettings;
+};
+
 } // namespace NKqp
 } // namespace NKikimr

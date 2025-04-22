@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_kqp.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
@@ -214,7 +215,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
 
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-            sysLocks.ApplyLocks();
+            auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+            NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
             if (locksDb.HasChanges()) {
                 op->SetWaitCompletionFlag(true);
@@ -469,7 +471,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 }
 
 void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
-    auto locks = DataShard.SysLocksTable().ApplyLocks();
+    auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+    NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
         if (lock.IsError()) {

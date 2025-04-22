@@ -36,9 +36,10 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
         ("queue", ProcessesOrdered.size())("workers", Workers.size())("count", ev->GetProcessIds().size())("d", ev->GetInstants().back() - ev->GetInstants().front());
     for (ui32 idx = 0; idx < ev->GetProcessIds().size(); ++idx) {
         AddCPUTime(ev->GetProcessIds()[idx], ev->GetInstants()[idx + 1] - std::max(LastAddProcessInstant, ev->GetInstants()[idx]));
+        Counters.TaskExecuteHistogram->Collect((ev->GetInstants()[idx + 1] - ev->GetInstants()[idx]).MicroSeconds());
     }
     const TDuration dExecution = ev->GetInstants().back() - ev->GetInstants().front();
-    Counters.ExecuteHistogram->Collect(dExecution.MicroSeconds());
+    Counters.PackExecuteHistogram->Collect(dExecution.MicroSeconds());
     Counters.ExecuteDuration->Add(dExecution.MicroSeconds());
 
     const TMonotonic now = TMonotonic::Now();

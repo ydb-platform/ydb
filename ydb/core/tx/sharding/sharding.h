@@ -310,7 +310,7 @@ public:
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
 
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch);
+    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch, arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
     TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit);
 
     virtual TString DebugString() const;

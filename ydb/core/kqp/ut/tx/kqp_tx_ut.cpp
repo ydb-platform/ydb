@@ -82,7 +82,10 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST(LocksAbortOnCommit) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig app;
+        // See KqpSinkTx::LocksAbortOnCommit for sink version of this test
+        app.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         {

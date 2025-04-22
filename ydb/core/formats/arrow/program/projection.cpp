@@ -8,7 +8,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TProjectionProcessor::DoExecut
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     context.GetResources()->RemainOnly(TColumnChainInfo::ExtractColumnIds(GetInput()), true);
     if (context.GetLimit()) {
-        context.GetResources()->CutFilter(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse());
+        context.GetResources()->CutFilter(context.GetResources()->GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
     }
     return EExecutionResult::Success;
 }

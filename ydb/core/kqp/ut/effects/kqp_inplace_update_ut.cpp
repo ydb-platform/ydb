@@ -61,7 +61,8 @@ void Test(
     TParams&& params,
     const TString& expectedResult,
     std::function<void(const Ydb::TableStats::QueryStats&)>&& check,
-    const std::function<void(TSession& session)>& prepareTable = &PrepareTable
+    const std::function<void(TSession& session)>& prepareTable = &PrepareTable,
+    std::optional<bool> useSink = std::nullopt
 ) {
     auto setting = NKikimrKqp::TKqpSetting();
     setting.SetName("_KqpAllowUnsafeCommit");
@@ -69,6 +70,9 @@ void Test(
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
+    if (useSink) {
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
+    }
 
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig)
@@ -105,15 +109,18 @@ void Test(
 #define ASSERT_LITERAL_PHASE(stats, phaseNo) \
     UNIT_ASSERT_C(stats.query_phases(phaseNo).table_access().empty(), stats.DebugString());
 
-#define ASSERT_PHASE(stats, phaseNo, table, readsCnt, updatesCnt) \
+#define ASSERT_PHASE_FULL(stats, phaseNo, table, readsCnt, updatesCnt, partitionsCnt) \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access().size(), 1, stats.DebugString());                     \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).name(), table, stats.DebugString());                \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).reads().rows(), readsCnt, stats.DebugString());     \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).updates().rows(), updatesCnt, stats.DebugString()); \
-    UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).partitions_count(), std::max(readsCnt, updatesCnt), stats.DebugString());
+    UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).partitions_count(), partitionsCnt, stats.DebugString());
+
+#define ASSERT_PHASE(stats, phaseNo, table, readsCnt, updatesCnt) \
+    ASSERT_PHASE_FULL(stats, phaseNo, table, readsCnt, updatesCnt, std::max(readsCnt, updatesCnt));
 
 
-Y_UNIT_TEST(SingleRowSimple) {
+Y_UNIT_TEST_TWIN(SingleRowSimple, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS String;
@@ -130,14 +137,21 @@ Y_UNIT_TEST(SingleRowSimple) {
             [[1u];["updated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
-Y_UNIT_TEST(SingleRowStr) {
+Y_UNIT_TEST_TWIN(SingleRowStr, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS String;
@@ -154,14 +168,21 @@ Y_UNIT_TEST(SingleRowStr) {
             [[1u];["neupdated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
-Y_UNIT_TEST(SingleRowArithm) {
+Y_UNIT_TEST_TWIN(SingleRowArithm, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $x AS Uint64;
@@ -181,14 +202,21 @@ Y_UNIT_TEST(SingleRowArithm) {
             [[1u];["One"];[1210u];[16.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
-Y_UNIT_TEST(SingleRowIf) {
+Y_UNIT_TEST_TWIN(SingleRowIf, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
 
@@ -212,15 +240,22 @@ Y_UNIT_TEST(SingleRowIf) {
             [[1u];["One"];[11u];[1.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
 // allow multiple keys in KqpLookupTable to enable this test
-Y_UNIT_TEST(Negative_SingleRowWithKeyCast) {
+Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, UseSink) {
     Test(
         R"( DECLARE $key AS Uint32; -- not Uint64
             DECLARE $value AS String;
@@ -237,21 +272,29 @@ Y_UNIT_TEST(Negative_SingleRowWithKeyCast) {
             [[1u];["updated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
+        [&](const Ydb::TableStats::QueryStats& stats) {
             // if constexpr (EnableInplaceUpdate) {
             //     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
             //     ASSERT_LITERAL_PHASE(stats, 0);
             //     ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 1);
             // } else {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_LITERAL_PHASE(stats, 0);
+                ASSERT_PHASE_FULL(stats, 1, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
                 ASSERT_LITERAL_PHASE(stats, 0);
                 ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 0);
                 ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 1);
+            }
             // }
-        });
+        },
+        &PrepareTable,
+        UseSink);
 }
 
-Y_UNIT_TEST(Negative_SingleRowWithValueCast) {
+Y_UNIT_TEST_TWIN(Negative_SingleRowWithValueCast, UseSink) {
 /*
     (
     (declare $key (DataType 'Uint64))
@@ -280,14 +323,21 @@ Y_UNIT_TEST(Negative_SingleRowWithValueCast) {
             [[1u];["One"];[1u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
-Y_UNIT_TEST(Negative_SingleRowListFromRange) {
+Y_UNIT_TEST_TWIN(Negative_SingleRowListFromRange, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
 
@@ -307,15 +357,22 @@ Y_UNIT_TEST(Negative_SingleRowListFromRange) {
             [[1u];["One1..2..3..4..5..6..7..8..9"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
+        },
+        &PrepareTable,
+        UseSink);
 }
 
 // allow multiple keys in KqpLookupTable to enable this test
-Y_UNIT_TEST(Negative_BatchUpdate) {
+Y_UNIT_TEST_TWIN(Negative_BatchUpdate, UseSink) {
     Test(
         R"( DECLARE $key1 AS Uint64;
             DECLARE $value1 AS String;
@@ -343,19 +400,27 @@ Y_UNIT_TEST(Negative_BatchUpdate) {
             [[1u];["updated-1"];[100u];[101.]];
             [[20u];["updated-2"];[200u];[202.]]
         ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
+        [&](const Ydb::TableStats::QueryStats& stats) {
             // if constexpr (EnableInplaceUpdate) {
             //     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
             //     ASSERT_LITERAL_PHASE(stats, 0);
             //     ASSERT_LITERAL_PHASE(stats, 1);
             //     ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 2, 2);
             // } else {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_LITERAL_PHASE(stats, 0);
+                ASSERT_PHASE_FULL(stats, 1, "/Root/InplaceUpdate", 2, 2, 4);
+            } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
                 ASSERT_LITERAL_PHASE(stats, 0);
                 ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 2, 0);
                 ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 2);
+            }
             // }
-        });
+        },
+        &PrepareTable,
+        UseSink);
 }
 
 Y_UNIT_TEST(BigRow) {
@@ -421,7 +486,7 @@ Y_UNIT_TEST(BigRow) {
     ])", FormatResultSetYson(result.GetResultSet(0)));
 }
 
-Y_UNIT_TEST(SingleRowPgNotNull) {
+Y_UNIT_TEST_TWIN(SingleRowPgNotNull, UseSink) {
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS PgInt2;
@@ -438,12 +503,18 @@ Y_UNIT_TEST(SingleRowPgNotNull) {
             [[1u];["One"];"123";[101.]];
             [[20u];["Two"];"200";[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            if (UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+            }
         },
-        &PreparePgTable);
+        &PreparePgTable,
+        UseSink);
 }
 
 } // suite

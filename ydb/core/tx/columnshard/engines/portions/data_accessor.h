@@ -319,7 +319,7 @@ public:
         }
 
         TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
     class TPreparedColumn {
@@ -346,7 +346,7 @@ public:
             AFL_VERIFY(Loader);
         }
 
-        std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
         TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
     };
 

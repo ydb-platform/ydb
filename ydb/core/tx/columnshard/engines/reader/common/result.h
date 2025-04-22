@@ -12,6 +12,22 @@ namespace NKikimr::NOlap::NReader {
 
 class TReadContext;
 
+class TPartialSourceAddress {
+private:
+    YDB_READONLY(ui32, SourceId, 0);
+    YDB_READONLY(ui32, SourceIdx, 0);
+    YDB_READONLY(ui32, SyncPointIndex, 0);
+
+public:
+    TPartialSourceAddress(const ui32 sourceId, const ui32 sourceIdx, const ui32 syncPointIndex)
+        : SourceId(sourceId)
+        , SourceIdx(sourceIdx)
+        , SyncPointIndex(syncPointIndex)
+    {
+    
+    }
+};
+
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult: public TNonCopyable {
 private:
@@ -22,7 +38,7 @@ private:
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<IScanCursor> ScanCursor;
-    YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
+    YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, NotFinishedInterval);
     const NColumnShard::TCounterGuard Guard;
 
 public:
@@ -61,11 +77,11 @@ public:
     explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
         const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, const NArrow::TShardedRecordBatch& batch,
         const std::shared_ptr<IScanCursor>& scanCursor, const std::shared_ptr<TReadContext>& context,
-        const std::optional<ui32> notFinishedIntervalIdx);
+        const std::optional<TPartialSourceAddress> notFinishedInterval);
 
     explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
-        const std::shared_ptr<TReadContext>& context, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult({}, nullptr, batch, scanCursor, context, notFinishedIntervalIdx) {
+        const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval)
+        : TPartialReadResult({}, nullptr, batch, scanCursor, context, notFinishedInterval) {
     }
 };
 

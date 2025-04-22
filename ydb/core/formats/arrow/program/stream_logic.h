@@ -21,15 +21,16 @@ private:
         return false;
     }
 
+    TConclusion<std::optional<bool>> GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const;
+
+    bool IsFinishDatum(const arrow::Datum& datum) const;
     virtual ui64 DoGetWeight() const override;
 
 public:
     NKernels::EOperation GetOperation() const {
         return Operation;
     }
-
     TConclusion<bool> OnInputReady(const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
-
     TStreamLogicProcessor(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op);
 };
 

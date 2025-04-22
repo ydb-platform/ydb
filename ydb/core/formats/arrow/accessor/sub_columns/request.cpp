@@ -1,5 +1,6 @@
-#include "request.h"
 #include "constructor.h"
+#include "data_extractor.h"
+#include "request.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -20,6 +21,20 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
     if (auto kff = features.Extract<ui32>("SPARSED_DETECTOR_KFF")) {
         Settings.SetSparsedDetectorKff(*kff);
     }
+    THolder<IDataAdapter> extractor;
+    if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {
+        extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);
+        if (!extractor) {
+            return TConclusionStatus::Fail("incorrect data extractor class name");
+        }
+    } else {
+        extractor = MakeHolder<TJsonScanExtractor>(false);
+    }
+    auto parseConclusion = extractor->DeserializeFromRequest(features);
+    if (parseConclusion.IsFail()) {
+        return parseConclusion;
+    }
+    Settings.SetDataExtractor(std::shared_ptr<IDataAdapter>(extractor.Release()));
     if (auto memLimit = features.Extract<ui32>("MEM_LIMIT_CHUNK")) {
         Settings.SetChunkMemoryLimit(*memLimit);
     }
@@ -36,4 +51,4 @@ NKikimr::TConclusion<TConstructorContainer> TRequestedConstuctor::DoBuildConstru
     return std::make_shared<TConstructor>(Settings);
 }
 
-}
+}   // namespace NKikimr::NArrow::NAccessor::NSubColumns

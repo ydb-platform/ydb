@@ -9,6 +9,11 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
+void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter) {
+    Remove(columnId, true);
+    AddVerified(columnId, data, withFilter);
+}
+
 void TAccessorsCollection::AddVerified(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
     AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
 }

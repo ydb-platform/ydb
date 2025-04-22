@@ -46,6 +46,7 @@ private:
             "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
+            hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
@@ -59,6 +60,8 @@ private:
     void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
+
+    void HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr& ev);
 
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
@@ -109,7 +112,9 @@ private:
 
     void ScheduleWakeup(const TMonotonic deadline);
 
-    TMonotonic GetDeadline() const;
+    TMonotonic GetScanDeadline() const;
+
+    TMonotonic GetComputeDeadline() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -186,7 +191,6 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
-    TDuration LastReportedElapsedTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

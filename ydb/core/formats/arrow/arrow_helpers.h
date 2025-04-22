@@ -12,18 +12,18 @@
 namespace NKikimr::NArrow {
 
 template <class TArray, class TValue>
-std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val) {
+std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val, const ui32 startIndex = 0) {
     if (!arr.length()) {
         return std::nullopt;
     }
-    TValue left = arr.Value(0);
+    TValue left = arr.Value(startIndex);
     TValue right = arr.Value(arr.length() - 1);
     if (val < left) {
-        return 0;
+        return startIndex;
     } else if (right < val) {
         return std::nullopt;
     } else if (val == left) {
-        return 0;
+        return startIndex;
     }
     ui32 idxLeft = 0;
     ui32 idxRight = arr.length() - 1;
@@ -39,6 +39,9 @@ std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val
         } else {
             idxRight = idxMiddle;
         }
+    }
+    while (idxRight && arr.Value(idxRight) == arr.Value(idxRight - 1)) {
+        --idxRight;
     }
     return idxRight;
 }

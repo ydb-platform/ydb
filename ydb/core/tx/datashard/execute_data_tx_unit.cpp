@@ -346,7 +346,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 }
 
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
-    auto locks = DataShard.SysLocksTable().ApplyLocks();
+    auto [locks, _] = DataShard.SysLocksTable().ApplyLocks();
     for (const auto& lock : locks) {
         if (lock.IsError()) {
             LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,

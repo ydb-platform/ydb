@@ -323,8 +323,10 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST(ProjectReplace) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(ProjectReplace, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -368,7 +370,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
     }
 
     Y_UNIT_TEST(CastValues) {

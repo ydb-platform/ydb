@@ -20,25 +20,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_2_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.ChangeSchemaAndSplit
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.HugeSchemeHistory
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSchemaVersions
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplits
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsThenMerges
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapJson.BloomIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
@@ -46,6 +27,9 @@ ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
+ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail+useSink
+ydb/core/kqp/ut/query KqpLimits.QSReplySizeEnsureMemoryLimits+useSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
@@ -163,6 +147,13 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
+ydb/tests/olap sole chunk chunk
+ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
+ydb/tests/olap/data_quotas test_quota_exhaustion.py.TestYdbWorkload.test_duplicates
+ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
+ydb/tests/olap/column_family/compression sole chunk chunk
+ydb/tests/olap/oom overlapping_portions.py.TestOverlappingPortions.test
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
@@ -172,6 +163,7 @@ ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhe
 ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/olap/ttl_tiering unstable_connection.py.TestUnstableConnection.test

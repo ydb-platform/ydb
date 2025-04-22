@@ -82,6 +82,7 @@ public:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleExecute);
                 hFunc(TEvScanExchange::TEvTerminateFromCompute, HandleExecute);
                 hFunc(TEvScanExchange::TEvAckData, HandleExecute);
+                hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
@@ -96,6 +97,8 @@ public:
     void HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev);
 
     void HandleExecute(TEvScanExchange::TEvTerminateFromCompute::TPtr& ev);
+
+    void HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev);
 
 private:
 

@@ -21,15 +21,15 @@ private:
     }
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
-        if (!subColumnName) {
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
+        if (!op.GetCaseSensitive()) {
             return false;
         }
-        if (op != EOperation::Equals) {
+        if (op.GetOperation() != EOperation::Equals) {
             return false;
         }
         return true;

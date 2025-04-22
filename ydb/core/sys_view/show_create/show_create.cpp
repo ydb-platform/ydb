@@ -467,8 +467,11 @@ private:
         auto* msg = ev->Get();
 
         auto it = CollectTableSettingsState->Sequences.find(msg->PathId);
-        if (it == CollectTableSettingsState->Sequences.end() || it->second) {
-            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected sequence path id");
+        if (it == CollectTableSettingsState->Sequences.end()) {
+            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unknown sequence path id: " << msg->PathId);
+        }
+        if (it->second) {
+            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Found duplicate sequence path id: " << msg->PathId);
         }
         it->second = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>(*msg);
         CollectTableSettingsState->CurrentSequencesNumber++;

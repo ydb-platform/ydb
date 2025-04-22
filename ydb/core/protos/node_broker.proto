@@ -144,6 +144,9 @@ message TSetConfigResponse {
 
 message TSubscribeNodesRequest {
     optional uint64 CachedVersion = 1;
+    // Sender increments SeqNo each time it re-subscribes.
+    // This invalidates all subscriptions with a lower SeqNo.
+    optional uint64 SeqNo = 2;
 }
 
 message TUpdateNode {
@@ -155,14 +158,14 @@ message TUpdateNode {
 }
 
 message TUpdateNodes {
-    optional uint64 FromVersion = 1;
-    optional TEpoch Epoch = 2;
-    repeated TUpdateNode Updates = 3;
+    optional TEpoch Epoch = 1;
+    repeated TUpdateNode Updates = 2;
+    optional uint64 SeqNo = 3;
 }
 
 message TSyncNodesRequest {
-    optional uint64 CachedVersion = 1;
 }
 
 message TSyncNodesResponse {
+    optional uint64 SeqNo = 1;
 }

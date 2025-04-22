@@ -44,6 +44,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   cpp-mapreduce-interface
   yql-essentials-ast
   essentials-core-extract_predicate
+  essentials-public-langver
   essentials-public-udf
   public-udf-tz
   yql-essentials-sql
@@ -197,6 +198,7 @@ target_link_libraries(providers-yt-provider.global PUBLIC
   cpp-mapreduce-interface
   yql-essentials-ast
   essentials-core-extract_predicate
+  essentials-public-langver
   essentials-public-udf
   public-udf-tz
   yql-essentials-sql

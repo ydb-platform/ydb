@@ -48,6 +48,7 @@ target_link_libraries(yql-essentials-minikql PUBLIC
   essentials-parser-pg_catalog
   parser-pg_wrapper-interface
   essentials-public-issue
+  essentials-public-langver
   essentials-public-udf
   public-udf-tz
   essentials-types-binary_json

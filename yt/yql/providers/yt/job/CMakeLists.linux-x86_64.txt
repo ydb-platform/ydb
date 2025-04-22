@@ -30,6 +30,7 @@ target_link_libraries(providers-yt-job PUBLIC
   cpp-mapreduce-interface
   mapreduce-library-user_job_statistics
   essentials-minikql-comp_nodes
+  essentials-public-langver
   essentials-public-udf
   yql-essentials-utils
   essentials-utils-backtrace

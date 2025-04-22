@@ -35,6 +35,7 @@ target_link_libraries(essentials-core-type_ann PUBLIC
   common-schema-expr
   essentials-parser-pg_catalog
   parser-pg_wrapper-interface
+  essentials-public-langver
   cpp-yson-node
 )
 

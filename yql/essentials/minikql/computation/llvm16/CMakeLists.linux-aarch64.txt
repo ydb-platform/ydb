@@ -51,6 +51,7 @@ target_link_libraries(minikql-computation-llvm16 PUBLIC
   essentials-minikql-arrow
   essentials-minikql-computation
   parser-pg_wrapper-interface
+  essentials-public-langver
   essentials-public-udf
   public-udf-arrow
   yql-essentials-utils

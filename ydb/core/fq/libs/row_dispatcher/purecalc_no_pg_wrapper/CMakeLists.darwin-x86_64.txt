@@ -39,6 +39,8 @@ target_link_libraries(libs-row_dispatcher-purecalc_no_pg_wrapper PUBLIC
   essentials-core-user_data
   essentials-utils-backtrace
   essentials-utils-log
+  essentials-public-langver
+  essentials-core-langver
   yql-essentials-core
   essentials-core-type_ann
   yql-essentials-sql

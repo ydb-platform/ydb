@@ -501,23 +501,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         return;
     }
 
-    if (const auto* recCard = ScanManager.Get(id)) {
-        if (recCard->SeqNo == seqNo) {
-            // do no start one more scan
-            return;
-        }
-
-        for (auto scanId : recCard->ScanIds) {
-            CancelScan(userTable.LocalTid, scanId);
-        }
-        ScanManager.Drop(id);
-    }
-
-    TScanOptions scanOpts;
-    scanOpts.SetSnapshotRowVersion(rowVersion);
-    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-    ScanManager.Set(id, seqNo).push_back(scanId);
+    StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
 }
 
 }

@@ -197,6 +197,6 @@ message TFeatureFlags {
     optional bool EnablePermissionsExport = 171 [default = false];
     optional bool EnableDataErasure = 172 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
-    optional bool SwitchToConfigV2 = 175 [default = false];
-    optional bool SwitchToConfigV1 = 176 [default = false];
+    optional bool SwitchToConfigV2 = 179 [default = false];
+    optional bool SwitchToConfigV1 = 180 [default = false];
 }

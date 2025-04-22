@@ -13,8 +13,6 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 
-// #include <format>
-
 
 namespace NYql::NDq {
 
@@ -62,9 +60,8 @@ public:
 
     bool IsFull() override {
         UpdateWriteStatus();
-        // std::cerr << std::format("MISHA isfull: {} {} {} {}\n", WritingBlobs_.size(), LoadingBlobs_.size(), WritingBlobsTotalSize_, StoredBlobsCount_);
 
-        return WritingBlobs_.size() + LoadingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
+        return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
     void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {

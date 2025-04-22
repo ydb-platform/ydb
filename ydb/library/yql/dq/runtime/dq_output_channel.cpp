@@ -168,7 +168,7 @@ public:
             packerSize = 0;
         }
 
-        while (Storage && PackedDataSize && !IsFull()) {
+        while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
             auto& head = Data.front();
             size_t bufSize = head.Buffer.Size();
             YQL_ENSURE(PackedDataSize >= bufSize);
@@ -233,7 +233,7 @@ public:
             YQL_ENSURE(Storage);
             LOG("Loading spilled blob. BlobId: " << FirstStoredId);
             TBuffer blob;
-            if (Storage->IsFull() || !Storage->Get(FirstStoredId, blob)) {
+            if (!Storage->Get(FirstStoredId, blob)) {
                 LOG("BlobId " << FirstStoredId << " not ready yet");
                 return false;
             }

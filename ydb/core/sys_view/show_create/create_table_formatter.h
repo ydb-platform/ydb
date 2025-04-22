@@ -2,13 +2,13 @@
 
 #include "formatters_common.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
-
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
 
@@ -30,8 +30,9 @@ public:
         Alloc.Acquire();
     }
 
-    TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
-        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
+        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
     TFormatResult Format(const TString& tablePath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
 
 private:
@@ -41,6 +42,7 @@ private:
 
     void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId);
+    void Format(const TString& fullTablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
 
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);

@@ -245,8 +245,9 @@ private:
     TStringStream& Stream;
 };
 
-TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc,
-        bool temporary, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues) {
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc,
+        bool temporary, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
+        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -411,14 +412,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const NKik
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size());
         auto firstColumnTypeId = columns[tableDesc.GetKeyColumnIds(0)]->GetTypeId();
         try {
-            Format(tablePath, tableDesc.GetCdcStreams(0), persQueues, firstColumnTypeId);
-            for (int i = 1; i < tableDesc.GetCdcStreams().size(); i++) {
+            for (int i = 0; i < tableDesc.GetCdcStreams().size(); i++) {
                 Format(tablePath, tableDesc.GetCdcStreams(i), persQueues, firstColumnTypeId);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
             return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    if (!tableDesc.GetSequences().empty()) {
+        try {
+            for (int i = 0; i < tableDesc.GetSequences().size(); i++) {
+                Format(fullPath, tableDesc.GetSequences(i), sequences);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, e.what());
         }
     }
 
@@ -999,6 +1011,41 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     Stream << ");";
+}
+
+void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
+    auto it = sequences.find(TPathId::FromProto(sequence.GetPathId()));
+    if (it == sequences.end() || !it->second) {
+        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected sequence path id");
+    }
+    const auto& getSequenceResult = *it->second;
+
+    if (getSequenceResult.StartValue == 1 && getSequenceResult.Increment == 1
+            && getSequenceResult.NextValue == 1) {
+        return;
+    }
+
+    Stream << "ALTER SEQUENCE ";
+    auto sequencePath = JoinPath({tablePath, sequence.GetName()});
+    EscapeName(sequencePath, Stream);
+
+    if (getSequenceResult.StartValue != 1) {
+        Stream << " START WITH " << getSequenceResult.StartValue;
+    }
+
+    if (getSequenceResult.Increment != 1) {
+        Stream << " INCREMENT BY " << getSequenceResult.Increment;
+    }
+
+    if (getSequenceResult.NextValue != 1) {
+        if (getSequenceResult.NextValue == getSequenceResult.StartValue) {
+            Stream << " RESTART";
+        } else {
+            Stream << " RESTART WITH " << getSequenceResult.NextValue;
+        }
+    }
+
+    Stream << ";";
 }
 
 

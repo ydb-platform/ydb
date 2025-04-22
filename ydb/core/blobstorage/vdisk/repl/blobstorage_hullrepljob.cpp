@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
-#include <ydb/core/util/backoff.h>
 #include <util/datetime/cputimer.h>
 
 // FIXME: we need a process that asyncronously transfers handoff parts to their correct vdisk
@@ -328,10 +327,7 @@ namespace NKikimr {
         TLogoBlobID LastProcessedKey;
 
         // OOS handling
-        TBackoffTimer BackoffTimer;
-        constexpr static TDuration MinOOSRecoveryRetryDelay = TDuration::Minutes(30);
-        constexpr static TDuration MaxOOSRecoveryRetryDelay = TDuration::Hours(6);
-
+        constexpr static TDuration OOSRecoveryRetryDelay = TDuration::Seconds(60);
         enum class EStatus {
             Working,
             WaitingForRetry,
@@ -976,7 +972,7 @@ namespace NKikimr {
             std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(
                     ReplCtx->PDiskCtx->PDiskId, SelfId(), new NPDisk::TEvCheckSpace(owner, ownerRound));
 
-            TActivationContext::Schedule(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()), ev.release());
+            TActivationContext::Schedule(OOSRecoveryRetryDelay, ev.release());
         }
 
         template <class TYardEventPtr>
@@ -1085,8 +1081,6 @@ namespace NKikimr {
             , UnreplicatedBlobRecords(std::move(ubr))
             , MilestoneQueue(std::move(milestoneQueue))
             , Donor(donor)
-            , BackoffTimer(MinOOSRecoveryRetryDelay.MilliSeconds(),
-                           MaxOOSRecoveryRetryDelay.MilliSeconds())
             , Status(EStatus::Working)
         {
             if (Donor) {

@@ -1561,7 +1561,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
             return NUdf::TUnboxedValuePod(value.int64_value());
         }
         case NUdf::TDataType<NUdf::TDate32>::Id: {
-            CheckTypeId(value.value_case(), Ydb::Value::kUint32Value, "Date32");
+            CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
             if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date value";
             }

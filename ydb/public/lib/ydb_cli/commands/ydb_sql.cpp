@@ -28,8 +28,8 @@ void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
-    config.Opts->AddLongOption('f', "file", "Path to file with script (query) text."
-            " Path \"-\" means reading query text from stdin.").RequiredArgument("PATH")
+    config.Opts->AddLongOption('f', "file", "Path to a file containing the query text to execute. "
+            "The path '-' means reading the query text from stdin.").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")

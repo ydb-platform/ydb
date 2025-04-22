@@ -90,6 +90,9 @@ public:
     // of the |Load| call.
     void SaveAsMapFragment(NYson::IYsonConsumer* consumer) const;
 
+    // Same as the above, but does not save local unrecognized parameters.
+    void SaveRecognizedAsMapFragment(NYson::IYsonConsumer* consumer) const;
+
     void Save(IOutputStream* output) const;
 
     IMapNodePtr GetLocalUnrecognized() const;

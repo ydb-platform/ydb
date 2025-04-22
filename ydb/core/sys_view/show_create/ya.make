@@ -22,6 +22,17 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/src/client/types
     yql/essentials/ast
+    yql/essentials/public/issue
+    yql/essentials/sql/settings
+    yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr3
+    yql/essentials/sql/v1/lexer/antlr3_ansi
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr3
+    yql/essentials/sql/v1/proto_parser/antlr3_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )
 
 YQL_LAST_ABI_VERSION()

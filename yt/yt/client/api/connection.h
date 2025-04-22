@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "options.h"
 
 #include <yt/yt/client/chunk_client/public.h>
 
@@ -73,4 +74,3 @@ DEFINE_REFCOUNTED_TYPE(IConnection)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

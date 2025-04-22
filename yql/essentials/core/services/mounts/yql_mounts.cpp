@@ -122,7 +122,8 @@ namespace NYql {
         const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags,
         bool optimizeLibraries,
-        THolder<TExprContext> ownedCtx)
+        THolder<TExprContext> ownedCtx,
+        TModuleResolver::TModuleChecker moduleChecker)
     {
         YQL_PROFILE_FUNC(DEBUG);
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
@@ -152,7 +153,7 @@ namespace NYql {
         }
 
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modulesTable), ctx->NextUniqueId,
-            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
+            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx), moduleChecker);
         return mounts;
     }
 
@@ -162,22 +163,25 @@ namespace NYql {
         const TVector<NUserData::TUserData>& userData,
         const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags,
-        bool optimizeLibraries) {
-        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr);
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr, moduleChecker);
     }
 
     bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,
         IModuleResolver::TPtr& moduleResolver,
         const THashMap<TString, TString>& clusterMapping,
-        bool optimizeLibraries) {
-        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr).empty();
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr, moduleChecker).empty();
     }
 
     bool GetYqlDefaultModuleResolverWithContext(
         IModuleResolver::TPtr& moduleResolver,
         const THashMap<TString, TString>& clusterMapping,
-        bool optimizeLibraries) {
-        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>()).empty();
+        bool optimizeLibraries,
+        TModuleResolver::TModuleChecker moduleChecker) {
+        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>(), moduleChecker).empty();
     }
 }

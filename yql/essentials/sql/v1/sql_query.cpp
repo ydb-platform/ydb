@@ -3387,6 +3387,24 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableemitunionmerge") {
             Ctx.EmitUnionMerge = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
+        } else if (normalizedPragma == "distinctoverkeys") {
+            Ctx.DistinctOverKeys = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DistinctOverKeys");
+        } else if (normalizedPragma == "disabledistinctoverkeys") {
+            Ctx.DistinctOverKeys = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverKeys");
+        } else if (normalizedPragma == "groupbyexprafterwhere") {
+            Ctx.GroupByExprAfterWhere = true;
+            Ctx.IncrementMonCounter("sql_pragma", "GroupByExprAfterWhere");
+        } else if (normalizedPragma == "disablegroupbyexprafterwhere") {
+            Ctx.GroupByExprAfterWhere = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableGroupByExprAfterWhere");
+        } else if (normalizedPragma == "failongroupbyexproverride") {
+            Ctx.FailOnGroupByExprOverride = true;
+            Ctx.IncrementMonCounter("sql_pragma", "FailOnGroupByExprOverride");
+        } else if (normalizedPragma == "disablefailongroupbyexproverride") {
+            Ctx.FailOnGroupByExprOverride = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableFailOnGroupByExprOverride");
         } else if (normalizedPragma == "engine") {
             Ctx.IncrementMonCounter("sql_pragma", "Engine");
 

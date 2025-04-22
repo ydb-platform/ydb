@@ -6,10 +6,9 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -154,51 +153,14 @@ bool TestFormat(
     return true;
 }
 
-bool TestLexers(
-    const TString& query
-) {
-    NSQLTranslationV1::TLexers lexers;
-    NSQLTranslation::TTranslationSettings settings;
+bool TestLexers(const TString& query) {
     NYql::TIssues issues;
-    if (!NSQLTranslation::ParseTranslationSettings(query, settings, issues)) {
+    if (!NSQLTranslationV1::CheckLexers({}, query, issues)) {
         Cerr << issues.ToString();
         return false;
     }
 
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
-    lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
-    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Default);
-    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Pure);
-    TVector<NSQLTranslation::TParsedToken> mainTokens;
-    if (!lexerMain->Tokenize(query, "", [&](auto token) { mainTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-        Cerr << issues.ToString();
-        return false;
-    }
-
-    TVector<NSQLTranslation::TParsedToken> pureTokens;
-    if (!lexerPure->Tokenize(query, "", [&](auto token) { pureTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-        Cerr << issues.ToString();
-        return false;
-    }
-
-    bool hasErrors = false;
-    if (mainTokens.size() != pureTokens.size()) {
-        hasErrors = true;
-        Cerr << "Mismatch token count, main: " << mainTokens.size() << ", pure: " << pureTokens.size() << "\n";
-    }
-
-    for (size_t i = 0; i < Min(mainTokens.size(), pureTokens.size()); ++i) {
-        if (mainTokens[i].Name != pureTokens[i].Name || mainTokens[i].Content != pureTokens[i].Content) {
-            hasErrors = true;
-            Cerr << "Mismatch token #" << i << ", main: " << mainTokens[i].Name << ":" << mainTokens[i].Content
-                << ", pure: " << pureTokens[i].Name << ":" << pureTokens[i].Content << "\n";
-            break;
-        }
-    }
-
-    return !hasErrors;
+    return true;
 }
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {

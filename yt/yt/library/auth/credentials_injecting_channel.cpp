@@ -268,7 +268,7 @@ public:
         }
         return CreateServiceTicketInjectingChannel(
             std::move(channel),
-            TAuthenticationOptions::FromServiceTicketAuth(ServiceTicketAuth_));
+            {.ServiceTicketAuth = ServiceTicketAuth_});
     }
 
 private:

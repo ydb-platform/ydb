@@ -1,6 +1,5 @@
 #include "type_builder.h"
 
-//#include <alice/wonderlogs/protos/wonderlogs.pb.h>
 #include <yql/essentials/minikql/protobuf_udf/ut/protobuf_ut.pb.h>
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
@@ -32,7 +31,7 @@ struct TSetup {
         , Env(Alloc)
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {})
+        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {})
         , PgmBuilder(Env, *FunctionRegistry)
     {
     }
@@ -118,9 +117,65 @@ Y_UNIT_TEST_SUITE(TProtobufTypeBuilderTests) {
         CheckYtSchemaCompatibility<NYql::NProtoTest::TAggregated>();
     }
 
-/*
-    Y_UNIT_TEST(YtMode_Wonderlog) {
-        CheckYtSchemaCompatibility<NAlice::NWonderlogs::TWonderlog, EEnumFormat::Name, ERecursionTraits::Bytes>();
+    Y_UNIT_TEST(FieldTypeParsing) {
+        // Test SeparateOptional.
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(NYql::NProtoTest::TIntegral::descriptor()->FindFieldByName("DoubleField"), /*ytMode=*/true), NUdf::EFieldContext::SeparateOptional);
+
+        // Test SeparateRequired.
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(NYql::NProtoTest::TWithTypeOptions::descriptor()->FindFieldByName("RequiredAnyField"), /*ytMode=*/true), NUdf::EFieldContext::SeparateRequired);
+
+        // Test SeparateRepeated.
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(NYql::NProtoTest::TRepeated::descriptor()->FindFieldByName("Int32Field"), /*ytMode=*/true), NUdf::EFieldContext::SeparateRepeated);
+
+        // Test MapKey and MapValue.
+        auto mapDescriptor = NYql::NProtoTest::TWithMap::descriptor()->FindFieldByName("MapDefault")->message_type();
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(mapDescriptor->map_key(), /*ytMode=*/true), NUdf::EFieldContext::MapKey);
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(mapDescriptor->map_value(), /*ytMode=*/true), NUdf::EFieldContext::MapValue);
+
+        // Test InsideOneofVariant fields in TDefaultSeparateFields.
+        auto defaultSeparateFields = NYql::NProtoTest::TWithOneof::TDefaultSeparateFields::descriptor();
+        auto oneof2 = defaultSeparateFields->FindOneofByName("Oneof2");
+        UNIT_ASSERT(oneof2);
+
+        // Test all fields in the Oneof2 oneof.
+        for (int i = 0; i < oneof2->field_count(); ++i) {
+            auto field = oneof2->field(i);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/true), NUdf::EFieldContext::InsideOneofYtVariant);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/false), NUdf::EFieldContext::InsideOneofProtobufSeparateFields);
+        }
+
+        // Test InsideOneofYtSeparateFields fields in TNoDefault.
+        auto noDefault = NYql::NProtoTest::TWithOneof::TNoDefault::descriptor();
+        auto oneof1 = noDefault->FindOneofByName("Oneof1");
+        UNIT_ASSERT(oneof1);
+
+        // Test all fields in the Oneof1 oneof.
+        for (int i = 0; i < oneof1->field_count(); ++i) {
+            auto field = oneof1->field(i);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/true), NUdf::EFieldContext::InsideOneofYtSeparateFields);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/false), NUdf::EFieldContext::InsideOneofProtobufSeparateFields);
+        }
+
+        // Test InsideOneofYtSeparateFields fields in TSerializationProtobuf.
+        auto serializationProtobuf = NYql::NProtoTest::TWithOneof::TSerializationProtobuf::descriptor();
+        auto oneof = serializationProtobuf->FindOneofByName("Oneof");
+        UNIT_ASSERT(oneof);
+
+        // Test all fields in the Oneof oneof.
+        for (int i = 0; i < oneof->field_count(); ++i) {
+            auto field = oneof->field(i);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/true), NUdf::EFieldContext::InsideOneofYtSeparateFields);
+            UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(field, /*ytMode=*/false), NUdf::EFieldContext::InsideOneofProtobufSeparateFields);
+        }
+
+        // Test TopLevelOneof in TWithOneof.
+        auto withOneof = NYql::NProtoTest::TWithOneof::descriptor();
+        auto topLevelOneof = withOneof->FindOneofByName("TopLevelOneof");
+        UNIT_ASSERT(topLevelOneof);
+
+        // Test the field in TopLevelOneof.
+        auto memberField = topLevelOneof->field(0);
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(memberField, /*ytMode=*/true), NUdf::EFieldContext::InsideOneofYtVariant);
+        UNIT_ASSERT_EQUAL(NUdf::GetFieldContext(memberField, /*ytMode=*/false), NUdf::EFieldContext::InsideOneofProtobufSeparateFields);
     }
-*/
 };

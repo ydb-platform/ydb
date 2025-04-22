@@ -227,10 +227,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalChunkWriterOptions
+struct TJournalChunkWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     int ReplicationFactor;
     NErasure::ECodec ErasureCodec;
 

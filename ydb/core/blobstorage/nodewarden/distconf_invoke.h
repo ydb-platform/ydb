@@ -121,6 +121,7 @@ namespace NKikimr::NStorage {
 
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
+        bool CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery

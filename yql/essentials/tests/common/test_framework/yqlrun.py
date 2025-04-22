@@ -25,7 +25,8 @@ FIX_DIR_PREFIXES = {
 
 class YQLRun(object):
 
-    def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None, fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True):
+    def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
+                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
@@ -79,6 +80,8 @@ class YQLRun(object):
         if yql_utils.get_param('SQL_FLAGS'):
             flags = yql_utils.get_param('SQL_FLAGS').split(',')
             self.gateway_config.SqlCore.TranslationFlags.extend(flags)
+
+        self.langver = langver
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
@@ -172,6 +175,9 @@ class YQLRun(object):
 
         if ansi_lexer:
             cmd += '--ansi-lexer '
+
+        if self.langver is not None:
+            cmd += '--langver=%s ' % (self.langver,)
 
         if self.keep_temp and prov != 'pure':
             cmd += '--keep-temp '

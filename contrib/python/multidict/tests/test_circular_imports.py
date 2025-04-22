@@ -51,9 +51,6 @@ def _discover_path_importables(
         if pkg_dir_path.parts[-1] == "__pycache__":
             continue
 
-        if all(Path(_).suffix != ".py" for _ in file_names):
-            continue
-
         rel_pt = pkg_dir_path.relative_to(pkg_pth)
         pkg_pref = ".".join((pkg_name,) + rel_pt.parts)
         yield from (

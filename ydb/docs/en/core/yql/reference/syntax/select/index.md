@@ -23,7 +23,8 @@ SELECT 2 + 2;
 The `SELECT` query result is calculated as follows:
 
 * Determine the set of input tables by evaluating the [FROM](from.md) clauses.
-* Apply [SAMPLE](sample.md)/[TABLESAMPLE](sample.md) to input tables.
+* Apply [MATCH_RECOGNIZE](match_recognize.md) to input tables.
+* Evaluate [SAMPLE](sample.md)/[TABLESAMPLE](sample.md).
 * Execute [FLATTEN COLUMNS](../flatten.md#flatten-columns) or [FLATTEN BY](../flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
@@ -129,6 +130,7 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [LIMIT OFFSET](limit_offset.md)
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+* [MATCH_RECOGNIZE](match_recognize.md)
 
 {% if yt %}
 

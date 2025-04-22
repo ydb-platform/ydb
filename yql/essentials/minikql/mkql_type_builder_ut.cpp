@@ -16,7 +16,7 @@ public:
         : Alloc(__LOCATION__)
         , Env(Alloc)
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {}) {
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {}) {
     }
 
 private:
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(TLogProviderTest) {
                 [this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                     Messages.push_back({TString(component), level, TString(message)});
                 }))
-            , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
+            , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
         {}
 
         TScopedAlloc Alloc;

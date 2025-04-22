@@ -1,7 +1,7 @@
 TAG(
     ya:fat
-    sb:ttl=2
-    sb:logs_ttl=4
+    sb:ttl=1
+    sb:logs_ttl=1
     ya:large_tests_on_ya_make_2
 )
 

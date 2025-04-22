@@ -1,3 +1,4 @@
+import re
 import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+# 0.0 - not to use chunks
+ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
 
@@ -295,6 +297,19 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
+def _get_var_name(s: str) -> tuple[bool, str]:
+    if not s.startswith("$"):
+        return False, ""
+
+    PLAIN_VAR_PATTERN = r"^\$\w+$"
+    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
+    if re.match(PLAIN_VAR_PATTERN, s):
+        return True, s[1:]
+    if re.match(WRAPPED_VAR_PATTERN, s):
+        return True, s[2:-1]
+    return False, ""
+
+
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
@@ -306,8 +321,9 @@ def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
 def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
+    input_part = "input=TEXT" if disable_include_processor else "input"
 
-    return _build_directives([hide_part, disable_ip_part, "input"], paths)
+    return _build_directives([hide_part, disable_ip_part, input_part], paths)
 
 
 def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
@@ -787,6 +803,19 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
+def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
+    if unit.get("TS_LOCAL_CLI") == "yes":
+        return False
+
+    if unit.get("_WITH_NODE_MODULES") == "yes":
+        return True
+
+    node_modules_for = unit.get("NODE_MODULES_FOR")
+    nm_required_for = node_modules_for.split(":") if node_modules_for else []
+
+    return arc_path in nm_required_for
+
+
 @_with_report_configure_error
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
@@ -795,8 +824,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+
+        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
@@ -994,12 +1026,19 @@ def on_depends_on_mod(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_run_javascript_after_build_add_js_script_as_input(unit: NotsUnitType, js_script: str) -> None:
+def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: str) -> None:
+    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
+
+    def process_input(input: str) -> str:
+        is_var, var_name = _get_var_name(input)
+        if is_var:
+            return f"${{hide;input:{var_name}}}"
+        return _build_cmd_input_paths([input], hide=True)
+
+    processed_inputs = [process_input(i) for i in inputs if i]
+
     js_script = os.path.normpath(js_script)
-    if js_script.startswith("node_modules/"):
-        return
+    if not js_script.startswith("node_modules/"):
+        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
-    __set_append(unit, "_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", js_script)
-
-
-# Zero-diff commit
+    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])

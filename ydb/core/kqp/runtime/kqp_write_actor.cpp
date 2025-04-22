@@ -44,6 +44,7 @@ namespace {
 
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation(NKikimrKqp::TKqpTableSinkSettings::EType type) {
         switch (type) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_FILL:
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
@@ -1746,7 +1747,6 @@ public:
 
     void Handle(TEvBufferWrite::TPtr& ev) {
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
-
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
@@ -1991,7 +1991,6 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
-        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -2967,6 +2966,12 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+
+        WriteToken = result->Get()->Token;
+        OnFlushed();
+    }
+
+    void OnFlushed() {
         InFlight = false;
 
         EgressStats.Bytes += DataSize;
@@ -2975,8 +2980,6 @@ private:
         EgressStats.Resume();
 
         Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-
-        WriteToken = result->Get()->Token;
         DataSize = 0;
 
         if (Closed) {
@@ -3031,6 +3034,12 @@ private:
         }
 
         ev->SendTime = TInstant::Now();
+
+        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
+            // Nothing was written
+            OnFlushed();
+            return;
+        }
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));

@@ -1,5 +1,7 @@
 Версия |  Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
+**v24.4**
+v.24.4.4.2  | 15.04.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2` | [См. список](../../../changelog-server.md#24-4-4-2)
 **v24.3**
 v.24.3.15.5  | 06.02.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.15.5` | [См. список](../../../changelog-server.md#24-3-15-5)
 v.24.3.11.14  | 09.01.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.14` | [См. список](../../../changelog-server.md#24-3-11-14)

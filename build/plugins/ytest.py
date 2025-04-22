@@ -876,6 +876,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestEnv.value,
         df.TestData.java_test,
         df.ForkMode.test_fork_mode,
+        df.TestExperimentalFork.value,
         df.SplitFactor.from_unit,
         df.CustomDependencies.test_depends_only,
         df.Tag.from_macro_args_and_unit,

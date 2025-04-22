@@ -428,19 +428,17 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMemoryTrackedWriterOptions
+struct TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterOptions
+struct TEncodingWriterOptions
     : public virtual TMemoryTrackedWriterOptions
 {
-public:
     NCompression::ECodec CompressionCodec;
     bool ChunksEden;
     bool SetChunkCreationTime;

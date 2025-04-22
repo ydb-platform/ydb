@@ -276,8 +276,22 @@ private:
     virtual TConclusion<bool> DoStartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) = 0;
 
+    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
+        const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
+        const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) {
+        return false;
+    }
+
 public:
     virtual ~IDataSource() = default;
+
+    TConclusion<bool> StartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+        const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
+        const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) {
+        AFL_VERIFY(policy);
+        return DoStartReserveMemory(context, columns, indexes, headers, policy);
+    }
 
     TConclusion<bool> StartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) {

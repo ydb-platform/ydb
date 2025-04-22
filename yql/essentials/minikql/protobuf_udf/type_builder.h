@@ -22,7 +22,21 @@ enum class EFieldFlag: ui16 {
     Dict                = 1 << 4,
     EnumInt             = 1 << 5,
     EnumString          = 1 << 6,
+    RecursiveOptionalUnwrapped  = 1 << 7,
 };
+
+enum class EFieldContext {
+    SeparateOptional,
+    SeparateRequired,
+    SeparateRepeated,
+    MapKey,
+    MapValue,
+    InsideOneofYtVariant,
+    InsideOneofYtSeparateFields,
+    InsideOneofProtobufSeparateFields,
+};
+
+EFieldContext GetFieldContext(const NProtoBuf::FieldDescriptor* fieldDescriptor, bool ytMode);
 
 struct TMessageInfo {
     struct TFieldInfo {

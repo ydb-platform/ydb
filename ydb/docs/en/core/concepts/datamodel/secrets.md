@@ -14,7 +14,7 @@ The current syntax for working with secrets is temporary and will be changed in 
 
 {% endnote %}
 
-## Creating secrets {#create_secret}
+## Creating Secrets {#create_secret}
 
 Secrets are created using an SQL query:
 
@@ -22,11 +22,11 @@ Secrets are created using an SQL query:
 CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```
 
-## Access management {#secret_access}
+## Access Management {#secret_access}
 
 All rights to use the secret belong to its creator. The creator can grant another user read access to the secret through [access management](#secret_access) for secrets.
 
-Special objects called `SECRET_ACCESS` are used to manage access to secrets. To grant permission to use the secret `MySecretName` to the user `another_user`, a `SECRET_ACCESS` object named `MySecretName:another_user` must be created.
+Special objects called `SECRET_ACCESS` are used to manage access to secrets. To grant permission to use the secret `MySecretName` to the user `another_user`, a `SECRET_ACCESS` object named `MySecretName:another_user` must be created:
 
 ```yql
 CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)

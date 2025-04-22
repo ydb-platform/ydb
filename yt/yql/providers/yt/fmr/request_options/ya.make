@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/yson/node
     library/cpp/threading/future
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

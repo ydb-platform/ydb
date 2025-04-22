@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(SqlRegexTests) {
         CheckRegex(
             /* ansi = */ false,
             "WS",
-            R"(( |\r|\t|\n))");
+            R"(( |\r|\t|\f|\n))");
     }
 
     Y_UNIT_TEST(Comment) {

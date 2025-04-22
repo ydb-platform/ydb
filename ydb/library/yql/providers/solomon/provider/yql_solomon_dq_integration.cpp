@@ -306,14 +306,14 @@ public:
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
             auto labelValues = NSo::ExtractSelectorValues(selectors);
-            source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
-            
             if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                source.MutableSelectors()->insert({ "service", settings.Project().StringValue() });
-                source.MutableSelectors()->insert({ "cluster", source.GetCluster() });
+                labelValues.insert({ "service", settings.Project().StringValue() });
+                labelValues.insert({ "cluster", source.GetCluster() });
             } else {
-                source.MutableSelectors()->insert({ "project", source.GetProject() });
+                labelValues.insert({ "project", source.GetProject() });
             }
+
+            source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
         }
 
         auto program = settings.Program().StringValue();

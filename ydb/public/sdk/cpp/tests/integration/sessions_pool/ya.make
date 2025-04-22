@@ -1,4 +1,5 @@
-UNITTEST_FOR(ydb/services/ydb)
+GTEST()
+INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 FORK_SUBTESTS()
 
@@ -11,13 +12,11 @@ ELSE()
 ENDIF()
 
 SRCS(
-    sdk_sessions_pool_ut.cpp
+    main.cpp
 )
 
 PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/core/testlib/default
-    ydb/core/testlib
     ydb/public/sdk/cpp/src/client/table
 )
 

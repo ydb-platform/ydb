@@ -260,10 +260,7 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
-        Ydb::Query::ResultType resultType = Ydb::Query::ResultType::RESULT_TYPE_UNSPECIFIED;
-        if (req->has_result_type()) {
-            resultType = req->result_type();
-        }
+        Ydb::Query::ResultType resultType = req->result_type();
 
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {

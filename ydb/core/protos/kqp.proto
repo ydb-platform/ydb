@@ -298,6 +298,9 @@ message TQueryResponse {
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
     optional TQueryResponseExtraInfo ExtraInfo = 16;
+    optional Ydb.Formats.ArrowBatchSettings ArrowBatchSettings = 17;
+
+    repeated bytes ResultData = 1000;
 }
 
 message TEvQueryResponse {

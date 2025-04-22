@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common_helper.h"
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
@@ -15,13 +16,6 @@
 #include <library/cpp/l2_distance/l2_distance.h>
 
 #include <span>
-
-// TODO(mbkkt) BUILD_INDEX_DATASHARD
-#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_I(stream) LOG_INFO_S  (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
-#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 
 namespace NKikimr::NDataShard::NKMeans {
 

@@ -2,12 +2,12 @@ UNION()
 
 
 RUN_PROGRAM(
-    ydb/tests/library/compatibility/downloader stable-25-1/release/ydbd ydbd-last2-stable
-    OUT_NOAUTO ydbd-last2-stable
+    ydb/tests/library/compatibility/downloader stable-25-1/release/ydbd ydbd-last-stable
+    OUT_NOAUTO ydbd-last-stable
 )
 RUN_PROGRAM(
-    ydb/tests/library/compatibility/downloader stable-24-4/release/ydbd ydbd-prev2-stable
-    OUT_NOAUTO ydbd-prev2-stable
+    ydb/tests/library/compatibility/downloader stable-24-4/release/ydbd ydbd-prev-stable
+    OUT_NOAUTO ydbd-prev-stable
 )
 
 

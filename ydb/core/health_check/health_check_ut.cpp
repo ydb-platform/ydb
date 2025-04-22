@@ -18,6 +18,7 @@ using namespace NSchemeShard;
 using namespace Tests;
 using namespace NSchemeCache;
 using namespace NNodeWhiteboard;
+using namespace NHealthCheck;
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -2297,6 +2298,311 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(LayoutCorrect) {
         LayoutCorrectTest(true);
+    }
+
+}
+
+
+struct TReport {
+    Ydb::Monitoring::StatusFlag::Status Status;
+    TString Message;
+    ETags Tag;
+};
+
+struct TComponentStatus {
+    TVector<TReport> Reports;
+    Ydb::Monitoring::StatusFlag::Status OverallStatus;
+
+    TComponentStatus& AddReport(Ydb::Monitoring::StatusFlag::Status status, const TString& message = {}, ETags setTag = ETags::None) {
+        Reports.push_back({status, message, setTag});
+        return *this;
+    }
+
+    TComponentStatus& SetStatus(Ydb::Monitoring::StatusFlag::Status status) {
+        OverallStatus = status;
+        return *this;
+    }
+};
+
+struct TComputeMock: public TComponentStatus, public TBuilderBase<TComputeMock> {
+    void FillImpl(TDatabaseState&, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext&& context) {
+        computeStatus.set_overall(OverallStatus);
+        for (const auto& report : Reports) {
+            context.ReportStatus(report.Status, report.Message, report.Tag);
+        }
+    }
+};
+
+struct TStorageMock: public TComponentStatus, public TBuilderBase<TStorageMock> {
+    void FillImpl(TDatabaseState&, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext&& context) {
+        storageStatus.set_overall(OverallStatus);
+        for (const auto& report : Reports) {
+            context.ReportStatus(report.Status, report.Message, report.Tag);
+        }
+    }
+};
+
+struct TVDiskMock: public TBuilderBase<TVDiskMock>{
+    THashMap<TString, TComponentStatus> VDisksStatuses;
+
+    void FillImpl(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext&& context) {
+        TString vSlotId = GetVSlotId(vSlot->GetKey());
+        auto it = VDisksStatuses.find(vSlotId);
+        UNIT_ASSERT_C(it != VDisksStatuses.end(), "VDisk status not found for " << vSlotId);
+
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(vSlotId);
+        storageVDiskStatus.set_id(vSlotId);
+        storageVDiskStatus.set_overall(it->second.OverallStatus);
+        for (const auto& report : it->second.Reports) {
+            context.ReportStatus(report.Status, report.Message, report.Tag);
+        }
+    }
+};
+
+template <typename T>
+void AssertProtoEqual(const T& actual, const TString& expectedText) {
+    T expected;
+    bool ok = google::protobuf::TextFormat::ParseFromString(expectedText, &expected);
+    UNIT_ASSERT_C(ok, "Can't parse expected proto text");
+    UNIT_ASSERT_EQUAL(expected.DebugString(), actual.DebugString());
+}
+
+Y_UNIT_TEST_SUITE(THealthCheckDatabase) {
+    struct TBuilderDatabaseTestContext {
+        struct TBuilders: public TThrRefBase {
+            THolder<TSelfCheckRequest::TBuilderDatabase<TBuilders>> Database;
+            THolder<TComputeMock> Compute;
+            THolder<TStorageMock> Storage;
+        };
+
+        TIntrusivePtr<TBuilders> Builders;
+
+        TBuilderDatabaseTestContext(const bool isSpecificDatabaseFilter) {
+            Builders = MakeIntrusive<TBuilders>();
+            Builders->Database = MakeHolder<TSelfCheckRequest::TBuilderDatabase<TBuilders>>(Builders, isSpecificDatabaseFilter);
+            Builders->Compute = MakeHolder<TComputeMock>();
+            Builders->Storage = MakeHolder<TStorageMock>();
+        }
+
+        void Run(TOverallStateContext result, const TString& path) {
+            TDatabaseState state;
+            Builders->Database->Fill(result, path, state);
+        }
+    };
+
+    Y_UNIT_TEST(Green) {
+        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
+        TBuilderDatabaseTestContext testContext(false);
+        testContext.Builders->Compute->SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Builders->Storage->SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Run(TOverallStateContext(&result), "/Root/db");
+
+        AssertProtoEqual(result, R"(
+            database_status { name: "/Root/db" overall: GREEN compute { overall: GREEN } storage { overall: GREEN } }
+        )");
+    }
+
+    Y_UNIT_TEST(NoComputeNodes) {
+        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
+        TBuilderDatabaseTestContext testContext(false);
+        testContext.Builders->Compute->SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
+        testContext.Builders->Storage->SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Run(TOverallStateContext(&result), "/Root/db");
+
+        AssertProtoEqual(result, R"(
+            issue_log { id: "RED-f489-669f92df" status: RED message: "Database has compute issues" location { database { name: "/Root/db" } } reason: "RED-7469-669f92df" type: "DATABASE" level: 1 }
+            issue_log { id: "RED-7469-669f92df" status: RED message: "There are no compute nodes" location { database { name: "/Root/db" } } type: "COMPUTE" level: 2 }
+            database_status { name: "/Root/db" overall: RED storage { overall: GREEN } compute { overall: RED } }
+        )");
+    }
+
+    Y_UNIT_TEST(StorageFailed) {
+        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
+        TBuilderDatabaseTestContext testContext(false);
+        testContext.Builders->Compute->SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Builders->Storage->SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "Storage failed", ETags::StorageState);
+        testContext.Run(TOverallStateContext(&result), "/Root/db");
+
+        AssertProtoEqual(result, R"(
+            issue_log { id: "RED-be81-669f92df" status: RED message: "Database has storage issues" location { database { name: "/Root/db" } } reason: "RED-d6d1-669f92df" type: "DATABASE" level: 1 }
+            issue_log { id: "RED-d6d1-669f92df" status: RED message: "Storage failed" location { database { name: "/Root/db" } } type: "STORAGE" level: 2 }
+            database_status { name: "/Root/db" overall: RED storage { overall: RED } compute { overall: GREEN } }
+        )");
+    }
+
+    Y_UNIT_TEST(StorageDegraded) {
+        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
+        TBuilderDatabaseTestContext testContext(true);
+        testContext.Builders->Compute->SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Builders->Storage->SetStatus(Ydb::Monitoring::StatusFlag::YELLOW).AddReport(Ydb::Monitoring::StatusFlag::YELLOW, "Storage degraded", ETags::StorageState);
+        testContext.Run(TOverallStateContext(&result), "/Root/db");
+        Cerr << result.ShortDebugString() << Endl;
+
+        AssertProtoEqual(result, R"(
+            issue_log { id: "YELLOW-be81" status: YELLOW message: "Database has storage issues" reason: "YELLOW-5321" type: "DATABASE" level: 1 }
+            issue_log { id: "YELLOW-5321" status: YELLOW message: "Storage degraded" type: "STORAGE" level: 2 }
+            database_status { name: "/Root/db" overall: YELLOW storage { overall: YELLOW } compute { overall: GREEN } }
+        )");
+    }
+
+    Y_UNIT_TEST(RedComputeRedStorage) {
+        THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
+
+        TBuilderDatabaseTestContext testContext(false);
+        testContext.Builders->Compute->SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
+        testContext.Builders->Storage->SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "Storage failed", ETags::StorageState);
+        testContext.Run(TOverallStateContext(&result), "/Root/db");
+
+        AssertProtoEqual(result, R"(
+            issue_log { id: "RED-70fb-669f92df" status: RED message: "Database has multiple issues" location { database { name: "/Root/db" } } reason: "RED-7469-669f92df" reason: "RED-d6d1-669f92df" type: "DATABASE" level: 1 }
+            issue_log { id: "RED-7469-669f92df" status: RED message: "There are no compute nodes" location { database { name: "/Root/db" } } type: "COMPUTE" level: 2 }
+            issue_log { id: "RED-d6d1-669f92df" status: RED message: "Storage failed" location { database { name: "/Root/db" } } type: "STORAGE" level: 2 }
+            database_status { name: "/Root/db" overall: RED storage { overall: RED } compute { overall: RED } }
+        )");
+    }
+}
+
+Y_UNIT_TEST_SUITE(THealthCheckStorageGroup) {
+    struct TBuilderStorageGroupTestContext {
+        struct TBuilders: public TThrRefBase {
+            THolder<TSelfCheckRequest::TBuilderStorageGroup<TBuilders>> StorageGroup;
+            THolder<TVDiskMock> VDisk;
+        };
+
+        TIntrusivePtr<TBuilders> Builders;
+        THashMap<ui32, TGroupState> GroupStatuses;
+        std::unordered_map<TString, Ydb::Monitoring::StatusFlag::Status> VDiskStatuses;
+        static constexpr NKikimr::NHealthCheck::TGroupId GROUP_ID = 1;
+
+        TBuilderStorageGroupTestContext(const TString& erasureSpecies, bool layoutCorrect) {
+            Builders = MakeIntrusive<TBuilders>();
+            GroupStatuses[GROUP_ID] = { erasureSpecies, {}, 1, layoutCorrect };
+            Builders->StorageGroup = MakeHolder<TSelfCheckRequest::TBuilderStorageGroup<TBuilders>>(Builders, GroupStatuses, VDiskStatuses);
+            Builders->VDisk = MakeHolder<TVDiskMock>();
+        }
+
+        THolder<NKikimrSysView::TVSlotEntry> CreateVSlot(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
+            auto vSlot = MakeHolder<NKikimrSysView::TVSlotEntry>();
+            vSlot->MutableKey()->SetNodeId(nodeId);
+            vSlot->MutableKey()->SetPDiskId(pdiskId);
+            vSlot->MutableKey()->SetVSlotId(vslotId);
+            return vSlot;
+        }
+
+        void AttachVSlotToGroup(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
+            auto vSlot = CreateVSlot(nodeId, pdiskId, vslotId);
+            GroupStatuses[GROUP_ID].VSlots.push_back(vSlot.Release());
+        }
+
+        TComponentStatus& AddVSlotMockStatus(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
+            auto vSlot = CreateVSlot(nodeId, pdiskId, vslotId);
+            TComponentStatus& status = Builders->VDisk->VDisksStatuses[GetVSlotId(vSlot->GetKey())];
+            return status;
+        }
+
+        TComponentStatus& AddVSlot(ui32 nodeId, ui32 pdiskId, ui32 vslotId) {
+            AttachVSlotToGroup(nodeId, pdiskId, vslotId);
+            return AddVSlotMockStatus(nodeId, pdiskId, vslotId);
+        }
+
+        void Run(Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, Ydb::Monitoring::SelfCheckResult& result) {
+            TSelfCheckResult poolContext;
+            Builders->StorageGroup->Fill(GROUP_ID, storageGroupStatus, TSelfCheckContext(&poolContext, "STORAGE_GROUP"));
+
+            TOverallStateContext context(&result);
+            context.AddIssues(poolContext.IssueRecords);
+            context.UpdateMaxStatus(poolContext.GetOverallStatus());
+            context.FillSelfCheckResult();
+        }
+    };
+
+    Y_UNIT_TEST(Green) {
+        Ydb::Monitoring::StorageGroupStatus storageGroupStatus;
+        Ydb::Monitoring::SelfCheckResult result;
+
+        TBuilderStorageGroupTestContext testContext(TGroupChecker::BLOCK_4_2, true);
+        testContext.AddVSlot(1, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        testContext.Run(storageGroupStatus, result);
+
+        AssertProtoEqual(storageGroupStatus, R"(
+            id: "1" overall: GREEN vdisks { }
+        )");
+        AssertProtoEqual(result, R"(
+            self_check_result: GOOD
+        )");
+    }
+
+    Y_UNIT_TEST(BLOCK_4_2_Degraded) {
+        Ydb::Monitoring::StorageGroupStatus storageGroupStatus;
+        Ydb::Monitoring::SelfCheckResult result;
+
+        TBuilderStorageGroupTestContext testContext(TGroupChecker::BLOCK_4_2, true);
+        for (ui32 i = 1; i <= 7; ++i) {
+            testContext.AddVSlot(i, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        }
+        testContext.AddVSlot(8, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "VDisk is not available", ETags::VDiskState);
+        testContext.Run(storageGroupStatus, result);
+
+        Cerr << storageGroupStatus.ShortDebugString() << Endl;
+        Cerr << result.ShortDebugString() << Endl;
+        AssertProtoEqual(storageGroupStatus, R"(
+            id: "1" overall: YELLOW
+            vdisks { id: "1-1-1" overall: GREEN }
+            vdisks { id: "2-1-1" overall: GREEN }
+            vdisks { id: "3-1-1" overall: GREEN }
+            vdisks { id: "4-1-1" overall: GREEN }
+            vdisks { id: "5-1-1" overall: GREEN }
+            vdisks { id: "6-1-1" overall: GREEN }
+            vdisks { id: "7-1-1" overall: GREEN }
+            vdisks { id: "8-1-1" overall: RED }
+        )");
+        AssertProtoEqual(result, R"(
+            self_check_result: GOOD
+            issue_log { id: "YELLOW-ef3e-1" status: YELLOW message: "Group degraded" location { storage { pool { group { id: "1" } } } } reason: "RED-4847-8-1-1" type: "STORAGE_GROUP" level: 2 }
+            issue_log { id: "RED-4847-8-1-1" status: RED message: "VDisk is not available" location { storage { pool { group { id: "1" vdisk { id: "8-1-1" } } } } } type: "VDISK" level: 3 }
+        )");
+    }
+
+    Y_UNIT_TEST(BLOCK_4_2_HasNoRedundancy) {
+        Ydb::Monitoring::StorageGroupStatus storageGroupStatus;
+        Ydb::Monitoring::SelfCheckResult result;
+
+        TBuilderStorageGroupTestContext testContext(TGroupChecker::BLOCK_4_2, true);
+        for (ui32 i = 1; i <= 6; ++i) {
+            testContext.AddVSlot(i, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::GREEN).AddReport(Ydb::Monitoring::StatusFlag::GREEN);
+        }
+        testContext.AddVSlot(7, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "VDisk is not available", ETags::VDiskState);
+        testContext.AddVSlot(8, 1, 1).SetStatus(Ydb::Monitoring::StatusFlag::RED).AddReport(Ydb::Monitoring::StatusFlag::RED, "VDisk is not available", ETags::VDiskState);
+        testContext.Run(storageGroupStatus, result);
+
+        Cerr << storageGroupStatus.ShortDebugString() << Endl;
+        Cerr << result.ShortDebugString() << Endl;
+        AssertProtoEqual(storageGroupStatus, R"(
+            id: "1" overall: ORANGE
+            vdisks { id: "1-1-1" overall: GREEN }
+            vdisks { id: "2-1-1" overall: GREEN }
+            vdisks { id: "3-1-1" overall: GREEN }
+            vdisks { id: "4-1-1" overall: GREEN }
+            vdisks { id: "5-1-1" overall: GREEN }
+            vdisks { id: "6-1-1" overall: GREEN }
+            vdisks { id: "7-1-1" overall: RED }
+            vdisks { id: "8-1-1" overall: RED }
+        )");
+        AssertProtoEqual(result, R"(
+            self_check_result: MAINTENANCE_REQUIRED
+            issue_log { id: "ORANGE-4490-1" status: ORANGE message: "Group has no redundancy" location { storage { pool { group { id: "1" } } } } reason: "RED-4847-7-1-1" reason: "RED-4847-8-1-1" type: "STORAGE_GROUP" level: 2 }
+            issue_log { id: "RED-4847-7-1-1" status: RED message: "VDisk is not available" location { storage { pool { group { id: "1" vdisk { id: "7-1-1" } } } } } type: "VDISK" level: 3 }
+            issue_log { id: "RED-4847-8-1-1" status: RED message: "VDisk is not available" location { storage { pool { group { id: "1" vdisk { id: "8-1-1" } } } } } type: "VDISK" level: 3 }
+        )");
     }
 }
 }

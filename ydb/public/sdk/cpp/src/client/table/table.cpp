@@ -1983,12 +1983,10 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : TransactionImpl_(new TTransaction::TImpl(session, txId))
-{}
-
-const std::string& TTransaction::GetId() const
+    : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {
-    return TransactionImpl_->GetId();
+    SessionId_ = &TransactionImpl_->Session_.GetId();
+    TxId_ = &TransactionImpl_->TxId_;
 }
 
 bool TTransaction::IsActive() const
@@ -2001,11 +1999,18 @@ TAsyncStatus TTransaction::Precommit() const
     return TransactionImpl_->Precommit();
 }
 
-TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
+NThreading::TFuture<void> TTransaction::ProcessFailure() const
+{
+    return TransactionImpl_->ProcessFailure();
+}
+
+TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings)
+{
     return TransactionImpl_->Commit(settings);
 }
 
-TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
+TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings)
+{
     return TransactionImpl_->Rollback(settings);
 }
 
@@ -2017,6 +2022,10 @@ TSession TTransaction::GetSession() const
 void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
 {
     TransactionImpl_->AddPrecommitCallback(std::move(cb));
+}
+
+void TTransaction::AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+    TransactionImpl_->AddOnFailureCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

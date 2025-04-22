@@ -151,8 +151,6 @@ private:
             ev->ResultsTtl = GetDuration(req->results_ttl());
         }
 
-        ev->ProgressStatsPeriod = TDuration::MilliSeconds(req->stats_period_ms());
-
         std::tie(status, issues) = FillKqpRequest(*req, ev->Record);
         if (status != Ydb::StatusIds::SUCCESS) {
             return nullptr;

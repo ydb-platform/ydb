@@ -218,11 +218,6 @@ message ExecuteScriptRequest {
     google.protobuf.Duration results_ttl = 6;
 
     string pool_id = 7; // Workload manager pool id
-
-    // Time interval for updating periodical script statistics.
-    // When script statistics are enabled (stats_mode != STATS_MODE_NONE), by default statistics will be set once after script execution is finished.
-    // In case when stats_period_ms is specified and is non-zero, script statistics will be additionally updated every stats_period_ms milliseconds beginning from the start of script execution.
-    int64 stats_period_ms = 8 [(Ydb.value) = ">= 0"];
 }
 
 enum ExecStatus {

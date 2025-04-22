@@ -72,7 +72,7 @@ class TestExample:
     @link_test_case("#999999998")  # test can be linked with test-case issue in github
     def test_linked_with_testcase(self):
         pass
-    
+
     @skip_with_issue("#999999999")  # test can be skipped with github issue
     def test_skipped_with_issue(self):
         pass

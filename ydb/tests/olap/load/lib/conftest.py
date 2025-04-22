@@ -287,6 +287,7 @@ class LoadSuiteBase:
 
         if result.stderr is not None:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
+        end_time = time()
         allure_test_description(
             cls.suite(), test, refference_set=cls.refference,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
@@ -295,7 +296,6 @@ class LoadSuiteBase:
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-        end_time = time()
         if os.getenv('NO_KUBER_LOGS') is None and not result.success:
             cls.__attach_logs(start_time=result.start_time, attach_name='kikimr')
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)

@@ -2212,7 +2212,7 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     auto result = EProcessResult::Continue;
-    if (t->SupportivePartitionActor && !t->WriteInfo) { // Pending for write info
+    if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied

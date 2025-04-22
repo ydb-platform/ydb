@@ -156,8 +156,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
                      "TTxInitRoot DoComplete"
                          << ", at schemeshard: " << Self->TabletID());
 
-        Self->SignalTabletActive(ctx);
-        Self->ActivateAfterInitialization(ctx, {});
+        Self->ActivateAfterInitialization(ctx, {.SignalTabletActive = true});
     }
 };
 

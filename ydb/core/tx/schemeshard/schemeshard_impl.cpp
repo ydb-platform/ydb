@@ -100,6 +100,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         return;
     }
 
+    if (opts.SignalTabletActive) {
+        SignalTabletActive(ctx);
+    }
+
     TPathId subDomainPathId = GetCurrentSubDomainPathId();
     TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId);
     LoginProvider.Audience = TPath::Init(subDomainPathId, this).PathString();

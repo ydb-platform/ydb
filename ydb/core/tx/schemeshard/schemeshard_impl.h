@@ -221,6 +221,7 @@ public:
         TVector<TPathId> TablesToClean;
         TDeque<TPathId> BlockStoreVolumesToClean;
         TVector<TPathId> RestoreTablesToUnmark;
+        bool SignalTabletActive = false;
     };
 
     std::optional<TActivationOpts> DelayedActivationOpts;

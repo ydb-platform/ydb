@@ -268,10 +268,6 @@ An **authentication token** or **auth token** is a token that {{ ydb-short-name 
 
 {{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
 
-### User token {#user-token}
-
-When a {{ ydb-short-name }} node gets a request from a [user](#access-user), it requests the service where the user was created to validate the user's authentication token. Upon successful validation, the node creates and caches a **user token** for validating subsequent requests from that user instead of re-validating the authentication token.
-
 ### Cluster scheme {#scheme}
 
 A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ ydb-short-name }} cluster. The top-level element of the namespace is the [cluster scheme root](#scheme-root) that contains [databases](#database) as its children. Scheme objects inside databases can use nested directories to form a hierarchy.

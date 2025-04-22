@@ -284,9 +284,11 @@ Default value: `false`
     ||
 |#
 
-## Configuring user token life cycle
+## Configuring authentication token caching
 
-Parameters for configuring the [user token](../../concepts/glossary.md#user-token) life cycle are applicable to all authentication methods.
+During the authentication process, a user session receives an authentication token, which is transmitted along with each request to the cluster {{ydb-short-name }}. Since {{ydb-short-name }} is a distributed system, user requests will eventually be processed on one or more {{ydb-short-name }} nodes. After receiving a request from the user, a {{ydb-short-name }} node verifies the authentication token. If successful, the node generates a **user token**, which is valid only inside the current node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same node do not require verification of the authentication token.
+
+To configure the life cycle and other important aspects of managing user tokens, define the following parameters:
 
 #|
 || refresh_period

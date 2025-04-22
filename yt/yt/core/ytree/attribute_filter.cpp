@@ -510,7 +510,7 @@ void FormatValue(
 
 TShrunkAttributeFilterView MakeShrunkFormattableView(
     const TAttributeFilter& attributeFilter,
-    size_t limit)
+    i64 limit)
 {
     return {attributeFilter, limit};
 }

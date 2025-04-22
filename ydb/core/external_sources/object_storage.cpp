@@ -344,7 +344,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         std::shared_ptr<TMetadata> Metadata;
     };
 
-    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override {
+    virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override try {
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
@@ -363,11 +363,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             structuredTokenBuilder.SetBasicAuth(params.SerializeAsString(), awsAuth.SecretAccessKey);
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
             if (!CredentialsFactory) {
-                try {
-                    throw yexception{} << "trying to authenticate with service account credentials, internal error";
-                } catch (const yexception& error) {
-                    return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
-                }
+                throw yexception{} << "trying to authenticate with service account credentials, internal error";
             }
             auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
             structuredTokenBuilder.SetServiceAccountIdAuth(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature);
@@ -548,6 +544,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
             throw TExternalSourceException{} << value.Issues().ToOneLineString();
         });
+    } catch (const std::exception&) {
+        return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
     }
 
     virtual bool CanLoadDynamicMetadata() const override {

@@ -71,7 +71,7 @@ namespace NActors {
     std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const {
         if (XdcSocket) {
             if (ZcProcessor.ZcStateIsOk()) {
-                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY;
+                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
             } else {
                 return TInterconnectProxyTCP::TProxyStats::NONE;
             }

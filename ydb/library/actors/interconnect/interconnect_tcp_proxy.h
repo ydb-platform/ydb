@@ -52,7 +52,7 @@ namespace NActors {
             TString Encryption;
             enum XDCFlags {
                 NONE = 0,
-                MSG_ZERO_COPY = 1,
+                MSG_ZERO_COPY_SEND = 1,
             };
             ui8 XDCFlags;
         };

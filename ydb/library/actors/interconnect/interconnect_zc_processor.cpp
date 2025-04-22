@@ -1,4 +1,5 @@
 #include "interconnect_zc_processor.h"
+#include "logging.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -92,7 +93,7 @@ static TProcessErrQueueResult DoProcessErrQueue(NInterconnect::TStreamSocket& so
                 if (r == -EAGAIN || r == -EWOULDBLOCK) {
                     return TAgain();
                 } else {
-                    return TErr("unexpected error during errqueue read, err: " + ToString(r));
+                    return TErr("unexpected error during errqueue read, err: " + ToString(r) + ", " + TString(strerror(r)));
                 }
             } else {
                 break;
@@ -293,7 +294,9 @@ TString TInterconnectZcProcessor::ExtractErrText() {
 // We must guarantee liveness of buffers used for zc
 // until enqueued zc operation completed by kernel
 
-class TGuardActor : public NActors::TActorBootstrapped<TGuardActor> {
+class TGuardActor
+    : public NActors::TActorBootstrapped<TGuardActor>
+    , public NActors::TInterconnectLoggingBase {
 public:
     TGuardActor(ui64 uncompleted, ui64 confirmed, std::list<TEventHolder>&& queue,
         TIntrusivePtr<NInterconnect::TStreamSocket> socket,
@@ -312,7 +315,8 @@ private:
 TGuardActor::TGuardActor(ui64 uncompleted, ui64 confirmed, std::list<TEventHolder>&& queue,
     TIntrusivePtr<NInterconnect::TStreamSocket> socket,
     std::unique_ptr<NActors::TEventHolderPool>&& pool)
-    : Uncompleted(uncompleted)
+    : TInterconnectLoggingBase(Sprintf("TGuardActor, socket %lu", socket ? i64(*socket) : -1))
+    , Uncompleted(uncompleted)
     , Confirmed(confirmed)
     , Delayed(std::move(queue))
     , Socket(socket)
@@ -334,7 +338,8 @@ void TGuardActor::DoGc()
     std::visit(TOverloaded{
         [this](const TErr& err) {
             // Nothing can do here (( VERIFY, or just drop buffer probably unsafe from network perspective
-            Cerr << err.Reason << Endl;
+            LOG_ERROR_IC_SESSION("ICZC01", "error during ERRQUEUE processing: %s",
+                err.Reason.data());
             Pool->Release(Delayed);
             Pool->Trim();
             TActor::PassAway();
@@ -366,6 +371,7 @@ public:
         : Uncompleted(uncompleted)
         , Confirmed(confirmed)
     {}
+
     void ExtractToSafeTermination(std::list<TEventHolder>& queue) noexcept override {
         for (std::list<TEventHolder>::iterator event = queue.begin(); event != queue.end();) {
             if (event->ZcTransferId > Confirmed) {
@@ -375,6 +381,7 @@ public:
             }
         }
     }
+
     void Terminate(std::unique_ptr<NActors::TEventHolderPool>&& pool, TIntrusivePtr<NInterconnect::TStreamSocket> socket, const NActors::TActorContext &ctx) override {
         // must be registered on the same mailbox!
         ctx.RegisterWithSameMailbox(new TGuardActor(Uncompleted, Confirmed, std::move(Delayed), socket, std::move(pool)));

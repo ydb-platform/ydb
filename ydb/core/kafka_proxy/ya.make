@@ -22,6 +22,7 @@ SRCS(
     actors/kafka_balance_actor_sql.cpp
     actors/kafka_balancer_actor.cpp
     actors/txn_actor_response_builder.cpp
+    actors/kafka_transaction_actor_sql.cpp
     actors/kafka_transaction_actor.cpp
     kafka_connection.cpp
     kafka_connection.h

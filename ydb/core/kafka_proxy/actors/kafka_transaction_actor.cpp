@@ -1,5 +1,5 @@
 #include "kafka_transaction_actor.h"
-#include "kafka_transaction_actor_sql.cpp"
+#include "kafka_transaction_actor_sql.h"
 #include "txn_actor_response_builder.h"
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>

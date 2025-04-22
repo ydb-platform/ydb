@@ -46,7 +46,7 @@ Authentication by username and password includes the following steps:
 1. The service validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
 1. The client accesses the database, presenting their token as authentication data.
 
-To enable authentication by username and password, set the `use_login_provider` and `enable_login_authentication` parameters to `true` in the [configuration file](../reference/configuration/auth_config.md).
+To enable authentication by username and password, ensure that the `use_login_provider` and `enable_login_authentication` parameters are set to the default value of `true` in the [configuration file](../reference/configuration/auth_config.md). Besides, to disable anonymous authentication, set the [`enforce_user_token_requirement` parameter](../reference/configuration/security_config.md) to `true`.
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
 

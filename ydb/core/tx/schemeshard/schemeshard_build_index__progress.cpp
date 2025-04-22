@@ -248,7 +248,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnBuild);
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
     } else {
-        Y_ABORT("Unknown operation kind while building InitiatePropose");
+        Y_ABORT("Unknown operation kind while building CreateIndexPropose");
     }
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 

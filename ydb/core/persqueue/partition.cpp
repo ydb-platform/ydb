@@ -1443,7 +1443,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TActorContext& ctx)
 {
     TReadAnswer answer = info.FormAnswer(
-        ctx, blobResponse, StartOffset, EndOffset, Partition, userInfo,
+        ctx, blobResponse, WorkZone.StartOffset, WorkZone.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
     );
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -2355,7 +2355,7 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                result = false;
             }
         } else if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || userInfo.Offset != i64(EndOffset)) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < WorkZone.EndOffset || userInfo.Offset != i64(WorkZone.EndOffset)) {
                 PQ_LOG_D("Partition " << Partition <<
                     " Consumer '" << consumer << "'" <<
                     " Bad request (session already dead) " <<
@@ -2955,7 +2955,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         }
 
         if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < EndOffset || pendingUserInfo.Offset != i64(EndOffset)) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < WorkZone.EndOffset || pendingUserInfo.Offset != i64(WorkZone.EndOffset)) {
                 ScheduleReplyPropose(record,
                             NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                             NKikimrPQ::TError::BAD_REQUEST,

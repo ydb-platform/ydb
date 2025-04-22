@@ -770,12 +770,6 @@ bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) co
     return false;
 }
 
-bool TNodeBroker::HasSubscription(TActorId subscriber) const
-{
-    auto it = Subscribers.find(subscriber);
-    return it != Subscribers.end();
-}
-
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
 {
     Config = config;
@@ -1616,7 +1610,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
         RemoveSubscriber(ev->Sender, ctx);
     }
 
-    if (!HasSubscription(ev->Sender)) {
+    if (!Subscribers.contains(ev->Sender)) {
         const auto& subscriber = AddSubscriber(ev->Sender, ev->Recipient, seqNo, ctx);
         SendUpdateNodes(subscriber, ev->Get()->Record.GetCachedVersion(), ctx);
     }

@@ -290,7 +290,6 @@ private:
     TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, const TActorContext &ctx);
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
-    bool HasSubscription(TActorId subscriber) const;
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);

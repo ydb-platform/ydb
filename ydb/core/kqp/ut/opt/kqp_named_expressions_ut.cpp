@@ -807,6 +807,64 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
             }
         }
     }
+
+    Y_UNIT_TEST_TWIN(NamedExpressionRandomSelect, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
+        {
+            const TString query = R"(
+                CREATE TABLE Source (
+                    Key String,
+                    Key2 String,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                INSERT INTO Source (Key, Key2, Value) VALUES
+                    ("1", "test", "");
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $t = (
+                    SELECT 
+                        Key AS Key,
+                        Key AS Key2,
+                        CAST(RandomUuid(Key) AS String) As Value
+                    FROM Source
+                );
+
+               SELECT COUNT(DISTINCT Value) FROM (SELECT * FROM $t UNION ALL SELECT * FROM $t);
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
+        }
+       
+    }
 }
 
 } // namespace NKikimr::NKqp

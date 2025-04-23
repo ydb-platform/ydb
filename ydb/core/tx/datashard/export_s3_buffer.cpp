@@ -45,6 +45,10 @@ public:
 
     TMaybe<TBuffer> Flush();
 
+    size_t GetReadyOutputBytes() const {
+        return Buffer.Size();
+    }
+
 private:
     enum ECompressionResult {
         CONTINUE,
@@ -324,7 +328,11 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
-    if (Buffer.Size() < MinBytes) {
+    size_t outputSize = Buffer.Size();
+    if (Compression) {
+        outputSize = Compression->GetReadyOutputBytes();
+    }
+    if (outputSize < MinBytes) {
         return false;
     }
 

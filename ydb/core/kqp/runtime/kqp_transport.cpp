@@ -112,10 +112,11 @@ void TKqpProtoBuilder::BuildArrow(
         auto* type = mkqlSrcRowStructType->GetMemberType(memberIndex);
         NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(type);
 
-        columns.emplace_back(std::move(name), std::move(typeInfo));
         if (type->GetKind() != TType::EKind::Pg && !type->IsOptional()) {
             notNullColumns.insert(name);
         }
+
+        columns.emplace_back(std::move(name), std::move(typeInfo));
     }
 
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);

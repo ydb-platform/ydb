@@ -193,7 +193,8 @@ TPQReadService::TPQReadService(NKikimr::NGRpcService::TGRpcPersQueueService* ser
     );
 
     if (NeedDiscoverClusters) {
-        ActorSystem->Register(new TClustersUpdater(this));
+        ClustersUpdaterStatus = std::make_shared<TClustersUpdater::TStatus>();
+        ActorSystem->Register(new TClustersUpdater(this, ClustersUpdaterStatus));
     }
 }
 

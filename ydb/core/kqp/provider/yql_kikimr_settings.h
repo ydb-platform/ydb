@@ -175,6 +175,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpillingGenericQuery = false;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
+    bool EnableFoldUdfs = true;
     ui64 DefaultEnableSpillingNodes = 0;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);

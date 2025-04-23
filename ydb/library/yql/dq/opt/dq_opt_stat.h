@@ -70,7 +70,7 @@ private:
 };
 
 bool NeedCalc(NNodes::TExprBase node);
-bool IsConstantExpr(const TExprNode::TPtr& input);
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

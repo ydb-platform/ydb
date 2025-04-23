@@ -2373,7 +2373,7 @@
 
 {% list tabs group=lang %}
 
-  - Python
+- Python
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
 

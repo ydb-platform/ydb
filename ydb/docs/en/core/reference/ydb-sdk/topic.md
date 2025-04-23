@@ -2330,7 +2330,7 @@ Most often, committing is conveniently done within the reader that has read the 
 
 {% list tabs group=lang %}
 
-  - Python
+- Python
 
   Commit outside the reader is done using the `topic_client.commit_offset` method:
 

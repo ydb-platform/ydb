@@ -25,6 +25,7 @@ add_library(complete-name-static)
 target_link_libraries(complete-name-static PUBLIC
   contrib-libs-cxxsupp
   yutil
+  essentials-core-sql_types
   v1-complete-name
   v1-complete-text
   library-cpp-resource
@@ -33,6 +34,7 @@ target_link_libraries(complete-name-static PUBLIC
 target_sources(complete-name-static PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/frequency.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/json_name_set.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/name_index.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/name_service.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/ranking.cpp
 )
@@ -45,6 +47,7 @@ add_global_library_for(complete-name-static.global
 target_link_libraries(complete-name-static.global PUBLIC
   contrib-libs-cxxsupp
   yutil
+  essentials-core-sql_types
   v1-complete-name
   v1-complete-text
   library-cpp-resource

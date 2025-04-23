@@ -46,6 +46,7 @@ target_proto_messages(yt_proto-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/cell_master/proto/cell_directory.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/chaos_client/proto/replication_card.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/chaos_client/proto/chaos_lease.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/chunk_client/proto/data_statistics.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/chunk_client/proto/chunk_meta.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/chunk_client/proto/read_limit.proto
@@ -73,6 +74,7 @@ target_sources(yt_proto-yt-client PRIVATE
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/cell_master/proto/cell_directory.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/chaos_client/proto/replication_card.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/chaos_client/proto/chaos_lease.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/chunk_client/proto/data_statistics.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/chunk_client/proto/chunk_meta.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/chunk_client/proto/read_limit.pb.h

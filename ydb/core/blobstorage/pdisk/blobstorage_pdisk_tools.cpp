@@ -235,12 +235,29 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
 }
 
 void ObliterateDisk(TString path) {
-    TFile f(path, OpenAlways | RdWr);
+    TFile f(path, OpenExisting | RdWr);
     f.Flock(LOCK_EX | LOCK_NB);
+
+    bool isBlockDevice = false;
+    ui64 diskSizeBytes = 0;
+    DetectFileParameters(path, diskSizeBytes, isBlockDevice);
+
+    constexpr ui64 GB_BYTES = 4096L * 262144L;
+    constexpr ui64 GB_BLOCKS = GB_BYTES / NPDisk::FormatSectorSize;
+    if (diskSizeBytes <= GB_BYTES) {
+        ythrow TFileError() << "illegal size " << diskSizeBytes << " for device " << path;
+    }
 
     TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0);
     f.Pwrite(zeros.data(), zeros.size(), 0);
+#if defined(YDB_DISABLE_PDISK_ENCRYPTION)
+    // for non-encrypted pdisks the trailing gigabyte has to be cleared
+    ui64 writePos = diskSizeBytes - GB_BYTES;
+    for (ui64 i=0; i<GB_BLOCKS; ++i) {
+        f.Pwrite(zeros.data(), NPDisk::FormatSectorSize, (i64)(writePos + (i * NPDisk::FormatSectorSize)));
+    }
     f.Flush();
+#endif
 }
 
 } // NKikimr

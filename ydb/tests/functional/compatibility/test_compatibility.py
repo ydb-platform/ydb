@@ -144,9 +144,7 @@ class TestCompatibility(object):
 
         yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
-        s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, 
-                                   aws_access_key_id=s3_access_key,
-                                   aws_secret_access_key=s3_secret_key)
+        s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
 
         keys_expected = []
         for table_num in range(1, 6):
@@ -154,11 +152,11 @@ class TestCompatibility(object):
             keys_expected.append(table_name + "/data_00.csv")
             keys_expected.append(table_name + "/metadata.json")
             keys_expected.append(table_name + "/scheme.pb")
-        
+
         def check_export_progress():
             bucket = s3_resource.Bucket(s3_bucket)
             keys = [x.key for x in list(bucket.objects.all())]
             keys.sort()
             return keys == keys_expected
-        
+
         yatest.common.wait_for(check_function=check_export_progress, timeout=600)

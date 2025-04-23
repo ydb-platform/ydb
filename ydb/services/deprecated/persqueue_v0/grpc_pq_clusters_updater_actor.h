@@ -51,7 +51,7 @@ public:
         using TPtr = std::shared_ptr<TStatus>;
 
         bool Running = true;
-        TAdaptiveLock Lock;
+        TSpinLock Lock;
 
         void Stop() {
             TGuard guard(Lock);

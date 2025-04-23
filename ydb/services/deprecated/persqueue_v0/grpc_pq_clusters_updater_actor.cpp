@@ -36,7 +36,7 @@ void TClustersUpdater::Handle(TEvPQClustersUpdater::TEvUpdateClusters::TPtr&, co
 }
 
 void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) {
-    TGuard<TAdaptiveLock> guard(Status->Lock);
+    TGuard<TSpinLock> guard(Status->Lock);
     if (!Status->Running) {
         return Die(ctx);
     }
@@ -45,7 +45,7 @@ void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpd
 }
 
 void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
-    TGuard<TAdaptiveLock> guard(Status->Lock);
+    TGuard<TSpinLock> guard(Status->Lock);
     if (!Status->Running) {
         return Die(ctx);
     }

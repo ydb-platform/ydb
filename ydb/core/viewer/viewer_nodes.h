@@ -439,15 +439,11 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetDiskUsageForGroup() const {
-            //return TStringBuilder() << std::ceil(std::clamp<float>(DiskSpaceUsage, 0, 100) / 5) * 5 << '%';
-            // we want 0%-95% groups instead of 5%-100% groups
-            return TStringBuilder() << std::floor(std::clamp<float>(DiskSpaceUsage, 0, 100) / 5) * 5 << '%';
+            return TStringBuilder() << std::round(std::clamp<float>(DiskSpaceUsage, 0, 100) / 5) * 5 << '%';
         }
 
         TString GetNetworkUtilizationForGroup() const {
-            //return TStringBuilder() << std::ceil(std::clamp<float>(NetworkUtilization, 0, 100) / 5) * 5 << '%';
-            // we want 0%-95% groups instead of 5%-100% groups
-            return TStringBuilder() << std::floor(std::clamp<float>(NetworkUtilization, 0, 100) / 5) * 5 << '%';
+            return TStringBuilder() << std::round(std::clamp<float>(NetworkUtilization, 0, 100) / 5) * 5 << '%';
         }
 
         TInstant GetStartTime() const {

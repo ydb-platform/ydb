@@ -256,8 +256,8 @@ void ObliterateDisk(TString path) {
     for (ui64 i=0; i<GB_BLOCKS; ++i) {
         f.Pwrite(zeros.data(), NPDisk::FormatSectorSize, (i64)(writePos + (i * NPDisk::FormatSectorSize)));
     }
-    f.Flush();
 #endif
+    f.Flush();
 }
 
 } // NKikimr

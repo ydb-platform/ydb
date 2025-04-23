@@ -383,6 +383,7 @@ void TDqPqRdReadActor::Init() {
             nextOffset = offsetIt->second;
         }
     }
+    StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
 

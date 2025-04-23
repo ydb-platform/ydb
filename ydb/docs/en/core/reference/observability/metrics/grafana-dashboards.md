@@ -121,7 +121,7 @@ The dashboard includes the following filters:
 
 | Name | Description |
 |---|---|
-| hive+balancer | CPU time utilized by HIVE_ACTOR and HIVE_BALANCER_ACTOR, the two of the most important actors of the Hive tablet. |
+| hive+balancer | CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet. |
 | hive self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
 | hive local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
 | `{{local-tx}}` avg time | Average execution time of a single local transaction for the type specified in the `local-tx` parameter selector on the dashboard. |

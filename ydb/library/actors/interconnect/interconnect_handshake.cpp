@@ -431,7 +431,6 @@ namespace NActors {
                     [[fallthrough]];
 
                 case ui32(ENetwork::NodeInfo):
-                case TEvInterconnect::EvNodeAddress:
                 case ui32(ENetwork::ResolveError):
                    break; // most likely a race with resolve timeout
 
@@ -821,28 +820,21 @@ namespace NActors {
             Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, Deadline));
 
             // wait for the result
-            auto ev = WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo, TEvInterconnect::TEvNodeAddress>(
-                "ValidateIncomingPeerViaDirectLookup", mono + ResolveTimeout);
+            const auto ev = WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo>("ValidateIncomingPeerViaDirectLookup", mono + ResolveTimeout);
 
             // extract address from the result
             std::vector<NInterconnect::TAddress> addresses;
             if (!ev) {
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve timed out", true);
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS response timed out");
             } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
                 addresses = std::move(p->Addresses);
                 if (addresses.empty()) {
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS knows nothing about the node " + ToString(PeerNodeId));
                 }
-            } else if (auto *p = ev->CastAsLocal<TEvInterconnect::TEvNodeAddress>()) {
-                const auto& r = p->Record;
-                if (!r.HasAddress() || !r.HasPort()) {
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
-                }
-                addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
                 Y_ABORT_UNLESS(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
-                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
+                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host);
             }
 
             return addresses;

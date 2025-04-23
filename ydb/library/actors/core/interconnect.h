@@ -123,7 +123,7 @@ namespace NActors {
         enum EEv {
             EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT),
             EvResolveNode, // resolve info about node (internal)
-            EvNodeAddress, // node info (internal)
+            EvStubForUnused,
             EvConnectNode, // request proxy to establish connection (like: we would send something there soon)
             EvAcceptIncoming,
             EvNodeConnected,    // node connected notify
@@ -149,8 +149,6 @@ namespace NActors {
         };
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)");
-
-        struct TEvNodeAddress;
 
         struct TEvConnectNode: public TEventLocal<TEvConnectNode, EvConnectNode> {
         };

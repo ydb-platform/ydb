@@ -102,10 +102,12 @@ struct TKqpExecuterTxResult {
     NKikimrMiniKQL::TResult* GetMkql(google::protobuf::Arena* arena);
     NKikimrMiniKQL::TResult GetMkql();
     Ydb::ResultSet* GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
+    std::shared_ptr<arrow::RecordBatch> GetArrow(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
     bool HasTrailingResults();
 
     void FillMkql(NKikimrMiniKQL::TResult* mkqlResult);
     void FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite);
+    void FillArrow(std::shared_ptr<arrow::RecordBatch> arrowResult, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
 };
 
 struct TTimeAndRandomProvider {
@@ -255,6 +257,7 @@ public:
     TTypedUnboxedValue GetTxResult(ui32 txIndex, ui32 resultIndex);
     NKikimrMiniKQL::TResult* GetMkqlTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena);
     Ydb::ResultSet* GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite);
+    std::shared_ptr<arrow::RecordBatch> GetArrowTxResult(const NKqpProto::TKqpPhyResultBinding& rb, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
     bool HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb);
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);

@@ -297,9 +297,11 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(Counters);
+
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
-            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, scheduler->CreateSchedulableTaskFactory(), FederatedQuerySetup);
 
         KqpNodeService = TActivationContext::Register(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -308,6 +310,13 @@ public:
         KqpWorkloadService = TActivationContext::Register(CreateKqpWorkloadService(Counters->GetWorkloadManagerCounters()));
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
+
+        NScheduler::TOptions schedulerOptions {
+            .UpdateFairSharePeriod = TDuration::MicroSeconds(500'000),
+        };
+        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(scheduler, schedulerOptions));
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -665,6 +674,11 @@ public:
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
         }
+
+        // TODO: not the best place for adding database.
+        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+        addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
 
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
@@ -1623,6 +1637,7 @@ private:
 
         const auto& poolId = ev->Get()->GetPoolId();
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
+
         if (!poolInfo) {
             return true;
         }
@@ -1642,6 +1657,10 @@ private:
         const auto& poolConfig = poolInfo->Config;
         if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
             ev->Get()->SetPoolConfig(poolConfig);
+        }
+
+        if (poolId != NResourcePool::DEFAULT_POOL_ID && !poolId.empty()) {
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
         }
 
         return true;

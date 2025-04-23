@@ -619,7 +619,7 @@ private:
         for (TS3FileWriteActor* actor : ProcessedActors) {
             actor->Go();
         }
-        if (GetFreeSpace() < 0) {
+        if (GetFreeSpace() <= 0) {
             CheckDeadlock();
         }
 
@@ -678,7 +678,7 @@ private:
         if (Finished) {
             return;
         }
-        if (GetFreeSpace() >= 0) {
+        if (GetFreeSpace() > 0) {
             LOG_D("TS3WriteActor", "Has free space, notify owner");
             Callbacks->ResumeExecution();
             return;
@@ -687,9 +687,9 @@ private:
     }
 
     void CheckDeadlock() const {
-        const bool isAllStarted = std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), true, [](bool started, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
-            return started &= std::accumulate(item.second.cbegin(), item.second.cend(), true, [](bool started, TS3FileWriteActor* actor) {
-                return started &= actor->IsUploadStarted();
+        const bool isAllStarted = std::all_of(FileWriteActors.cbegin(), FileWriteActors.cend(), [](const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
+            return std::all_of(item.second.cbegin(), item.second.cend(), [](TS3FileWriteActor* actor) {
+                return actor->IsUploadStarted();
             });
         });
         if (!isAllStarted) {
@@ -698,7 +698,7 @@ private:
         }
 
         const auto usedSpace = GetUsedSpace(/* storedOnly */ false);
-        if (usedSpace > i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
+        if (usedSpace >= i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
             // If all data is not inflight and all uploads running now -- deadlock occurred
             Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
         }
@@ -971,38 +971,38 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         .DirtyWrite = !params.GetAtomicUploadCommit(),
     };
 
-    if (params.HasArrowSettings()) {
-        const auto& arrowSettings = params.GetArrowSettings();
-
-        const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
-        const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(arrowSettings.GetRowType()), *programBuilder, Cerr);
-        YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
-        const auto structType = static_cast<TStructType*>(outputItemType);
-
-        arrow::SchemaBuilder builder;
-        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-            const auto memberType = structType->GetMemberType(i);
-            std::shared_ptr<arrow::DataType> dataType;
-            YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
-
-            const std::string memberName(structType->GetMemberName(i));
-            ARROW_OK(builder.AddField(std::make_shared<arrow::Field>(memberName, dataType, memberType->IsOptional())));
-        }
-
-        auto schemaResult = builder.Finish();
-        ARROW_OK(schemaResult.status());
-        auto schema = std::move(schemaResult).ValueOrDie();
-
-        const auto actor = new TS3BlockWriteActor({
-            .ArrowSchema = std::move(schema),
-            .MaxFileSize = arrowSettings.GetMaxFileSize(),
-            .MaxBlockSize = arrowSettings.GetMaxBlockSize(),
-        }, s3Params);
-        return {actor, actor};
-    } else {
+    if (!params.HasArrowSettings()) {
         const auto actor = new TS3ScalarWriteActor(std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()), s3Params);
         return {actor, actor};
     }
+
+    const auto& arrowSettings = params.GetArrowSettings();
+
+    const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
+    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(arrowSettings.GetRowType()), *programBuilder, Cerr);
+    YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
+    const auto structType = static_cast<TStructType*>(outputItemType);
+
+    arrow::SchemaBuilder builder;
+    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+        const auto memberType = structType->GetMemberType(i);
+        std::shared_ptr<arrow::DataType> dataType;
+        YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+
+        const std::string memberName(structType->GetMemberName(i));
+        ARROW_OK(builder.AddField(std::make_shared<arrow::Field>(memberName, dataType, memberType->IsOptional())));
+    }
+
+    auto schemaResult = builder.Finish();
+    ARROW_OK(schemaResult.status());
+    auto schema = std::move(schemaResult).ValueOrDie();
+
+    const auto actor = new TS3BlockWriteActor({
+        .ArrowSchema = std::move(schema),
+        .MaxFileSize = arrowSettings.GetMaxFileSize(),
+        .MaxBlockSize = arrowSettings.GetMaxBlockSize(),
+    }, s3Params);
+    return {actor, actor};
 }
 
 } // namespace NYql::NDq

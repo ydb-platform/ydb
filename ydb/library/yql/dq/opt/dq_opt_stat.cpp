@@ -227,7 +227,7 @@ bool IsConstantExprPg(const TExprNode::TPtr& input) {
  *   - If its a callable in the while list and all children are constant expressions, then its a constant expression
  *   - If one of the child is a type expression, it also passes the check
  */
-bool IsConstantExpr(const TExprNode::TPtr& input) {
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
     if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
@@ -250,7 +250,7 @@ bool IsConstantExpr(const TExprNode::TPtr& input) {
         return true;
     }
 
-    else if (TCoApply::Match(input.Get()) && IsConstantUdf(input)) {
+    else if (foldUdfs && TCoApply::Match(input.Get()) && IsConstantUdf(input)) {
         return true;
     }
 

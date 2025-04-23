@@ -18,11 +18,11 @@ jobs:
       pull-requests: read
     runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
     env:
-      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
     steps:
       - uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.YDBOT_TOKEN }}
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const pr        = context.payload.pull_request;
             const assignees = pr.assignees.map(a => `@${a.login}`).join(' ');

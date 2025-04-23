@@ -155,10 +155,10 @@ public:
             hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
-            hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

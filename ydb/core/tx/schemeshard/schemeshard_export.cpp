@@ -100,7 +100,8 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     case TExportInfo::EState::CopyTables:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_PREPARING);
         break;
-
+    
+    case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
         for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -111,7 +112,6 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
     
-    case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Dropping:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_DONE);
         break;

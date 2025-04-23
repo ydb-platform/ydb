@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(FrequencyTests) {
             },
             .Hints = {
                 {"columns", 826110},
-                {"column_groups", 225},
+                {"columngroups", 225},
             },
         };
 

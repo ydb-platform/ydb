@@ -107,6 +107,7 @@ namespace NYql {
             TMaybe<ui64> DeterministicTimeProviderSeed_;
             bool UseSystemColumns_;
             bool UseWorkerPool_;
+            TLangVersion LangVer_;
             TVector<THolder<IWorker>> WorkerPool_;
 
         public:

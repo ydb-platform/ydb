@@ -11088,6 +11088,26 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    IGraphTransformer::TStatus CurrentLanguageVersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TLangVersionBuffer buffer;
+        TStringBuf str;
+        if (!FormatLangVersion(ctx.Types.LangVer, buffer, str)) {
+            str = "";
+        }
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("String")
+                .Atom(0, str)
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -13145,6 +13165,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["CurrentOperationId"] = &CurrentOperationIdWrapper;
         ExtFunctions["CurrentOperationSharedId"] = &CurrentOperationSharedIdWrapper;
         ExtFunctions["CurrentAuthenticatedUser"] = &CurrentAuthenticatedUserWrapper;
+        ExtFunctions["CurrentLanguageVersion"] = &CurrentLanguageVersionWrapper;
         ExtFunctions["SecureParam"] = &SecureParamWrapper;
         ExtFunctions["UnsafeTimestampCast"] = &UnsafeTimestampCastWrapper;
         ExtFunctions["JsonValue"] = &JsonValueWrapper;

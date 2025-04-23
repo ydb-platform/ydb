@@ -130,7 +130,7 @@ Functions for ASCII strings:
 
 * `String::Prec(Double{Flags:AutoMap}, Uint64) -> String`
 
-* `String::Reverse(String?) -> String?`
+* `String::Reverse(String?) -> String?` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 {% note alert %}
 

@@ -854,9 +854,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Expected list value, group: "
                         << it->first.Quote()));
                     return false;
-                } else if (it->second.AsList().size() < 2) {
+                } else if (it->second.AsList().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Expected list with at least two columns, group: "
+                        << "Expected non empty column list, group: "
                         << it->first.Quote()));
                     return false;
                 } else {
@@ -904,7 +904,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     return false;
                 }
             }
-            return true;
+            break;
         }
         case EYtSettingType::BlockOutputReady: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
@@ -917,7 +917,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
                 return false;
             }
-            return true;
+            break;
         }
         case EYtSettingType::QLFilter: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {

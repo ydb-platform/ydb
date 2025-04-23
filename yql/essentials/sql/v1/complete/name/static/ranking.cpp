@@ -4,6 +4,8 @@
 
 #include <yql/essentials/sql/v1/complete/name/name_service.h>
 
+#include <yql/essentials/core/sql_types/normalize_name.h>
+
 #include <util/charset/utf8.h>
 
 namespace NSQLComplete {
@@ -57,7 +59,7 @@ namespace NSQLComplete {
             return std::visit([this](const auto& name) -> size_t {
                 using T = std::decay_t<decltype(name)>;
 
-                auto content = ToLowerUTF8(ContentView(name));
+                auto content = NYql::NormalizeName(ContentView(name));
 
                 if constexpr (std::is_same_v<T, TKeyword>) {
                     if (auto weight = Frequency_.Keywords.FindPtr(content)) {

@@ -184,7 +184,7 @@ class LoadSuiteBase:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
         end = datetime.fromtimestamp(end_time, tz).strftime("%Y-%m-%d %H:%M:%S")
-        oom_cmd = f'sudo journalctl -k -q --no-pager -S {start} -U {end} --grep "Out of memory: Kill" --case-sensitive=false'
+        oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "Out of memory: Kill" --case-sensitive=false'
         ooms = set()
         for h in hosts:
             exec = cls.__execute_ssh(h, oom_cmd)

@@ -521,6 +521,7 @@ namespace {
                             backupTxId = record.GetTxId();
                             // hijack
                             schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                            schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
                             record.SetTxBody(schemeTx.SerializeAsString());
                         }
 
@@ -1665,6 +1666,7 @@ partitioning_settings {
 
                     if (schemeTx.HasBackup()) {
                         schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
                         record.SetTxBody(schemeTx.SerializeAsString());
                     }
 

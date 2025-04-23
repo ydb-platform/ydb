@@ -941,7 +941,10 @@ struct TEvBlobStorage {
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
 
-        EvEnd
+        EvEnd,
+        
+        // Unique ID for binary-serialized VPut
+        EvVPutBinary = EvPut + 18 * 512,     
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_BLOBSTORAGE),
@@ -2441,6 +2444,7 @@ struct TEvBlobStorage {
     struct TEvVInplacePatchResult;
     struct TEvVPut;
     struct TEvVPutResult;
+    struct TEvVPutBinary;
     struct TEvVMultiPut;
     struct TEvVMultiPutResult;
     struct TEvVGet;

@@ -1,16 +1,11 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-import "ydb/public/api/protos/annotations/validation.proto";
-
 package Ydb.Formats;
 option java_package = "com.yandex.ydb.formats";
 
 message ArrowBatchSettings {
     bytes schema = 1;
-
-    // For Ydb.Query.ExecuteQueryResponsePart
-    optional int64 result_arrow_index = 2 [(Ydb.value) = ">= 0"];
 }
 
 message CsvSettings {

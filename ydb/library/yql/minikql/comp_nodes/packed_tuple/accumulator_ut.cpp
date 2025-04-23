@@ -23,7 +23,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = false;
+static volatile bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -55,6 +55,9 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     CTEST << ">  nTuples: " << nTuples << Endl;
     CTEST << ">  nCols: " << nCols << Endl;
     CTEST << ">  nBuckets: " << nBuckets << Endl;
+
+    ui64 totalTime = 0;
+
     TScopedAlloc alloc(__LOCATION__);
     using TBuffer = TAccumulator::TBuffer;
 
@@ -69,46 +72,86 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     CTEST << " " << Endl;
 
     std::vector<ui64> col(nTuples, 0);
+    std::iota(col.begin(), col.end(), 0);
+    auto colsData = std::vector(nCols, col);
+    std::vector<const ui8*> cols(nCols);
+    for (size_t ind = 0; ind != nCols; ind++) {
+        cols[ind] = (ui8*)colsData[ind].data();
+    }
+    std::vector<ui8> colValid((nTuples + 7)/8, ~0);
+    auto colsValidData = std::vector(nCols, colValid);
+    std::vector<const ui8*> colsValid(nCols);
+    for (size_t ind = 0; ind != nCols; ind++) {
+        colsValid[ind] = (ui8*)colsValidData[ind].data();
+    }
+
+    auto resesData = std::vector<std::vector<ui8, TMKQLAllocator<ui8>>>(1u << log2Buckets);
+    std::vector<std::vector<ui8, TMKQLAllocator<ui8>>> overflowsData(1u << log2Buckets);
+
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+
+    tl->BucketPack(cols.data(), colsValid.data(), reses, overflows, 0, nTuples, log2Buckets);
+    for (auto& bres : resesData) {
+        bres.resize(0);
+    }
+
+    auto begintp = std::chrono::steady_clock::now();
+    tl->BucketPack(cols.data(), colsValid.data(), reses, overflows, 0, nTuples, log2Buckets);
+    auto endtp = std::chrono::steady_clock::now();
+    auto bucketPackTime = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+    if (bucketPackTime == 0) bucketPackTime = 1;
+
+    CTEST << "Bucket pack time: " << bucketPackTime  << "[microseconds]" << Endl;
+    CTEST << "Bucket pack speed: " << TuplesDataBytes / bucketPackTime << "[MB/sec]" << Endl;
+    CTEST << " " << Endl;
+
     std::vector<ui8> res(TuplesDataBytes, 0);
     for (ui32 i = 0; i < nTuples; ++i) {
         col[i] = i;
     }
-    std::vector<const ui8*> cols(nCols, (ui8*)col.data());
-    std::vector<ui8> colValid((nTuples + 7)/8, ~0);
-    std::vector<const ui8*> colsValid(nCols, colValid.data());
-
     std::vector<ui8, TMKQLAllocator<ui8>> overflow;
     tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
+
+    begintp = std::chrono::steady_clock::now();
+    tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
+    endtp = std::chrono::steady_clock::now();
+    auto packTime = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+    if (packTime == 0) packTime = 1;
+    totalTime += packTime;
+
+    CTEST << "Pack time: " << packTime  << "[microseconds]" << Endl;
+    CTEST << "Pack speed: " << TuplesDataBytes / packTime << "[MB/sec]" << Endl;
+    CTEST << " " << Endl;
 
     ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
     ui32 shift = 32 - bitsCount;
     ui32 mask = (1 << bitsCount) - 1;
 
     std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(nBuckets, {0, 0});
-    ui64 totalTime = 0;
 
     {
-        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
         Histogram hist;
         hist.AddData(tl.Get(), res.data(), nTuples, TAccumulator::GetBucketId, shift, mask);
         hist.EstimateSizes(sizes);
 
-        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-        ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-        if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        // ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+        // if (microseconds == 0) microseconds = 1;
+        // // totalTime += microseconds;
 
-        CTEST << "Histogram build time: " << microseconds  << "[microseconds]" << Endl;
-        CTEST << "Histogram build speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
-        CTEST << " " << Endl;
+        // CTEST << "Histogram build time: " << microseconds  << "[microseconds]" << Endl;
+        // CTEST << "Histogram build speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
+        // CTEST << " " << Endl;
     }
 
     std::vector<TBuffer, TMKQLAllocator<TBuffer>> PackedTupleBuckets(nBuckets);
     std::vector<TBuffer, TMKQLAllocator<TBuffer>> OverflowBuckets(nBuckets);
 
     {
-        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
         for (ui32 i = 0; i < sizes.size(); ++i) {
             auto [TLsize, Osize] = sizes[i];
@@ -118,18 +161,23 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
             std::memset(OverflowBuckets[i].data(), 0, Osize);
         }
 
-        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-        ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-        if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        // ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+        // if (microseconds == 0) microseconds = 1;
+        // // totalTime += microseconds;
 
-        CTEST << "Memory allocation time: " << microseconds  << "[microseconds]" << Endl;
-        CTEST << "Memory allocation speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
-        CTEST << " " << Endl;
+        // CTEST << "Memory allocation time: " << microseconds  << "[microseconds]" << Endl;
+        // CTEST << "Memory allocation speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
+        // CTEST << " " << Endl;
     }
 
-    auto accum = TAccumulator::Create(tl.Get(), 0, log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
+    std::array<THolder<TAccumulator>, 2> accums;
+    accums[0] = MakeHolder<TAccumulatorImpl>(
+        tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
+    accums[1] = MakeHolder<TSMBAccumulatorImpl>(
+        tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
 
+    for (auto &accum : accums)
     {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -138,29 +186,30 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // totalTime += microseconds;
     
+        CTEST << "------------------" << Endl << " " << Endl;
+
         CTEST << "Accumulation time: " << microseconds  << "[microseconds]" << Endl;
         CTEST << "Accumulation speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
         CTEST << " " << Endl;
+
+        CTEST << "Total time: " << totalTime + microseconds  << "[microseconds]" << Endl;
+        CTEST << "Resulting speed: " << TuplesDataBytes / (totalTime + microseconds) << "[MB/sec]" << Endl;
+        CTEST << " " << Endl;
     }
 
-    CTEST << "Total time: " << totalTime  << "[microseconds]" << Endl;
-    CTEST << "Resulting speed: " << TuplesDataBytes / totalTime << "[MB/sec]" << Endl;
     CTEST << "============= BENCH END =============" << Endl << " " << Endl;
 
-    return accum->GetBucket(0).NTuples > 0;
+    return accums[0]->GetBucket(0).NTuples > 0;
 }
 
 bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     auto nBuckets = 1 << log2Buckets;
-    CTEST << "============ BENCH BEGIN ============" << Endl;
-    CTEST << "Test config:" << Endl;
-    CTEST << ">  nTuples: " << nTuples << Endl;
-    CTEST << ">  nCols: " << nCols << Endl;
-    CTEST << ">  nBuckets: " << nBuckets << Endl;
     TScopedAlloc alloc(__LOCATION__);
     using TBuffer = TAccumulator::TBuffer;
+
+    ui64 totalTime = 0;
 
     TColumnDesc kc;
     kc.Role = EColumnRole::Key;
@@ -173,7 +222,6 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
 
     std::vector<ui32> col(1, 0);
     std::vector<ui8> colData;
-    std::vector<ui8> res(TuplesDataBytes, 0);
 
     for (ui64 i = 0; i < nTuples; ++i) {
         const auto& str = threeLetterValues[i % threeLetterValues.size()];
@@ -198,11 +246,54 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         colsValid[2 * i + 1] = nullptr;
     }
 
+    std::vector<ui8> res(TuplesDataBytes, 0);
     std::vector<ui8, TMKQLAllocator<ui8>> overflow;
-    tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
 
+    tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
     TuplesDataBytes += overflow.size();
+    overflow.resize(0);
+
+    CTEST << "============ BENCH BEGIN ============" << Endl;
+    CTEST << "Test config:" << Endl;
+    CTEST << ">  nTuples: " << nTuples << Endl;
+    CTEST << ">  nCols: " << nCols << Endl;
+    CTEST << ">  nBuckets: " << nBuckets << Endl;
     CTEST << ">  Dataset size: " << TuplesDataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST << " " << Endl;
+
+    auto resesData = std::vector<std::vector<ui8, TMKQLAllocator<ui8>>>(1u << log2Buckets);
+    std::vector<std::vector<ui8, TMKQLAllocator<ui8>>> overflowsData(1u << log2Buckets);
+
+    auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+    auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+    
+    tl->BucketPack(cols.data(), colsValid.data(), reses, overflows, 0, nTuples, log2Buckets);
+    for (auto& bres : resesData) {
+        bres.resize(0);
+    }
+    for (auto& boverflow : overflowsData) {
+        boverflow.resize(0);
+    }
+
+    auto begintp = std::chrono::steady_clock::now();
+    tl->BucketPack(cols.data(), colsValid.data(), reses, overflows, 0, nTuples, log2Buckets);
+    auto endtp = std::chrono::steady_clock::now();
+    auto bucketPackTime = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+    if (bucketPackTime == 0) bucketPackTime = 1;
+
+    CTEST << "Bucket pack time: " << bucketPackTime  << "[microseconds]" << Endl;
+    CTEST << "Bucket pack speed: " << TuplesDataBytes / bucketPackTime << "[MB/sec]" << Endl;
+    CTEST << " " << Endl;
+
+    begintp = std::chrono::steady_clock::now();
+    tl->Pack(cols.data(), colsValid.data(), res.data(), overflow, 0, nTuples);
+    endtp = std::chrono::steady_clock::now();
+    auto packTime = std::chrono::duration_cast<std::chrono::microseconds>(endtp - begintp).count();
+    if (packTime == 0) packTime = 1;
+    totalTime += packTime;
+
+    CTEST << "Pack time: " << packTime  << "[microseconds]" << Endl;
+    CTEST << "Pack speed: " << TuplesDataBytes / packTime << "[MB/sec]" << Endl;
     CTEST << " " << Endl;
 
     ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
@@ -210,7 +301,6 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     ui32 mask = (1 << bitsCount) - 1;
 
     std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(nBuckets, {0, 0});
-    ui64 totalTime = 0;
 
     {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -222,7 +312,7 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // totalTime += microseconds;
 
         CTEST << "Histogram build time: " << microseconds  << "[microseconds]" << Endl;
         CTEST << "Histogram build speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
@@ -246,15 +336,20 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // totalTime += microseconds;
 
         CTEST << "Memory allocation time: " << microseconds  << "[microseconds]" << Endl;
         CTEST << "Memory allocation speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
         CTEST << " " << Endl;
     }
 
-    auto accum = TAccumulator::Create(tl.Get(), 0, log2Buckets, std::move(PackedTupleBuckets), std::move(OverflowBuckets));
+    std::array<THolder<TAccumulator>, 2> accums;
+    accums[0] = MakeHolder<TAccumulatorImpl>(
+        tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
+    accums[1] = MakeHolder<TSMBAccumulatorImpl>(
+        tl.Get(), 0, log2Buckets, std::vector(PackedTupleBuckets), std::vector(OverflowBuckets));
 
+    for (auto &accum : accums)
     {
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -263,18 +358,22 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         if (microseconds == 0) microseconds = 1;
-        totalTime += microseconds;
+        // totalTime += microseconds;
     
+        CTEST << "------------------" << Endl << " " << Endl;
+
         CTEST << "Accumulation time: " << microseconds  << "[microseconds]" << Endl;
         CTEST << "Accumulation speed: " << TuplesDataBytes / microseconds << "[MB/sec]" << Endl;
         CTEST << " " << Endl;
+
+        CTEST << "Total time: " << totalTime + microseconds  << "[microseconds]" << Endl;
+        CTEST << "Resulting speed: " << TuplesDataBytes / (totalTime + microseconds) << "[MB/sec]" << Endl;
+        CTEST << " " << Endl;
     }
 
-    CTEST << "Total time: " << totalTime  << "[microseconds]" << Endl;
-    CTEST << "Resulting speed: " << TuplesDataBytes / totalTime << "[MB/sec]" << Endl;
     CTEST << "============= BENCH END =============" << Endl << " " << Endl;
 
-    return accum->GetBucket(0).NTuples > 0;
+    return accums[0]->GetBucket(0).NTuples > 0;
 }
 
 } // namespace
@@ -489,13 +588,13 @@ Y_UNIT_TEST(BenchAccumulator_VariateNTuples) {
 
 Y_UNIT_TEST(BenchAccumulator_VariateNColumns) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> BenchAccumulator_VariateNColumns <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  1, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  2, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  4, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  8, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 16, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 24, 3));
-    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 32, 3));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  1, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  2, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  4, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e6,  8, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e6, 16, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e6, 24, 4));
+    UNIT_ASSERT(RunFixSizedAccumulatorBench(1e6, 32, 4));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(BenchAccumulator_VariateNColumns)
 
@@ -521,16 +620,15 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2, 3));
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e6, 2, 3));
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7, 2, 3));
-    UNIT_ASSERT(RunVarSizedAccumulatorBench(4e7, 2, 3));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples)
 
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> VarSized_BenchAccumulator_VariateNColumns <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
-    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  1, 3));
-    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  2, 3));
-    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  4, 3));
-    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  8, 3));
+    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  1, 4));
+    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  2, 4));
+    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  4, 4));
+    UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  8, 4));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns)
 

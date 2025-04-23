@@ -17,6 +17,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/accumulator.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/cardinality.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/page_hash_table.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
 
 #include <util/generic/serialized_enum.h>
@@ -75,6 +76,7 @@ THash CalculateTupleHash(const TVector<THash>& hashes) {
 // -------------------------------------------------------------------
 using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<true>;
 using TNeumannTable = NPackedTuple::TNeumannHashTable<false>;
+using TPageTable = NPackedTuple::TPageHashTableImpl<NSimd::TSimdSSE42Traits>;
 
 size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, size_t nTuples) {
     size_t varSizedCount = 0;
@@ -886,9 +888,9 @@ private:
         auto  nTuples = joinState.ProbePackedInput.NTuples;
         auto  overflow = joinState.ProbePackedInput.Overflow.data();
 
-        constexpr auto batchSize = 64;
+        constexpr auto batchSize = 16;
         
-    if constexpr (true) { /// ignore batch api switch (test purpose)
+    if constexpr (false) { /// ignore batch api switch (test purpose)
         using TIterPair = std::pair<TTable::TIterator, const ui8*>;
         TVector<TIterPair> iterators(batchSize);
 
@@ -901,7 +903,7 @@ private:
             for (size_t offset = 0; offset < remaining; ++offset) {
                 auto [it, inTuple] = iterators[offset];
                 const ui8* foundTuple = nullptr;
-                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                while ((foundTuple = Table_.NextMatch(it, overflow)) != nullptr) {
                     // Copy tuple from build part into output
                     auto prevSize = joinState.BuildPackedOutput.size();
                     joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
@@ -931,7 +933,7 @@ private:
                 auto inTuple = tuples[offset];
                 auto it = iterators[offset];
                 const ui8* foundTuple = nullptr;
-                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                while ((foundTuple = Table_.NextMatch(it, overflow)) != nullptr) {
                     // Copy tuple from build part into output
                     auto prevSize = joinState.BuildPackedOutput.size();
                     joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
@@ -1049,10 +1051,12 @@ public:
         LeftBuckets_.resize(1u << BucketsLogNum_);
         RightBuckets_.resize(1u << BucketsLogNum_);
 
-        // Reserve memory for buckets overflow
+        // Reserve memory for buckets
         const size_t leftOverflowSizeEst = CalculateExpectedOverflowSize(LeftConverter_->GetTupleLayout(), leftRowsNum >> BucketsLogNum_);
         const size_t rightOverflowSizeEst = CalculateExpectedOverflowSize(RightConverter_->GetTupleLayout(), rightRowsNum >> BucketsLogNum_);
         for (ui32 bucket = 0; bucket < (1u << BucketsLogNum_); ++bucket) {
+            LeftBuckets_[bucket].PackedTuples.reserve(bucketDesiredSize);
+            RightBuckets_[bucket].PackedTuples.reserve(bucketDesiredSize);
             LeftBuckets_[bucket].Overflow.reserve(leftOverflowSizeEst);
             RightBuckets_[bucket].Overflow.reserve(rightOverflowSizeEst);
         }
@@ -1196,7 +1200,7 @@ private:
         auto *tuple = joinState.ProbePackedInput.PackedTuples.data() + CurrProbeRow_ * probeLayout->TotalRowSize;
 
         using TIterPair = std::pair<TTable::TIterator, const ui8*>;
-        constexpr auto batchSize = 64;
+        constexpr auto batchSize = 16;
         TVector<TIterPair> iterators(batchSize);
 
         // TODO: interrupt this loop when joinState is full as in BlockMapJoin. So track current iterator and save iterators somewhere.
@@ -1211,7 +1215,7 @@ private:
             for (size_t offset = 0; offset < remaining; ++offset) {
                 auto [it, inTuple] = iterators[offset];
                 const ui8* foundTuple = nullptr;
-                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                while ((foundTuple = Table_.NextMatch(it, overflow)) != nullptr) {
                     // Copy tuple from build part into output
                     auto prevSize = joinState.BuildPackedOutput.size();
                     joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
@@ -1900,7 +1904,7 @@ private:
         auto *const overflow = joinState.ProbePackedInput.Overflow.data();
         auto *tuple = joinState.ProbePackedInput.PackedTuples.data() + CurrProbeRow_ * probeLayout->TotalRowSize;
 
-        constexpr ui32 batchSize = 64;
+        constexpr ui32 batchSize = 16;
 
         /// TODO: add check if HasEnoughMemory()
         for (; CurrProbeRow_ < nTuples && joinState.IsNotFull(); CurrProbeRow_ += batchSize) {
@@ -1917,7 +1921,7 @@ private:
                 auto it = iterators[offset];
                 
                 const ui8* foundTuple = nullptr;
-                while ((foundTuple = Table_.NextMatch(it)) != nullptr) {
+                while ((foundTuple = Table_.NextMatch(it, overflow)) != nullptr) {
                     // Copy tuple from build part into output
                     auto prevSize = joinState.BuildPackedOutput.size();
                     joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);

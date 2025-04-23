@@ -22,7 +22,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = false;
+static volatile bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -279,6 +279,33 @@ class TMixtureDistribution : public IDistribution {
     std::bernoulli_distribution PLeft_;
 };
 
+class TRepeatDistribution : public IDistribution {
+  public:
+    TRepeatDistribution(IDistribution &distribution, ui32 repeatNum)
+        : Distribution_(distribution), RepeatNum_(std::max(1u, repeatNum)), Cnt_(0) {}
+
+    virtual ui32 operator()(std::mt19937 &gen) override {
+        if (Cnt_ == 0) {
+            Cnt_ = RepeatNum_;
+            Val_ = Distribution_(gen);
+        }
+        --Cnt_;
+        return Val_;
+    }
+    virtual ui32 Min() const override {
+        return Distribution_.Min();
+    }
+    virtual ui32 Max() const override {
+        return Distribution_.Max();
+    }
+
+  private:
+    IDistribution &Distribution_;
+    const ui32 RepeatNum_;
+    ui32 Val_;
+    ui32 Cnt_;
+};
+
 } // namespace
 
 namespace {
@@ -294,7 +321,8 @@ template <size_t Batch, typename... Args> class TBenchmark {
 
     friend std::ostream &operator<<(std::ostream &out, TResult res) {
         out << res.coldBuildTime << ',' << res.warmBuildTime << ','
-            << res.lookupTime << ',' << res.memUsed;
+            << res.lookupTime << ',' << res.batchedLookupTime
+            << ',' << res.memUsed;
         return out;
     }
 
@@ -555,7 +583,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
                         std::array<typename Arg::TIterator, Batch> iters =
                             arg.FindBatch(rows, lookupOverflow);
                         for (size_t i = 0; i < Batch && batchInd + i < lookupSize; ++i) {
-                            while (auto match = arg.NextMatch(iters[i])) {
+                            while (auto match = arg.NextMatch(iters[i], lookupOverflow)) {
                                 checksum += ReadUnaligned<ui32>(rows[i]);
                                 matches +=
                                     ReadUnaligned<ui8>(match + 2 * sizeof(ui32) + (1 + 7) / 8);    
@@ -628,7 +656,11 @@ using TNeumannTableSeq = TNeumannHashTable<true, false>;
 using TNeumannTablePref = TNeumannHashTable<false, true>;
 using TNeumannTableSeqPref = TNeumannHashTable<true, true>;
 
-using TPageTableSSE = TPageHashTableImpl<NSimd::TSimdSSE42Traits>;
+using TPageTableSSE = TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>;
+using TPageTableSSEPref = TPageHashTableImpl<NSimd::TSimdSSE42Traits, true>;
+
+using TPageTableAVX2 = TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>;
+using TPageTableAVX2Pref = TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>;
 
 // -----------------------------------------------------------------
 
@@ -640,8 +672,7 @@ template <typename... Args> struct TTablesCase {
     template <size_t Batch> using TBenchmark = TBenchmark<Batch, Args...>;
 };
 using TTablesBatched =
-    TTablesCase<TRobinHoodTableSeq, TRobinHoodTableSeqPref, TNeumannTable,
-                TNeumannTablePref, TNeumannTableSeq, TNeumannTableSeqPref>;
+    TTablesCase<TRobinHoodTableSeqPref, TNeumannTablePref, TNeumannTableSeqPref, TPageTableSSEPref, TPageTableAVX2Pref>;
 
 // -----------------------------------------------------------------
 
@@ -663,18 +694,19 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
         benchmark.Run(toCSV);
     }
 
-    Y_UNIT_TEST(UniformBatched) {
-        TUniformDistribution uni1M(0, 999999);
-        TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
+    Y_UNIT_TEST(UniformBatchedOutplace) {
+        TUniformDistribution uni1M(0, 9999999);
+        TRepeatDistribution uni1Mrpt8(uni1M, 8);
+        TUniformDistribution uni10M(0, 9999999);
+        TUniformDistribution uni200M(0, 199999999);
 
         auto benchmark = TTablesBatched::TBenchmark<16>(4, Name_);
 
-        benchmark.Register({"uniform 1M", uni1M, uni1M});
-        // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
-        // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
-        // benchmark.Register({"uniform 1B", uni1B, uni1B});
+        benchmark.Register({"uniform 1M", uni1Mrpt8, uni1M});
+        benchmark.Register({"uniform 10M", uni10M, uni10M});
+        benchmark.Register({"uniform 10M, 200M", uni10M, uni200M});
 
-        // benchmark.Run(toCSV);
+        benchmark.Run(toCSV);
     }
 
     Y_UNIT_TEST(UniformPayloaded) {

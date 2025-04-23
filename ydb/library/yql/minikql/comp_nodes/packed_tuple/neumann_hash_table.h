@@ -298,7 +298,7 @@ class TNeumannHashTable {
         }
     }
 
-    const ui8 *NextMatch(TIterator &iter) const {
+    const ui8 *NextMatch(TIterator &iter, const ui8 *overflow) const {
         const ui8 *result = nullptr;
 
         if constexpr (ConsecutiveDuplicates) {
@@ -309,7 +309,7 @@ class TNeumannHashTable {
             }
         } else {
             for (auto& it = iter.It_; it != iter.End_; it += BufferSlotSize_) { /// allow multiple false calls
-                if (GetRowMatch(it, iter.Row_, Overflow_, result)) {
+                if (GetRowMatch(it, iter.Row_, overflow, result)) {
                     it += BufferSlotSize_;
                     break;
                 }
@@ -320,7 +320,7 @@ class TNeumannHashTable {
         return result;
     }
 
-    TIterator Find(const ui8 *const row, const ui8 *const overflow) {
+    TIterator Find(const ui8 *const row, const ui8 *const overflow) const {
         Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 
@@ -367,20 +367,26 @@ class TNeumannHashTable {
 
     template <size_t Size>
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
-                                          const ui8 *const overflow) {
+                                          const ui8 *const overflow) const {
         if constexpr (Prefetch) {
-            for (ui32 index = 0; index < Size && rows[index]; ++index) {
-                const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
-                const Hash dirSlot = getDirectorySlot(thash);
-                const TDirectory dir = Directories_[dirSlot];
-                
-                ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
-                NYql::PrefetchForRead(ptr);
+            if (Directories_.size_bytes() > 1024 * 1024) {
+                for (ui32 index = 0; index < Size && rows[index]; ++index) {
+                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const Hash dirSlot = getDirectorySlot(thash);
+                    NYql::PrefetchForRead(&Directories_[dirSlot]);
+                }    
+            } else {
+                for (ui32 index = 0; index < Size && rows[index]; ++index) {
+                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const Hash dirSlot = getDirectorySlot(thash);
+                    const TDirectory dir = Directories_[dirSlot]; 
+                    const ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
+                    NYql::PrefetchForRead(ptr);
+                }
             }
         }
 
         std::array<TIterator, Size> iters;
-
         for (ui32 index = 0; index < Size && rows[index]; ++index) {
             iters[index] = Find(rows[index], overflow);
         }
@@ -391,7 +397,7 @@ class TNeumannHashTable {
     void Apply(const ui8 *const row, const ui8 *const overflow,
                auto &&onMatch) {
         auto iter = Find(row, overflow);
-        while (auto matched = NextMatch(iter)) {
+        while (auto matched = NextMatch(iter, overflow)) {
             onMatch(matched);
         }
     }

@@ -17,6 +17,7 @@ SRCS(
     mkql_value_builder.cpp
     mkql_computation_pattern_cache.cpp
     presort.cpp
+    mkql_resource_meter.cpp
 )
 
 PEERDIR(

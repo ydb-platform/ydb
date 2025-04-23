@@ -90,26 +90,28 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
 
 } // namespace
 
-bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
-                             const ui8 *rhsRow, const ui8 *rhsOverflow) const {
-    if (std::memcmp(lhsRow, rhsRow, KeyColumnsFixedEnd)) {
+
+bool TupleKeysEqual(const TTupleLayout *layout,
+                           const ui8 *lhsRow, const ui8 *lhsOverflow,
+                           const ui8 *rhsRow, const ui8 *rhsOverflow) {
+    if (std::memcmp(lhsRow, rhsRow, layout->KeyColumnsFixedEnd)) {
         return false;
     }
 
     // TODO: better nulls detection??
-    const ui8 rem = KeyColumnsNum % 8;
+    const ui8 rem = layout->KeyColumnsNum % 8;
     const ui8 masks[2] = {static_cast<ui8>((1 << rem) - 1), 0xFF};
-    for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
-        const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + BitmaskOffset + byteN);
-        const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + BitmaskOffset + byteN);
+    for (i32 i = layout->KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
+        const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + byteN);
+        const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + layout->BitmaskOffset + byteN);
         const ui8 midx = (i >= 8);
         if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
             return false;
         }
     }
 
-    for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
-        const auto &col = Columns[colInd];
+    for (auto colInd = layout->KeyColumnsFixedNum; colInd != layout->KeyColumnsNum; ++colInd) {
+        const auto &col = layout->Columns[colInd];
 
         const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
         const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
@@ -298,6 +300,31 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         KeyColumnsFixedEnd = KeyColumnsEnd;
 
     KeyColumnsSize = KeyColumnsEnd - KeyColumnsOffset;
+
+    switch (KeyColumnsSize) {
+    case 1:
+        KeySizeTag_ = 0;
+        break;
+    case 2:
+        KeySizeTag_ = 1;
+        break;
+    case 4:
+        KeySizeTag_ = 2;
+        break;
+    case 8:
+        KeySizeTag_ = 3;
+        break;
+    case 16:
+        KeySizeTag_ = 4;
+        break;
+    default:
+        KeySizeTag_ = 5;
+    }
+    /// if layout contains varsize keys or null byte of 8 cols is not enough
+    if (KeyColumnsFixedNum != KeyColumnsNum || KeyColumnsNum > 8) {
+        KeySizeTag_ = 5;
+    }
+
     BitmaskOffset = currOffset;
 
     BitmaskSize = (OrigColumns.size() + 7) / 8;
@@ -1048,7 +1075,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 std::min<size_t>((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
-            const auto simple_mask_transpose = [&](const size_t until) {
+            const auto edge_mask_transpose = [&](const size_t until) {
                 for (; block_row_ind < until; ++block_row_ind) {
                     const auto shift = (start + block_row_ind) % 8;
 
@@ -1063,7 +1090,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 }
             };
 
-            simple_mask_transpose(first_full_byte);
+            edge_mask_transpose(first_full_byte);
             if (first_full_byte) {
                 advance_masks();
             }
@@ -1075,7 +1102,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 advance_masks();
             }
 
-            simple_mask_transpose(cur_block_size);
+            edge_mask_transpose(cur_block_size);
         }
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
@@ -1232,10 +1259,10 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                 std::min<size_t>((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
-            const auto simple_mask_transpose = [&](const size_t until) {
+            const auto edge_mask_transpose = [&](const size_t until) {
                 for (size_t col_ind = 0;
                      block_row_ind != until && col_ind != cols; ++col_ind) {
-                    auto col_bitmask =
+                    auto bitmask =
                         bitmasks[col_ind][0] & ~((0xFF << (block_row_ind & 7)) ^
                                                  (0xFF << (until & 7)));
 
@@ -1246,18 +1273,18 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                         const auto new_res = res + row_ind * TotalRowSize;
                         const auto res = new_res;
 
-                        col_bitmask |=
+                        bitmask |=
                             ((res[BitmaskOffset + cols_ind / 8] >> col_ind) &
                              1u)
                             << shift;
                     }
 
-                    bitmasks[col_ind][0] = col_bitmask;
+                    bitmasks[col_ind][0] = bitmask;
                 }
                 block_row_ind = until;
             };
 
-            simple_mask_transpose(first_full_byte);
+            edge_mask_transpose(first_full_byte);
             if (first_full_byte) {
                 advance_masks();
             }
@@ -1270,7 +1297,7 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                 advance_masks();
             }
 
-            simple_mask_transpose(cur_block_size);
+            edge_mask_transpose(cur_block_size);
         }
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
@@ -1324,16 +1351,16 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const {
-    if (bucketsLogNum == 0) {
-        auto& bres = reses[0];
-        const auto size = bres.size();
+    // if (bucketsLogNum == 0) {
+    //     auto& bres = reses[0];
+    //     const auto size = bres.size();
 
-        bres.resize(size + count * TotalRowSize);
-        auto* const res = bres.data() + size;
+    //     bres.resize(size + count * TotalRowSize);
+    //     auto* const res = bres.data() + size;
 
-        Pack(columns, isValidBitmask, res, overflows[0], start, count);
-        return;
-    }
+    //     Pack(columns, isValidBitmask, res, overflows[0], start, count);
+    //     return;
+    // }
 
     std::vector<ui8> resbuf(BlockRows_ * TotalRowSize);
     ui8 *const res = resbuf.data();
@@ -1426,7 +1453,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
                 std::min<size_t>((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
-            const auto simple_mask_transpose = [&](const size_t until) {
+            const auto edge_mask_transpose = [&](const size_t until) {
                 for (; block_row_ind < until; ++block_row_ind) {
                     const auto shift = (start + block_row_ind) % 8;
 
@@ -1441,7 +1468,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
                 }
             };
 
-            simple_mask_transpose(first_full_byte);
+            edge_mask_transpose(first_full_byte);
             if (first_full_byte) {
                 advance_masks();
             }
@@ -1453,7 +1480,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
                 advance_masks();
             }
 
-            simple_mask_transpose(cur_block_size);
+            edge_mask_transpose(cur_block_size);
         }
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
@@ -1485,7 +1512,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             WriteUnaligned<ui32>(res, hash);
 
             /// most-significant bits of hash
-            const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
+            const auto bucket = bucketsLogNum ? hash >> (sizeof(hash) * 8 - bucketsLogNum) : 0;
 
             auto& overflow = overflows[bucket];
 

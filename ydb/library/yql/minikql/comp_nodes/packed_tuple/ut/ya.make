@@ -28,6 +28,7 @@ PEERDIR(
 )
 
 CFLAGS(
+    -mavx2
     -mprfchw
 )
 

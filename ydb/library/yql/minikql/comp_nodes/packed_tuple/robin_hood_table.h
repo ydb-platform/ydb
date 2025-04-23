@@ -22,14 +22,14 @@ namespace NPackedTuple {
 struct TTupleEqual {
     bool operator()(const TTupleLayout *layout, const ui8 *lhsRow,
                     const ui8 *lhsOverflow, const ui8 *rhsRow,
-                    const ui8 *rhsOverflow) {
+                    const ui8 *rhsOverflow) const {
         return layout->KeysEqual(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
     }
 };
 
 struct TTupleHash {
     ui32 operator()(const TTupleLayout * /*layout*/, const ui8 *tuple,
-                    const ui8 * /*overflow*/) {
+                    const ui8 * /*overflow*/) const {
         return ((const ui32 *)tuple)[0];
     }
 };
@@ -131,7 +131,7 @@ class TRobinHoodHashBase {
     void operator=(const TRobinHoodHashBase &) = delete;
     void operator=(TRobinHoodHashBase &&) = delete;
 
-    Y_FORCE_INLINE const ui8 *NextMatch(TIterator &iter) const {
+    Y_FORCE_INLINE const ui8 *NextMatch(TIterator &iter, const ui8 * /*overflow*/) const {
         const ui8 *result = nullptr;
 
         if constexpr (ConsecutiveDuplicates) {
@@ -161,15 +161,16 @@ class TRobinHoodHashBase {
         return result;
     }
 
-    Y_FORCE_INLINE TIterator Find(const ui8 *const tuple, const ui8 *const overflow) {
+    Y_FORCE_INLINE TIterator Find(const ui8 *const tuple, const ui8 *const overflow) const {
         const ui32 hash = TupleHash_(Layout_, tuple, overflow);
         auto ptr = GetPtr(hash, Data_, CapacityShift_);
         return FindImpl(hash, ptr, tuple, overflow);
     }
 
     template <size_t Size>
-    Y_FORCE_INLINE std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &tuples,
-                                          const ui8 *const overflow) {
+    Y_FORCE_INLINE std::array<TIterator, Size>
+    FindBatch(const std::array<const ui8 *, Size> &tuples,
+              const ui8 *const overflow) const {
         if constexpr (Prefetch) {
             for (ui32 index = 0; index < Size && tuples[index]; ++index) {
                 const ui32 hash = TupleHash_(Layout_, tuples[index], overflow);
@@ -179,7 +180,6 @@ class TRobinHoodHashBase {
         }
 
         std::array<TIterator, Size> iters;
-
         for (ui32 index = 0; index < Size && tuples[index]; ++index) {
             iters[index] = Find(tuples[index], overflow);
         }
@@ -190,7 +190,7 @@ class TRobinHoodHashBase {
     Y_FORCE_INLINE void Apply(const ui8 *const tuple, const ui8 *const overflow,
                               auto &&onMatch) {
         auto iter = Find(tuple, overflow);
-        while (auto matched = NextMatch(iter)) {
+        while (auto matched = NextMatch(iter, overflow)) {
             onMatch(matched);
         }
     }
@@ -210,7 +210,7 @@ class TRobinHoodHashBase {
 
         auto duplicates = TVector<ui8, TAllocator>(Allocator_);
 
-        constexpr ui32 prefetchInAdvance = 32;
+        constexpr ui32 prefetchInAdvance = 16;
 
         if constexpr (Prefetch) {
             for (ui32 index = 0; index < std::min(prefetchInAdvance, nItems); ++index) {
@@ -308,7 +308,7 @@ class TRobinHoodHashBase {
     }
 
   private:
-    ui8 *GetPtr(const ui64 hash, ui8 *data, ui64 capacityShift) {
+    ui8 *GetPtr(const ui64 hash, ui8 *data, ui64 capacityShift) const {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485llu) >> capacityShift;
         ui8 *ptr = data + CellSize_ * bucket;
@@ -342,7 +342,7 @@ class TRobinHoodHashBase {
         std::memcpy(rhs, buf, CellSize_);
     }
 
-    Y_FORCE_INLINE TIterator FindImpl(ui32 hash, ui8* ptr, const ui8 *const tuple, const ui8 *const overflow) {
+    Y_FORCE_INLINE TIterator FindImpl(ui32 hash, ui8* ptr, const ui8 *const tuple, const ui8 *const overflow) const {
         TCellStatus currCellStatus;
         TIterator iter;
 
@@ -386,7 +386,7 @@ class TRobinHoodHashBase {
     Y_FORCE_INLINE bool
     OnEqual(ui32 hash, ui8 *ptr, const TVector<ui8, TAllocator> &duplicates,
             const ui8 *tuple, const ui8 *overflow, auto FInplaceCell,
-            auto FInplaceList, auto FOutplaceCell, auto FOutplaceList) {
+            auto FInplaceList, auto FOutplaceCell, auto FOutplaceList) const {
         static constexpr ui32 dupOffset = Offseted ? sizeof(ui32) : 0;
 
         auto &ptrPsl = GetPSL(ptr);

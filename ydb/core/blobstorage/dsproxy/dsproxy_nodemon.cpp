@@ -37,6 +37,8 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
             percentiles1);
     RangeResponseTime.Initialize(Group, "event", "range", "latency", percentiles1);
     PatchResponseTime.Initialize(Group, "event", "patch", "latency", percentiles4);
+    CheckIntegrityGetResponseTime.Initialize(Group, "event", "checkIntegrityGet", "latency",
+        percentiles1);
 
     IsCountersPresentedForIdx.fill(false);
     if (initForAllDeviceTypes) {
@@ -60,6 +62,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
         RestartIndexRestoreGet = group->GetCounter("EvIndexRestoreGet", true);
         RestartStatus = group->GetCounter("EvStatus", true);
         RestartAssimilate = group->GetCounter("EvAssimilate", true);
+        RestartCheckIntegrityGet = group->GetCounter("EvCheckIntegrityGet", true);
     }
 
     {

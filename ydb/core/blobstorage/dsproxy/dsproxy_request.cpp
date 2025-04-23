@@ -42,7 +42,28 @@ namespace NKikimr {
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
         EnableWilsonTracing(ev, Mon->GetSamplePPM);
-        if (ev->Get()->IsIndexOnly) {
+
+        if (ev->Get()->CheckIntegrity) {
+            Mon->EventCheckIntegrityGet->Inc();
+            PushRequest(CreateBlobStorageGroupCheckIntegrityGetRequest(
+                TBlobStorageGroupCheckIntegrityGetParameters{
+                    .Common = {
+                        .GroupInfo = Info,
+                        .GroupQueues = Sessions->GroupQueues,
+                        .Mon = Mon,
+                        .Source = ev->Sender,
+                        .Cookie = ev->Cookie,
+                        .Now = TActivationContext::Monotonic(),
+                        .StoragePoolCounters = StoragePoolCounters,
+                        .RestartCounter = ev->Get()->RestartCounter,
+                        .TraceId = std::move(ev->TraceId),
+                        .Event = ev->Get(),
+                        .ExecutionRelay = ev->Get()->ExecutionRelay,
+                    }
+                }),
+                ev->Get()->Deadline
+            );
+        } else if (ev->Get()->IsIndexOnly) {
             Mon->EventIndexRestoreGet->Inc();
             PushRequest(CreateBlobStorageGroupIndexRestoreGetRequest(
                 TBlobStorageGroupRestoreGetParameters{

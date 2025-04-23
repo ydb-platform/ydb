@@ -98,6 +98,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
 
     ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");
     ActiveIndexRestoreGet = ActiveRequestsGroup->GetCounter("ActiveIndexRestoreGet");
+    ActiveCheckIntegrityGet = ActiveRequestsGroup->GetCounter("ActiveCheckIntegrityGet");
     ActiveMultiCollect = ActiveRequestsGroup->GetCounter("ActiveMultiCollect");
 
     auto respStatGroup = NodeMon->Group->GetSubgroup("subsystem", "responseStatus");
@@ -141,6 +142,8 @@ void TBlobStorageGroupProxyMon::BecomeFull() {
                 Percentiles1);
         RangeResponseTime.Initialize(ResponseGroup, "event", "range", "Response in millisec", Percentiles1);
         PatchResponseTime.Initialize(ResponseGroup, "event", "patch", "Response in millisec", Percentiles1);
+        CheckIntegrityGetResponseTime.Initialize(ResponseGroup, "event", "checkIntegrityGet", "Response in millisec",
+                Percentiles1);
     }
     IsLimitedMon = false;
 }
@@ -201,6 +204,7 @@ void TBlobStorageGroupProxyMon::Update() {
         IndexRestoreGetResponseTime.Update();
         RangeResponseTime.Update();
         PatchResponseTime.Update();
+        CheckIntegrityGetResponseTime.Update();
     }
 
     BlockResponseTime.Update();
@@ -216,4 +220,3 @@ void TBlobStorageGroupProxyMon::ThroughputUpdate() {
 
 
 } // NKikimr
-

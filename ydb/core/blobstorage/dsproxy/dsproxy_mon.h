@@ -175,6 +175,7 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> CheckIntegrityGetResponseTime;
 
     // event counters
     TIntrusivePtr<::NMonitoring::TDynamicCounters> EventGroup;
@@ -224,6 +225,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrityGet;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
@@ -245,6 +247,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrityGet;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
@@ -376,9 +379,13 @@ public:
         NodeMon->CountPatchResponseTime(type, duration);
     }
 
+    void CountCheckIntegrityGetResponseTime(TDuration duration) {
+        CheckIntegrityGetResponseTime.Increment(duration.MilliSeconds());
+        NodeMon->CheckIntegrityGetResponseTime.Increment(duration.MilliSeconds());
+    }
+
     void Update();
     void ThroughputUpdate();
 };
 
 } // NKikimr
-

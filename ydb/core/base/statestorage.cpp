@@ -64,9 +64,12 @@ public:
     }
 };
 
-void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) const {
+void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
-    auto& ringGroup = RingGroups[0];
+
+    Y_ABORT_UNLESS(ringGroupIdx < RingGroups.size());
+    
+    auto& ringGroup = RingGroups[ringGroupIdx];
     const ui32 total = ringGroup.Rings.size();
 
     Y_ABORT_UNLESS(ringGroup.NToSelect <= total);
@@ -106,10 +109,11 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
 TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 // TODO: we really need this method in such way?
     TList<TActorId> replicas;
-
-    for (auto &ring : RingGroups[0].Rings) {
-        for (TActorId replica : ring.Replicas)
-            replicas.push_back(replica);
+    for(auto &ringGroup : RingGroups) {
+        for (auto &ring : ringGroup.Rings) {
+            for (TActorId replica : ring.Replicas)
+                replicas.push_back(replica);
+        }
     }
 
     return replicas;
@@ -127,13 +131,16 @@ ui32 TStateStorageInfo::ContentHash() const {
     ui64 hash = RelaxedLoad<ui64>(&Hash);
     if (Y_UNLIKELY(hash == Max<ui64>())) {
         hash = 37;
-        for (const TRing &ring : RingGroups[0].Rings) {
-            hash = Hash64to32((hash << 32) | ring.ContentHash());
+        for(auto &ringGroup : RingGroups) {
+            for (const TRing &ring : ringGroup.Rings) {
+                hash = Hash64to32((hash << 32) | ring.ContentHash());
+            }
         }
         RelaxedStore<ui64>(&Hash, static_cast<ui32>(hash));
     }
     return static_cast<ui32>(hash);
 }
+
 TString TStateStorageInfo::TRingGroup::ToString() const {
     TStringStream s;
     s << "{";

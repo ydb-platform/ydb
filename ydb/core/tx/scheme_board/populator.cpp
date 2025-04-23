@@ -483,10 +483,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         TStateStorageInfo::TSelection selection;
 
-        GroupInfo->SelectReplicas(pathHash, &selection);
+        GroupInfo->SelectReplicas(pathHash, &selection, 0);
         SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-        GroupInfo->SelectReplicas(idHash, &selection);
+        GroupInfo->SelectReplicas(idHash, &selection, 0);
         for (const TActorId& replica : selection) {
             if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
                 SelectionReplicaCache.emplace_back(replica);

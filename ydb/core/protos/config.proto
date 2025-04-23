@@ -195,7 +195,7 @@ message TDomainsConfig {
 
         message TRingGroup {
             optional bool WriteOnly = 1 [default = false];
-            required TRing Ring = 2; 
+            optional TRing Ring = 2; 
         }
 
         optional uint32 SSId = 1 [default = 1];

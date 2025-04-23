@@ -28,7 +28,6 @@ const static ui64 StateStorageRequestTimeout = 30 * 1000 * 1000;
 
 class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
-    TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
 
     const bool UseInterconnectSubscribes;
     ui64 TabletID;
@@ -60,7 +59,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
-        info->SelectReplicas(TabletID, selection.Get());
+        info->SelectReplicas(TabletID, selection.Get(), 0);
         Replicas = selection->Sz;
         ReplicaSelection = std::move(selection);
         Signature.Reset(new ui64[Replicas]);
@@ -521,10 +520,9 @@ public:
         return NKikimrServices::TActivity::SS_PROXY_REQUEST;
     }
 
-    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &flowControlledInfo)
+    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info)
         : TActor(&TThis::StateInit)
         , Info(info)
-        , FlowControlledInfo(flowControlledInfo)
         , UseInterconnectSubscribes(true)
         , TabletID(0)
         , Cookie(0)
@@ -748,8 +746,6 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     TIntrusivePtr<TStateStorageInfo> BoardInfo;
     TIntrusivePtr<TStateStorageInfo> SchemeBoardInfo;
 
-    TIntrusivePtr<TStateStorageInfo> FlowControlledInfo;
-
     THashMap<std::tuple<TActorId, ui64>, std::tuple<ui64, TIntrusivePtr<TStateStorageInfo> TThis::*>> Subscriptions;
     THashSet<std::tuple<TActorId, ui64>> SchemeBoardSubscriptions;
 
@@ -768,9 +764,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {
         const auto *msg = ev->Get();
-        THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
-        Info->SelectReplicas(msg->TabletID, selection.Get());
-        SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader);
+        for(size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
+            THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
+            Info->SelectReplicas(msg->TabletID, selection.Get(), ringGroupIdx);
+            SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader);
+        }
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicas::TPtr &ev) {
@@ -861,11 +859,12 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
-        THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
-        info->SelectReplicas(tabletId, selection.Get());
-
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
-        reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
+        for(size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
+            THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
+            info->SelectReplicas(tabletId, selection.Get(), ringGroupIdx);
+            reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
+        }
         reply->ConfigContentHash = info->ContentHash();
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);
     }
@@ -900,7 +899,7 @@ public:
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
-            TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
+            TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info)));
             break;
         }
     }

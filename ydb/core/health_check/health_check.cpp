@@ -2148,36 +2148,52 @@ public:
         const auto& pDisk = itPDisk->second->GetInfo();
 
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDisk.GetPath());
-        const auto& statusString = pDisk.GetStatusV2();
-        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
-        auto status = descriptor->FindValueByName(statusString);
-        if (!status) {
+        const auto& stateString = pDisk.GetState();
+        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        auto state = descriptor->FindValueByName(stateString);
+        if (!state) {;
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "Unknown PDisk state: " << statusString,
+                                 TStringBuilder() << "Unknown PDisk state: " << stateString,
                                  ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
             return;
         }
-        switch (status->number()) {
-            case NKikimrBlobStorage::ACTIVE:
-            case NKikimrBlobStorage::INACTIVE: {
+        switch (state->number()) {
+            case NKikimrBlobStorage::TPDiskState::Normal:
+            case NKikimrBlobStorage::TPDiskState::Stopped:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
                 break;
-            }
-            case NKikimrBlobStorage::FAULTY: {
+            case NKikimrBlobStorage::TPDiskState::Initial:
+            case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
-                                     TStringBuilder() << "PDisk state is " << statusString,
-                                     ETags::PDiskState);
+                                        TStringBuilder() << "PDisk state is " << stateString,
+                                        ETags::PDiskState);
                 break;
-            }
-            case NKikimrBlobStorage::BROKEN:
-            case NKikimrBlobStorage::TO_BE_REMOVED: {
+            case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
+            case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+            case NKikimrBlobStorage::TPDiskState::OpenFileError:
+            case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
+            case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+            case NKikimrBlobStorage::TPDiskState::Missing:
+            case NKikimrBlobStorage::TPDiskState::Timeout:
+            case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
+            case NKikimrBlobStorage::TPDiskState::Unknown:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                     TStringBuilder() << "PDisk state is " << statusString,
-                                     ETags::PDiskState);
+                                        TStringBuilder() << "PDisk state is " << stateString,
+                                        ETags::PDiskState);
                 break;
-            }
+            case NKikimrBlobStorage::TPDiskState::Reserved15:
+            case NKikimrBlobStorage::TPDiskState::Reserved16:
+            case NKikimrBlobStorage::TPDiskState::Reserved17:
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
+                break;
         }
 
         if (pDisk.GetAvailableSize() != 0 && pDisk.GetTotalSize() != 0) { // do not replace it with Has()

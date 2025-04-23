@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     struct TTestVSlotInfo {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
         ui32 Generation = DEFAULT_GROUP_GENERATION;
-        NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
+        NKikimrBlobStorage::TPDiskState::E PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
                        ui32 generation = DEFAULT_GROUP_GENERATION)
@@ -80,9 +80,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         {
         }
 
-        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::EDriveStatus pDiskStatus = NKikimrBlobStorage::ACTIVE)
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TPDiskState::E pDiskState = NKikimrBlobStorage::TPDiskState::Normal)
             : Status(status)
-            , PDiskStatus(pDiskStatus)
+            , PDiskState(pDiskState)
         {
         }
     };
@@ -235,15 +235,24 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         record.clear_entries();
         auto pdiskId = PDISK_START_ID;
         const size_t totalSize = 3'200'000'000'000ull;
-        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
         for (const auto& vslot : vslots) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_pdiskid(pdiskId);
             entry->mutable_info()->set_totalsize(totalSize);
             entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
-            entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(vslot.PDiskStatus)->name());
+            entry->mutable_info()->set_state(descriptor->FindValueByNumber(vslot.PDiskState)->name());
             ++pdiskId;
+        }
+    }
+
+    void SetPDisksStateNormalToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        const TString state = descriptor->FindValueByNumber(NKikimrBlobStorage::TPDiskState::Normal)->name();
+        for (auto& entry: *record.mutable_entries()) {
+            entry.mutable_info()->set_state(state);
         }
     }
 
@@ -727,8 +736,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
     }
 
-    Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
+    Y_UNIT_TEST(OnlyDiskIssueOnInitialPDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::Initial}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
@@ -937,6 +946,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupsToSysViewResponse(x);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
+                    break;
+                }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
@@ -1040,6 +1054,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1146,6 +1165,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -1349,6 +1373,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -1440,6 +1469,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1551,6 +1585,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1695,6 +1734,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {

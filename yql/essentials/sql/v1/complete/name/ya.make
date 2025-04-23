@@ -8,5 +8,6 @@ END()
 
 RECURSE(
     fallback
+    object
     static
 )

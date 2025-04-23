@@ -107,6 +107,16 @@ public:
         }
     }
 
+    virtual std::variant<TError, TStatistics> Map(
+        const TMapTaskParams& /* params */,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& /* clusterConnections */,
+        std::shared_ptr<std::atomic<bool>> /* cancelFlag */
+    ) override {
+        Cerr << "MAP NOT IMPLEMENTED" << Endl;
+        YQL_CLOG(ERROR, FastMapReduce) << "MAP NOT IMPLEMENTED";
+        ythrow yexception() << "Not implemented";
+    }
+
 private:
     NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) const {
         auto ytTable = std::get_if<TYtTableRef>(&tableRef);
@@ -154,8 +164,10 @@ TJobResult RunJob(
             return job->Download(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TMergeTaskParams>) {
             return job->Merge(taskParams, task->ClusterConnections, cancelFlag);
+        } else if constexpr (std::is_same_v<T, TMapTaskParams>) {
+            return job->Map(taskParams, task->ClusterConnections, cancelFlag);;
         } else {
-            throw std::runtime_error{"Unsupported task type"};
+            ythrow yexception() << "Unsupported task type";
         }
     };
 

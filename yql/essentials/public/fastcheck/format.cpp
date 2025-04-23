@@ -83,6 +83,7 @@ private:
         settings.File = request.File;
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
+        settings.LangVer = request.LangVer;
 
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();

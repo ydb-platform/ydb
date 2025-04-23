@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_pdisk_config_pb2 as kikimr_pdisk_config
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 
@@ -49,6 +50,9 @@ def do(args):
         'FailDomainIdx',
         'VDiskIdx',
         'VDiskKind',
+        'Group.SlotSizeUnits',
+        'PDisk.SlotSizeUnits',
+        'VDisk.SlotSizeUnits',
         'Usage',
         'UsedSize',
         'AvailableSize',
@@ -65,6 +69,7 @@ def do(args):
         'NodeId:PDiskId',
         'VSlotId',
         'VSlotStatus',
+        'VDisk.SlotSizeUnits'
         'IsDonor',
         'ReadOnly',
     ]
@@ -109,6 +114,9 @@ def do(args):
             row['FailDomainIdx'] = vslot.FailDomainIdx
             row['VDiskIdx'] = vslot.VDiskIdx
             row['VDiskKind'] = vslot.VDiskKind
+            row['Group.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(group_map[group].SlotSizeUnits.Value)
+            row['PDisk.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(pdisk.PDiskConfig.SlotSizeUnits)
+            row['VDisk.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(vslot.SlotSizeUnits.Value)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']

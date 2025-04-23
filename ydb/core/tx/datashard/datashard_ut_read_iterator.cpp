@@ -4748,11 +4748,19 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         // Slee for some time, this will make sure the lease expires and stops getting renewed
         runtime.SimulateSleep(TDuration::Seconds(10));
 
-        // Start blocking new commits for the tablet
+        // Start blocking new commits and leases for the tablet
         TBlockEvents<TEvBlobStorage::TEvPut> blockCommits(runtime,
             [tabletId = table1.TabletId](auto& ev) {
                 if (ev->Get()->Id.TabletID() == tabletId) {
                     Cerr << "... blocking blob " << ev->Get()->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+        TBlockEvents<TEvBlobStorage::TEvGetBlock> blockLeases(runtime,
+            [tabletId = table1.TabletId](auto& ev) {
+                if (ev->Get()->TabletId == tabletId) {
+                    Cerr << "... blocking getblock " << ev->Get()->TabletId << Endl;
                     return true;
                 }
                 return false;
@@ -4766,9 +4774,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
 
         // Sleep for some time, giving the tablet a chance to produce out-of-order results
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C((blockCommits.size() + blockLeases.size()) > 0, "no commits or leases have been blocked");
 
-        // Stop blocking commits
+        // Stop blocking commits and leases
         blockCommits.Stop().Unblock();
+        blockLeases.Stop().Unblock();
 
         // The first result we receive should be with the first row
         auto readResult2 = helper.WaitReadResult();

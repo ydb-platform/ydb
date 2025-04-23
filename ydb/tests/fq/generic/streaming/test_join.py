@@ -530,7 +530,7 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
                 on(AsList(e.Data) = u.data)
             ;
 
@@ -570,7 +570,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
                 on(e.user = u.id)
             ;
 
@@ -626,7 +626,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
                 on(e.user = u.id)
             ;
 
@@ -678,7 +678,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.db with Listify as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
@@ -772,7 +772,7 @@ class TestJoinStreaming(TestYdsBase):
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG or 1 else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
@@ -810,6 +810,15 @@ class TestJoinStreaming(TestYdsBase):
         query_id = fq_client.create_query(
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
         ).result.query_id
+
+        if not streamlookup and " with Listify " in sql:
+            fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+            describe_result = fq_client.describe_query(query_id).result
+            # logging.debug("Describe result: {}".format(describe_result))
+            describe_string = "{}".format(describe_result)
+            assert "WITH Listify is only supported with streamlookup JOIN" in describe_string
+            return
+
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 

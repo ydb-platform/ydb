@@ -363,7 +363,6 @@ namespace NYql {
 
             if (read.FreeArgs().Count() > 4) {
                 for (auto& child: read.FreeArgs().Get(4).Ref().Children()) {
-                    Cerr << "Child: " << child->Dump() << Endl;
                     if (child.Get()->ChildrenSize() == 1 && child.Get()->Head().IsAtom("listify")) {
                        builder.Listify(child.Get()->HeadPtr());
                     }
@@ -520,9 +519,6 @@ namespace NYql {
 
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
                                    const TGenericClusterConfig& clusterConfig) {
-            for (auto &[k, v]: clusterConfig.GetDataSourceOptions()) {
-                Cerr << "Option " << k << " = |" << v << "|\n";
-            }
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
                 case NYql::EGenericDataSourceKind::CLICKHOUSE:

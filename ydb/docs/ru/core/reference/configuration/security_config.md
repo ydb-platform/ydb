@@ -151,7 +151,7 @@ default_users:
 
 {% note warning %}
 
-Эти группы создаются в [корневой базе данных](../../concepts/glossary.md#root-database) и применяются для всего кластера {{ ydb-short-name }}.
+Эти группы создаются для всего кластера {{ ydb-short-name }}.
 
 {% endnote %}
 

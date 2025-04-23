@@ -20,10 +20,10 @@
 
 Пользователи в {{ ydb-short-name }} могут создаваться в разных источниках:
 
-- внутренние пользователи в базах данных {{ ydb-short-name }};
+- локальные пользователи в базах данных {{ ydb-short-name }};
 - внешние пользователи из сторонних служб доступа к каталогам.
 
-Для создания, изменения и удаления [внутренних пользователей](../concepts/glossary.md#access-user) {{ ydb-short-name }} есть команды:
+Для создания, изменения и удаления [локальных пользователей](../concepts/glossary.md#access-user) {{ ydb-short-name }} есть команды:
 
 * [{#T}](../yql/reference/syntax/create-user.md)
 * [{#T}](../yql/reference/syntax/alter-user.md)
@@ -48,8 +48,8 @@
 
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются [SID](../concepts/glossary.md#access-sid) с использованием суффикса.
 
-Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) имена пользователей будут `user1@ldap` и `user2@ldap`.<br/>
-Если имя пользователя указано без суффикса, то имеется в виду внутренний пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
+Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) SID'ы пользователей будут `user1@ldap` и `user2@ldap`.<br/>
+У локальных пользователей пустой auth-domain. Если SID пользователя не содержит суффикса, то имеется в виду локальный пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
 
 ## Группа {#group}
 
@@ -72,7 +72,7 @@
 
 ## Права доступа {#right}
 
-[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 
 У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 

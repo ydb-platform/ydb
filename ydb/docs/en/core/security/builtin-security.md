@@ -1,12 +1,19 @@
-# Built-in security configuration
+# Initial security configuration
 
-Built-in security is configured automatically when the {{ ydb-short-name }} cluster starts for the first time, if the [`security_config`](../reference/configuration/index.md#security) section in the cluster configuration file does not define the `default_users`, `default_groups`, or `default_access` parameters.
+Initial security is configured automatically when the {{ ydb-short-name }} cluster starts for the first time.
 
-Built-in security configuration can be disabled by setting the [`domains_config.disable_builtin_security`](../reference/configuration/index.md#domains-config) parameter to `true`.
+During this process {{ ydb-short-name }} adds a [superuser](#superuser) and a set of [roles](#roles) for user access management.
 
-Built-in security configuration adds a superuser and a set of roles for user access management.
+{% note info %}
 
-## Roles
+For information about overriding and skipping initial security configuration, see the following sections:
+
+- [{#T}](#skip-initial-security)
+- [{#T}](#override-initial-security)
+
+{% endnote %}
+
+## Roles {#roles}
 
 | Role              | Description |
 |------------------|-------------|
@@ -19,7 +26,7 @@ Built-in security configuration adds a superuser and a set of roles for user acc
 | `METADATA-READERS` | Provides access rights for scheme objects. No data access. |
 | `USERS`         | Provides access rights for databases. This is a common group for all users. |
 
-## Groups
+## Groups {#groups}
 
 Roles in {{ ydb-short-name }} are implemented as a hierarchy of [user](../concepts/glossary.md#access-user) [groups](./authorization.md#group) and a set of [access rights](./authorization.md#right) for these groups. Access rights for the groups are granted on the cluster scheme root.
 
@@ -40,14 +47,24 @@ Users in the `DDL-ADMINS` group are allowed to:
 
 Users in the `ADMINS` group are allowed to perform all operations on the scheme and data.
 
-## Superuser
+## Superuser {#superuser}
 
 A superuser belongs to the `ADMINS` and `USERS` groups and has full access rights to the cluster scheme.
 
 By default, a superuser is the `root` user with an empty password.
 
-## A group for all users
+## A group for all users {#all-users-group}
 
-The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all internal [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
+The `USERS` group is a common [group](../concepts/glossary.md#access-group) for all local [users](../concepts/glossary.md#access-user). When you [add new users](./authorization.md#user), they are automatically added to the `USERS` group.
 
 For more information about managing groups and users, see [{#T}](../security/authorization.md).
+
+## Overriding initial security configuration {#override-initial-security}
+
+You can override the initial security configuration with a custom set of users, groups, and access rights.
+
+To specify custom users, groups, and access rights to be created during the initial security configuration, define the `default_users`, `default_groups`, or `default_access` parameters in the [`security_config`](../reference/configuration/security_config.md#security-bootstrap) section in the cluster configuration file.
+
+## Skipping initial security configuration {#skip-initial-security}
+
+You can skip initial security configuration by setting the [`security_config.disable_builtin_security`](../reference/configuration/index.md#domains-config) parameter to `true`.

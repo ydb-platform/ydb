@@ -2,39 +2,35 @@
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-## Configuring internal {{ ydb-short-name }} user authentication {#internal-auth-config}
+## Configuring local {{ ydb-short-name }} user authentication {#local-auth-config}
 
-For more information about the authentication of [internal {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
+For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
 || use_login_provider
-| Indicates whether to allow the authentication of internal users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
+| Indicates whether to allow the authentication of local users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
 
 Default value: `true`
     ||
 || enable_login_authentication
-| Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating authentication tokens after an internal user enters a username and password.
+| Indicates whether to allow adding local users to {{ ydb-short-name }} databases and generating authentication tokens after an local user enters a username and password.
 
 Default value: `true`
     ||
 || domain_login_only
-| Determines the scope of internal user access rights in a {{ ydb-short-name }} cluster.
+| Determines the scope of local user access rights in a {{ ydb-short-name }} cluster.
 
 Valid values:
 
-- `true` — internal users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [tenant databases](../../concepts/glossary.md#tenant-database).
+- `true` — local users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [databases](../../concepts/glossary.md#database).
 
-    In this scenario, users are added only to the [root database](../../concepts/glossary.md#root-database).
-
-- `false` — internal users can exist either in a {{ ydb-short-name }} cluster or in tenant databases. The scope of access rights for internal users in tenant databases is limited to the database, in which they are created.
-
-    In this scenario, users are added either to the root database or to tenant databases.
+- `false` — local users can exist either at the cluster or database level. The scope of access rights for local users created at the database level is limited to the database, in which they are created.
 
 Default value: `true`
     ||
 || login_token_expire_time
-| Specifies the expiration time of the authentication token created when an internal user logs in to {{ ydb-short-name }}.
+| Specifies the expiration time of the authentication token created when an local user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
     ||
@@ -75,7 +71,7 @@ Default value: `1h`
 
 ### Configuring password complexity requirements {#password-complexity}
 
-{{ ydb-short-name }} allows internal users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [internal users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows local users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [local users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
 
 Example of the `password_complexity` section:
 
@@ -288,9 +284,11 @@ Default value: `false`
     ||
 |#
 
-## Configuring user token life cycle
+## Configuring caching for authentication results
 
-Parameters for configuring the [user token](../../concepts/glossary.md#user-token) life cycle are applicable to all authentication methods.
+During the authentication process, a user session receives an authentication token, which is transmitted along with each request to the cluster {{ydb-short-name }}. Since {{ydb-short-name }} is a distributed system, user requests will eventually be processed on one or more {{ydb-short-name }} nodes. After receiving a request from the user, a {{ydb-short-name }} node verifies the authentication token. If successful, the node generates a **user token**, which is valid only inside the current node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same node do not require verification of the authentication token.
+
+To configure the life cycle and other important aspects of managing user tokens, define the following parameters:
 
 #|
 || refresh_period

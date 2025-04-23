@@ -16,13 +16,19 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
 - **Access objects** in {{ ydb-short-name }} are scheme objects (tables, views, etc) for which access rights are configured.
 
-- **Access rights** and **access levels** in {{ ydb-short-name }} are used to determine the list of permitted operations for a given user or group:
+- **Access rights** in {{ ydb-short-name }} are used to determine the list of permitted operations with access objects for a given user or group.
 
-    - Access rights represent permission for an access subject to perform a specific set of operations (create, drop, select, update, etc) in a cluster or database on a specific access object. For more information about access rights, see [{#T}](./authorization.md#right).
+    Access rights represent permission for an access subject to perform a specific set of operations (create, drop, select, update, etc) in a cluster or database on a specific access object.
 
-    - {{ ydb-short-name }} uses [access levels](../concepts/glossary.md#access-level) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object). For more information about access levels, see [{#T}](../reference/configuration/security_config.md#security-access-levels).
+    Access rights can be granted to a user or a group. When a user is added to a group, the user gets the access rights that were granted to the group. When a user is removed from a group, the user loses the access rights of the group.
 
-    Access rights and access levels can be granted to a user or a group. When a user is added to a group, the user gets the access rights and access levels that were granted to the group. When a user is removed from a group, the user loses the access rights and access levels of the group.
+    For more information about access rights, see [{#T}](./authorization.md#right).
+
+- **Access levels** in {{ ydb-short-name }} are used to determine the list of additional cluster management operations, such as monitoring, starting and stopping nodes, changing configuration, etc, permitted for a given user or group.
+
+    Like access rights, access levels can be granted to a user or a group.
+
+    For more information about access levels, see [{#T}](../reference/configuration/security_config.md#security-access-levels).
 
 - **[Authentication](./authentication.md) and [authorization](./authorization.md)**. The access control system in {{ ydb-short-name }} provides data protection in a {{ ydb-short-name }} cluster. Due to the access system, only authorized [access subjects](../concepts/glossary.md#access-subject) (users and groups) can work with data. Access to data can be restricted.
 
@@ -30,7 +36,7 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
         Regardless of an authentication mode, after passing [authentication](./authentication.md), a user gets a [SID](./authorization.md#sid) and an authentication token.
 
-        - {{ ydb-short-name }} cluster uses a [SID](./authorization.md#sid) for user identification. For example, a SID for an internal user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md#auth) describing the security configuration.
+        - {{ ydb-short-name }} cluster uses a [SID](./authorization.md#sid) for user identification. For example, a SID for a local user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md#auth) describing the security configuration.
 
         - The authentication token is used by {{ydb-short-name }} nodes to authorize user access before processing user requests.
 

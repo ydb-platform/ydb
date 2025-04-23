@@ -4,7 +4,7 @@ This section describes the {{ ydb-short-name }} cluster scheme entities.
 
 ## {{ ydb-short-name }} cluster scheme {#cluster-scheme}
 
-{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a **cluster scheme root**. [Databases](../../concepts/glossary.md#database) are children elements of the cluster scheme root. It is also possible to create other [scheme objects](../../concepts/glossary.md#scheme-object) in the cluster scheme root. These objects exist at the cluster level and do not belong to tenant databases. Scheme objects inside a database can use nested directories to form a hierarchy.
+{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The top-level element of the namespace is the **cluster scheme root** that contains [databases](../../concepts/glossary.md#database) as its children. Scheme objects inside a database can use nested directories to form a hierarchy.
 
 ![cluster scheme diagram](_assets/cluster-scheme.png =500x)
 

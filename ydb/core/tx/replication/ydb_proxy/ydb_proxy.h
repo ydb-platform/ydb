@@ -54,6 +54,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
         EvTopicEndPartition,
+        EvStartReadingSession,
 
         EvEnd,
     };
@@ -204,6 +205,17 @@ struct TEvYdbProxy {
     };
 
     struct TEvTopicEndPartition: public TGenericResponse<TEvTopicEndPartition, EvTopicEndPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
+    };
+
+    struct TStartReadingSessionResult {
+        TStartReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
+            : ReadSessionId(event.GetPartitionSession()->GetReadSessionId()) {}
+
+        TString ReadSessionId;
+    };
+
+    struct TEvStartReadingSession: public TGenericResponse<TEvStartReadingSession, EvStartReadingSession, TStartReadingSessionResult> {
         using TBase::TBase;
     };
 

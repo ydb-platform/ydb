@@ -75,6 +75,36 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }
 
+    void Handle(TEvYdbProxy::TEvStartReadingSession::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        ReadSessionId = ev->Get()->Result.ReadSessionId;
+    }
+
+    void Handle(TEvWorker::TEvCommit::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        Y_ABORT_UNLESS(YdbProxy);
+        Y_ABORT_UNLESS(ReadSessionId);
+
+        auto settings = NYdb::NTopic::TCommitOffsetSettings()
+            .ReadSessionId(ReadSessionId);
+
+        TString topicName{Settings.GetBase().Topics_.at(0).Path_};
+        ui64 partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
+        TString consumerName{Settings.GetBase().ConsumerName_};
+
+        Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(topicName, partitionId, consumerName, ev->Get()->Offset, std::move(settings)));
+    }
+
+    void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
+        if (!ev->Get()->Result.IsSuccess()) {
+            LOG_W("Handle " << ev->Get()->ToString());
+        } else {
+            LOG_D("Handle " << ev->Get()->ToString());
+        }
+    }
+
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -125,6 +155,9 @@ public:
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvTopicEndPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
+            hFunc(TEvYdbProxy::TEvStartReadingSession, Handle);
+            hFunc(TEvWorker::TEvCommit, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -137,6 +170,7 @@ private:
     TActorId Worker;
     TActorId ReadSession;
 
+    TString ReadSessionId;
 }; // TRemoteTopicReader
 
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {

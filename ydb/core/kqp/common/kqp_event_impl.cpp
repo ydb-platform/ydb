@@ -100,7 +100,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
         Record.MutableRequest()->SetSyntax(QuerySettings.Syntax);
-        Record.MutableRequest()->SetResultType(QuerySettings.ResultType);
+        Record.MutableRequest()->SetResultSetType(QuerySettings.ResultSetType);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());

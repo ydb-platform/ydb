@@ -260,7 +260,7 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
-        Ydb::Query::ResultType resultType = req->result_type();
+        Ydb::Query::ResultSetType resultSetType = req->result_set_type();
 
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {
@@ -285,7 +285,7 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetResultType(resultType)
+            .SetResultSetType(resultSetType)
             .SetSupportStreamTrailingResult(true)
             .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 

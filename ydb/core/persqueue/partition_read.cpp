@@ -592,9 +592,9 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
-    TReadAnswer answer(res->FormAnswer(
-            ctx, StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
-    ));
+    TReadAnswer answer = res->FormAnswer(
+            ctx, nullptr, StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
+    );
     ctx.Send(Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);

@@ -31,7 +31,7 @@ struct TRequestSettings {
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
         , ClientTimeout_(other.ClientTimeout_)
-        , TraceParent_(other.TraceParent)
+        , TraceParent_(other.TraceParent_)
     {}
 };
 

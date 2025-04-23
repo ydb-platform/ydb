@@ -16,7 +16,7 @@ jobs:
     permissions:
       issues: write
       pull-requests: read
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
     env:
       GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
     steps:

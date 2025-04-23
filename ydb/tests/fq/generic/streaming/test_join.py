@@ -772,7 +772,7 @@ class TestJoinStreaming(TestYdsBase):
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG or 1 else [True])
+    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,

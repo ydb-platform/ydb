@@ -48,7 +48,9 @@ ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& n
     }
     rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-    if (implTable.IsLocked()) { // some impl tables may be not locked
+    if (implTable.IsLocked()) {
+        // because some impl tables may be not locked, do not pass lock guard for them
+        // otherwise `CheckLocks` check would fail
         *transaction.MutableLockGuard() = lockGuard;
     }
     auto operation = transaction.MutableDrop();

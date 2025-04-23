@@ -46,6 +46,8 @@ class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
         TValueDesc(TValueDesc&&) = default;
     };
 
+    static constexpr ui64 REESTIMATE_ROW_SIZE_PERIOD = 1024;
+
 public:
     TDqOutputStats PushStats;
     TDqAsyncOutputBufferStats PopStats;
@@ -130,7 +132,7 @@ public:
             if (std::holds_alternative<NUdf::TUnboxedValue>(value)) {
                 batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(value)));
             } else if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(value)) {
-                auto multiValue = std::move(std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value));
+                auto& multiValue = std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value);
                 batch.PushRow(multiValue.data(), multiValue.size());
             } else {
                 YQL_ENSURE(false, "Unsupported output value");
@@ -206,7 +208,7 @@ public:
 private:
     template <typename... TArgs>
     void DoPush(TArgs&&... args) {
-        if (ValuesPushed++ % 1000 == 0) {
+        if (ValuesPushed++ % REESTIMATE_ROW_SIZE_PERIOD == 0) {
             ReestimateRowBytes(args...);
         }
 

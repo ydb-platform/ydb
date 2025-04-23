@@ -7278,6 +7278,7 @@ void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext
     }
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");
     LoadTableProfiles(nullptr, ctx);
+    ActivateAfterConsoleConfigs(ctx);
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx) {

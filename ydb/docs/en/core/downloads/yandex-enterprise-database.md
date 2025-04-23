@@ -56,16 +56,3 @@ v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [See list]
 **v23.3**
 v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../../../changelog-server-23.md#23-3-17)
 v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [See list](../../../changelog-server.md#23-3)
-
-
-## Scripts for Sserver-Side Installation using Ansible {#ydb-ansible}
-
-A set of scripts for installing and maintaining the server side of Yandex Enterprise Database using [Ansible](https://docs.ansible.com/) is available for download via the links below.
-
-| Version | Release date | Download | Checksums |
-| ------ | ------------ | ------- | ----------------- |
-| v0.14   | 30.11.2024   | [ydb-ansible-0.14.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.14.zip) | [ydb-ansible-0.14.txt](https://binaries.ясубд.рф/ansible/ydb-ansible-0.14.txt) |
-| v0.10   | 01.08.2024   | [ydb-ansible-0.10.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.10.zip) | [ydb-ansible-0.10.txt](https://binaries.ясубд.рф/ansible/ydb-ansible-0.10.txt) |
-| v0.9   | 20.07.2024   | [ydb-ansible-0.9.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.9.zip) | [ydb-ansible-0.9.txt](https://binaries.ясубд.рф/ansible/ydb-ansible-0.9.txt) |
-| v0.8   | 10.07.2024   | [ydb-ansible-0.8.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.8.zip) | [ydb-ansible-0.7.txt](https://binaries.ясубд.рф/ansible/ydb-ansible-0.8.txt) |
-| v0.7   | 03.05.2024   | [ydb-ansible-0.7.zip](https://binaries.ясубд.рф/ansible/ydb-ansible-0.7.zip) | [ydb-ansible-0.7.txt](https://binaries.ясубд.рф/ansible/ydb-ansible-0.7.txt) |

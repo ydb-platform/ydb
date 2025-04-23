@@ -15,13 +15,50 @@ namespace {
      * We maintain a white list of callables that we consider part of constant expressions
      * All other callables will not be evaluated
      */
-    THashSet<TString> constantFoldingWhiteList = {
+    THashSet<TString> ConstantFoldingWhiteList = {
         "Concat", "Just", "Optional", "SafeCast", "AsList",
         "+", "-", "*", "/", "%"};
 
-    THashSet<TString> pgConstantFoldingWhiteList = {
+    THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
+    TVector<TString> UdfBlackList = {
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
+
+    bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams = false) {
+        if (!TCoApply::Match(input.Get())) {
+            return false;
+        }
+
+        if (input->ChildrenSize()!=2) {
+            return false;
+        }
+        if (input->Child(0)->IsCallable("Udf")) {
+            auto udf = TCoUdf(input->Child(0));
+            auto udfName = udf.MethodName().StringValue();
+
+            for (auto blck : UdfBlackList) {
+                if (udfName.find(blck) != TString::npos) {
+                    return false;
+                }
+            }
+
+            if (withParams) {
+                return IsConstantExprWithParams(input->Child(1));
+            }
+            else {
+                return IsConstantExpr(input->Child(1));
+            }
+        }
+        return false;
+    }
 
     TString RemoveAliases(TString attributeName) {
         if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
@@ -167,7 +204,7 @@ bool IsConstantExprPg(const TExprNode::TPtr& input) {
         return true;
     }
 
-    if (input->IsCallable(pgConstantFoldingWhiteList) || input->IsList()) {
+    if (input->IsCallable(PgConstantFoldingWhiteList) || input->IsList()) {
         for (size_t i = 0; i < input->ChildrenSize(); i++) {
             auto callableInput = input->Child(i);
             if (callableInput->IsLambda() && !IsConstantExprPg(callableInput->Child(1))) {
@@ -190,7 +227,7 @@ bool IsConstantExprPg(const TExprNode::TPtr& input) {
  *   - If its a callable in the while list and all children are constant expressions, then its a constant expression
  *   - If one of the child is a type expression, it also passes the check
  */
-bool IsConstantExpr(const TExprNode::TPtr& input) {
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
     if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
@@ -203,13 +240,17 @@ bool IsConstantExpr(const TExprNode::TPtr& input) {
         return true;
     }
 
-    else if (input->IsCallable(constantFoldingWhiteList)) {
+    else if (input->IsCallable(ConstantFoldingWhiteList)) {
         for (size_t i = 0; i < input->ChildrenSize(); i++) {
             auto callableInput = input->Child(i);
             if (callableInput->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
                 return false;
             }
         }
+        return true;
+    }
+
+    else if (foldUdfs && TCoApply::Match(input.Get()) && IsConstantUdf(input)) {
         return true;
     }
 
@@ -233,13 +274,17 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
         return true;
     }
 
-    else if (input->IsCallable(constantFoldingWhiteList)) {
+    else if (input->IsCallable(ConstantFoldingWhiteList)) {
         for (size_t i = 0; i < input->ChildrenSize(); i++) {
             auto callableInput = input->Child(i);
             if (callableInput->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type && !IsConstantExprWithParams(callableInput)) {
                 return false;
             }
         }
+        return true;
+    }
+
+    else if (TCoApply::Match(input.Get()) && IsConstantUdf(input, true)) {
         return true;
     }
 

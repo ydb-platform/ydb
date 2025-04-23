@@ -115,9 +115,9 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 [Hive](../../../contributor/hive.md) metrics for the selected database.
 
 The dashboard includes the following filters:
-* database - used to select the database which metrics need to be displayed;
-* ds - used to select the Grafana datasource the dashboard will use;
-* local-tx - determines which data will be displayed on the `{{local-tx}}` avg time widget.
+* database – selects the database for which metrics are displayed
+* ds – selects the Grafana data source the dashboard will use
+* local-tx – determines the data displayed on the "`{{local-tx}}` avg time" widget
 
 | Name | Description |
 |---|---|

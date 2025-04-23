@@ -4,4 +4,5 @@ RECURSE(
     dump_restore
     lib
     split_merge
+    secondary_index
 )

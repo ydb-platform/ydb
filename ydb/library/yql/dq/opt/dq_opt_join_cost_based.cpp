@@ -288,13 +288,16 @@ public:
         ui32 maxDPhypDPTableSize,
         TExprContext& exprCtx,
         bool enableShuffleElimination,
-        TOrderingsStateMachine* orderingsFSM
+        TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
+        TTableAliasMap* tableAliases
     )
         : IOptimizerNew(ctx)
         , MaxDPHypTableSize_(maxDPhypDPTableSize)
         , ExprCtx(exprCtx)
         , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
+        , OrderingsFSMWasRebuilt(false)
         , OrderingsFSM(orderingsFSM)
+        , TableAliases(tableAliases)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -328,12 +331,19 @@ private:
 
     template <typename TNodeSet, typename TDpHypImpl>
     auto GetDPHypImpl(TJoinHypergraph<TNodeSet>& hypergraph) {
-        TOrderingStatesAssigner<TNodeSet> assigner(hypergraph);
-        assigner.Assign(*OrderingsFSM);
-
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
             return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
+            try {
+                TOrderingStatesAssigner<TNodeSet> assigner(hypergraph, TableAliases);
+                assigner.Assign(*OrderingsFSM);
+            } catch (std::exception& e) { // There can be table aliases propogation mistakes, so we will construct a separate orderings FSM
+                TOrderingsStateMachineConstructor<TNodeSet> fsmConstructor(hypergraph);
+                OrderingsFSM = MakeSimpleShared<TOrderingsStateMachine>(fsmConstructor.Construct());
+                YQL_CLOG(TRACE, CoreDq) << "Detected error while table alias propogation, rebuilding ordering FSM for join subtree: " << OrderingsFSM->ToString();
+                OrderingsFSMWasRebuilt = true;
+            }
+
             return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
         } else {
             static_assert(false, "No such DPHyp implementation");
@@ -373,6 +383,9 @@ private:
         }
 
         auto resTree = ConvertFromInternal(bestJoinOrder, EnableShuffleElimination, OrderingsFSM? &OrderingsFSM->FDStorage: nullptr);
+        if (OrderingsFSMWasRebuilt) {
+            resTree->Stats.LogicalOrderings = OrderingsFSM->CreateState();
+        }
 
         AddMissingConditions(hypergraph, resTree);
         return resTree;
@@ -434,13 +447,8 @@ private:
                     joinNode->ShuffleRightSideByOrderingIdx = rightJoinKeysOrderingIdx;
                 }
 
-                Cout << JoinSeq(", ", left->Labels()) << " AND " << JoinSeq(", ", right->Labels()) << Endl;
-                Cout << "left: " << joinNode->ShuffleLeftSideByOrderingIdx << ", right: " << joinNode->ShuffleRightSideByOrderingIdx << Endl;
-                Cout << lhsShuffled << " " << rhsShuffled << Endl;
-
                 joinNode->Stats.LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
 
-                Cout << joinNode->Stats.LogicalOrderings.GetState() << Endl;
                 break;
             }
             case EJoinAlgoType::MapJoin:
@@ -484,8 +492,10 @@ private:
     ui32 MaxDPHypTableSize_;
     TExprContext& ExprCtx;
     bool EnableShuffleElimination;
+    bool OrderingsFSMWasRebuilt;
 
-    TOrderingsStateMachine* OrderingsFSM;
+    TSimpleSharedPtr<TOrderingsStateMachine> OrderingsFSM;
+    TTableAliasMap* TableAliases;
 };
 
 IOptimizerNew* MakeNativeOptimizerNew(
@@ -493,19 +503,21 @@ IOptimizerNew* MakeNativeOptimizerNew(
     const ui32 maxDPhypDPTableSize,
     TExprContext& ectx,
     bool enableShuffleElimination,
-    TOrderingsStateMachine* orderingsFSM
+    TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
+    TTableAliasMap* tableAliases
 ) {
-    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination, orderingsFSM);
+    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
 }
 
 void CollectInterestingOrderingsFromJoinTree(
     const NYql::NNodes::TExprBase& equiJoinNode,
     TFDStorage& fdStorage,
-    TTypeAnnotationContext&
+    TTypeAnnotationContext& typeCtx
 ) {
     Y_ENSURE(equiJoinNode.Maybe<TCoEquiJoin>());
 
     auto equiJoin = equiJoinNode.Cast<TCoEquiJoin>();
+    auto stats = typeCtx.GetStats(equiJoinNode.Raw());
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
@@ -517,62 +529,28 @@ void CollectInterestingOrderingsFromJoinTree(
         }
 
         TString label = scope.Cast<TCoAtom>().StringValue();
-        auto joinArg = input.List();
-        // if (auto stats = typeCtx.GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
-        fdStorage.TableAliases.AddMapping(label, label);
-        // }
-
-        if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(joinArg.Ptr())) {
-            auto flatMapBase = maybeFlatMapBase.Cast();
-            VisitExpr(
-                flatMapBase.Lambda().Body().Ptr(),
-                {},
-                [&fdStorage, &flatMapBase, &label](const TExprNode::TPtr& node){
-                    if (auto asStruct = TMaybeNode<TCoAsStruct>(node)) {
-                        for (const auto& field: asStruct.Cast()) {
-                            if (field.Size() == 2) {
-                                if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
-                                    if (member.Cast().Struct().Ptr() == flatMapBase.Lambda().Args().Arg(0).Ptr()) {
-                                        TString renameTo = label + "." + field.Item(0).Cast<TCoAtom>().StringValue();
-                                        TString renameFrom = member.Cast().Name().StringValue();
-
-                                        fdStorage.TableAliases.AddRename(renameFrom, renameTo);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    return true;
-                }
-            );
-        }
-
         TOptimizerStatistics dummy;
         rels.emplace_back(std::make_shared<TRelOptimizerNode>(label, std::move(dummy)));
-    }
-
-    for (const auto& option : equiJoin.Arg(equiJoin.ArgCount() - 1).Ref().Children()) {
-        if (option->Head().IsAtom("rename")) {
-            TCoAtom fromName{option->Child(1)};
-            YQL_ENSURE(!fromName.Value().empty());
-            TCoAtom toName{option->Child(2)};
-            if (!toName.Value().empty()) {
-                fdStorage.TableAliases.AddRename(fromName.StringValue(), toName.StringValue());
-            }
-        }
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
     auto joinTree = ConvertToJoinTree(joinTuple, rels);
     auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree, {}, false);
+    THashSet<TString> interestingOrderingIdxes;
+    interestingOrderingIdxes.reserve(hypergraph.GetEdges().size());
     for (const auto& edge: hypergraph.GetEdges()) {
         for (const auto& [lhs, rhs]: Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
-            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false);
+            fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, stats->TableAliases.Get());
         }
 
-        fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle);
-        fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle);
+        TString idx;
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle, stats->TableAliases.Get()));
+        interestingOrderingIdxes.insert(std::move(idx));
+        idx = ToString(fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle, stats->TableAliases.Get()));
+        interestingOrderingIdxes.insert(std::move(idx));
     }
+
+    YQL_CLOG(TRACE, CoreDq) << "Collected EquiJoin interesting ordering idxes: " << JoinSeq(", ", interestingOrderingIdxes);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -582,10 +560,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     ui32 optLevel,
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
-    const TOptimizerHints& hints
+    const TOptimizerHints& hints,
+    bool enableShuffleElimination
 ) {
     int dummyEquiJoinCounter = 0;
-    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter, hints);
+    return DqOptimizeEquiJoinWithCosts(node, ctx, typesCtx, optLevel, opt, providerCollect, dummyEquiJoinCounter, hints, enableShuffleElimination);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -596,7 +575,8 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     IOptimizerNew& opt,
     const TProviderCollectFunction& providerCollect,
     int& equiJoinCounter,
-    const TOptimizerHints& hints
+    const TOptimizerHints& hints,
+    bool enableShuffleElimination
 ) {
     if (optLevel <= 1) {
         return node;
@@ -608,11 +588,18 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     auto equiJoin = node.Cast<TCoEquiJoin>();
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
-    if (typesCtx.ContainsStats(equiJoin.Raw())) {
+    auto stats = typesCtx.GetStats(equiJoin.Raw());
+    if (!enableShuffleElimination && stats) {
+        return node;
+    } else if (enableShuffleElimination && stats && stats->LogicalOrderings.HasState()) {
         return node;
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "Optimizing join with costs";
+    if (stats && stats->TableAliases) {
+        YQL_CLOG(TRACE, CoreDq) << "EquiJoin propogated aliases: " << stats->TableAliases->ToString();
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Optimizing join with costs for equijoin(" << reinterpret_cast<uintptr_t>(equiJoin.Raw()) << ")";
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
 

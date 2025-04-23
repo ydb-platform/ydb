@@ -14,9 +14,9 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContex
     : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
 { }
 
-struct TVisiter {
+struct TVisitor {
 public:
-    TVisiter(
+    TVisitor(
         TExprVisitPtrFunc preLambdaFunc,
         TExprVisitPtrFunc postLambdaFunc,
         TTypeAnnotationContext* typeCtx
@@ -27,7 +27,7 @@ public:
     {}
 
 public:
-    void Visit(const TExprNode::TPtr& node) {
+    void Visit(const TExprNode::TPtr& node, bool insideLambda = false) {
         if (!VisitedNodes.emplace(node.Get()).second) {
             return;
         }
@@ -35,20 +35,20 @@ public:
         for (auto child : node->Children()) {
             if (!child->IsLambda()) {
                 if (VisitedNodes.contains(child.Get())) { // process CTE labels (parent of cte must have different links to SourceTableName)
-                    if (auto stats = TypeCtx->GetStats(child.Get()); stats && stats->SourceTableName) {
+                    if (auto stats = TypeCtx->GetStats(child.Get()); stats && stats->SourceTableName && !insideLambda) {
                         stats->SourceTableName = MakeSimpleShared<TString>(*stats->SourceTableName);
                     }
                 } else {
-                    Visit(child);
+                    Visit(child, insideLambda);
                 }
             }
         }
-        // матуха ваще сидит тупа ага да да я какает каловые массы
+
         PreLambdaFunc(node);
 
         for (auto child : node->Children()) {
             if (child->IsLambda()) {
-                Visit(child);
+                Visit(child, true);
             }
         }
 
@@ -84,8 +84,8 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         return AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx) || true;
     };
 
-    auto visiter = TVisiter(std::move(preLambda), std::move(postLambda), TypeCtx);
-    visiter.Visit(input);
+    auto Visitor = TVisitor(std::move(preLambda), std::move(postLambda), TypeCtx);
+    Visitor.Visit(input);
 
     return IGraphTransformer::TStatus::Ok;
 }
@@ -127,7 +127,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
 
-    // Propogate aliases
+    // Propogate aliases, don't create statistics for this, otherwise CBO rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
         auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
         for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
@@ -140,6 +140,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
             TString label = scope.Cast<TCoAtom>().StringValue();
             auto joinArg = input.List();
+
             if (auto stats = TypeCtx->GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
                 *stats->SourceTableName = label;
             }

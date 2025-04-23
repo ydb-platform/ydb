@@ -134,6 +134,19 @@ public:
             , Column(std::move(column))
         {}
 
+        TBaseColumn(const TBaseColumn& other)
+            : Relation(other.Relation)
+            , Column(other.Column)
+        {}
+
+        TBaseColumn& operator=(const TBaseColumn& other) {
+            if (this != &other) {
+                Relation = other.Relation;
+                Column = other.Column;
+            }
+            return *this;
+        }
+
         NDq::TJoinColumn ToJoinColumn() {
             return NDq::TJoinColumn(Relation, Column);
         }
@@ -149,7 +162,6 @@ public:
     TTableAliasMap() = default;
 
     void AddMapping(const TString& table, const TString& alias) {
-        AliasesByTable[table].push_back(alias);
         TableByAlias[alias] = table;
     }
 
@@ -185,17 +197,6 @@ public:
             return BaseColumnByRename[renamedColumn];
         }
 
-        if (std::count(renamedColumn.begin(), renamedColumn.end(), '.') > 1) {
-            auto lastPointIdx = renamedColumn.find_last_of('.');
-            auto prevPointIdx = renamedColumn.find_last_of('.', lastPointIdx - 1);
-            TString alias = renamedColumn.substr(prevPointIdx + 1, lastPointIdx - prevPointIdx - 1);
-            TString column = renamedColumn.substr(lastPointIdx + 1);
-            if (auto baseTable = GetBaseTableByAlias(alias)) {
-                return TBaseColumn(std::move(baseTable), std::move(column));
-            }
-            return TBaseColumn(std::move(alias), std::move(column));
-        }
-
         if (auto pointIdx = renamedColumn.find('.'); pointIdx != TString::npos) {
             TString alias = renamedColumn.substr(0, pointIdx);
             TString column = renamedColumn.substr(pointIdx + 1);
@@ -214,29 +215,32 @@ public:
 
     TString ToString() const {
         TString result;
-        result += "Table Alias Map:\n";
-
-        for (const auto& [table, aliases] : AliasesByTable) {
-            result += "Table: " + table + "\n";
-            result += "  Aliases: ";
-            for (const auto& alias : aliases) {
-                result += alias + ", ";
-            }
-            if (!aliases.empty()) {
-                result.pop_back();
-                result.pop_back();
-            }
-            result += "\n";
-        }
 
         if (!BaseColumnByRename.empty()) {
-            result += "Column Renames:\n";
+            result += "Renames: ";
             for (const auto& [from, to] : BaseColumnByRename) {
-                result += "  " + from + " -> " + to.Relation + "." + to.Column + "\n";
+                result += from + "->" + to.Relation + "." + to.Column + " ";
             }
+            result.pop_back();
+            result += ", ";
         }
 
+        result += "TableAliases: ";
+        for (const auto& [alias, table] : TableByAlias) {
+            result += alias + "->" + table + ", ";
+        }
+        result.pop_back();
+
         return result;
+    }
+
+    void Merge(const TTableAliasMap& other) {
+        for (const auto& [alias, table] : other.TableByAlias) {
+            TableByAlias[alias] = table;
+        }
+        for (const auto& [from, to] : other.BaseColumnByRename) {
+            BaseColumnByRename[from] = TBaseColumn(to.Relation, to.Column);
+        }
     }
 
 private:
@@ -245,7 +249,6 @@ private:
     }
 
 private:
-    THashMap<TString, TVector<TString>> AliasesByTable;
     THashMap<TString, TString> TableByAlias;
 
     THashMap<TString, TBaseColumn> BaseColumnByRename;
@@ -259,10 +262,11 @@ public:
     std::int64_t FindFDIdx(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
-        TFunctionalDependency::EType type
+        TFunctionalDependency::EType type,
+        TTableAliasMap* tableAliases
     ) {
-        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, false);
-        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}, false).at(0);
+        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, false, tableAliases);
+        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}, false, tableAliases).at(0);
 
         for (std::size_t i = 0; i < FDs.size(); ++i) {
             auto& fd = FDs[i];
@@ -282,11 +286,12 @@ public:
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
         TFunctionalDependency::EType type,
-        bool alwaysActive
+        bool alwaysActive,
+        TTableAliasMap* tableAliases
     ) {
         auto fd = TFunctionalDependency{
-            .AntecedentItems = {GetIdxByColumn(antecedentColumn, true)},
-            .ConsequentItem = GetIdxByColumn(consequentColumn, true),
+            .AntecedentItems = {GetIdxByColumn(antecedentColumn, true, tableAliases)},
+            .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
             .Type = type,
             .AlwaysActive = alwaysActive
         };
@@ -297,21 +302,23 @@ public:
 
     std::int64_t FindInterestingOrderingIdx(
         const std::vector<TJoinColumn>& interestingOrdering,
-        TOrdering::EType type
+        TOrdering::EType type,
+        TTableAliasMap* tableAliases
     ) {
-        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, false);
+        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, false, tableAliases);
         return orderingIdx;
     }
 
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
-        TOrdering::EType type
+        TOrdering::EType type,
+        TTableAliasMap* tableAliases
     ) {
         if (interestingOrdering.empty()) {
             return std::numeric_limits<std::size_t>::max();
         }
 
-        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true);
+        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true, tableAliases);
 
         if (foundIdx >= 0) {
             return static_cast<std::size_t>(foundIdx);
@@ -355,7 +362,6 @@ public:
         ss << JoinSubsequence(", ", columnsMapping) << "\n";
         ss << "FDs: " << JoinSubsequence(", ", toVectorString(FDs)) << "\n";
         ss << "Interesting Orderings: " << JoinSubsequence(", ", toVectorString(InterestingOrderings)) << "\n";
-        ss << TableAliases.ToString() << "\n";
 
         return ss.str();
     }
@@ -364,7 +370,6 @@ public:
 public:
     std::vector<TFunctionalDependency> FDs;
     std::vector<TOrdering> InterestingOrderings;
-    TTableAliasMap TableAliases;
 
 private:
     /*
@@ -374,9 +379,10 @@ private:
     std::pair<std::vector<std::size_t>, std::int64_t> ConvertColumnsAndFindExistingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
-        bool createIfNotExists
+        bool createIfNotExists,
+        TTableAliasMap* tableAliases
     ) {
-        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists);
+        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists, tableAliases);
 
         for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
             if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
@@ -389,20 +395,30 @@ private:
 
     std::vector<std::size_t> ConvertColumnIntoIndexes(
         const std::vector<TJoinColumn>& ordering,
-        bool createIfNotExists
+        bool createIfNotExists,
+        TTableAliasMap* tableAliases
     ) {
         std::vector<std::size_t> items;
         items.reserve(ordering.size());
 
         for (const auto& column: ordering) {
-            items.push_back(GetIdxByColumn(column, createIfNotExists));
+            items.push_back(GetIdxByColumn(column, createIfNotExists, tableAliases));
         }
 
         return items;
     }
 
-    std::size_t GetIdxByColumn(const TJoinColumn& column, bool createIfNotExists) {
-        auto baseColumn = TableAliases.GetBaseColumnByRename(column).ToJoinColumn();
+    std::size_t GetIdxByColumn(
+        const TJoinColumn& column,
+        bool createIfNotExists,
+        TTableAliasMap* tableAliases
+    ) {
+        TJoinColumn baseColumn("", "");
+        if (tableAliases) {
+            baseColumn = tableAliases->GetBaseColumnByRename(column).ToJoinColumn();
+        } else {
+            baseColumn = column;
+        }
 
         const std::string fullPath = baseColumn.RelName + "." + baseColumn.AttributeName;
 
@@ -533,11 +549,11 @@ public:
     };
 
     TLogicalOrderings CreateState() {
-        return TLogicalOrderings(&DFSM);
+        return TLogicalOrderings(DFSM.Get());
     }
 
     TLogicalOrderings CreateState(std::int64_t orderingIdx) {
-        auto state = TLogicalOrderings(&DFSM);
+        auto state = TLogicalOrderings(DFSM.Get());
         state.SetOrdering(orderingIdx);
         return state;
     }
@@ -547,6 +563,7 @@ public:
 
     TOrderingsStateMachine(TFDStorage fdStorage)
         : FDStorage(std::move(fdStorage))
+        , DFSM(MakeSimpleShared<TDFSM>())
     {
         Build(FDStorage.FDs, FDStorage.InterestingOrderings);
     }
@@ -586,7 +603,7 @@ public:
         ss << "FdMapping: [" << JoinSubsequence(", ", FdMapping) << "]\n";
         ss << "FDStorage:\n" << FDStorage.ToString() << "\n";
         ss << NFSM.ToString();
-        ss << DFSM.ToString(NFSM);
+        ss << DFSM->ToString(NFSM);
         return ss.str();
     }
 
@@ -597,7 +614,7 @@ private:
     ) {
         std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
         NFSM.Build(processedFDs, interestingOrderings);
-        DFSM.Build(NFSM, processedFDs, interestingOrderings);
+        DFSM->Build(NFSM, processedFDs, interestingOrderings);
         Built = true;
     }
 
@@ -1029,7 +1046,7 @@ private:
 
 private:
     TNFSM NFSM;
-    TDFSM DFSM;
+    TSimpleSharedPtr<TDFSM> DFSM; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 
     std::vector<std::int64_t> FdMapping; // We to remap FD idxes after the pruning
     bool Built = false;

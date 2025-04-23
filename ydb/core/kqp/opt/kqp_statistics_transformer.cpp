@@ -102,11 +102,13 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         0.0,
         keyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType
+    );
     stats->SortColumns = sortedPrefixPtr;
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
     stats->LogicalOrderings = inputStats->LogicalOrderings;
     stats->SourceTableName = inputStats->SourceTableName;
+    stats->TableAliases = inputStats->TableAliases;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -126,10 +128,10 @@ void InferStatisticsForKqpTable(
     if (tableStats) {
         auto& orderingsFSM = typeCtx->OrderingsFSM;
         auto shuffledBy = tableStats->ShuffledByColumns;
-        if (orderingsFSM.IsBuilt() && shuffledBy) {
-            std::int64_t orderingIdx = orderingsFSM.FDStorage.FindInterestingOrderingIdx(shuffledBy->Data, TOrdering::EShuffle);
+        if (orderingsFSM && shuffledBy) {
+            std::int64_t orderingIdx = orderingsFSM->FDStorage.FindInterestingOrderingIdx(shuffledBy->Data, TOrdering::EShuffle, tableStats->TableAliases.Get());
             Y_ENSURE(orderingIdx >= 0, TStringBuilder{} << "Ordering wasn't found: " << shuffledBy->ToString());
-            tableStats->LogicalOrderings = orderingsFSM.CreateState(orderingIdx);
+            tableStats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
         }
 
         return;
@@ -204,6 +206,9 @@ void InferStatisticsForKqpTable(
             new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledByColumns))
         );
     }
+
+    stats->TableAliases = MakeIntrusive<TTableAliasMap>();
+    stats->TableAliases->AddMapping(path.StringValue(), path.StringValue());
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -341,6 +346,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     outputStats->ShuffledByColumns = inputStats->ShuffledByColumns;
     outputStats->LogicalOrderings = inputStats->LogicalOrderings;
     outputStats->SourceTableName = inputStats->SourceTableName;
+    outputStats->TableAliases = inputStats->TableAliases;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
@@ -410,6 +416,7 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
     stats->LogicalOrderings = inputStats->LogicalOrderings;
     stats->SourceTableName = inputStats->SourceTableName;
+    stats->TableAliases = inputStats->TableAliases;
 
     typeCtx->SetStats(input.Get(), stats);
 
@@ -484,6 +491,161 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
         }
     }
 }
+
+class TTableAliasMapPropagator {
+public:
+    TTableAliasMapPropagator(TTypeAnnotationContext& typeCtx)
+        : TypeCtx(typeCtx)
+    {}
+
+
+    void PropagateAliases(const TExprNode::TPtr& node) {
+        if (!node) {
+            return;
+        }
+
+        for (auto& child : node->Children()) {
+            PropagateAliases(child);
+        }
+
+        if (auto flatMap = TMaybeNode<TCoFlatMapBase>(node)) {
+            ProcessFlatMap(flatMap.Cast());
+        } else if (auto join = TMaybeNode<TCoEquiJoin>(node)) {
+            ProcessEquiJoin(join.Cast());
+        } else if (auto table = TMaybeNode<TKqpTable>(node)) {
+            ProcessKqpTable(table.Cast());
+        } else {
+            MergeChildrenAliases(node);
+        }
+
+    }
+
+private:
+    void ProcessFlatMap(const TCoFlatMapBase& flatMap) {
+        auto inputStats = TypeCtx.GetStats(flatMap.Input().Raw());
+        auto flatMapTableAliases = GetTableAliases(flatMap.Ptr());
+        if (flatMapTableAliases == nullptr) {
+            return;
+        }
+        auto inputTableAliases = GetTableAliases(flatMap.Input().Ptr());
+        Y_ENSURE(inputTableAliases);
+        *flatMapTableAliases = *inputTableAliases;
+
+        if (auto just = TMaybeNode<TCoJust>(flatMap.Lambda().Body().Ptr())) {
+            if (auto asStruct = TMaybeNode<TCoAsStruct>(just.Cast().Input().Ptr())) {
+                for (const auto& field : asStruct.Cast()) {
+                    if (field.Size() == 2) {
+                        if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
+                            TString renameTo = field.Item(0).Cast<TCoAtom>().StringValue();
+                            TString columnName = member.Cast().Name().StringValue();
+                            if (inputStats && inputStats->SourceTableName) {
+                                flatMapTableAliases->AddRename(*inputStats->SourceTableName + "." + columnName, renameTo);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void ProcessEquiJoin(const TCoEquiJoin& equiJoin) {
+        TypeCtx.SetStats(equiJoin.Raw(), std::make_shared<TOptimizerStatistics>());
+        auto tableAliases = GetTableAliases(equiJoin.Ptr());
+        if (tableAliases == nullptr) {
+            return;
+        }
+
+        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+
+            auto scope = input.Scope();
+            if (!scope.Maybe<TCoAtom>()){
+                continue;
+            }
+
+            TString label = scope.Cast<TCoAtom>().StringValue();
+            auto joinArg = input.List();
+            tableAliases->AddMapping(label, label);
+
+            if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(joinArg.Ptr())) {
+                auto flatMapBase = maybeFlatMapBase.Cast();
+                VisitExpr(
+                    flatMapBase.Lambda().Body().Ptr(),
+                    {},
+                    [&flatMapBase, &label, &tableAliases](const TExprNode::TPtr& node){
+                        if (auto asStruct = TMaybeNode<TCoAsStruct>(node)) {
+                            for (const auto& field: asStruct.Cast()) {
+                                if (field.Size() == 2) {
+                                    if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
+                                        if (member.Cast().Struct().Ptr() == flatMapBase.Lambda().Args().Arg(0).Ptr()) {
+                                            TString renameTo = label + "." + field.Item(0).Cast<TCoAtom>().StringValue();
+                                            TString renameFrom = member.Cast().Name().StringValue();
+
+                                            tableAliases->AddRename(renameFrom, renameTo);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return true;
+                    }
+                );
+            }
+        }
+
+        for (const auto& option : equiJoin.Arg(equiJoin.ArgCount() - 1).Ref().Children()) {
+            if (option->Head().IsAtom("rename")) {
+                TCoAtom fromName{option->Child(1)};
+                YQL_ENSURE(!fromName.Value().empty());
+                TCoAtom toName{option->Child(2)};
+                if (!toName.Value().empty()) {
+                    tableAliases->AddRename(fromName.StringValue(), toName.StringValue());
+                }
+            }
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "Infer table aliases for EquiJoin(" << reinterpret_cast<uintptr_t>(equiJoin.Raw()) << "): " << tableAliases->ToString();
+    }
+
+    void ProcessKqpTable(const TKqpTable& table) {
+        auto tableName = table.Path().StringValue();
+        auto tableAliases = GetTableAliases(table.Ptr());
+        if (tableAliases == nullptr) {
+            return;
+        }
+        tableAliases->AddMapping(tableName, tableName);
+        YQL_CLOG(TRACE, CoreDq) << "Infer table aliases for KqpTable: " << tableName << ": " << tableAliases->ToString();
+    }
+
+    void MergeChildrenAliases(const TExprNode::TPtr& node) {
+        auto tableAliases = GetTableAliases(node);
+        if (tableAliases == nullptr) {
+            return;
+        }
+
+        for (auto& child : node->Children()) {
+            auto childStats = TypeCtx.GetStats(child.Get());
+            if (childStats && childStats->TableAliases) {
+                tableAliases->Merge(*childStats->TableAliases);
+            }
+        }
+    }
+
+    TIntrusivePtr<TTableAliasMap> GetTableAliases(const TExprNode::TPtr& node) {
+        auto stats = TypeCtx.GetStats(TExprBase(node).Raw());
+        if (stats == nullptr) {
+            return nullptr;
+        }
+
+        if (!stats->TableAliases) {
+            stats->TableAliases = MakeIntrusive<TTableAliasMap>();
+        }
+        return stats->TableAliases;
+    }
+
+private:
+    TTypeAnnotationContext& TypeCtx;
+};
 
 class TKqpOlapPredicateSelectivityComputer: public TPredicateSelectivityComputer {
 public:
@@ -900,8 +1062,6 @@ private:
                 CollectKqpTable(kqpTable.Cast());
             } else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(node)) {
                 CollectAggregateBase(aggregateBase.Cast());
-            } else if (auto flatMapBase = TMaybeNode<TCoFlatMapBase>(node)) {
-                CollectFlatMapBase(flatMapBase.Cast());
             }
 
             return true;
@@ -923,12 +1083,11 @@ private:
                 return;
             }
 
-            FDStorage.TableAliases.AddMapping(table.Path().StringValue(), table.Path().StringValue());
-
             for (auto& column: stats->ShuffledByColumns->Data) {
                 column.RelName = *stats->SourceTableName;
             }
-            FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle);
+            TString idx = ToString(FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle, stats->TableAliases.Get()));
+            YQL_CLOG(TRACE, CoreDq) << "Collected KqpTable interesting ordering idx: " << idx << ", path: " << table.Path().StringValue();
         }
 
     private:
@@ -939,7 +1098,13 @@ private:
 
             std::vector<TJoinColumn> joinColumns;
 
-            TString tableName = TryGetTableNameFromAggregationInput(aggregateCombine.Input().Ptr());
+            TString tableName;
+            if (auto stats = TypeCtx.GetStats(aggregateCombine.Input().Raw()); stats && stats->SourceTableName) {
+                tableName = *stats->SourceTableName;
+            } else {
+                tableName = TryGetTableNameFromAggregationInput(aggregateCombine.Input().Ptr());
+            }
+
             for (const auto& key: aggregateCombine.Keys()) {
                 TString aggregationKey = key.StringValue();
 
@@ -954,12 +1119,12 @@ private:
                 joinColumns.emplace_back(tableName, std::move(columnName));
             }
 
-            std::size_t shuffleOrderingIdx = FDStorage.AddInterestingOrdering(joinColumns, TOrdering::EShuffle);
             auto stats = TypeCtx.GetStats(aggregateCombine.Keys().Raw());
             if (!stats) {
                 stats = std::make_shared<TOptimizerStatistics>();
                 TypeCtx.SetStats(aggregateCombine.Keys().Raw(), stats);
             }
+            std::size_t shuffleOrderingIdx = FDStorage.AddInterestingOrdering(joinColumns, TOrdering::EShuffle, stats->TableAliases.Get());
             stats->ShuffleOrderingIdx = shuffleOrderingIdx;
         }
 
@@ -975,30 +1140,6 @@ private:
             return "";
         }
 
-    private:
-        void CollectFlatMapBase(const TCoFlatMapBase& flatMapBase) {
-            auto stats = TypeCtx.GetStats(flatMapBase.Input().Raw());
-            if (auto just =  TMaybeNode<TCoJust>(flatMapBase.Lambda().Body().Ptr())) {
-                if (auto asStruct = TMaybeNode<TCoAsStruct>(just.Cast().Input().Ptr())) {
-                    for (const auto& field: asStruct.Cast()) {
-                        if (field.Size() == 2) {
-                            if (auto member = TMaybeNode<TCoMember>(field.Item(1).Raw())) {
-                                TString renameTo = field.Item(0).Cast<TCoAtom>().StringValue();
-                                TString renameFrom;
-                                TString columnName = member.Cast().Name().StringValue();
-                                if (stats && stats->SourceTableName) {
-                                    renameFrom = *stats->SourceTableName + "." + columnName;
-                                } else {
-                                    renameFrom = columnName;
-                                }
-
-                                FDStorage.TableAliases.AddRename(renameFrom, renameTo);
-                            }
-                        }
-                    }
-                }
-            }
-        }
     };
 
 private:
@@ -1017,14 +1158,18 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (!TypeCtx->OrderingsFSM.IsBuilt()) {
+    if (!TypeCtx->OrderingsFSM) {
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+        TTableAliasMapPropagator aliasPropagator(*TypeCtx);
+        aliasPropagator.PropagateAliases(input);
+
         /* ^ we have to propogate KqpTable statistics to EquiJoin for working with its partitioning */
         auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx);
-        TypeCtx->OrderingsFSM = fsmBuilder.Build(input);
+        TypeCtx->OrderingsFSM = MakeSimpleShared<TOrderingsStateMachine>(fsmBuilder.Build(input));
     }
 
     TxStats.clear();
+
     return TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
 }
 

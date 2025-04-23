@@ -498,6 +498,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
         outputStats.LogicalOrderings = inputStats->LogicalOrderings;
         outputStats.SourceTableName = inputStats->SourceTableName;
+        outputStats.TableAliases = inputStats->TableAliases;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 
@@ -553,6 +554,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     );
     outputStats.SortColumns = inputStats->SortColumns;
     outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
+    outputStats.TableAliases = inputStats->TableAliases;
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
@@ -597,6 +599,7 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
     auto aggStats = RemoveOrdering(inputStats);
     aggStats->ShuffledByColumns = nullptr;
     auto keysStats = typeCtx->GetStats(agg.Keys().Raw());
+    aggStats->TableAliases = inputStats->TableAliases;
 
     TVector<TString> strKeys;
     strKeys.reserve(agg.Keys().Size());
@@ -604,12 +607,12 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
         strKeys.push_back(key.StringValue());
     }
 
-    if (typeCtx->OrderingsFSM.IsBuilt() && keysStats && keysStats->ShuffleOrderingIdx) {
+    if (typeCtx->OrderingsFSM && keysStats && keysStats->ShuffleOrderingIdx) {
         Y_ENSURE(
             keysStats && keysStats->ShuffleOrderingIdx,
             TStringBuilder{} << "FSM was built, but orderingIdx wasn' set for aggregation with keys: " << JoinSeq(", ", strKeys);
         );
-        aggStats->LogicalOrderings = typeCtx->OrderingsFSM.CreateState(*keysStats->ShuffleOrderingIdx);
+        aggStats->LogicalOrderings = typeCtx->OrderingsFSM->CreateState(*keysStats->ShuffleOrderingIdx);
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();

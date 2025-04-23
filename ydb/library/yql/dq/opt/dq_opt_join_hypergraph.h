@@ -504,7 +504,7 @@ private:
 };
 
 /*
- * This class builds FSM which is used for the DPHypElimination algorithm. It fills edges with information of orderings and FD's
+ * This class builds FSM for CBO join tree which is used for the DPHypElimination algorithm. It fills edges with information of orderings and FD's
  * which they have. Also, it converts orderings (vector of shuffles) into inner representation (just indexes) for faster enumeration.
  */
 template <typename TNodeSet>
@@ -517,9 +517,10 @@ public:
         : Graph_(graph)
     {}
 
-    TOrderingsStateMachine Construct(TFDStorage& fdStorage) {
+    TOrderingsStateMachine Construct() {
         auto& edges = Graph_.GetEdges();
 
+        TFDStorage fdStorage;
         std::vector<std::vector<std::size_t>> fdsByEdgeIdx(edges.size());
         for (std::size_t i = 0; i < edges.size(); ++i) {
             if (edges[i].IsReversed) {
@@ -529,16 +530,16 @@ public:
             std::size_t edgeIdx = i;
             std::size_t revEdgeIdx = edges[i].ReversedEdgeId;
             for (const auto& [lhs, rhs]: Zip(edges[i].LeftJoinKeys, edges[i].RightJoinKeys)) {
-                std::size_t fdIdx = fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false);
+                std::size_t fdIdx = fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, nullptr);
                 fdsByEdgeIdx[edgeIdx].push_back(fdIdx);
                 fdsByEdgeIdx[revEdgeIdx].push_back(fdIdx);
             }
 
             std::size_t orderingIdx;
-            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].LeftJoinKeys , TOrdering::EShuffle);
+            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].LeftJoinKeys , TOrdering::EShuffle, nullptr);
             edges[edgeIdx].LeftJoinKeysShuffleOrderingIdx = orderingIdx;
             edges[revEdgeIdx].RightJoinKeysShuffleOrderingIdx = orderingIdx; // reversed edge
-            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].RightJoinKeys, TOrdering::EShuffle);
+            orderingIdx = fdStorage.AddInterestingOrdering(edges[i].RightJoinKeys, TOrdering::EShuffle, nullptr);
             edges[edgeIdx].RightJoinKeysShuffleOrderingIdx = orderingIdx;
             edges[revEdgeIdx].LeftJoinKeysShuffleOrderingIdx = orderingIdx; // reversed edge
         }
@@ -557,7 +558,7 @@ public:
             for (const auto& column: relNode->Stats.ShuffledByColumns->Data) {
                 shuffledBy.emplace_back(relNode->Label, column.AttributeName);
             }
-            shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle);
+            shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle, nullptr);
         }
 
         TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
@@ -568,11 +569,11 @@ public:
 
         for (std::size_t i = 0; i < Graph_.GetNodes().size(); ++i) {
             auto& node = Graph_.GetNodes()[i].RelationOptimizerNode;
-            node->LogicalOrderings = orderingsFSM.CreateState();
+            node->Stats.LogicalOrderings = orderingsFSM.CreateState();
             if (shuffleOrderingIdxByNodeIdx[i] == -1) {
                 continue;
             }
-            node->LogicalOrderings.SetOrdering(shuffleOrderingIdxByNodeIdx[i]);
+            node->Stats.LogicalOrderings.SetOrdering(shuffleOrderingIdxByNodeIdx[i]);
         }
 
         return orderingsFSM;
@@ -588,8 +589,12 @@ private:
 template <typename TNodeSet>
 class TOrderingStatesAssigner {
 public:
-    TOrderingStatesAssigner(TJoinHypergraph<TNodeSet>& graph)
+    TOrderingStatesAssigner(
+        TJoinHypergraph<TNodeSet>& graph,
+        TTableAliasMap* tableAliases
+    )
         : Graph_(graph)
+        , TableAliases_(tableAliases)
     {}
 
     void Assign(TOrderingsStateMachine& fsm) {
@@ -611,22 +616,22 @@ public:
             }
 
             e.LeftJoinKeysShuffleOrderingIdx =
-                fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle);
+                fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle, TableAliases_);
             Y_ENSURE(
                 e.LeftJoinKeysShuffleOrderingIdx >= 0,
                 TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.LeftJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
             );
 
             e.RightJoinKeysShuffleOrderingIdx =
-                fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle);
+                fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle, TableAliases_);
             Y_ENSURE(
                 e.RightJoinKeysShuffleOrderingIdx >= 0,
                 TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.RightJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
             );
 
             for (const auto& [lhs, rhs]: Zip(e.LeftJoinKeys, e.RightJoinKeys)) {
-                auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence);
-                auto fdIdxRev = fdStorage.FindFDIdx(rhs, lhs, TFunctionalDependency::EEquivalence);
+                auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence, TableAliases_);
+                auto fdIdxRev = fdStorage.FindFDIdx(rhs, lhs, TFunctionalDependency::EEquivalence, TableAliases_);
                 e.FDs |= fsm.GetFDSet(fdIdx);
                 e.FDs |= fsm.GetFDSet(fdIdxRev);
             }
@@ -635,6 +640,7 @@ public:
 
 private:
     TJoinHypergraph<TNodeSet>& Graph_;
+    TTableAliasMap* TableAliases_;
 };
 
 } // namespace NYql::NDq

@@ -129,3 +129,5 @@ The dashboard includes the following filters:
 | event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
 | versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
 | hive node | Node where the database Hive is running. |
+
+Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.

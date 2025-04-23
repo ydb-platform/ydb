@@ -568,6 +568,24 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             AssertMessageMeta(readMessage, headerKey, headerValue);
         }
 
+        // send empty produce message
+        {
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(1);
+            batch.Records[0].Key = TKafkaBytes{};
+            batch.Records[0].Value = TKafkaBytes{};
+
+            auto msg = client.Produce(topicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
         {
             // Check short topic name
 

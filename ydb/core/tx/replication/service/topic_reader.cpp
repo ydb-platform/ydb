@@ -68,14 +68,14 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Send(Worker, new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records)));
     }
 
-    void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {
+    void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
         Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }
 
-    void Handle(TEvYdbProxy::TEvTopicStartReadingSession::TPtr& ev) {
+    void Handle(TEvYdbProxy::TEvStartTopicReadingSession::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
@@ -100,6 +100,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
             LOG_W("Handle " << ev->Get()->ToString());
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         } else {
             LOG_D("Handle " << ev->Get()->ToString());
         }
@@ -154,9 +155,9 @@ public:
             hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
-            hFunc(TEvYdbProxy::TEvTopicEndPartition, Handle);
+            hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
+            hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
-            hFunc(TEvYdbProxy::TEvTopicStartReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

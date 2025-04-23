@@ -2326,7 +2326,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 ### Commit outside the reader {#commit-outside-the-reader}
 
-Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a process separate from reading — in such cases, a method of commit outside the reader is necessary.
+Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
 
 {% list tabs group=lang %}
 

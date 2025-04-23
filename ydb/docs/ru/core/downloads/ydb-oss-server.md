@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} Open-Source Server
+# Загрузка {{ ydb-short-name }} Open-Source Server
 
 {{ ydb-short-name }} Open-Source Server (`ydbd`) — исполняемый файл для запуска узла [кластера {{ ydb-short-name }}](../concepts/glossary.md#cluster). Распространяется под [лицензией Apache 2.0](https://github.com/ydb-platform/ydb/blob/main/LICENSE).
 

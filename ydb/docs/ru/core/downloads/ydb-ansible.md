@@ -1,4 +1,4 @@
-# Ansible Playbooks для {{ ydb-short-name }}
+# Загрузка Ansible Playbooks для {{ ydb-short-name }}
 
 Набор автоматизированных сценариев для установки и сопровождения серверной части [YDB Open-Source](ydb-oss-server.md) или [Корпоративной СУБД Яндекса](yandex-enterprise-database.md) с помощью инструмента [Ansible](https://docs.ansible.com/) доступен для скачивания по ссылкам ниже. Исходный код сценариев опубликован [на GitHub](https://github.com/ydb-platform/ydb-ansible) под лицензией Apache 2.0.
 

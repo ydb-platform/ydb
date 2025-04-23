@@ -1,4 +1,4 @@
-# Downloading {{ ydb-short-name }} CLI
+# Download {{ ydb-short-name }} CLI
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) is a command-line utility for working with {{ ydb-short-name }} databases.
 

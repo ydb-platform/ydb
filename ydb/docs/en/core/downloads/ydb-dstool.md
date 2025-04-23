@@ -1,4 +1,4 @@
-# Downloading {{ ydb-short-name }} DSTool
+# Download {{ ydb-short-name }} DSTool
 
 {{ ydb-short-name }} DSTool (`ydb-dstool`) is a command-line utility for [managing the disk subsystem](../maintenance/manual/index.md) of a {{ ydb-short-name }} cluster.
 

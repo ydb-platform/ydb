@@ -98,6 +98,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   cpp-deprecated-enum_codegen
   cpp-html-pcdata
   library-cpp-json
+  cpp-protobuf-json
   ydb-core-actorlib_impl
   ydb-core-audit
   ydb-core-base

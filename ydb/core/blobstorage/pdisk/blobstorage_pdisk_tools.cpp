@@ -243,7 +243,6 @@ void ObliterateDisk(TString path) {
     DetectFileParameters(path, diskSizeBytes, isBlockDevice);
 
     constexpr ui64 GB_BYTES = 4096L * 262144L;
-    constexpr ui64 GB_BLOCKS = GB_BYTES / NPDisk::FormatSectorSize;
     if (diskSizeBytes <= GB_BYTES) {
         ythrow TFileError() << "illegal size " << diskSizeBytes << " for device " << path;
     }
@@ -252,6 +251,7 @@ void ObliterateDisk(TString path) {
     f.Pwrite(zeros.data(), zeros.size(), 0);
 #if defined(YDB_DISABLE_PDISK_ENCRYPTION)
     // for non-encrypted pdisks the trailing gigabyte has to be cleared
+    constexpr ui64 GB_BLOCKS = GB_BYTES / NPDisk::FormatSectorSize;
     ui64 writePos = diskSizeBytes - GB_BYTES;
     for (ui64 i=0; i<GB_BLOCKS; ++i) {
         f.Pwrite(zeros.data(), NPDisk::FormatSectorSize, (i64)(writePos + (i * NPDisk::FormatSectorSize)));

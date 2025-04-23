@@ -35,6 +35,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -2088,13 +2089,34 @@ public:
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
-                        auto ydbResult = QueryState->QueryData->GetYdbTxResult(
-                            phyQuery.GetResultBindings(i), response->GetArena(), {});
-
-                        YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
                         YQL_ENSURE(trailingResultsCount <= 1);
-                        response->AddYdbResults()->Swap(ydbResult);
+
+                        switch (QueryState->GetResultSetType()) {
+                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED: {
+                                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                                    phyQuery.GetResultBindings(i), response->GetArena(), {});
+
+                                YQL_ENSURE(ydbResult);
+                                response->AddYdbResults()->Swap(ydbResult);
+                                break;
+                            }
+                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
+                                auto batch = QueryState->QueryData->GetArrowTxResult(
+                                    phyQuery.GetResultBindings(i), QueryState->TxCtx->TxAlloc->TypeEnv);
+                                *response->AddResultData() = NArrow::SerializeBatchNoCompression(batch);
+
+                                if (!response->HasArrowBatchSettings()) {
+                                    TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
+                                    YQL_ENSURE(serializedSchema);
+
+                                    response->MutableArrowBatchSettings()->set_schema(serializedSchema);
+                                }
+                                break;
+                            }
+                            default:
+                                YQL_ENSURE(false);
+                        }
                     }
 
                     continue;
@@ -2104,8 +2126,31 @@ public:
                 if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
-                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
-                response->AddYdbResults()->Swap(ydbResult);
+                switch (QueryState->GetResultSetType()) {
+                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED: {
+                        auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                            phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
+
+                        YQL_ENSURE(ydbResult);
+                        response->AddYdbResults()->Swap(ydbResult);
+                        break;
+                    }
+                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
+                        auto batch = QueryState->QueryData->GetArrowTxResult(
+                            phyQuery.GetResultBindings(i), QueryState->TxCtx->TxAlloc->TypeEnv);
+                        *response->AddResultData() = NArrow::SerializeBatchNoCompression(batch);
+
+                        if (!response->HasArrowBatchSettings()) {
+                            TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
+                            YQL_ENSURE(serializedSchema);
+
+                            response->MutableArrowBatchSettings()->set_schema(serializedSchema);
+                        }
+                        break;
+                    }
+                    default:
+                        YQL_ENSURE(false);
+                }
             }
         }
 

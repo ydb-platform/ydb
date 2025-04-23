@@ -277,7 +277,7 @@ class TestCompatibility(object):
             "tpch",
             "init",
             "--store={}".format(store_type),
-            # "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
         ]
         import_command = [
@@ -324,9 +324,9 @@ class TestCompatibility(object):
             "--database=/Root",
             "workload",
             "tpch",
-            "clean",
             "-p",
             "tpch",
+            "clean"
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f)

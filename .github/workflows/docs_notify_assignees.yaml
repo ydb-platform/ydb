@@ -53,5 +53,5 @@ jobs:
               owner: context.repo.owner,
               repo:  context.repo.repo,
               issue_number: pr.number,
-              body: `🔄 New commits pushed — ${assignees} please take another look.`
+              body: `🔄 New commits pushed — ${assignees} please take a look.`
             });

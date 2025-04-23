@@ -809,6 +809,7 @@ void CheckSyncNodes(TTestActorRuntime &runtime,
                     const NKikimrNodeBroker::TEpoch &epoch)
 {
     TAutoPtr<TEvNodeBroker::TEvSyncNodesRequest> event = new TEvNodeBroker::TEvSyncNodesRequest;
+    event->Record.SetSeqNo(seqNo);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, {}, pipe);
 
     TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);

@@ -120,6 +120,7 @@ struct TEvKqp {
         mutable NKikimrKqp::TEvQueryRequest Record;
         TDuration ForgetAfter;
         TDuration ResultsTtl;
+        TDuration ProgressStatsPeriod;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

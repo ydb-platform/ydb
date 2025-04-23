@@ -147,7 +147,7 @@ class TestCompatibility(object):
             "--script",
             f"{query}"
         ]
-        yatest.common.execute(command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(command, wait=True, stdout=self.output_f)
 
     def execute_scan_query(self, query_body):
         query = ydb.ScanQuery(query_body, {})
@@ -176,7 +176,7 @@ class TestCompatibility(object):
             "-l",
             "-R"
         ]
-        yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(get_scheme_command, wait=True, stdout=self.output_f)
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
@@ -329,12 +329,12 @@ class TestCompatibility(object):
             "tpch",
         ]
 
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(import_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
         self.change_cluster_version(self.all_binary_paths[1])
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-        yatest.common.execute(clean_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(clean_command, wait=True, stdout=self.output_f)
 
     def test_export(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
@@ -378,4 +378,4 @@ class TestCompatibility(object):
             "src=/Root,dst=Root"
         ]
 
-        yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(export_command, wait=True, stdout=self.output_f)

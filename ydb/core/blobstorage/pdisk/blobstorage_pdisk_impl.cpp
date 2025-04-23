@@ -584,6 +584,19 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
     return ownedChunks;
 }
 
+ui32 TPDisk::GetNumActiveSlots() const {
+    ui32 sum = 0;
+    for (const auto& ownerData: OwnerData) {
+        if (ownerData.VDiskId == TVDiskID::InvalidId) {
+            continue;
+        }
+        ui32 u_vdisk = ownerData.SlotSizeUnits ?: 1;
+        ui32 u_pdisk = Cfg->SlotSizeUnits ?: 1;
+        sum += int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+    }
+    return sum;
+}
+
 NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
     double occupancy_;
     NPDisk::TStatusFlags res;
@@ -1489,7 +1502,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
-        pdiskState.SetNumActiveSlots(TotalOwners);
+        pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeUnits(Cfg->SlotSizeUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
@@ -1813,6 +1826,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
     ownerData.LastShredGeneration = 0;
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
+    ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
 
     AddCbsSet(owner);
 

@@ -687,7 +687,12 @@ void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 
 void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const
 {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(subscriber.Id, ctx.SelfID, event);
+    SendToSubscriber(subscriber, event, 0, ctx);
+}
+
+void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const
+{
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(subscriber.Id, ctx.SelfID, event, 0, cookie);
     if (subscriber.PipeServerInfo->IcSession) {
         ev->Rewrite(TEvInterconnect::EvForward, subscriber.PipeServerInfo->IcSession);
     }
@@ -708,10 +713,6 @@ void TNodeBroker::SendUpdateNodes(const TActorContext &ctx)
 
 void TNodeBroker::SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 version, const TActorContext &ctx)
 {
-    if (version >= Committed.Epoch.Version) {
-        return;
-    }
-
     NKikimrNodeBroker::TUpdateNodes record;
     record.SetSeqNo(subscriber.SeqNo);
     Committed.Epoch.Serialize(*record.MutableEpoch());
@@ -743,7 +744,7 @@ TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
 
     auto& pipeServer = PipeServers.at(pipeServerId);
     auto res = Subscribers.emplace(subscriberId, TSubscriberInfo(subscriberId, seqNo, &pipeServer));
-    Y_VERIFY_DEBUG_S(res.second, "Subscription already exists for " << subscriberId);
+    Y_ENSURE(res.second, "Subscription already exists for " << subscriberId);
     pipeServer.Subscribers.insert(subscriberId);
     return res.first->second;
 }
@@ -751,7 +752,7 @@ TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
 void TNodeBroker::RemoveSubscriber(TActorId subscriber, const TActorContext &ctx)
 {
     auto it = Subscribers.find(subscriber);
-    Y_VERIFY_DEBUG_S(it != Subscribers.end(), "No subscription for " << subscriber);
+    Y_ENSURE(it != Subscribers.end(), "No subscription for " << subscriber);
 
     LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                 "Unsubscribed " << subscriber
@@ -1622,26 +1623,25 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
     TabletCounters->Cumulative()[COUNTER_SYNC_NODES_REQUESTS].Increment(1);
 
     if (auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
-        auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
-        response->Record.SetSeqNo(it->second.SeqNo);
-        SendToSubscriber(it->second, response.Release(), ctx);
-    } else {
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Unexpected TEvSyncNodesRequest without subscription from " << ev->Sender);
+        if (it->second.SeqNo == ev->Get()->Record.GetSeqNo()) {
+            auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+            response->Record.SetSeqNo(it->second.SeqNo);
+            SendToSubscriber(it->second, response.Release(), ev->Cookie, ctx);
+        }
     }
 }
 
 void TNodeBroker::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev)
 {
     auto res = PipeServers.emplace(ev->Get()->ServerId, TPipeServerInfo(ev->Get()->ServerId, ev->Get()->InterconnectSession));
-    Y_VERIFY_DEBUG_S(res.second, "Unexpected TEvServerConnected for " << ev->Get()->ServerId);
+    Y_ENSURE(res.second, "Unexpected TEvServerConnected for " << ev->Get()->ServerId);
 }
 
 void TNodeBroker::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev,
                          const TActorContext &ctx)
 {
     auto it = PipeServers.find(ev->Get()->ServerId);
-    Y_VERIFY_DEBUG_S(it != PipeServers.end(), "Unexpected TEvServerDisconnected for " << ev->Get()->ServerId);
+    Y_ENSURE(it != PipeServers.end(), "Unexpected TEvServerDisconnected for " << ev->Get()->ServerId);
     while (!it->second.Subscribers.empty()) {
         RemoveSubscriber(*it->second.Subscribers.begin(), ctx);
     }

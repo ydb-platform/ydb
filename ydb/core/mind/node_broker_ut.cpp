@@ -842,13 +842,7 @@ void CheckUpdateNodesLog(TTestActorRuntime &runtime,
     static ui32 seqNo = 1;
     TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
     SubscribeToNodesUpdates(runtime, sender, pipe, version, ++seqNo);
-    if (epoch.GetVersion() != version) {
-        CheckNodesUpdate(runtime, updates, seqNo, epoch);
-    } else {
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
-        runtime.SimulateSleep(TDuration::MilliSeconds(10));
-        UNIT_ASSERT(block.empty());
-    }
+    CheckNodesUpdate(runtime, updates, seqNo, epoch);
     runtime.ClosePipe(pipe, sender, 0);
 }
 

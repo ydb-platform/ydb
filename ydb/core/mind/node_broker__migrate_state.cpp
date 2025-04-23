@@ -102,7 +102,10 @@ public:
             Self->ScheduleEpochUpdate(ctx);
             Self->PrepareEpochCache();
             Self->PrepareUpdateNodesLog();
-            Self->SignalTabletActive(ctx, "1.0");
+
+            NKikimrNodeBroker::TVersionInfo versionInfo;
+            versionInfo.SetSupportDeltaProtocol(true);
+            Self->SignalTabletActive(ctx, versionInfo.SerializeAsString());
         } else {
             Self->Execute(Self->CreateTxMigrateState(std::move(DbChanges)));
         }

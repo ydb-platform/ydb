@@ -286,6 +286,7 @@ private:
     void SendUpdateNodes(const TActorContext &ctx);
     void SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 version, const TActorContext &ctx);
     void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const;
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const;
 
     TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, const TActorContext &ctx);
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);

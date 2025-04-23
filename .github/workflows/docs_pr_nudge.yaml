@@ -89,7 +89,7 @@ jobs:
             ].join(' ');
             const { data: { items: docsPRs } } = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
             console.log(`Found ${docsPRs.length} documentation PR(s)`);
-  
+
             // 2) fetch primary-docs-reviewers
             const members = await github.paginate(
               github.rest.teams.listMembersInOrg,
@@ -97,12 +97,12 @@ jobs:
             );
             const reviewerLogins = members.map(u => u.login);
             console.log(`Loaded ${reviewerLogins.length} reviewer(s) from team`);
-  
+
             for (const prItem of docsPRs) {
               const prNum = prItem.number;
               console.log(`\n→ Processing PR #${prNum}`);
               const pr    = (await github.rest.pulls.get({ owner, repo, pull_number: prNum })).data;
-  
+
               // assign reviewer if none assigned
               if (!pr.assignees.some(a => reviewerLogins.includes(a.login))) {
                 const pick = reviewerLogins[Math.floor(Math.random() * reviewerLogins.length)];

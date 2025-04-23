@@ -104,22 +104,23 @@ class TestCompatibility(object):
 
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
 
-        for table_num in range(1, 6):
-            table_name = f"sample_table_{table_num}"
+        with ydb.SessionPool(self.driver, size=1) as pool:
+            with pool.checkout() as session:
+                for table_num in range(1, 6):
+                    table_name = f"sample_table_{table_num}"
+                    session.execute_scheme(
+                        f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
+                    )
 
-            session.execute_scheme(
-                f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
-            )
-
-            query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
-                (1, 'Payload 1 for table {table_num}'),
-                (2, 'Payload 2 for table {table_num}'),
-                (3, 'Payload 3 for table {table_num}'),
-                (4, 'Payload 4 for table {table_num}'),
-                (5, 'Payload 5 for table {table_num}');"""
-            session.transaction().execute(
-                query, commit_tx=True
-            )
+                    query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
+                        (1, 'Payload 1 for table {table_num}'),
+                        (2, 'Payload 2 for table {table_num}'),
+                        (3, 'Payload 3 for table {table_num}'),
+                        (4, 'Payload 4 for table {table_num}'),
+                        (5, 'Payload 5 for table {table_num}');"""
+                    session.transaction().execute(
+                        query, commit_tx=True
+                    )
 
         export_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -138,7 +139,26 @@ class TestCompatibility(object):
             "--secret-key",
             s3_secret_key,
             "--item",
-            "src=/Root,dst=Root"
+            "src=/Root,dst=."
         ]
 
         yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+
+        s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, 
+                                   aws_access_key_id=s3_access_key,
+                                   aws_secret_access_key=s3_secret_key)
+
+        keys_expected = []
+        for table_num in range(1, 6):
+            table_name = f"sample_table_{table_num}"
+            keys_expected.append(table_name + "/data_00.csv")
+            keys_expected.append(table_name + "/metadata.json")
+            keys_expected.append(table_name + "/scheme.pb")
+        
+        def check_export_progress():
+            bucket = s3_resource.Bucket(s3_bucket)
+            keys = [x.key for x in list(bucket.objects.all())]
+            keys.sort()
+            return keys == keys_expected
+        
+        yatest.common.wait_for(check_function=check_export_progress, timeout=600)

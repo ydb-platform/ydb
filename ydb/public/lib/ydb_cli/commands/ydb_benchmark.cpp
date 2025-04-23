@@ -488,7 +488,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
     }
 
-    return queriesWithSomeFails ? EXIT_FAILURE : EXIT_SUCCESS;
+    return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {

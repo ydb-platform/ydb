@@ -35,7 +35,8 @@ public:
         bufferSettings
             .WithColumns(Columns)
             .WithMaxRows(maxRows)
-            .WithMaxBytes(maxBytes);
+            .WithMaxBytes(maxBytes)
+            .WithMinBytes(minBytes); // S3 API returns EntityTooSmall error if file part is smaller that 5MB: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
         if (Task.GetEnableChecksums()) {
             bufferSettings.WithChecksum(TS3ExportBufferSettings::Sha256Checksum());
         }
@@ -45,7 +46,6 @@ public:
             break;
         case ECompressionCodec::Zstd:
             bufferSettings
-                .WithMinBytes(minBytes)
                 .WithCompression(TS3ExportBufferSettings::ZstdCompression(Task.GetCompression().GetLevel()));
             break;
         case ECompressionCodec::Invalid:

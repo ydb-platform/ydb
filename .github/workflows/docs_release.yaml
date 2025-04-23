@@ -3,8 +3,7 @@ name: Release documentation
 on:
   push:
     branches:
-      # catch any default branch name, plus your stable-* branches
-      - '**'
+      - 'main'
       - 'stable-**'
     paths:
       - 'ydb/docs/**'

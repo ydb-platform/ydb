@@ -176,14 +176,14 @@ TString MakeIcebergCreateExternalDataSourceProperties(const NConfig::TCommonConf
         catalogSection = fmt::format(
             R"(
                 {catalog_type}={catalog_type_value},
-                {catalog_hive_uri}={catalog_hive_uri_value},
+                {catalog_hive_metastore_uri}={catalog_hive_metastore_uri_value},
                 database_name={database_name}
             )",
-            "catalog_type"_a            = CATALOG_TYPE,
-            "catalog_type_value"_a      = EncloseAndEscapeString(VALUE_HIVE, '"'),
-            "catalog_hive_uri"_a        = CATALOG_HIVE_URI,
-            "catalog_hive_uri_value"_a  = EncloseAndEscapeString(hiveMetastore.uri(), '"'),
-            "database_name"_a           = EncloseAndEscapeString(hiveMetastore.database_name(), '"')
+            "catalog_type"_a                     = CATALOG_TYPE,
+            "catalog_type_value"_a               = EncloseAndEscapeString(VALUE_HIVE_METASTORE, '"'),
+            "catalog_hive_metastore_uri"_a       = CATALOG_HIVE_METASTORE_URI,
+            "catalog_hive_metastore_uri_value"_a = EncloseAndEscapeString(hiveMetastore.uri(), '"'),
+            "database_name"_a                    = EncloseAndEscapeString(hiveMetastore.database_name(), '"')
         );
     });
 
@@ -241,8 +241,8 @@ void FillIcebergGenericClusterConfig(const NConfig::TCommonConfig& yqConfig, con
     });
 
     processor.SetDoOnCatalogHive([&options, &cluster](const FederatedQuery::IcebergCatalog_HiveMetastore& hiveMetastore) {
-        options[CATALOG_TYPE]           = VALUE_HIVE;
-        options[CATALOG_HIVE_URI]       = hiveMetastore.uri();
+        options[CATALOG_TYPE]               = VALUE_HIVE_METASTORE;
+        options[CATALOG_HIVE_METASTORE_URI] = hiveMetastore.uri();
 
         cluster.SetDatabaseName(hiveMetastore.database_name());
     });

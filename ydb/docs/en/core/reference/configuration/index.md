@@ -430,6 +430,7 @@ blob_storage_config:
 
 For a configuration located in 3 availability zones, specify 3 rings. For a configuration within a single availability zone, specify exactly one ring.
 
+
 ## Enabling stable node names {#node-broker-config}
 
 Node names are assigned through the Node Broker, which is a system tablet that registers dynamic nodes in the {{ ydb-short-name }} cluster.

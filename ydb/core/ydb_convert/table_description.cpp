@@ -1503,7 +1503,8 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     FillColumnFamiliesImpl(out, in);
 }
 
-void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TColumnTableDescription& in) {
     const auto& schema = in.GetSchema();
     for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
@@ -1512,6 +1513,16 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 
         FillColumnFamily(*r, family, true);
     }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
 }
 
 void FillAttributes(Ydb::Table::DescribeTableResult& out,

@@ -46,7 +46,7 @@ void TFDTransport::close() {
   int errno_copy = THRIFT_ERRNO;
   fd_ = -1;
   // Have to check uncaught_exception because this is called in the destructor.
-  if (rv < 0 && !std::uncaught_exception()) {
+  if (rv < 0 && !std::uncaught_exceptions()) {
     throw TTransportException(TTransportException::UNKNOWN, "TFDTransport::close()", errno_copy);
   }
 }

@@ -87,15 +87,16 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
-        : ExecutionId(executionId)
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
+        : ExecutionId(settings.ExecutionId)
         , Request(request)
-        , Database(database)
-        , LeaseGeneration(leaseGeneration)
-        , LeaseDuration(leaseDuration)
-        , ResultsTtl(resultsTtl)
-        , QueryServiceConfig(queryServiceConfig)
-        , Counters(counters)
+        , Database(settings.Database)
+        , LeaseGeneration(settings.LeaseGeneration)
+        , LeaseDuration(settings.LeaseDuration)
+        , ResultsTtl(settings.ResultsTtl)
+        , ProgressStatsPeriod(settings.ProgressStatsPeriod)
+        , QueryServiceConfig(std::move(queryServiceConfig))
+        , Counters(settings.Counters)
     {
         UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
     }
@@ -174,7 +175,7 @@ private:
         ev->Record.MutableRequest()->SetSessionId(SessionId);
         ev->SetUserRequestContext(UserRequestContext);
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
+            ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
@@ -680,6 +681,7 @@ private:
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
+    const TDuration ProgressStatsPeriod;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
@@ -713,8 +715,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, std::move(queryServiceConfig), counters);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(request, settings, std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

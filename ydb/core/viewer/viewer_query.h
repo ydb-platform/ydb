@@ -472,17 +472,7 @@ private:
                     if (valueParser.IsNull()) {
                         jsonOptional = NJson::JSON_NULL;
                     } else {
-                        switch(valueParser.GetKind()) {
-                            case NYdb::TTypeParser::ETypeKind::Primitive:
-                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
-                                break;
-                            case NYdb::TTypeParser::ETypeKind::Decimal:
-                                jsonOptional = valueParser.GetDecimal().ToString();
-                                break;
-                            default:
-                                jsonOptional = NJson::JSON_UNDEFINED;
-                                break;
-                        }
+                        jsonOptional = ColumnValueToJsonValue(valueParser);
                     }
                     valueParser.CloseOptional();
                     return jsonOptional;

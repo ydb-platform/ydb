@@ -245,8 +245,9 @@ private:
     TStringStream& Stream;
 };
 
-TFormatResult TCreateTableFormatter::Format(const TString& tablePath,
-        const TTableDescription& tableDesc, bool temporary) {
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc,
+        bool temporary, const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
+        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -402,7 +403,35 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath,
     }
 
     if (printed) {
-        Stream << "\n);";
+        Stream << "\n)";
+    }
+
+    Stream << ";";
+
+    if (!tableDesc.GetCdcStreams().empty()) {
+        Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size());
+        auto firstColumnTypeId = columns[tableDesc.GetKeyColumnIds(0)]->GetTypeId();
+        try {
+            for (int i = 0; i < tableDesc.GetCdcStreams().size(); i++) {
+                Format(tablePath, tableDesc.GetCdcStreams(i), persQueues, firstColumnTypeId);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
+    if (!tableDesc.GetSequences().empty()) {
+        try {
+            for (int i = 0; i < tableDesc.GetSequences().size(); i++) {
+                Format(fullPath, tableDesc.GetSequences(i), sequences);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+        }
     }
 
     TString statement = Stream.Str();
@@ -871,6 +900,154 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
     }
     return true;
 }
+
+void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,
+        const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues, ui32 firstColumnTypeId) {
+    Stream << "ALTER TABLE ";
+    EscapeName(tablePath, Stream);
+    Stream << "\n\t";
+    auto persQueuePath = JoinPath({tablePath, cdcStream.GetName(), "streamImpl"});
+    auto it = persQueues.find(persQueuePath);
+    if (it == persQueues.end() || !it->second) {
+        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected topic path");
+    }
+    const auto& persQueue = *it->second;
+
+    Stream << "ADD CHANGEFEED ";
+    EscapeName(cdcStream.GetName(), Stream);
+    Stream << " WITH (";
+
+    TString del = "";
+    switch (cdcStream.GetMode()) {
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly: {
+            Stream << "MODE = \'KEYS_ONLY\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate: {
+            Stream << "MODE = \'UPDATES\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage: {
+            Stream << "MODE = \'NEW_IMAGE\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage: {
+            Stream << "MODE = \'OLD_IMAGE\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages: {
+            Stream << "MODE = \'NEW_AND_OLD_IMAGES\'";
+            del = ", ";
+            break;
+        }
+        default:
+            ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected cdc stream mode");
+    }
+
+    switch (cdcStream.GetFormat()) {
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson: {
+            Stream << del << "FORMAT = \'JSON\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson: {
+            Stream << del << "FORMAT = \'DEBEZIUM_JSON\'";
+            del = ", ";
+            break;
+        }
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson: {
+            Stream << del << "FORMAT = \'DYNAMODB_STREAMS_JSON\'";
+            del = ", ";
+            break;
+        }
+        default:
+            ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected cdc stream format");
+    }
+
+    if (cdcStream.GetVirtualTimestamps()) {
+        Stream << del << "VIRTUAL_TIMESTAMPS = TRUE";
+        del = ", ";
+    }
+
+    if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
+        Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
+        del = ", ";
+    }
+
+    const auto& pqConfig = persQueue.GetPQTabletConfig();
+    const auto& partitionConfig = pqConfig.GetPartitionConfig();
+
+    if (partitionConfig.HasLifetimeSeconds()) {
+        Stream << del << "RETENTION_PERIOD = ";
+        TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+        Stream << "INTERVAL(";
+        ui64 retentionPeriod = partitionConfig.GetLifetimeSeconds();
+        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(retentionPeriod * 1000000));
+        Y_ENSURE(str.HasValue());
+        EscapeString(TString(str.AsStringRef()), Stream);
+        Stream << ")";
+        del = ", ";
+    }
+
+    if (persQueue.HasTotalGroupCount()) {
+        switch (firstColumnTypeId) {
+            case NScheme::NTypeIds::Uint32:
+            case NScheme::NTypeIds::Uint64:
+            case NScheme::NTypeIds::Uuid: {
+                Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
+                Stream << persQueue.GetTotalGroupCount();
+                del = ", ";
+                break;
+            }
+        }
+    }
+
+    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {
+        Stream << del << "INITIAL_SCAN = TRUE";
+    }
+
+    Stream << ");";
+}
+
+void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
+    auto it = sequences.find(TPathId::FromProto(sequence.GetPathId()));
+    if (it == sequences.end() || !it->second) {
+        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected sequence path id");
+    }
+    const auto& getSequenceResult = *it->second;
+
+    if (getSequenceResult.StartValue == 1 && getSequenceResult.Increment == 1
+            && getSequenceResult.NextValue == 1) {
+        return;
+    }
+
+    Stream << "ALTER SEQUENCE ";
+    auto sequencePath = JoinPath({tablePath, sequence.GetName()});
+    EscapeName(sequencePath, Stream);
+
+    if (getSequenceResult.StartValue != 1) {
+        Stream << " START WITH " << getSequenceResult.StartValue;
+    }
+
+    if (getSequenceResult.Increment != 1) {
+        Stream << " INCREMENT BY " << getSequenceResult.Increment;
+    }
+
+    if (getSequenceResult.NextValue != 1) {
+        if (getSequenceResult.NextValue == getSequenceResult.StartValue) {
+            Stream << " RESTART";
+        } else {
+            Stream << " RESTART WITH " << getSequenceResult.NextValue;
+        }
+    }
+
+    Stream << ";";
+}
+
 
 TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TColumnTableDescription& tableDesc, bool temporary) {
     Stream.Clear();

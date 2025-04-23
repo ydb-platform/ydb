@@ -486,7 +486,12 @@ void ToProto(
 {
     serializedMap->clear();
     for (const auto& [key, value] : originalMap) {
-        serializedMap->insert(std::pair(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value)));
+        auto [_, emplaced] = serializedMap->emplace(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value));
+        if (!emplaced) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map serialization")
+                << TErrorAttribute("key", key)
+                << TErrorAttribute("serialized_key", ToProto<TSerializedKey>(key));
+        }
     }
 }
 
@@ -532,8 +537,14 @@ void FromProto(
     const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap)
 {
     originalMap->clear();
+    originalMap->reserve(serializedMap.size());
     for (const auto& [serializedKey, serializedValue] : serializedMap) {
-        EmplaceOrCrash(*originalMap, FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+        auto [_, emplaced] = originalMap->emplace(FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
+        if (!emplaced) {
+            THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map deserialization")
+                << TErrorAttribute("serialized_key", serializedKey)
+                << TErrorAttribute("key", FromProto<TKey>(serializedKey));
+        }
     }
 }
 

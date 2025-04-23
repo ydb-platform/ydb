@@ -22,6 +22,7 @@
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/utf8.h>
 
@@ -486,7 +487,7 @@ namespace NTypeAnnImpl {
             imports.push_back(&x.second);
         }
 
-        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel)) {
+        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel, Types.UserDataStorage->GetHoldingFileStorage())) {
             return false;
         }
 
@@ -7606,13 +7607,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (settingName == "cpu" || settingName == "extraMem") {
+                } else if (settingName == "cpu" || settingName == "extraMem" ||
+                    settingName == "minLang" || settingName == "maxLang") {
                     if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
 
                     if (!EnsureAtom(child->Tail(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (ctx.Types.LangVer != UnknownLangVersion) {
+                        if (settingName == "minLang" && ctx.Types.LangVer < FromString<NYql::TLangVersion>(child->Tail().Content())) {
+                            TLangVersionBuffer buffer;
+                            TStringBuf str;
+                            if (!FormatLangVersion(FromString<NYql::TLangVersion>(child->Tail().Content()), buffer, str)) {
+                                str = "unknown";
+                            }
+
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available before version " << str));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (settingName == "maxLang" && ctx.Types.LangVer > FromString<NYql::TLangVersion>(child->Tail().Content())) {
+                            TLangVersionBuffer buffer;
+                            TStringBuf str;
+                            if (!FormatLangVersion(FromString<NYql::TLangVersion>(child->Tail().Content()), buffer, str)) {
+                                str = "unknown";
+                            }
+
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available after version " << str));
+                            return IGraphTransformer::TStatus::Error;
+                        }
                     }
                 } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Head().Pos()), TStringBuilder() << "Unknown setting: " << settingName));
@@ -7630,6 +7656,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.Name = TString(name);
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
+                description.LangVer = ctx.Types.LangVer;
                 ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
                     description.SecureParams[TString("token:") + name] = cred.Content;
                     if (name.StartsWith("default_")) {
@@ -7679,6 +7706,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 cached.NormalizedUserType = description.NormalizedUserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
                 cached.SupportsBlocks = description.SupportsBlocks;
                 cached.IsStrict = description.IsStrict;
+                cached.MinLangVer = description.MinLangVer;
+                cached.MaxLangVer = description.MaxLangVer;
 
                 if (name != cached.NormalizedName) {
                     ctx.Types.UdfTypeCache[std::make_tuple(cached.NormalizedName, TString(typeConfig), userType)] = cached;
@@ -7730,6 +7759,20 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             if (cached.IsStrict) {
                                 parent.List(settingIndex++)
                                     .Atom(0, "strict")
+                                    .Seal();
+                            }
+
+                            if (cached.MinLangVer != UnknownLangVersion) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "minLang")
+                                    .Atom(1, cached.MinLangVer)
+                                    .Seal();
+                            }
+
+                            if (cached.MaxLangVer != UnknownLangVersion) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "maxLang")
+                                    .Atom(1, cached.MaxLangVer)
                                     .Seal();
                             }
 

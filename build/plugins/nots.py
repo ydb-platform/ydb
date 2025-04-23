@@ -321,8 +321,9 @@ def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
 def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
+    input_part = "input=TEXT" if disable_include_processor else "input"
 
-    return _build_directives([hide_part, disable_ip_part, "input"], paths)
+    return _build_directives([hide_part, disable_ip_part, input_part], paths)
 
 
 def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):

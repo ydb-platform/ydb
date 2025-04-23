@@ -1343,6 +1343,14 @@ class TestPartition:
         return {cls.KEY: unit.get("TEST_PARTITION")}
 
 
+class TestExperimentalFork:
+    KEY = 'TEST_EXPERIMENTAL_FORK'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: unit.get("TEST_EXPERIMENTAL_FORK")}
+
+
 class TestRecipes:
     KEY = 'TEST-RECIPES'
 

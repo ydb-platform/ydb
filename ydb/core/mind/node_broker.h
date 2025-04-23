@@ -75,6 +75,16 @@ struct TEpochInfo {
     }
 };
 
+struct TApproximateEpochStartInfo {
+    ui64 Id = 0;
+    ui64 Version = 0;
+
+    TString ToString() const
+    {
+        return TStringBuilder() << "#" << Id << "." << Version;
+    }
+};
+
 struct TEvNodeBroker {
     enum EEv {
         // requests

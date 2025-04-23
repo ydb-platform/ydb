@@ -2,7 +2,7 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 */2 * * *"  # At the beginning of every 2nd hour
+    - cron: "0 12 * * *"  # At 12-00 UTC every day
   workflow_dispatch:
     inputs:
       branches:

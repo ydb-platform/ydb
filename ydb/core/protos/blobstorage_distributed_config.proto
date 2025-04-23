@@ -167,6 +167,7 @@ message TEvNodeConfigInvokeOnRoot {
         bool IgnoreDegradedGroupsChecks = 5;
         bool IgnoreVSlotQuotaCheck = 6;
         bool IsSelfHealReasonDecommit = 7;
+        bool FromSelfHeal = 8;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

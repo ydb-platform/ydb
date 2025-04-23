@@ -34,6 +34,7 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 Authentication by username and password using the YDB server is available only to [local users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
 
 This access type implies that each database user has a username and password.
+
 Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
 
 The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.

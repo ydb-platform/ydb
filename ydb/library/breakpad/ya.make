@@ -10,7 +10,7 @@ IF (OS_LINUX)
         GLOBAL minidumps.cpp
     )
 
-    RESOURCE(about.txt "interanal_breakpad_about")
+    RESOURCE(about.txt "internal_breakpad_about")
 
 ENDIF()
 

@@ -158,6 +158,7 @@ namespace NKikimr::NBsController {
                 VDiskIDFromVDiskID(*VDiskToReplace, cmd->MutableVDiskId());
                 cmd->SetConvertToDonor(DonorMode);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+                cmd->SetFromSelfHeal(true);
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
                 return;
             }

@@ -313,6 +313,7 @@ RECURSE_FOR_TESTS(
     ut_compaction
     ut_data_cleanup
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup

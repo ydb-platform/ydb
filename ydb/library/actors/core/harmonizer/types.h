@@ -289,6 +289,7 @@ struct THarmonizerPersistentPoolState {
     i16 Priority = 0;
     ui16 MaxLocalQueueSize = 0;
     ui16 MinLocalQueueSize = 0;
+    TString Name;
 };
 
 // 48 bytes + 320bytes

@@ -5,6 +5,7 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
+#include <ydb/core/actorlib_impl/actor_system_mon.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 
@@ -22,6 +23,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/user_registry.h>
+
 
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
@@ -236,7 +238,6 @@
 #include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
-
 #include <ydb/core/graph/api/service.h>
 #include <ydb/core/graph/api/shard.h>
 
@@ -883,6 +884,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
     }
+
+    setup->LocalServices.emplace_back(
+        MakeActorSystemMonId(),
+        TActorSetupCmd(CreateActorSystemMon(), TMailboxType::ReadAsFilled, appData->SystemPoolId));
+
+
 }
 
 // TImmediateControlBoardInitializer

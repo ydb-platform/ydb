@@ -446,6 +446,20 @@ void THarmonizer::InitIterationState() {
     }
     IterationThreadState.resize(threadsPerIteration * SAVED_ITERATION_COUNT);
 
+    PersistentPoolState.resize(Pools.size());
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        PersistentPoolState[poolIdx].Name = Pools[poolIdx]->Pool->GetName();
+        PersistentPoolState[poolIdx].Priority = Pools[poolIdx]->Priority;
+        PersistentPoolState[poolIdx].DefaultFullThreadCount = Pools[poolIdx]->DefaultFullThreadCount;
+        PersistentPoolState[poolIdx].MinFullThreadCount = Pools[poolIdx]->MinFullThreadCount;
+        PersistentPoolState[poolIdx].MaxFullThreadCount = Pools[poolIdx]->MaxFullThreadCount;
+        PersistentPoolState[poolIdx].DefaultThreadCount = Pools[poolIdx]->DefaultThreadCount;
+        PersistentPoolState[poolIdx].MinThreadCount = Pools[poolIdx]->MinThreadCount;
+        PersistentPoolState[poolIdx].MaxThreadCount = Pools[poolIdx]->MaxThreadCount;
+        PersistentPoolState[poolIdx].MinLocalQueueSize = Pools[poolIdx]->MinLocalQueueSize;
+        PersistentPoolState[poolIdx].MaxLocalQueueSize = Pools[poolIdx]->MaxLocalQueueSize;
+    }
+
     for (size_t i = 0; i < SAVED_ITERATION_COUNT; ++i) {
         THarmonizerIterationPoolState *poolState = IterationPoolState.data() + i * poolsPerIteration;
         IterationState[i].Pools.Set(poolState, poolState + poolsPerIteration);

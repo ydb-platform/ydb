@@ -1041,24 +1041,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     if (info.Blobs.empty()) { //all from head, answer right now
         PQ_LOG_D("Reading cookie " << cookie << ". All data is from uncompacted head.");
 
-        TReadAnswer answer = info.FormAnswer(
-            ctx, StartOffset, EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
-            info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
-        );
-        const auto* ev = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
-        Y_ABORT_UNLESS(ev);
-        const auto& resp = ev->Response;
-        if (info.IsSubscription) {
-            TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(1);
-        }
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_HEAD_ONLY_OK].Increment(1);
-        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_HEAD_ONLY].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
-
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
-
-        ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
-
-        OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
+        OnReadComplete(info, &UsersInfoStorage->GetOrCreate(info.User, ctx), nullptr, ctx);
         return;
     }
 

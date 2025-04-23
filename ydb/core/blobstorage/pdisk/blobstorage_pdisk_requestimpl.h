@@ -133,6 +133,7 @@ public:
     TActorId CutLogId;
     TActorId WhiteboardProxyId;
     ui32 SlotId;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -141,6 +142,7 @@ public:
         , CutLogId(ev.CutLogID)
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
+        , SlotSizeUnits(ev.SlotSizeUnits)
     {}
 
     ERequestType GetType() const override {
@@ -159,6 +161,7 @@ public:
         str << "VDisk# " << VDisk.ToString();
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
+        str << " SlotSizeUnits# " << SlotSizeUnits;
         str << "}";
         return str.Str();
     }

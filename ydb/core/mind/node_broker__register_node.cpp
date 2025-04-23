@@ -221,9 +221,11 @@ public:
         if (ShouldUpdateVersion()) {
             Self->Committed.UpdateEpochVersion();
             Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
         }
 
         Reply(ctx);
+        Self->SendUpdateNodes(ctx);
     }
 
 private:

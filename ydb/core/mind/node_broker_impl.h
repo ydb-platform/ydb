@@ -154,6 +154,29 @@ private:
         }
     };
 
+    struct TPipeServerInfo {
+        TPipeServerInfo(TActorId id, TActorId icSession)
+            : Id(id)
+            , IcSession(icSession)
+        {}
+
+        TActorId Id;
+        TActorId IcSession;
+        THashSet<TActorId> Subscribers;
+    };
+
+    struct TSubscriberInfo {
+        TSubscriberInfo(TActorId id, ui64 seqNo, TPipeServerInfo* pipeServerInfo)
+            : Id(id)
+            , SeqNo(seqNo)
+            , PipeServerInfo(pipeServerInfo)
+        {}
+
+        TActorId Id;
+        ui64 SeqNo = 0;
+        TPipeServerInfo* PipeServerInfo;
+    };
+
     class TTxExtendLease;
     class TTxInitScheme;
     class TTxLoadState;
@@ -223,10 +246,12 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSubscribeNodesRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSyncNodesRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
-            IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-            IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+            hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
@@ -251,10 +276,21 @@ private:
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
     void PrepareEpochCache();
+    void PrepareUpdateNodesLog();
     void AddNodeToEpochCache(const TNodeInfo &node);
     void AddDeltaToEpochDeltasCache(const TString& delta, ui64 version);
+    void AddNodeToUpdateNodesLog(const TNodeInfo &node);
 
     void SubscribeForConfigUpdates(const TActorContext &ctx);
+
+    void SendUpdateNodes(const TActorContext &ctx);
+    void SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 version, const TActorContext &ctx);
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const;
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const;
+
+    TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, const TActorContext &ctx);
+    void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
+    bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
@@ -276,6 +312,12 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
@@ -288,10 +330,18 @@ private:
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
     TSchedulerCookieHolder EpochTimerCookieHolder;
-    TString EpochCache;
 
+    // old epoch protocol
+    TString EpochCache;
     TString EpochDeltasCache;
     TVector<TCacheVersion> EpochDeltasVersions;
+
+    // new delta protocol
+    TString UpdateNodesLog;
+    TVector<TCacheVersion> UpdateNodesLogVersions;
+    ui64 SentVersion;
+    THashMap<TActorId, TPipeServerInfo> PipeServers;
+    THashMap<TActorId, TSubscriberInfo> Subscribers;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

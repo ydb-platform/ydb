@@ -33,7 +33,9 @@ public:
         Self->Committed.ApplyStateDiff(Diff);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
+        Self->PrepareUpdateNodesLog();
         Self->ProcessDelayedListNodesRequests();
+        Self->SendUpdateNodes(ctx);
     }
 
 private:

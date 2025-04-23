@@ -95,8 +95,8 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
-        const auto lockTxId = Transaction.HasLockGuard() && Transaction.GetLockGuard().HasOwnerTxId()
-            ? TTxId(Transaction.GetLockGuard().GetOwnerTxId())
+        const TTxId lockTxId = op.HasLockTxId()
+            ? TTxId(op.GetLockTxId())
             : OperationId.GetTxId();
 
         LOG_N("TCreateLock Propose"

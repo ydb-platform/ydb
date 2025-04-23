@@ -220,9 +220,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLock);
     modifyScheme.SetInternal(true);
-    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     modifyScheme.SetWorkingDir(path.Parent().PathString());
     modifyScheme.MutableLockConfig()->SetName(path.LeafName());
+    modifyScheme.MutableLockConfig()->SetLockTxId(ui64(buildInfo.LockTxId));
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
         "LockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -271,6 +271,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.SetInternal(true);
     modifyScheme.SetWorkingDir(path.Parent().PathString());
     if (path.IsLocked()) {
+        // because some impl tables may be not locked, do not pass lock guard for them
+        // otherwise `CheckLocks` check would fail
         modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     }
 

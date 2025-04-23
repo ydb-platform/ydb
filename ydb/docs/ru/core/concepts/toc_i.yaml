@@ -32,6 +32,8 @@ items:
   when: feature_async_replication
 - name: Оптимизатор запросов
   href: optimizer.md
+- name: Режимы кэширования
+  href: cache_modes.md
 - name: Федеративные запросы
   include:
     path: federated_query/toc_p.yaml

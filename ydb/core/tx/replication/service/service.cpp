@@ -394,11 +394,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
+            .AutoCommit(autoCommit)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
-            )
-            .AutoCommit(autoCommit);
+            );
 
         return [ydbProxy, settings = std::move(topicReaderSettings)]() {
             return CreateRemoteTopicReader(ydbProxy, settings);

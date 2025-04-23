@@ -75,7 +75,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }
 
-    void Handle(TEvYdbProxy::TEvStartReadingSession::TPtr& ev) {
+    void Handle(TEvYdbProxy::TEvTopicStartReadingSession::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
@@ -90,9 +90,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto settings = NYdb::NTopic::TCommitOffsetSettings()
             .ReadSessionId(ReadSessionId);
 
-        TString topicName{Settings.GetBase().Topics_.at(0).Path_};
-        ui64 partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
-        TString consumerName{Settings.GetBase().ConsumerName_};
+        const auto topicName = Settings.GetBase().Topics_.at(0).Path_;
+        const auto partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
+        const auto consumerName = Settings.GetBase().ConsumerName_;
 
         Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(topicName, partitionId, consumerName, ev->Get()->Offset, std::move(settings)));
     }
@@ -151,12 +151,12 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
+            hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvTopicEndPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
-            hFunc(TEvYdbProxy::TEvStartReadingSession, Handle);
-            hFunc(TEvWorker::TEvCommit, Handle);
+            hFunc(TEvYdbProxy::TEvTopicStartReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -169,7 +169,6 @@ private:
 
     TActorId Worker;
     TActorId ReadSession;
-
     TString ReadSessionId;
 }; // TRemoteTopicReader
 

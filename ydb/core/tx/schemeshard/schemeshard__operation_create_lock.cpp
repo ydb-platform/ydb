@@ -161,19 +161,16 @@ public:
         const auto pathId = tablePath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        if (auto lockedBy = tablePath.LockedBy(); lockedBy != InvalidTxId) {
-            if (lockedBy == lockTxId) {
-                result->SetError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "path checks failed"
-                    << ", path already locked by this operation"
-                    << ", path: " << tablePath.PathString());
-                return result;
-            } else {
-                result->SetError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "path checks failed"
-                    << ", path already locked by another operation"
-                    << ", path: " << tablePath.PathString()
-                    << ", locked by: " << lockedBy);
-                return result;
-            }
+        if (tablePath.LockedBy() == lockTxId) {
+            result->SetError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "path checks failed"
+                << ", path already locked by this operation"
+                << ", path: " << tablePath.PathString());
+            return result;
+        }
+        TString errStr;
+        if (!context.SS->CheckLocks(pathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
         }
 
         auto guard = context.DbGuard();

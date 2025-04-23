@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    actor_system_mon.cpp
+    actor_system_mon.h
     actor_tracker.cpp
     actor_tracker.h
     async_destroyer.h

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "types.h"
 
 namespace NActors {
     class IExecutorPool;
@@ -54,6 +55,8 @@ namespace NActors {
     // Pool cpu harmonizer
     class IHarmonizer {
     public:
+        using TIterationViewerCallback = std::function<void(const TIterableDoubleRange<THarmonizerIterationState>&)>;
+
         virtual ~IHarmonizer() {}
         virtual void Harmonize(ui64 ts) = 0;
         virtual void DeclareEmergency(ui64 ts) = 0;
@@ -62,6 +65,8 @@ namespace NActors {
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual THarmonizerStats GetStats() const = 0;
         virtual void SetSharedPool(ISharedPool* pool) = 0;
+
+        virtual bool InvokeReadHistory(TIterationViewerCallback callback) = 0;
     };
 
     std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts);

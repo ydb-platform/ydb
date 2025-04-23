@@ -43,7 +43,9 @@ struct TPoolInfo {
     i16 Priority = 0;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
-    ui32 MaxAvgPingUs = 0;
+    ui64 LastAvgPingUs = 0;
+    ui64 LastAvgPingUsWithSmallWindow = 0;
+    ui64 MaxAvgPingUs = 0;
     ui64 LastUpdateTs = 0;
     ui64 NotEnoughCpuExecutions = 0;
     ui64 NewNotEnoughCpuExecutions = 0;
@@ -56,6 +58,11 @@ struct TPoolInfo {
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
     std::atomic<float> PotentialMaxThreadCount = 0;
+    std::atomic<ui64> IncreaseForeignSlotsInSharedPool = 0;
+    std::atomic<ui64> DecreaseForeignSlotsInSharedPool = 0;
+    bool IsNeedy = false;
+    bool IsStarved = false;
+    bool IsHoggish = false;
 
     TValueHistory<16> UsedCpu;
     TValueHistory<16> ElapsedCpu;

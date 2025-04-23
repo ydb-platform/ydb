@@ -15,13 +15,13 @@ using namespace NPrivate;
 
 namespace {
 
-bool NodeHasQLCompatibleType(const TExprNode::TPtr& node) {
+bool NodeHasQLCompatibleType(const TExprNode::TPtr& node, bool allowOptional) {
     bool isOptional = false;
     const TDataExprType* dataType = nullptr;
     if (!IsDataOrOptionalOfData(node->GetTypeAnn(), isOptional, dataType)) {
         return false;
     }
-    if (isOptional) {
+    if (!allowOptional && isOptional) {
         return false;
     }
     if (!dataType) {
@@ -33,8 +33,8 @@ bool NodeHasQLCompatibleType(const TExprNode::TPtr& node) {
     return true;
 }
 
-TExprNode::TPtr CheckQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg) {
-    if (!NodeHasQLCompatibleType(node)) {
+TExprNode::TPtr CheckQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, bool allowOptional) {
+    if (!NodeHasQLCompatibleType(node, allowOptional)) {
         return nullptr;
     }
     if (IsDepended(*node, *rowArg)) {
@@ -43,7 +43,7 @@ TExprNode::TPtr CheckQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr&
     return node;
 }
 
-TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx) {
+TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
     if (!node->IsCallable("Member")) {
         return nullptr;
     }
@@ -55,22 +55,22 @@ TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TP
     if (memberName.StartsWith("_yql_sys_")) {
         return nullptr;
     }
-    if (!NodeHasQLCompatibleType(node)) {
+    if (!NodeHasQLCompatibleType(node, allowOptional)) {
         return nullptr;
     }
     auto arg = newRowArg;
     return ctx.ChangeChild(*node, 0, std::move(arg));
 }
 
-TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx) {
+TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional = false) {
     YQL_ENSURE(node->ChildrenSize() == 2);
     TExprNode::TPtr childLeft;
     TExprNode::TPtr childRight;
-    if (childLeft = ConvertQLMember(node->ChildPtr(0), rowArg, newRowArg, ctx)) {
-        childRight = CheckQLConst(node->ChildPtr(1), rowArg);
+    if (childLeft = ConvertQLMember(node->ChildPtr(0), rowArg, newRowArg, ctx, allowOptional)) {
+        childRight = CheckQLConst(node->ChildPtr(1), rowArg, allowOptional);
     }
-    else if (childRight = ConvertQLMember(node->ChildPtr(1), rowArg, newRowArg, ctx)) {
-        childLeft = CheckQLConst(node->ChildPtr(0), rowArg);
+    else if (childRight = ConvertQLMember(node->ChildPtr(1), rowArg, newRowArg, ctx, allowOptional)) {
+        childLeft = CheckQLConst(node->ChildPtr(0), rowArg, allowOptional);
     }
     if (!childLeft || !childRight) {
         return nullptr;
@@ -79,7 +79,7 @@ TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode
 }
 
 TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx) {
-    if (node->IsCallable({"And", "Or", "Not"})) {
+    if (node->IsCallable({"And", "Or", "Not", "Exists"})) {
         TExprNode::TListType convertedChildren;
         for (const auto& child : node->ChildrenList()) {
             const auto converted = ConvertQLSubTree(child, rowArg, newRowArg, ctx);
@@ -90,8 +90,32 @@ TExprNode::TPtr ConvertQLSubTree(const TExprNode::TPtr& node, const TExprNode::T
         };
         return ctx.ChangeChildren(*node, std::move(convertedChildren));
     }
+    if (node->IsCallable("Coalesce")) {
+        if (node->ChildrenSize() != 2) {
+            return nullptr;
+        }
+        const auto comparison = node->Child(0);
+        if (!comparison->IsCallable({"<", "<=", ">", ">=", "==", "!="})) {
+            return nullptr;
+        }
+        const auto nullValue = node->Child(1);
+        if (!nullValue->IsCallable("Bool")) {
+            return nullptr;
+        }
+        const auto convertedComparison = ConvertQLComparison(comparison, rowArg, newRowArg, ctx, /*allowOptional*/ true);
+        if (!convertedComparison) {
+            return nullptr;
+        }
+        return ctx.ChangeChildren(*node, {convertedComparison, nullValue});
+    }
     if (node->IsCallable({"<", "<=", ">", ">=", "==", "!="})) {
         return ConvertQLComparison(node, rowArg, newRowArg, ctx);
+    }
+    if (node->IsCallable("Bool")) {
+        return node;
+    }
+    if (node->IsCallable("Member")) {
+        return ConvertQLMember(node, rowArg, newRowArg, ctx);
     }
     return nullptr;
 }

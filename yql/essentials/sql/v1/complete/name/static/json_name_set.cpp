@@ -1,5 +1,8 @@
 #include "name_service.h"
 
+#include "frequency.h"
+#include "name_index.h"
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
@@ -78,15 +81,52 @@ namespace NSQLComplete {
         return hints;
     }
 
+    TVector<TString> Pruned(TVector<TString> names, const THashMap<TString, size_t>& frequency) {
+        THashMap<TString, TVector<std::tuple<TString, size_t>>> groups;
+
+        for (auto& [normalized, original] : BuildNameIndex(std::move(names), NormalizeName)) {
+            size_t freq = 0;
+            if (const size_t* it = frequency.FindPtr(original)) {
+                freq = *it;
+            }
+            groups[normalized].emplace_back(std::move(original), freq);
+        }
+
+        for (auto& [_, group] : groups) {
+            Sort(group, [](const auto& lhs, const auto& rhs) {
+                return std::get<1>(lhs) < std::get<1>(rhs);
+            });
+        }
+
+        names = TVector<TString>();
+        names.reserve(groups.size());
+        for (auto& [_, group] : groups) {
+            Y_ASSERT(!group.empty());
+            names.emplace_back(std::move(std::get<0>(group.back())));
+        }
+        return names;
+    }
+
+    NameSet Pruned(NameSet names) {
+        auto frequency = LoadFrequencyDataForPrunning();
+        names.Pragmas = Pruned(std::move(names.Pragmas), frequency.Pragmas);
+        names.Types = Pruned(std::move(names.Types), frequency.Types);
+        names.Functions = Pruned(std::move(names.Functions), frequency.Functions);
+        for (auto& [k, h] : names.Hints) {
+            h = Pruned(h, frequency.Hints);
+        }
+        return names;
+    }
+
     NameSet MakeDefaultNameSet() {
-        return {
+        return Pruned({
             .Pragmas = ParsePragmas(LoadJsonResource("pragmas_opensource.json")),
             .Types = ParseTypes(LoadJsonResource("types.json")),
             .Functions = Merge(
                 ParseFunctions(LoadJsonResource("sql_functions.json")),
                 ParseUdfs(LoadJsonResource("udfs_basic.json"))),
             .Hints = ParseHints(LoadJsonResource("statements_opensource.json")),
-        };
+        });
     }
 
 } // namespace NSQLComplete

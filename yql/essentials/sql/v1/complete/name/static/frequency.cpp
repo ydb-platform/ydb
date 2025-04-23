@@ -1,5 +1,7 @@
 #include "frequency.h"
 
+#include "name_index.h"
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
@@ -54,7 +56,7 @@ namespace NSQLComplete {
         }
     };
 
-    TFrequencyData Convert(TVector<TFrequencyItem> items) {
+    TFrequencyData Convert(TVector<TFrequencyItem> items, auto normalize) {
         TFrequencyData data;
         for (auto& item : items) {
             if (item.Parent == Json.Parent.Pragma ||
@@ -65,7 +67,7 @@ namespace NSQLComplete {
                 item.Parent == Json.Parent.Module ||
                 item.Parent == Json.Parent.ReadHint ||
                 item.Parent == Json.Parent.InsertHint) {
-                item.Rule = ToLowerUTF8(item.Rule);
+                item.Rule = normalize(item.Rule);
             }
 
             if (item.Parent == Json.Parent.Pragma) {
@@ -89,14 +91,24 @@ namespace NSQLComplete {
         return data;
     }
 
+    TFrequencyData ParseJsonFrequencyData(const TStringBuf text, auto normalize) {
+        return Convert(TFrequencyItem::ParseListFromJsonText(text), normalize);
+    }
+
     TFrequencyData ParseJsonFrequencyData(const TStringBuf text) {
-        return Convert(TFrequencyItem::ParseListFromJsonText(text));
+        return ParseJsonFrequencyData(text, NormalizeName);
     }
 
     TFrequencyData LoadFrequencyData() {
         TString text;
         Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
-        return ParseJsonFrequencyData(text);
+        return ParseJsonFrequencyData(text, NormalizeName);
+    }
+
+    TFrequencyData LoadFrequencyDataForPrunning() {
+        TString text;
+        Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
+        return ParseJsonFrequencyData(text, UnchangedName);
     }
 
 } // namespace NSQLComplete

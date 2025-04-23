@@ -56,6 +56,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , DeterministicTimeProviderSeed_(options.DeterministicTimeProviderSeed_)
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
+    , LangVer_(options.LangVer_)
 {
     // Prepare input struct types and extract all column names from inputs
 
@@ -300,7 +301,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             LLVMSettings_,
             CountersProvider_,
             NativeYtTypeFlags_,
-            DeterministicTimeProviderSeed_
+            DeterministicTimeProviderSeed_,
+            langver
         );
 
         with_lock (graph.ScopedAlloc_) {
@@ -551,7 +553,8 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             LLVMSettings_,                                                              \
             CountersProvider_,                                                          \
             NativeYtTypeFlags_,                                                         \
-            DeterministicTimeProviderSeed_                                              \
+            DeterministicTimeProviderSeed_,                                             \
+            LangVer_                                                                    \
         ));                                                                             \
     }
 

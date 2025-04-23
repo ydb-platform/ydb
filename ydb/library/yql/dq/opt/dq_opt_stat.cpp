@@ -32,7 +32,11 @@ namespace {
         "CurrentUtcTimestamp"
     };
 
-    bool CanFoldUdf(const TExprNode::TPtr& input, bool withParams=false) {
+    bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams = false) {
+        if (!TCoApply::Match(input.Get())) {
+            return false;
+        }
+
         if (input->ChildrenSize()!=2) {
             return false;
         }
@@ -45,6 +49,7 @@ namespace {
                     return false;
                 }
             }
+
             if (withParams) {
                 return IsConstantExprWithParams(input->Child(1));
             }
@@ -245,7 +250,7 @@ bool IsConstantExpr(const TExprNode::TPtr& input) {
         return true;
     }
 
-    else if (input->IsCallable("Apply") && CanFoldUdf(input)) {
+    else if (TCoApply::Match(input.Get()) && IsConstantUdf(input)) {
         return true;
     }
 
@@ -279,7 +284,7 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
         return true;
     }
 
-    else if (input->IsCallable("Apply") && CanFoldUdf(input, true)) {
+    else if (TCoApply::Match(input.Get()) && IsConstantUdf(input, true)) {
         return true;
     }
 

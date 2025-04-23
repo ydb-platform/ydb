@@ -89,7 +89,7 @@ jobs:
             ].join(' ');
             const { data: { items: docsPRs } } = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
             console.log(`Found ${docsPRs.length} documentation PR(s)`);
-
+  
             // 2) fetch primary-docs-reviewers
             const members = await github.paginate(
               github.rest.teams.listMembersInOrg,
@@ -97,12 +97,12 @@ jobs:
             );
             const reviewerLogins = members.map(u => u.login);
             console.log(`Loaded ${reviewerLogins.length} reviewer(s) from team`);
-
+  
             for (const prItem of docsPRs) {
               const prNum = prItem.number;
               console.log(`\n→ Processing PR #${prNum}`);
               const pr    = (await github.rest.pulls.get({ owner, repo, pull_number: prNum })).data;
-
+  
               // assign reviewer if none assigned
               if (!pr.assignees.some(a => reviewerLogins.includes(a.login))) {
                 const pick = reviewerLogins[Math.floor(Math.random() * reviewerLogins.length)];
@@ -116,16 +116,20 @@ jobs:
               const [comments, reviewComments, reviews, commits] = await Promise.all([
                 github.paginate(github.rest.issues.listComments,       { owner, repo, issue_number: prNum, per_page: 100 }),
                 github.paginate(github.rest.pulls.listReviewComments, { owner, repo, pull_number:  prNum, per_page: 100 }),
-                github.paginate(github.rest.pulls.listReviews,        { owner, repo, pull_number:  prNum, per_page: 100 }),
-                github.paginate(github.rest.pulls.listCommits,        { owner, repo, pull_number:  prNum, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviews,        { owner, repo, pull_number: prNum, per_page: 100 }),
+                github.paginate(github.rest.pulls.listCommits,        { owner, repo, pull_number: prNum, per_page: 100 }),
               ]);
   
               const author    = pr.user.login;
               const assignees = pr.assignees.map(a => a.login);
   
               const extract = (arr, whoFn, dateKey) =>
-                arr.map(i => ({ who: whoFn(i), when: new Date(i[dateKey]) }))
-                   .filter(x => x.when);
+                arr
+                  .map(i => {
+                    const d = new Date(i[dateKey]);
+                    return { who: whoFn(i), when: d };
+                  })
+                  .filter(x => x.when && !isNaN(x.when.getTime()));
   
               const allEvents = [
                 ...extract(comments,       c => c.user.login,                             'created_at'),
@@ -133,7 +137,7 @@ jobs:
                 ...extract(reviews,        r => r.user.login,                             'submitted_at'),
                 ...extract(commits,        c => c.author?.login || c.commit?.author?.name, 'commit.author.date'),
                 { who: author, when: new Date(pr.created_at) }
-              ];
+              ].filter(e => e.when && !isNaN(e.when.getTime()));
   
               const authorEvents   = allEvents.filter(e => e.who === author).map(e => e.when);
               const reviewerEvents = allEvents.filter(e => assignees.includes(e.who)).map(e => e.when);
@@ -142,8 +146,9 @@ jobs:
               const lastReviewerActivity = reviewerEvents.length ? new Date(Math.max(...reviewerEvents)) : new Date(0);
   
               // last nudge time
-              const nudgeTimes = comments.filter(c => c.body.includes(BOT_MARKER))
-                                         .map(c => new Date(c.created_at));
+              const nudgeTimes = comments
+                .map(c => new Date(c.created_at))
+                .filter(d => !isNaN(d.getTime()) && comments.find(cc => cc.body.includes(BOT_MARKER)));
               const lastNudgeTime = nudgeTimes.length ? new Date(Math.max(...nudgeTimes)) : new Date(0);
   
               // RULE 1: nudge reviewers

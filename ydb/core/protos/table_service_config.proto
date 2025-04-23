@@ -381,4 +381,7 @@ message TTableServiceConfig {
     }
 
     optional TBatchOperationSettings BatchOperationSettings = 81;
+
+    optional bool EnableFoldUdfs = 82 [ default = true ];
+
 };

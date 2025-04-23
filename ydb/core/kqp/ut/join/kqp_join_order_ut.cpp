@@ -683,6 +683,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
+    Y_UNIT_TEST_TWIN(UdfConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/udf_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+    }
+
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);
     }

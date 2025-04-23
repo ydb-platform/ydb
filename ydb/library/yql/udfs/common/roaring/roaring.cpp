@@ -428,6 +428,65 @@ namespace {
         }
     };
 
+    class TRoaringIntersect: public TBoxedValue {
+    public:
+        TRoaringIntersect(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("Intersect");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* left = GetBitmapFromArg(args[0]);
+                auto* right = GetBitmapFromArg(args[1]);
+
+                return TUnboxedValuePod(roaring_bitmap_intersect(left, right));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
+    class TRoaringIntersectWithBinary: public TBoxedValue {
+    public:
+        TRoaringIntersectWithBinary(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return TStringRef::Of("IntersectWithBinary");
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                auto* left = GetBitmapFromArg(args[0]);
+                auto* right = DeserializePortable(args[1].AsStringRef());
+
+                auto intersect = roaring_bitmap_intersect(left, right);
+                roaring_bitmap_free(right);
+                return TUnboxedValuePod(intersect);
+
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
     class TRoaringModule: public IUdfModule {
     public:
         class TMemoryHookInitializer {
@@ -610,6 +669,24 @@ namespace {
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringNaiveBulkAndWithBinary(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringIntersect::Name() == name) {
+                    builder.Returns<bool>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<TResource<RoaringResourceName>>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringIntersect(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringIntersectWithBinary::Name() == name) {
+                    builder.Returns<bool>()
+                        .Args()
+                        ->Add<TAutoMap<TResource<RoaringResourceName>>>()
+                        .Add<TAutoMap<char*>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringIntersectWithBinary(builder.GetSourcePosition()));
                     }
                 } else {
                     TStringBuilder sb;

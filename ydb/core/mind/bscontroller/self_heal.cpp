@@ -300,7 +300,8 @@ namespace NKikimr::NBsController {
         static constexpr uint32_t GroupLayoutSanitizerOperationLogSize = 128;
         TOperationLog<GroupLayoutSanitizerOperationLogSize> GroupLayoutSanitizerOperationLog;
 
-        std::deque<TGroupId> ReassignQueue;
+        std::deque<TGroupId> SelfHealReassignQueue;
+        std::deque<TGroupId> GroupLayoutSanitizerReassignQueue;
         std::optional<TActorId> ActiveReassignerActorId = std::nullopt;
 
     public:
@@ -452,7 +453,7 @@ namespace NKikimr::NBsController {
                         &isSelfHealReasonDecommit, &ignoreDegradedGroupsChecks)) {
                     if (ActiveReassignerActorId) {
                         group.ReassignStatus = EReassignStatus::Enqueued;
-                        ReassignQueue.push_back(group.GroupId);
+                        SelfHealReassignQueue.push_back(group.GroupId);
                     } else {
                         CreateReassignerActor(group, vdiskId, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks);
                     }
@@ -509,7 +510,12 @@ namespace NKikimr::NBsController {
                     } else {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
                                 "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
-                        CreateReassignerActor(group, std::nullopt, false, false);
+                        if (ActiveReassignerActorId) {
+                            group.ReassignStatus = EReassignStatus::Enqueued;
+                            GroupLayoutSanitizerReassignQueue.push_back(group.GroupId);
+                        } else {
+                            CreateReassignerActor(group, std::nullopt, false, false);
+                        }
                     }
                 }
             }
@@ -619,7 +625,7 @@ namespace NKikimr::NBsController {
             if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
                 auto& group = it->second;
                 group.ReassignStatus = EReassignStatus::NotNeeded;
-                ProcessReassignQueue();
+                ProcessReassignQueues();
 
                 const TMonotonic now = TActivationContext::Monotonic();
                 if (ev->Get()->Success) {
@@ -669,12 +675,20 @@ namespace NKikimr::NBsController {
             Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         }
 
-        void ProcessReassignQueue() {
-            while (!ReassignQueue.empty()) {
-                TGroupId groupId = ReassignQueue.front();
-                ReassignQueue.pop_front();
-                if (CreateReassignerActorIfNeeded(groupId)) {
-                    break;
+        void ProcessReassignQueues() {
+            while (!ActiveReassignerActorId && !SelfHealReassignQueue.empty()) {
+                TGroupId groupId = SelfHealReassignQueue.front();
+                SelfHealReassignQueue.pop_front();
+                CreateReassignerActorIfNeeded(groupId);
+            }
+
+            while (!ActiveReassignerActorId && !GroupLayoutSanitizerReassignQueue.empty()) {
+                TGroupId groupId = GroupLayoutSanitizerReassignQueue.front();
+                GroupLayoutSanitizerReassignQueue.pop_front();
+                auto it = Groups.find(groupId);
+                if (it != Groups.end()) {
+                    TGroupRecord& group = it->second;
+                    CreateReassignerActor(group, std::nullopt, false, false);
                 }
             }
         }

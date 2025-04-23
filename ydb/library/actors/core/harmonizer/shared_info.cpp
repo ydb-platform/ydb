@@ -22,6 +22,7 @@ void TSharedInfo::Pull(const ISharedPool& shared) {
     }
 
     bool isFirst = true;
+    FreeCpu = 0.0;
 
     for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
         TStackVec<ui64, 8> elapsedByPool;
@@ -56,6 +57,7 @@ void TSharedInfo::Pull(const ISharedPool& shared) {
         }
         float parkedCpu = static_cast<float>(parked) / threadTime;
         CpuConsumption[ThreadOwners[threadId]].CpuQuota += parkedCpu;
+        FreeCpu += parkedCpu;
     }
 }
 

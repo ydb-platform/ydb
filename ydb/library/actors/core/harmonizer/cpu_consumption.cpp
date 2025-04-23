@@ -94,8 +94,9 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
         if (isStarved) {
             IsStarvedPresent = true;
         }
-
+        pool.IsStarved = isStarved;
         bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount);
+        pool.IsNeedy = isNeedy;
         IsNeedyByPool.push_back(isNeedy);
         if (isNeedy) {
             NeedyPools.push_back(poolIdx);
@@ -103,10 +104,10 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
         bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount);
         if (isHoggish) {
-            float freeCpu = std::max(currentThreadCount - PoolConsumption[poolIdx].Elapsed, currentThreadCount - PoolConsumption[poolIdx].LastSecondElapsed);
+            float freeCpu = currentThreadCount - PoolConsumption[poolIdx].Elapsed;
             HoggishPools.push_back({poolIdx, freeCpu});
         }
-
+        pool.IsHoggish = isHoggish;
         Elapsed += PoolConsumption[poolIdx].Elapsed;
         Cpu += PoolConsumption[poolIdx].Cpu;
         LastSecondElapsed += PoolConsumption[poolIdx].LastSecondElapsed;
@@ -139,14 +140,12 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
     HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "HoggishPools", HoggishPools.size());
 
-    Budget = TotalCores - Max(Elapsed, LastSecondElapsed);
+    Budget = TotalCores - Elapsed;
+    Overbooked = -Budget;
+    LostCpu = Max<float>(0.0f, Elapsed - Cpu);
     BudgetInt = static_cast<i16>(Max(Budget, 0.0f));
     if (Budget < -0.1) {
         IsStarvedPresent = true;
-    }
-    Overbooked = Elapsed - Cpu;
-    if (Overbooked < 0) {
-        IsStarvedPresent = false;
     }
     HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "BudgetInt", BudgetInt, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu, "LastSecondElapsed", LastSecondElapsed, "LastSecondCpu", LastSecondCpu);
 }

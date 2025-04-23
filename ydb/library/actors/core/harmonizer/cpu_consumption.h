@@ -26,6 +26,7 @@ struct THarmonizerCpuConsumption {
     float Budget = 0.0;
     i16 BudgetInt = 0;
     float Overbooked = 0.0;
+    float LostCpu = 0.0;
 
     float Elapsed = 0.0;
     float Cpu = 0.0;

@@ -107,7 +107,7 @@ class TestTTL(TestBase):
         dml.query(create_ttl_sql_request(f"ttl_{ttl}", {"PT0S": ""}, "SECONDS" if ttl ==
                                          "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name))
         self.insert(table_name, pk_types, all_types, index, ttl)
-        self.select(table_name, pk_types, all_types, index)
+        self.select(table_name, pk_types, all_types, index, dml)
 
     def insert(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str):
         now_date = datetime.now()
@@ -154,29 +154,18 @@ class TestTTL(TestBase):
         """
         self.query(insert_sql)
 
-    def select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str]):
-        print(f"{table_name} select")
+    def select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], dml: DMLOperations):
         for i in range(1, 7):
-            self.create_select(table_name, pk_types, all_types, index, i, 0)
+            self.create_select(table_name, pk_types,
+                               all_types, index, i, 0, dml)
 
         for i in range(7, 9):
-            self.create_select(table_name, pk_types, all_types, index, i, 1)
-        print(f"{table_name} select ok")
+            self.create_select(table_name, pk_types,
+                               all_types, index, i, 1, dml)
 
-    def create_select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], value: int, expected_count_rows: int):
-        create_all_type = []
-        for type_name in all_types.keys():
-            if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                create_all_type.append(
-                    f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](value), type_name)}")
-        sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](value), type_name)}" for type_name in pk_types.keys()])}
-                {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](value), type_name)}" for type_name in index.keys()])}
-                {" and " if len(create_all_type) != 0 else ""}
-                {" and ".join(create_all_type)}
-                """
+    def create_select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], value: int, expected_count_rows: int, dml: DMLOperations):
+        sql_select = dml.create_select_sql_request(
+            table_name, all_types, value, pk_types, value, index, value, "", value)
         wait_for(self.create_predicate(
             sql_select, expected_count_rows), timeout_seconds=200)
         rows = self.query(sql_select)
@@ -222,5 +211,7 @@ class TestTTL(TestBase):
     def create_predicate(self, sql_select, expected_count_rows):
         def predicate():
             rows = self.query(sql_select)
-            return (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1
+            if expected_count_rows == 1:
+                return True
+            return len(rows) == 1 and rows[0].count == expected_count_rows
         return predicate

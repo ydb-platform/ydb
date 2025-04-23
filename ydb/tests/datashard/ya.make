@@ -9,4 +9,4 @@ RECURSE(
     s3
     vector_index
     ttl
-)      
+)

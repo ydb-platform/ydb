@@ -105,7 +105,7 @@ struct TReadInfo {
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
         const bool isActive
     ) {
-        TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
+        static TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
         if (!response) {
             response = &fakeBlobResponse;
         }

@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <yql/essentials/sql/v1/complete/core/input.h>
+
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -36,7 +38,7 @@ namespace NSQLComplete {
             std::unordered_set<TRuleId> PreferredRules;
         };
 
-        virtual TC3Candidates Complete(TStringBuf prefix) = 0;
+        virtual TC3Candidates Complete(TCompletionInput input) = 0;
         virtual ~IC3Engine() = default;
     };
 

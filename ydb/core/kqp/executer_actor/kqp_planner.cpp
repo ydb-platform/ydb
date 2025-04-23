@@ -252,19 +252,12 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetSerializedGUCSettings(SerializedGUCSettings);
     }
 
-
-    request.SetSchedulerGroup(UserRequestContext->PoolId);
+    // TODO: is it the same value?
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
+
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
-        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
-        if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
-            request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
-        }
-        if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
-            request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
-        }
     }
 
     if (UserToken) {

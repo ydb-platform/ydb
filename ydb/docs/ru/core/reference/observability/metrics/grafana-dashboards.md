@@ -82,7 +82,7 @@
 | ReadSets | Сведения о пересылаемых ReadSets при исполнении пользовательской транзакции |
 | Other | Прочие метрики |
 
-## Database hive {#database-hive-detailed}
+## Database Hive {#database-hive-detailed}
 
 Метрики таблетки [Hive](../../../contributor/hive.md) выбранной базы данных.
 

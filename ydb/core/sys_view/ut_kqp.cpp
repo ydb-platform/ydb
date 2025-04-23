@@ -278,6 +278,7 @@ NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TStri
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnSetVal(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     return runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle)->GetRecord().GetPathDescription();
 }
@@ -1539,6 +1540,121 @@ WITH (
 );
 )"
         );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint32,
+                Key2 BigSerial,
+                Key3 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', TOPIC_MIN_ACTIVE_PARTITIONS = 3, FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"));
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key3`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint32,
+    `Key2` Serial8 NOT NULL,
+    `Key3` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT30M'), TOPIC_MIN_ACTIVE_PARTITIONS = 3)
+;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key3` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2)
+            ) WITH (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                PARTITION_AT_KEYS = ((10), (100, 1000), (1000, 20))
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed1` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed2` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT2H")
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    PARTITION_AT_KEYS = ((10), (100, 1000), (1000, 20))
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT1H'))
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT2H'))
+;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
+        );
     }
 
     Y_UNIT_TEST(ShowCreateTableChangefeeds) {
@@ -1653,6 +1769,102 @@ ALTER TABLE `test_show_create`
 ;
 )"
         , false, true
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableSequences) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Serial,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key`
+                START 50
+                INCREMENT BY 11;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key`
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Serial4 NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key` START WITH 50 INCREMENT BY 11 RESTART;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 50
+                INCREMENT BY 11;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 50 INCREMENT BY 11;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
         );
     }
 

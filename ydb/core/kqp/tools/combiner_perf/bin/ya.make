@@ -1,5 +1,4 @@
 PROGRAM(combiner_perf)
-ALLOCATOR(LF_DBG)
 
 YQL_LAST_ABI_VERSION()
 
@@ -14,6 +13,8 @@ PEERDIR(
     library/cpp/lfalloc/alloc_profiler
     library/cpp/dwarf_backtrace
     library/cpp/dwarf_backtrace/registry
+    library/cpp/getopt
+    library/cpp/json
 )
 
 SRCS(

@@ -789,6 +789,7 @@ protected:
     virtual std::string ParseGrpcRequest() = 0;
     virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
+    virtual bool ExecuteAsync() const { return false; }
 
     i64 Revision = 0LL;
 };
@@ -812,7 +813,7 @@ public:
             this->Die(ctx);
         } else {
             this->Become(&TEtcdRequestGrpc::StateFunc);
-            SendDatabaseRequest();
+            SendDatabaseRequest(ctx);
         }
     }
 private:
@@ -822,7 +823,7 @@ private:
 
     virtual std::ostream& Dump(std::ostream& out) const = 0;
 
-    void SendDatabaseRequest() {
+    void SendDatabaseRequest(const TActorContext& ctx) {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
@@ -834,14 +835,24 @@ private:
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
-            if (const auto lock = stuff.lock()) {
+        if (this->ExecuteAsync()) {
+            Stuff->Client->RetryQuery(std::move(callback)).Subscribe([name = GetRequestName()](const auto& future) {
                 if (const auto res = future.GetValueSync(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                    std::cout << name << " finished succesfully." << std::endl;
                 else
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
-            }
-        });
+                    std::cout << name << " finished with errors: " << res.GetIssues().ToString() << std::endl;
+            });
+            ctx.Send(this->SelfId(), new NEtcd::TEvQueryResult);
+        } else {
+            Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+                if (const auto lock = stuff.lock()) {
+                    if (const auto res = future.GetValueSync(); res.IsSuccess())
+                        lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                    else
+                        lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+                }
+            });
+        }
     }
 
     STFUNC(StateFunc) {
@@ -1076,9 +1087,14 @@ private:
 
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
+        Physical = rec.physical();
         if (KeyRevision <= 0LL | KeyRevision >= Revision)
             return std::string("invalid revision:" ) += std::to_string(KeyRevision);
         return {};
+    }
+
+    bool ExecuteAsync() const final {
+        return !Physical;
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
@@ -1086,27 +1102,39 @@ private:
         sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
         sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
         sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
-        sql << "select count(*) from $Trash;" << std::endl;
         sql << "delete from `history` on select * from $Trash;" << std::endl;
+        if (Physical) {
+            sql << "select count(*) from $Trash;" << std::endl;
+        }
     }
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
-        auto parser = NYdb::TResultSetParser(results.front());
-        const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
-        if (!erased)
-            TryToRollbackRevision();
+        Dump(std::cout);
+        if (Physical) {
+            auto parser = NYdb::TResultSetParser(results.front());
+            const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
+            if (!erased)
+                TryToRollbackRevision();
+
+            std::cout << '=' << erased << std::endl;
+        } else {
+            std::cout << " is executing asynchronously." << std::endl;
+        }
 
         etcdserverpb::CompactionResponse response;
         response.mutable_header()->set_revision(Revision);
-        Dump(std::cout) << '=' << erased << std::endl;
         return Reply(response, ctx);
     }
 
     std::ostream& Dump(std::ostream& out) const final {
-        return out << "Compact(" << KeyRevision << ')';
+        out << "Compact(" << KeyRevision;
+        if (Physical)
+            out << ",physical";
+        return out << ')';
     }
 
     i64 KeyRevision;
+    bool Physical;
 };
 
 class TLeaseGrantRequest

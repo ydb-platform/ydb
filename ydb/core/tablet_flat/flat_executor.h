@@ -383,22 +383,29 @@ class TExecutor
     // Counts the number of times LeaseDuration was increased
     size_t LeaseDurationIncreases = 0;
 
-    struct TLeaseCommit {
+    struct TLeaseCommit : public TIntrusiveListItem<TLeaseCommit> {
+        using TByEndMap = std::multimap<TMonotonic, TLeaseCommit*>;
+
+        // Note: for lightweight read-only confirmations Step == 0
         const ui32 Step;
         const TMonotonic Start;
         TMonotonic LeaseEnd;
         TVector<std::function<void()>> Callbacks;
-        std::multimap<TMonotonic, TLeaseCommit*>::iterator ByEndIterator;
+        TByEndMap::iterator ByEndIterator;
+        const ui64 Cookie;
 
-        TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd)
+        TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd, ui64 cookie)
             : Step(step)
             , Start(start)
             , LeaseEnd(leaseEnd)
+            , Cookie(cookie)
         { }
     };
 
     TList<TLeaseCommit> LeaseCommits;
-    std::multimap<TMonotonic, TLeaseCommit*> LeaseCommitsByEnd;
+    TLeaseCommit::TByEndMap LeaseCommitsByEnd;
+    TIntrusiveList<TLeaseCommit> LeaseCommitsByStep;
+    ui64 LeaseCommitsCounter = 0;
 
     // TSeat's UniqID to an owned pointer
     absl::flat_hash_map<ui64, std::unique_ptr<TSeat>> Transactions;
@@ -560,6 +567,7 @@ class TExecutor
     void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvDropLease::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
@@ -641,6 +649,8 @@ public:
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) override;
     bool CancelTransaction(ui64 id) override;
 
+    void LeaseConfirmed(ui64 confirmedCookie);
+    TLeaseCommit* AddLeaseConfirm();
     TLeaseCommit* AttachLeaseCommit(TLogCommit* commit, bool force = false);
     TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);
     void ConfirmReadOnlyLease(TMonotonic at) override;

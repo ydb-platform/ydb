@@ -64,6 +64,8 @@ struct TEvTablet {
         EvPromoteToLeader,
         EvFGcAck, // from user tablet to follower
         EvLeaseDropped,
+        EvConfirmLeader, // from user tablet to sys tablet
+        EvConfirmLeaderResult, // from sys tablet to user tablet
 
         EvTabletDead = EvBoot + 1024,
         EvFollowerUpdateState, // notifications to guardian
@@ -881,6 +883,30 @@ struct TEvTablet {
         explicit TEvLeaseDropped(ui64 tabletId) {
             Record.SetTabletID(tabletId);
         }
+    };
+
+    struct TEvConfirmLeader : TEventLocal<TEvConfirmLeader, EvConfirmLeader> {
+        ui64 TabletID;
+        ui32 Generation;
+
+        TEvConfirmLeader(ui64 tabletId, ui32 generation)
+            : TabletID(tabletId)
+            , Generation(generation)
+        {}
+    };
+
+    struct TEvConfirmLeaderResult : TEventLocal<TEvConfirmLeaderResult, EvConfirmLeaderResult> {
+        ui64 TabletID;
+        ui32 Generation;
+        NKikimrProto::EReplyStatus Status;
+        TString ErrorReason;
+
+        TEvConfirmLeaderResult(ui64 tabletId, ui32 generation, NKikimrProto::EReplyStatus status = NKikimrProto::OK, TString errorReason = {})
+            : TabletID(tabletId)
+            , Generation(generation)
+            , Status(status)
+            , ErrorReason(std::move(errorReason))
+        {}
     };
 };
 

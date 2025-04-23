@@ -37,6 +37,10 @@ message TNodeInfoSchema {
     optional bool AuthorizedByCertificate = 10;
 }
 
+message TVersionInfo {
+    optional bool SupportDeltaProtocol = 1;
+}
+
 message TEpoch {
     optional uint64 Id = 1;
     optional uint64 Version = 2;
@@ -140,4 +144,33 @@ message TSetConfigRequest {
 
 message TSetConfigResponse {
     optional TStatus Status = 1;
+}
+
+message TSubscribeNodesRequest {
+    optional uint64 CachedVersion = 1;
+    // Sender increments SeqNo each time it re-subscribes.
+    // This invalidates all subscriptions with a lower SeqNo.
+    optional uint64 SeqNo = 2;
+}
+
+message TUpdateNode {
+    oneof UpdateType {
+        TNodeInfo Node = 1;
+        uint32 ExpiredNode = 2;
+        uint32 RemovedNode = 3;
+    }
+}
+
+message TUpdateNodes {
+    optional TEpoch Epoch = 1;
+    repeated TUpdateNode Updates = 2;
+    optional uint64 SeqNo = 3;
+}
+
+message TSyncNodesRequest {
+    optional uint64 SeqNo = 1;
+}
+
+message TSyncNodesResponse {
+    optional uint64 SeqNo = 1;
 }

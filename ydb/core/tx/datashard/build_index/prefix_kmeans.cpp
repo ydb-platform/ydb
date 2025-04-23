@@ -67,36 +67,24 @@ protected:
     std::vector<ui64> ClusterSizes;
 
     // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> LevelTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> PostingTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> PrefixTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> UploadTypes;
+    TBatchRowsUploader Uploader;
 
-    const TString LevelTable;
-    const TString PostingTable;
-    const TString PrefixTable;
-    TString UploadTable;
-
-    TBufferData LevelBuf;
-    TBufferData PostingBuf;
-    TBufferData PrefixBuf;
-    TBufferData UploadBuf;
+    TBufferData* LevelBuf;
+    TBufferData* PostingBuf;
+    TBufferData* PrefixBuf;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
     ui32 RetryCount = 0;
 
-    TActorId Uploader;
+    TActorId UploaderId;
     const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
 
     TUploadStatus UploadStatus;
-
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
 
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse> Response;
@@ -147,12 +135,13 @@ public:
         // upload types
         {
             Ydb::Type type;
-            LevelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
+            auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
             type.set_type_id(NTableIndex::ClusterIdType);
-            (*LevelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*LevelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            (*levelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
+            (*levelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
         PostingTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns);
         // prefix types
@@ -191,9 +180,9 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        if (Uploader) {
-            Send(Uploader, new TEvents::TEvPoison);
-            Uploader = {};
+        if (UploaderId) {
+            Send(UploaderId, new TEvents::TEvPoison);
+            UploaderId = {};
         }
 
         auto& record = Response->Record;
@@ -267,14 +256,14 @@ protected:
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
         LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " Uploader: " << (Uploader ? Uploader.ToString() : "<null>")
+            << " Uploader: " << (UploaderId ? UploaderId.ToString() : "<null>")
             << " ev->Sender: " << ev->Sender.ToString());
 
-        if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
-                << " Uploader: " << Uploader.ToString()
+        if (UploaderId) {
+            Y_ENSURE(UploaderId == ev->Sender, "Mismatch"
+                << " Uploader: " << UploaderId.ToString()
                 << " Sender: " << ev->Sender.ToString());
-            Uploader = {};
+            UploaderId = {};
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -329,12 +318,12 @@ protected:
         LOG_D("Uploading " << Debug());
 
         Y_ASSERT(!UploadBuf.IsEmpty());
-        Y_ASSERT(!Uploader);
+        Y_ASSERT(!UploaderId);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             this->SelfId(), UploadTable, UploadTypes, UploadBuf.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
-        Uploader = this->Register(actor);
+        UploaderId = this->Register(actor);
     }
 
     void InitUpload(std::string_view table, std::shared_ptr<NTxProxy::TUploadTypes> types)

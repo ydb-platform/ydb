@@ -13,6 +13,30 @@ namespace NKikimr::NDataShard {
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 
+class TBatchRowsUploader
+{
+    struct TDestination {
+        TBufferData Buffer;
+        TString Table;
+        std::shared_ptr<NTxProxy::TUploadTypes> Types;
+    };
+
+public:
+    TBufferData* AddDestination(const TString& table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
+        auto inserted = Destinations.emplace(table,
+            TDestination{{}, table, std::move(types)});
+        Y_ASSERT(inserted.second);
+        return &inserted.first->second.Buffer;
+    }
+
+private:
+    TMap<TString, TDestination> Destinations;
+    TDestination Uploading;
+
+    ui64 UploadRows = 0;
+    ui64 UploadBytes = 0;
+};
+
 inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui64 id, 
     TScanRecord::TSeqNo seqNo, TRowVersion rowVersion, ui32 tableId)
 {

@@ -193,7 +193,6 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
 
         for node in self.cluster.nodes.values():
             node_config = node.read_node_config()
-            node_config['metadata']['version'] = get_config_version(yaml.dump(node_config)) + 1
             assert_that(
                 yaml.dump(yaml.safe_load(fetched_config), sort_keys=True) ==
                 yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)

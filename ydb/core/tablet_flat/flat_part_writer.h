@@ -969,7 +969,7 @@ namespace NTable {
             
             TPos it;
             for (it = 0; it < Key.size(); it++) {
-                if (int cmp = CompareTypedCells(PrevPageLastKey[it], Key[it], layout.KeyTypes[it])) {
+                if (CompareTypedCells(PrevPageLastKey[it], Key[it], layout.KeyTypes[it]) != 0) {
                     break;
                 }
             }

@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto &part : subset.Flatten) {
             TTestEnv env;
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
-            Cerr << "  " << index->GetEndRowId() << " rows, " 
+            Cerr << "  " << part->Label << " " << index->GetEndRowId() << " rows, " 
                 << IndexTools::CountMainPages(*part.Part) << " pages, "
                 << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
             for (ui32 sample : xrange(1u, samples + 1)) {

@@ -28,6 +28,7 @@ target_link_libraries(providers-solomon-provider PUBLIC
   common-token_accessor-client
   providers-dq-expr_nodes
   providers-solomon-actors
+  providers-solomon-common
   providers-solomon-expr_nodes
   providers-solomon-proto
   providers-solomon-scheme

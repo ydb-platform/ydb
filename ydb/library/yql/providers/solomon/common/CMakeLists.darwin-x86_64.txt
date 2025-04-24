@@ -12,12 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(proto)
-add_subdirectory(gateway)
-add_subdirectory(provider)
-add_subdirectory(actors)
-add_subdirectory(events)
-add_subdirectory(solomon_accessor)
-add_subdirectory(scheme)
-add_subdirectory(common)
-add_subdirectory(expr_nodes)
+add_library(providers-solomon-common)
+
+
+target_link_libraries(providers-solomon-common PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  providers-solomon-proto
+  providers-common-proto
+  yql-essentials-utils
+)
+
+target_sources(providers-solomon-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/common/util.cpp
+)
+

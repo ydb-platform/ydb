@@ -90,7 +90,6 @@ struct TOptimizerStatistics {
         }
     };
 
-    TSimpleSharedPtr<TString> SourceTableName;
     EStatisticsType Type = BaseTable;
     double Nrows = 0;
     int Ncols = 0;
@@ -104,8 +103,9 @@ struct TOptimizerStatistics {
     EStorageType StorageType = EStorageType::NA;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
-    TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
 
+    TVector<TString> Aliases;
+    TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
     NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
     std::optional<std::size_t> ShuffleOrderingIdx;
 

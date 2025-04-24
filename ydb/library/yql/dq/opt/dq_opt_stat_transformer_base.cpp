@@ -14,78 +14,70 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContex
     : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
 { }
 
-struct TVisitor {
+class TTableAliasPropogaterUpDown {
 public:
-    TVisitor(
-        TExprVisitPtrFunc preLambdaFunc,
-        TExprVisitPtrFunc postLambdaFunc,
-        TTypeAnnotationContext* typeCtx
-    )
-        : PreLambdaFunc(std::move(preLambdaFunc))
-        , PostLambdaFunc(std::move(postLambdaFunc))
-        , TypeCtx(typeCtx)
+    TTableAliasPropogaterUpDown(TTypeAnnotationContext* typeCtx)
+        : TypeCtx(typeCtx)
     {}
 
-public:
-    void Visit(const TExprNode::TPtr& node, bool insideLambda = false) {
-        if (!VisitedNodes.emplace(node.Get()).second) {
-            return;
-        }
-
-        for (auto child : node->Children()) {
-            if (!child->IsLambda()) {
-                if (VisitedNodes.contains(child.Get())) { // process CTE labels (parent of cte must have different links to SourceTableName)
-                    if (auto stats = TypeCtx->GetStats(child.Get()); stats && stats->SourceTableName && !insideLambda) {
-                        stats->SourceTableName = MakeSimpleShared<TString>(*stats->SourceTableName);
-                    }
-                } else {
-                    Visit(child, insideLambda);
-                }
-            }
-        }
-
-        PreLambdaFunc(node);
-
-        for (auto child : node->Children()) {
-            if (child->IsLambda()) {
-                Visit(child, true);
-            }
-        }
-
-        PostLambdaFunc(node);
+    void Propogate(const TExprNode::TPtr& input) {
+        PropogateImpl(input.Get(), {});
     }
 
 private:
-    TNodeSet VisitedNodes;
-    TExprVisitPtrFunc PreLambdaFunc;
-    TExprVisitPtrFunc PostLambdaFunc;
+    void PropogateImpl(const TExprNode::TPtr& input, const TString& alias) {
+        auto stats = TypeCtx->GetStats(TExprBase(input).Raw());
+        if (stats == nullptr) {
+            return;
+        }
+        stats->Aliases.push_back(alias);
+
+        if (TCoEquiJoin::Match(input.Get())) {
+            auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
+            for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+                auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+
+                auto scope = input.Scope();
+                if (!scope.Maybe<TCoAtom>()){
+                    continue;
+                }
+
+                TString label = scope.Cast<TCoAtom>().StringValue();
+                auto joinArg = input.List();
+                PropogateImpl(joinArg.Ptr(), label);
+            }
+        } else {
+            for (const auto& child: input->Children()) {
+                PropogateImpl(child, alias);
+            }
+        }
+    }
+
+private:
     TTypeAnnotationContext* TypeCtx;
 };
 
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
-    THashSet<TExprNode::TPtr> visited;
+    VisitExprLambdasLast(
+        input, [&](const TExprNode::TPtr& input) {
+            BeforeLambdas(input, ctx) || BeforeLambdasSpecific(input, ctx) || BeforeLambdasUnmatched(input, ctx);
 
-    auto preLambda = [&](const TExprNode::TPtr& input) {
-        BeforeLambdas(input, ctx) || BeforeLambdasSpecific(input, ctx) || BeforeLambdasUnmatched(input, ctx);
+            // We have a separate rule for all callables that may use a lambda
+            // we need to take each generic callable and see if it includes a lambda
+            // if so - we will map the input to the callable to the argument of the lambda
+            if (input->IsCallable()) {
+                PropagateStatisticsToLambdaArgument(input, TypeCtx);
+            }
 
-        // We have a separate rule for all callables that may use a lambda
-        // we need to take each generic callable and see if it includes a lambda
-        // if so - we will map the input to the callable to the argument of the lambda
-        if (input->IsCallable()) {
-            PropagateStatisticsToLambdaArgument(input, TypeCtx);
-        }
+            return true;
+        },
+        [&](const TExprNode::TPtr& input) {
+            return AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx) || true;
+        });
 
-        return true;
-    };
-
-    auto postLambda = [&](const TExprNode::TPtr& input) {
-        return AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx) || true;
-    };
-
-    auto Visitor = TVisitor(std::move(preLambda), std::move(postLambda), TypeCtx);
-    Visitor.Visit(input);
+    TTableAliasPropogaterUpDown(TypeCtx).Propogate(input);
 
     return IGraphTransformer::TStatus::Ok;
 }
@@ -127,24 +119,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
     }
 
-    // Propogate aliases, don't create statistics for this, otherwise CBO rule won't fire
+    // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
-        auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
-        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
-            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
-
-            auto scope = input.Scope();
-            if (!scope.Maybe<TCoAtom>()){
-                continue;
-            }
-
-            TString label = scope.Cast<TCoAtom>().StringValue();
-            auto joinArg = input.List();
-
-            if (auto stats = TypeCtx->GetStats(joinArg.Raw()); stats && stats->SourceTableName) {
-                *stats->SourceTableName = label;
-            }
-        }
     }
 
     // In case of DqSource, propagate the statistics from the correct argument

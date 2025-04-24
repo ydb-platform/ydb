@@ -43,6 +43,28 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
         break;
     }
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkWrite
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
+
+    : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
+    , ChunkIdx(ev.ChunkIdx)
+    , Offset(ev.Offset)
+    , PartsPtr(ev.PartsPtr)
+    , Cookie(ev.Cookie)
+    , DoFlush(ev.DoFlush)
+    , IsSeqWrite(ev.IsSeqWrite)
+{
+    if (PartsPtr) {
+        for (size_t i = 0; i < PartsPtr->Size(); ++i) {
+            RemainingSize += (*PartsPtr)[i].second;
+        }
+    }
+    TotalSize = RemainingSize;
+    SlackSize = Max<ui32>();
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead

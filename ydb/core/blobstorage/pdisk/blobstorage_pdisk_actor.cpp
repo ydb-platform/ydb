@@ -450,12 +450,12 @@ public:
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata);
+                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
@@ -681,7 +681,7 @@ public:
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
     }
-    
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);

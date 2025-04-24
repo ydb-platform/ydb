@@ -971,7 +971,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 .DiskSize = 16_MB,
                 .SmallDisk = true,
             });
-            
+
             UNIT_ASSERT(false);
         } catch (const yexception &e) {
             UNIT_ASSERT_STRING_CONTAINS(e.what(), "Total chunks# 0, System chunks needed# 1, cant run with < 3 free chunks!");
@@ -1147,7 +1147,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 size_t createdBytes = 0;
                 if (size >= partsCount) {
                     for (size_t i = 0; i < partsCount - 1; ++i) {
-                        TRope x(PrepareData(rng.Uniform(1, size / partsCount)));
+                        size_t partSize = rng.Uniform(1, Max<size_t>(2, size / partsCount));
+                        TRope x(PrepareData(partSize));
                         createdBytes += x.size();
                         rope.Insert(rope.End(), std::move(x));
                     }
@@ -1166,6 +1167,17 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return nullptr;
     }
 
+    NPDisk::TEvChunkWrite::TPartsPtr GenAlignedPart(size_t size, bool useRope) {
+        if (useRope) {
+            TRope rope(PrepareData(size));
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TRopeAlignedParts>(std::move(rope), size);
+        } else {
+            static TString data = PrepareData(size);
+            TString copy = data;
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(copy));
+        }
+    }
+
     TString ConvertIPartsToString(NPDisk::TEvChunkWrite::IParts* parts) {
         auto data = TString::Uninitialized(parts->ByteSize());
         char *ptr = data.Detach();
@@ -1177,8 +1189,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return data;
     }
 
-    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        TActorTestContext testCtx{{}};
+    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks) {
+        TActorTestContext testCtx({
+            .PlainDataChunks = plainDataChunks,
+        });
+        Cerr << "plainDataChunks# " << plainDataChunks << Endl;
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
@@ -1197,8 +1212,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         for (ui32 offset = 0; offset <= vdisk.PDiskParams->ChunkSize - maxSize; offset += rng.Uniform(vdisk.PDiskParams->ChunkSize / 100)) {
             offset = offset / blockSize * blockSize;
             auto size = rng.Uniform(1, maxSize + 1); // + 1 for maxSize to be included in distribution
+            Cerr << "offset# " << offset << " size# " << size << Endl;
             NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, size);
-            Ctest << "offset# " << offset << " size# " << size << Endl;
             testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
                     new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                         reservedChunk, offset, parts, nullptr, false, 0),
@@ -1207,8 +1222,75 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                         reservedChunk, offset, size, 0, 0),
                     NKikimrProto::OK);
+            Cerr << ConvertIPartsToString(parts.Get()).size() << " ?= " << res->Data.ToString().size() << Endl;
+            UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()).size(), res->Data.ToString().size());
+
+            if (false) {
+                Cerr << "ConvertIPartsToString(parts.Get())# ";
+                Cerr << ConvertIPartsToString(parts.Get()).Quote() << Endl;
+                Cerr << "res->Data.ToString()# ";
+                auto x = res->Data.ToString();
+                Cerr << TString(x.data(), x.size()).Quote() << Endl;
+            }
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
+    }
+    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+        for (int i = 0; i <= 1; ++i) {
+            ChunkWriteDifferentOffsetAndSizeImpl(i);
+        }
+    }
+
+    Y_UNIT_TEST(PlainChunksWriteReadALot) {
+        TActorTestContext testCtx{{
+            .PlainDataChunks = true,
+        }};
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        for (ui32 i = 0; i < 10; ++i) {
+            vdisk.ReserveChunk();
+        }
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() >= 1);
+        const ui32 reservedChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        auto seed = TInstant::Now().MicroSeconds();
+        Cerr << "seed# " << seed << Endl;
+        TReallyFastRng32 rng(seed);
+
+        size_t size = 2_MB;
+        const bool useRope = false;
+        size = size / vdisk.PDiskParams->AppendBlockSize * vdisk.PDiskParams->AppendBlockSize;
+        size_t written = 0;
+        auto duration = TDuration::Seconds(15);
+        TInstant end = TInstant::Now() + duration;
+        while (TInstant::Now() < end) {
+            for (ui32 offset = 0; offset <= vdisk.PDiskParams->ChunkSize - size; offset += size) {
+                NPDisk::TEvChunkWrite::TPartsPtr parts = GenAlignedPart(size, useRope);
+                testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                        new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            reservedChunk, offset, parts, nullptr, false, 0),
+                        NKikimrProto::OK);
+                auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                        new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            reservedChunk, offset, size, 0, 0),
+                        NKikimrProto::OK);
+                written += size;
+                UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()).size(), res->Data.ToString().size());
+
+                if (false) {
+                    Cerr << "ConvertIPartsToString(parts.Get())# ";
+                    Cerr << ConvertIPartsToString(parts.Get()).Quote() << Endl;
+                    Cerr << "res->Data.ToString()# ";
+                    auto x = res->Data.ToString();
+                    Cerr << TString(x.data(), x.size()).Quote() << Endl;
+                }
+                UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
+            }
+        }
+        Cerr << " total_speed# " << 2 * written / duration.SecondsFloat() / 1e9 << " GB/s" << Endl;
     }
 
     Y_UNIT_TEST(ChunkWriteBadOffset) {
@@ -1233,6 +1315,79 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                         reservedChunk, offset, parts, nullptr, false, 0),
                     NKikimrProto::ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(TestStartEncryptedOrPlainAndRestart) {
+        for (ui32 plain = 0; plain <= 1; ++plain) {
+            TActorTestContext testCtx({
+                .PlainDataChunks = static_cast<bool>(plain),
+            });
+            TVDiskMock vdisk(&testCtx);
+
+            vdisk.InitFull();
+            vdisk.ReserveChunk();
+            vdisk.CommitReservedChunks();
+            UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() == 1);
+            auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+            ui32 logBuffSize = 250;
+            ui32 chunkBuffSize = 128_KB;
+
+            for (ui32 testCase = 0; testCase < 4; testCase++) {
+                Cerr << "testCase# " << testCase << Endl;
+                auto cfg = testCtx.GetPDiskConfig();
+                cfg->PlainDataChunks = testCase & 1;
+                Cerr << "plainDataChunk# " << cfg->PlainDataChunks  << Endl;
+                testCtx.UpdateConfigRecreatePDisk(cfg);
+
+                vdisk.InitFull();
+                for (ui32 i = 0; i < 100; ++i) {
+                    testCtx.Send(new NPDisk::TEvLog(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(logBuffSize)), vdisk.GetLsnSeg(), nullptr));
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(chunkBuffSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, chunkBuffSize, 0, nullptr));
+                }
+
+                if (testCase & 2) {
+                    Cerr << "restart" << Endl;
+                    testCtx.RestartPDiskSync();
+                }
+
+                for (ui32 i = 0; i < 100; ++i) {
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                }
+                Cerr << "all chunk reads are received" << Endl;
+
+                for (ui32 i = 0; i < 100; ++i) {
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+                }
+                Cerr << "all chunk writes are received" << Endl;
+
+                for (ui32 i = 0; i < 100;) {
+                    auto result = testCtx.Recv<NPDisk::TEvLogResult>();
+                    i += result->Results.size();
+                }
+                Cerr << "all log writes are received" << Endl;
+            }
+
+            Cerr << "reformat" << Endl;
+            auto cfg = testCtx.GetPDiskConfig();
+            cfg->PlainDataChunks = true;
+            testCtx.Settings.PlainDataChunks = true;
+            testCtx.UpdateConfigRecreatePDisk(cfg, true);
+            testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead( vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, chunkBuffSize, 0, nullptr),
+                NKikimrProto::CORRUPTED);
+
+            TVDiskMock vdisk2(&testCtx);
+            vdisk2.InitFull();
         }
     }
 }
@@ -1449,13 +1604,13 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
         cfg->ReadOnly = true;
         testCtx.UpdateConfigRecreatePDisk(cfg);
 
-        vdisk.Init(); 
+        vdisk.Init();
         vdisk.ReadLog();
 
         std::vector<std::function<void(TActorTestContext&)>> eventSenders = {
             // Should fail on writing log. (ERequestType::RequestLogWrite)
             CheckReadOnlyRequest<NPDisk::TEvLog, NPDisk::TEvLogResult>(
-                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0, 
+                vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
                 TRcBuf(PrepareData(1)), TLsnSeg(), nullptr
             ),
             // Should fail on writing chunk. (ERequestType::RequestChunkWrite)

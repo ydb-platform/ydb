@@ -386,6 +386,7 @@ public:
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
+    bool ChunkEncrypted = true;
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -486,6 +487,7 @@ public:
 };
 
 
+class TCompletionChunkWrite;
 //
 // TChunkWrite
 //
@@ -498,6 +500,7 @@ public:
     bool DoFlush;
     bool IsSeqWrite;
     bool IsReplied = false;
+    bool ChunkEncrypted = true;
 
     ui32 TotalSize;
     ui32 CurrentPart = 0;
@@ -510,25 +513,9 @@ public:
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    THolder<NPDisk::TCompletionAction> Completion;
+    THolder<TCompletionChunkWrite> Completion;
 
-    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
-        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
-        , ChunkIdx(ev.ChunkIdx)
-        , Offset(ev.Offset)
-        , PartsPtr(ev.PartsPtr)
-        , Cookie(ev.Cookie)
-        , DoFlush(ev.DoFlush)
-        , IsSeqWrite(ev.IsSeqWrite)
-    {
-        if (PartsPtr) {
-            for (size_t i = 0; i < PartsPtr->Size(); ++i) {
-                RemainingSize += (*PartsPtr)[i].second;
-            }
-        }
-        TotalSize = RemainingSize;
-        SlackSize = Max<ui32>();
-    }
+    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
     void RegisterPiece() {
         AtomicIncrement(Pieces);
@@ -1180,7 +1167,7 @@ public:
         : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ShredGeneration(ev.ShredGeneration)
     {}
-    
+
     ERequestType GetType() const override {
         return ERequestType::RequestShredPDisk;
     }

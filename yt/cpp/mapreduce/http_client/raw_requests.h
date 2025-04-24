@@ -55,6 +55,12 @@ std::unique_ptr<IOutputStream> WriteTable(
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options);
 
+std::unique_ptr<IOutputStream> WriteFile(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options);
+
 TAuthorizationInfo WhoAmI(const TClientContext& context);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/core/input.h>
 #include <yql/essentials/sql/v1/complete/name/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
@@ -7,11 +8,6 @@
 #include <util/generic/vector.h>
 
 namespace NSQLComplete {
-
-    struct TCompletionInput {
-        TStringBuf Text;
-        size_t CursorPosition = Text.length();
-    };
 
     struct TCompletedToken {
         TStringBuf Content;

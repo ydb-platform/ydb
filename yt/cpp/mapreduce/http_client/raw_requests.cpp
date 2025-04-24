@@ -315,7 +315,33 @@ struct THttpRequestStream
     : public IOutputStream
 {
 public:
-    THttpRequestStream(NHttpClient::IHttpRequestPtr request, size_t bufferSize)
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+};
+
+struct THttpBufferedRequestStream
+    : public IOutputStream
+{
+public:
+    THttpBufferedRequestStream(NHttpClient::IHttpRequestPtr request, size_t bufferSize)
         : Request_(std::move(request))
         , Underlying_(std::make_unique<TBufferedOutput>(Request_->GetStream(), bufferSize))
     { }
@@ -334,7 +360,7 @@ private:
 
 private:
     NHttpClient::IHttpRequestPtr Request_;
-    std::unique_ptr<TBufferedOutput> Underlying_;
+    std::unique_ptr<IOutputStream> Underlying_;
 };
 
 std::unique_ptr<IOutputStream> WriteTable(
@@ -353,7 +379,27 @@ std::unique_ptr<IOutputStream> WriteTable(
     TRequestConfig config;
     config.IsHeavy = true;
     auto request = StartRequestWithoutRetry(context, header, config);
-    return std::make_unique<THttpRequestStream>(std::move(request), options.BufferSize_);
+    if (options.SingleHttpRequest_) {
+        return std::make_unique<THttpBufferedRequestStream>(std::move(request), options.BufferSize_);
+    }
+    return std::make_unique<THttpRequestStream>(std::move(request));
+}
+
+std::unique_ptr<IOutputStream> WriteFile(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteFileCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(context, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request));
 }
 
 TAuthorizationInfo WhoAmI(const TClientContext& context)

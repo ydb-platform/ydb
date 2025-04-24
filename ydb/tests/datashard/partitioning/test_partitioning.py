@@ -28,7 +28,7 @@ class TestPartitionong(TestBase):
         self.create_table(table_name, all_types, pk_types, set_parametr, dml)
         dml.insert(table_name, all_types, pk_types, index, ttl)
         is_split = wait_for(self.create_predicate(
-            index, dml), timeout_seconds=150)
+            table_name, 10, dml), timeout_seconds=150)
         assert is_split is True, f"The table {table_name} is not split into partition"
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
@@ -64,7 +64,7 @@ class TestPartitionong(TestBase):
                           self.create_partition_at_keys_sql_request(pk_types), dml)
         dml.insert(table_name, all_types, pk_types, index, ttl)
         is_split = wait_for(self.create_predicate(
-            index, dml), timeout_seconds=150)
+            table_name, 4, dml), timeout_seconds=150)
         assert is_split is True, f"The table {table_name} is not split into partition"
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
@@ -97,11 +97,12 @@ class TestPartitionong(TestBase):
         print(sql_create_table)
         dml.query(sql_create_table)
 
-    def create_predicate(self, index, dml: DMLOperations):
+    def create_predicate(self, table_name, expectation, dml: DMLOperations):
         def predicate():
-            rows = dml.query("""SELECT
+            rows = dml.query(f"""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
+                WHERE Path = "{self.get_database()}/{table_name}"
                 """)
-            return rows[0].count != 1 + len(index)
+            return rows[0].count == expectation
         return predicate

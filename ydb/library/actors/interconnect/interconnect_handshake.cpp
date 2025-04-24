@@ -825,15 +825,15 @@ namespace NActors {
             // extract address from the result
             std::vector<NInterconnect::TAddress> addresses;
             if (!ev) {
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS response timed out");
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS response timed out");
             } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
                 addresses = std::move(p->Addresses);
                 if (addresses.empty()) {
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS knows nothing about the node " + ToString(PeerNodeId));
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS knows nothing about the node " + ToString(PeerNodeId));
                 }
             } else {
                 Y_ABORT_UNLESS(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DynamicNS resolve error: " + ev->Get<TEvResolveError>()->Explain
                     + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host);
             }
 

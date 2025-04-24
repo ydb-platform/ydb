@@ -40,7 +40,13 @@ namespace NKikimr {
         {}
 
         TBufferWithGaps(ui32 offset, ui32 size)
-            : Data(TRcBuf::Uninitialized(size))
+            : Data(TRcBuf::UninitializedPageAligned(size))
+            , Offset(offset)
+            , IsCommited(false)
+        {}
+
+        TBufferWithGaps(ui32 offset, ui32 size, ui32 tailroom)
+            : Data(TRcBuf::UninitializedPageAligned(size, tailroom))
             , Offset(offset)
             , IsCommited(false)
         {}
@@ -74,10 +80,14 @@ namespace NKikimr {
             return Data;
         }
 
+        TRcBuf SubstrRaw(ui32 offset, ui32 len) const {
+            return TRcBuf(TRcBuf::Piece, Data.data() + offset, len, Data);
+        }
+
         TRcBuf Substr(ui32 offset, ui32 len) const {
             Y_VERIFY_S(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" << offset
                    << " len# " << len << " and therefore could not be used safely, State# " << PrintState());
-            return TRcBuf(TRcBuf::Piece, Data.data() + offset, len, Data);
+            return SubstrRaw(offset, len);
         }
 
         template<typename T>
@@ -88,7 +98,7 @@ namespace NKikimr {
         }
 
         ui8 *RawDataPtr(ui32 offset, ui32 len) {
-            Y_ABORT_UNLESS(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
+            Y_ABORT_UNLESS(offset + len <= Data.size() + Data.Tailroom(), "Buffer has size# %zu less then requested offset# %" PRIu32
                     " len# %" PRIu32, Data.size(), offset, len);
             IsCommited = false;
             return reinterpret_cast<ui8 *>(Data.GetDataMut() + offset);
@@ -133,6 +143,10 @@ namespace NKikimr {
 
         ui32 Size() const {
             return Data.size();
+        }
+
+        ui32 SizeWithTail() const {
+            return Data.size() + Data.Tailroom();
         }
 
         void Swap(TBufferWithGaps& other) {

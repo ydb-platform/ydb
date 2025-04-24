@@ -2159,7 +2159,8 @@ public:
             context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
             return;
         }
-        switch (state->number()) {
+        auto stateEnum = static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number());
+        switch (stateEnum) {
             case NKikimrBlobStorage::TPDiskState::Normal:
             case NKikimrBlobStorage::TPDiskState::Stopped:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -2287,7 +2288,8 @@ public:
             FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
-        if (status->number() == NKikimrBlobStorage::ERROR) {
+        auto statusEnum = static_cast<NKikimrBlobStorage::EVDiskStatus>(status->number());
+        if (statusEnum == NKikimrBlobStorage::ERROR) {
             // the disk is not operational at all
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2303,7 +2305,11 @@ public:
             return;
         }
 
-        switch (status->number()) {
+        switch (statusEnum) {
+            case NKikimrBlobStorage::ERROR: {
+                // already handled above
+                break;
+            }
             case NKikimrBlobStorage::REPLICATING: { // the disk accepts queries, but not all the data was replicated
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, TStringBuilder() << "Replication in progress", ETags::VDiskState);
                 storageVDiskStatus.set_overall(context.GetOverallStatus());
@@ -2313,8 +2319,6 @@ public:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
-            default:
-                break;
         }
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());

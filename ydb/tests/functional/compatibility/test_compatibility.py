@@ -22,11 +22,13 @@ all_binary_combinations = [
     [last_stable_binary_path, current_binary_path],
     [last_stable_binary_path, [last_stable_binary_path, current_binary_path]],
     [current_binary_path, last_stable_binary_path],
+    [current_binary_path, current_binary_path],
 ]
 all_binary_combinations_ids = [
     "last_stable_to_current",
     "last_stable_to_current_mixed",
-    "current_to_last_stable"
+    "current_to_last_stable",
+    "current_to_current",
 ]
 
 logger = logging.getLogger(__name__)

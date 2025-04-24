@@ -193,6 +193,10 @@ public:
             return VSlotReadyTimestampIter != TVSlotReadyTimestampQ::iterator();
         }
 
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E GetSlotSizeUnits() const {
+            return Group->SlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED);
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         template<typename T>
@@ -2367,11 +2371,13 @@ public:
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
         bool MetricsDirty = false;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
+            , SlotSizeUnits(vdisk.GetSlotSizeUnits().GetValue())
         {
             const auto& loc = vdisk.GetVDiskLocation();
             const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());

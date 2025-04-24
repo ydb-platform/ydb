@@ -1050,6 +1050,9 @@ namespace NKikimr::NBsController {
             }
             pb->SetReady(vslot.IsReady);
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
+            if (auto slotSizeUnits = vslot.GetSlotSizeUnits()) {
+                pb->MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {
@@ -1063,7 +1066,9 @@ namespace NKikimr::NBsController {
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
             if (group.SlotSizeUnits.Defined()) {
-                pb->MutableSlotSizeUnits()->SetValue(*group.SlotSizeUnits.Get());
+                if (auto slotSizeUnits = *group.SlotSizeUnits.Get()) {
+                    pb->MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+                }
             }
 
             const auto& status = group.Status;

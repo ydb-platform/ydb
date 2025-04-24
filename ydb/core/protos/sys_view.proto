@@ -234,6 +234,7 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional uint32 SlotSizeUnitsInt = 20;
 }
 
 message TVSlotEntry {

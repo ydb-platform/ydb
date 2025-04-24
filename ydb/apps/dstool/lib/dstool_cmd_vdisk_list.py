@@ -51,8 +51,8 @@ def do(args):
         'VDiskIdx',
         'VDiskKind',
         'Group.SlotSizeUnits',
-        'PDisk.SlotSizeUnits',
         'VDisk.SlotSizeUnits',
+        'PDisk.SlotSizeUnits',
         'Usage',
         'UsedSize',
         'AvailableSize',
@@ -115,8 +115,8 @@ def do(args):
             row['VDiskIdx'] = vslot.VDiskIdx
             row['VDiskKind'] = vslot.VDiskKind
             row['Group.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(group_map[group].SlotSizeUnits.Value)
-            row['PDisk.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(pdisk.PDiskConfig.SlotSizeUnits)
             row['VDisk.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(vslot.SlotSizeUnits.Value)
+            row['PDisk.SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(pdisk.PDiskConfig.SlotSizeUnits)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']

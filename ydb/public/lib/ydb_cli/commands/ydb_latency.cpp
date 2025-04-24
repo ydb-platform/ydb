@@ -198,6 +198,10 @@ void TCommandLatency::Config(TConfig& config) {
 void TCommandLatency::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
+    if (MaxInflight >= 4) {
+        config.IsNetworkIntensive = true;
+    }
+
     if (Percentiles.empty()) {
         Percentiles = DEFAULT_PERCENTILES;
     }

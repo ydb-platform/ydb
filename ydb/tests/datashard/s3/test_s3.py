@@ -54,26 +54,46 @@ class TestYdbS3TTL(TestBase, S3Base):
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
-        self.is_import_or_export(False, table_name)
+        self.export_s3(table_name)
         dml.query(f"drop table {table_name}")
-        self.is_import_or_export(True, table_name)
+        self.import_s3(table_name)
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
-    def is_import_or_export(self, is_import: bool, table_name: str):
+    def export_s3(self, table_name: str):
         cmd_test = yatest.common.execute([
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '-e', 'grpc://'+self.get_endpoint(),
             "--database", self.get_database(),
-            'import' if is_import else 'export',
+            'export',
             's3',
             '--s3-endpoint', self.s3_endpoint(),
             '--access-key', self.s3_access_key(),
             '--secret-key', self.s3_secret_access_key(),
             '--item',
-            f"destination=/Root,source={table_name}" if is_import else f"destination={table_name},source=/Root",
+            f"destination={table_name},source=/Root",
             '--bucket', self.bucket_name(),
         ]).stdout.decode("utf-8")
 
+        self.wait(cmd_test)
+
+    def import_s3(self, table_name: str):
+        cmd_test = yatest.common.execute([
+            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+            '-e', 'grpc://'+self.get_endpoint(),
+            "--database", self.get_database(),
+            'import',
+            's3',
+            '--s3-endpoint', self.s3_endpoint(),
+            '--access-key', self.s3_access_key(),
+            '--secret-key', self.s3_secret_access_key(),
+            '--item',
+            f"destination=/Root,source={table_name}",
+            '--bucket', self.bucket_name(),
+        ]).stdout.decode("utf-8")
+
+        self.wait(cmd_test)
+
+    def wait(self, cmd_test: str):
         position = cmd_test.find("ydb://")
         url = ""
         while cmd_test[position] != " ":

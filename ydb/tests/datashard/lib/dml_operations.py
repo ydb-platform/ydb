@@ -12,7 +12,7 @@ class DMLOperations():
 
     def query(self, text):
         return self.query_object.query(text)
-    
+
     def transactional(self, process):
         return self.query_object.transactional(process)
 

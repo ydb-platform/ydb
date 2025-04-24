@@ -75,4 +75,10 @@ void TTreeElementBase::UpdateTopDown() {
     // TODO: distribute resources lost because of integer division.
 }
 
+void TTreeElementBase::AccountFairShare(const TDuration& period) {
+    for (auto& child : Children) {
+        child->AccountFairShare(period);
+    }
+}
+
 } // namespace NKikimr::NKqp::NScheduler::NHdrf

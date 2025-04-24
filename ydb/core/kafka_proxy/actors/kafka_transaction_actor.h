@@ -11,9 +11,9 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TKafkaTransactionActor : public NActors::TActor<TKafkaTransactionActor> {
+    class TTransactionActor : public NActors::TActor<TTransactionActor> {
 
-        using TBase = NActors::TActor<TKafkaTransactionActor>;
+        using TBase = NActors::TActor<TTransactionActor>;
         
         public:
             struct TTopicPartition {
@@ -36,7 +36,7 @@ namespace NKafka {
                 i64 ConsumerGeneration;
             };
 
-            enum EKafkaTxnKqpRequests : ui8 {
+            enum ETxnKqpRequests : ui8 {
                 NO_REQUEST = 0,
                 
                 // This request selects up-to-date producer and consumers states from relevant tables
@@ -48,8 +48,8 @@ namespace NKafka {
             };
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
-            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
-                TActor<TKafkaTransactionActor>(&TKafkaTransactionActor::StateFunc),
+            TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
+                TActor<TTransactionActor>(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerInstanceId({producerId, producerEpoch}),
                 DatabasePath(DatabasePath),
@@ -57,7 +57,7 @@ namespace NKafka {
                 KqpActorId(kqpActorId) {};
 
             TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
+                return TStringBuilder() << "TransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
             }
         
         private:
@@ -116,7 +116,7 @@ namespace NKafka {
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
             std::unordered_map<TString, i32> ParseConsumersGenerations(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInConsumersStates(const std::unordered_map<TString, i32>& consumerGenerationByName);
-            TString GetAsStr(EKafkaTxnKqpRequests request);
+            TString GetAsStr(ETxnKqpRequests request);
 
             // data from fields below will be sent to KQP on END_TXN request
             std::unordered_map<TTopicPartition, TPartitionCommit, TopicPartitionHashFn> OffsetsToCommit = {};
@@ -139,6 +139,6 @@ namespace NKafka {
             TActorId KqpActorId;
             TString KqpSessionId;
             ui64 KqpCookie = 0;
-            EKafkaTxnKqpRequests LastSentToKqpRequest;
+            ETxnKqpRequests LastSentToKqpRequest;
     };
 } // namespace NKafka

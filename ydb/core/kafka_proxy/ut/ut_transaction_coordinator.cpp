@@ -23,7 +23,7 @@ namespace {
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
-                ActorId = Ctx->Runtime->Register(new NKafka::TKafkaTransactionsCoordinator());
+                ActorId = Ctx->Runtime->Register(new NKafka::TTransactionsCoordinator());
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {

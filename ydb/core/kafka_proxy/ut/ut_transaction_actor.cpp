@@ -210,7 +210,7 @@ namespace {
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
                 DummyKqpActor = new TDummyKqpActor();
                 KqpActorId = Ctx->Runtime->Register(DummyKqpActor);
-                ActorId = Ctx->Runtime->Register(new TKafkaTransactionActor(
+                ActorId = Ctx->Runtime->Register(new TTransactionActor(
                     TransactionalId,
                     ProducerId,
                     ProducerEpoch,
@@ -325,7 +325,7 @@ namespace {
         private:
             void MatchPartitionsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request, const TQueryRequestMatcher& matcher) {
                 auto& partitionsInRequest = request->Record.GetRequest().GetKafkaApiOperations().GetPartitionsInTxn();
-                std::unordered_set<TKafkaTransactionActor::TTopicPartition, TKafkaTransactionActor::TopicPartitionHashFn> paritionsInRequestSet;
+                std::unordered_set<TTransactionActor::TTopicPartition, TTransactionActor::TopicPartitionHashFn> paritionsInRequestSet;
                 paritionsInRequestSet.reserve(partitionsInRequest.size());
                 for (auto& partition : partitionsInRequest) {
                     paritionsInRequestSet.emplace(partition.GetTopicPath(), partition.GetPartitionId());

@@ -1,6 +1,6 @@
 #include <util/generic/string.h>
 
-namespace NKafka::NKafkaTransactionSql {
+namespace NKafka::NTransactionSql {
 
     TString SELECT_FOR_VALIDATION = R"sql(
         --!syntax_v1
@@ -19,4 +19,4 @@ namespace NKafka::NKafkaTransactionSql {
         GROUP BY consumer_group;
     )sql";
 
-} // namespace NKafka::NKafkaTransactionSql
+} // namespace NKafka::NTransactionSql

@@ -13,9 +13,9 @@ namespace NKafka {
     It does so by maintaining a set of the most relevant for this node tranasactional_id+producer_id+producer_epoch. 
     Recieves updates from init_producer_id_actors. 
     */
-    class TKafkaTransactionsCoordinator : public NActors::TActorBootstrapped<TKafkaTransactionsCoordinator> {
+    class TTransactionsCoordinator : public NActors::TActorBootstrapped<TTransactionsCoordinator> {
 
-        using TBase = NActors::TActorBootstrapped<TKafkaTransactionsCoordinator>;
+        using TBase = NActors::TActorBootstrapped<TTransactionsCoordinator>;
 
         struct TTransactionalRequest {
             TString TransactionalId;
@@ -26,7 +26,7 @@ namespace NKafka {
 
         public:
             void Bootstrap(const TActorContext&) {
-                TBase::Become(&TKafkaTransactionsCoordinator::StateWork);
+                TBase::Become(&TTransactionsCoordinator::StateWork);
             }
 
             TStringBuilder LogPrefix() const {
@@ -77,7 +77,7 @@ namespace NKafka {
     };
 
     inline NActors::IActor* CreateKafkaTransactionsCoordinator() {
-        return new TKafkaTransactionsCoordinator();
+        return new TTransactionsCoordinator();
     };
 
     inline TActorId MakeKafkaTransactionsServiceID() {

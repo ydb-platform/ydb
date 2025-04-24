@@ -1,1 +1,2 @@
-select CurrentOperationId(),CurrentOperationSharedId(),CurrentAuthenticatedUser();
+select CurrentOperationId(),CurrentOperationSharedId(),CurrentAuthenticatedUser(),CurrentLanguageVersion();
+

@@ -17,4 +17,6 @@ namespace NSQLComplete {
 
     TFrequencyData LoadFrequencyData();
 
+    TFrequencyData LoadFrequencyDataForPrunning();
+
 } // namespace NSQLComplete

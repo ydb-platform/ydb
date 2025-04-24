@@ -598,15 +598,21 @@ namespace {
                 auto typesOnly = (flags & TFlags::TypesOnly);
 
                 if (TRoaringDeserialize::Name() == name) {
-                    builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TAutoMap<char*>>();
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .OptionalArgs(1)
+                        .Args()
+                        ->Add<TAutoMap<char*>>()
+                        .Add<TOptional<ui32>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringDeserialize(builder.GetSourcePosition()));
                     }
                 } else if (TRoaringFromUint32List::Name() == name) {
                     builder.Returns<TResource<RoaringResourceName>>()
+                        .OptionalArgs(1)
                         .Args()
-                        ->Add<TListType<ui32>>();
+                        ->Add<TListType<ui32>>()
+                        .Add<TOptional<ui32>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringFromUint32List(builder.GetSourcePosition()));

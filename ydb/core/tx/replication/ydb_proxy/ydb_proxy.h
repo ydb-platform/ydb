@@ -214,6 +214,8 @@ struct TEvYdbProxy {
         {
         }
 
+        void Out(IOutputStream& out) const;
+
         TString ReadSessionId;
     };
 

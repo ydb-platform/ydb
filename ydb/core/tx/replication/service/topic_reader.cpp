@@ -90,9 +90,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto settings = NYdb::NTopic::TCommitOffsetSettings()
             .ReadSessionId(ReadSessionId);
 
-        const auto topicName = Settings.GetBase().Topics_.at(0).Path_;
+        const auto& topicName = Settings.GetBase().Topics_.at(0).Path_;
         const auto partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
-        const auto consumerName = Settings.GetBase().ConsumerName_;
+        const auto& consumerName = Settings.GetBase().ConsumerName_;
 
         Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(topicName, partitionId, consumerName, ev->Get()->Offset, std::move(settings)));
     }
@@ -171,6 +171,7 @@ private:
     TActorId Worker;
     TActorId ReadSession;
     TString ReadSessionId;
+
 }; // TRemoteTopicReader
 
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {

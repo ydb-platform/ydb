@@ -39,6 +39,12 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
     << " }";
 }
 
+void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " ReadSessionId: " << ReadSessionId
+    << " }";
+}
+
 template <typename TDerived>
 class TBaseProxyActor: public TActor<TDerived> {
     class TRequest;

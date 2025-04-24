@@ -380,4 +380,4 @@ class TestCompatibility(object):
             "src=/Root,dst=Root"
         ]
 
-        yatest.common.execute(export_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(export_command, wait=True, stdout=self.output_f, stderr=self.output_f)

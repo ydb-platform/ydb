@@ -38,10 +38,11 @@ public:
 
 private:
     int IntervalSeconds;
+    int MinInflight;
     int MaxInflight;
     EFormat Format;
     TCommandPing::EPingKind RunKind;
-    double Percentile;
+    std::vector<double> Percentiles;
 
     std::unique_ptr<NDebug::TActorChainPingSettings> ChainConfig;
 };

@@ -15,20 +15,27 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 from decimal import Decimal
 
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+ydbd_25_1 = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-25-1")
+ydbd_24_4 = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-24-4")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
-    [last_stable_binary_path, current_binary_path],
-    [last_stable_binary_path, [last_stable_binary_path, current_binary_path]],
-    [current_binary_path, last_stable_binary_path],
+    [ydbd_25_1, current_binary_path],
+    [ydbd_25_1, [ydbd_25_1, current_binary_path]],
+    [current_binary_path, ydbd_25_1],
     [current_binary_path, current_binary_path],
+    [ydbd_24_4, current_binary_path],
+    [ydbd_24_4, [ydbd_24_4, current_binary_path]],
+    [current_binary_path, ydbd_24_4],
 ]
 all_binary_combinations_ids = [
-    "last_stable_to_current",
-    "last_stable_to_current_mixed",
-    "current_to_last_stable",
+    "stable_25_1_to_current",
+    "stable_25_1_to_current_mixed",
+    "current_to_stable_25_1",
     "current_to_current",
+    "stable_24_4_to_current",
+    "stable_24_4_to_current_mixed",
+    "current_to_stable_24_4",
 ]
 
 logger = logging.getLogger(__name__)

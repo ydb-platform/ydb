@@ -1501,8 +1501,8 @@ public:
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr,
-            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
+                ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
+            (QueryState) ? QueryState->GetResultSetType() : Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED, Nothing());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

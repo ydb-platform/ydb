@@ -211,7 +211,9 @@ public:
         NKikimrConfig::TAppConfig newConfig;
         try {
             auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            auto config = NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
+            auto config = shim.StorageConfig
+                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
+                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
             newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config
@@ -230,7 +232,9 @@ public:
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            false /* TODO: implement */,
+            false /* TODO: implement */);
     }
 
 private:

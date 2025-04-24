@@ -558,6 +558,8 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
         request->ResultSet.emplace_back(entry);
     }
 
+    request->DatabaseName = CanonizePath(Context->DatabasePath);
+
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 

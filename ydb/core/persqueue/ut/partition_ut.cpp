@@ -284,7 +284,7 @@ protected:
     void SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest = false);
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0);
+                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false);
     void SendGetWriteInfo();
     void ShadowPartitionCountersTest(bool isFirstClass);
 
@@ -299,6 +299,14 @@ protected:
     bool WaitWriteInfoRequest(const TActorId& supportivePart);
     void SendEvent(IEventBase* event);
     void SendEvent(IEventBase* event, const TActorId& from, const TActorId& to);
+
+    THolder<TEvPQ::TEvApproveWriteQuota> WaitForRequestQuotaAndHoldApproveWriteQuota();
+    void SendDeletePartition();
+    void WaitForDeletePartitionDoneTimeout();
+    void SendApproveWriteQuota(THolder<TEvPQ::TEvApproveWriteQuota>&& event);
+    void WaitForQuotaConsumed();
+    void WaitForWriteError(ui64 cookie, NPersQueue::NErrorCode::EErrorCode errorCode);
+    void WaitForDeletePartitionDone();
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -370,7 +378,6 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                 id,
                 Ctx->Edge,
                 Ctx->TabletId,
-                Config.GetLocalDC(),
                 *TabletCounters
         ));
     }
@@ -638,7 +645,7 @@ void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, con
 
 void TPartitionFixture::SendWrite
         (const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-        bool ignoreQuotaDeadline, ui64 seqNo
+        bool ignoreQuotaDeadline, ui64 seqNo, bool isDirectWrite
 ) {
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
@@ -660,7 +667,7 @@ void TPartitionFixture::SendWrite
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
     msgs.push_back(msg);
 
-    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), false, std::nullopt);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1349,6 +1356,92 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
         UNIT_ASSERT(event != nullptr);
         UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
     }
+}
+
+THolder<TEvPQ::TEvApproveWriteQuota> TPartitionFixture::WaitForRequestQuotaAndHoldApproveWriteQuota()
+{
+    THolder<TEvPQ::TEvApproveWriteQuota> approveWriteQuota;
+
+    auto observer = [&approveWriteQuota](TAutoPtr<IEventHandle>& ev) mutable {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvApproveWriteQuota>()) {
+            approveWriteQuota = MakeHolder<TEvPQ::TEvApproveWriteQuota>(event->Cookie,
+                                                                        event->AccountQuotaWaitTime,
+                                                                        event->PartitionQuotaWaitTime);
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return approveWriteQuota != nullptr;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(approveWriteQuota != nullptr);
+
+    return approveWriteQuota;
+}
+
+void TPartitionFixture::SendDeletePartition()
+{
+    auto event = MakeHolder<TEvPQ::TEvDeletePartition>();
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::WaitForDeletePartitionDoneTimeout()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvDeletePartitionDone>(TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(event, nullptr);
+}
+
+void TPartitionFixture::SendApproveWriteQuota(THolder<TEvPQ::TEvApproveWriteQuota>&& event)
+{
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+    event = nullptr;
+}
+
+void TPartitionFixture::WaitForQuotaConsumed()
+{
+    bool hasQuotaConsumed = false;
+
+    auto observer = [&hasQuotaConsumed](TAutoPtr<IEventHandle>& ev) mutable {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
+            hasQuotaConsumed = true;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return hasQuotaConsumed;
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(hasQuotaConsumed);
+}
+
+void TPartitionFixture::WaitForWriteError(ui64 cookie, NPersQueue::NErrorCode::EErrorCode errorCode)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>();
+
+    UNIT_ASSERT(event != nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(cookie, event->Cookie);
+    UNIT_ASSERT_C(errorCode == event->ErrorCode, "extected: " << (int)errorCode << ", accepted: " << (int)event->ErrorCode);
+}
+
+void TPartitionFixture::WaitForDeletePartitionDone()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvDeletePartitionDone>();
+
+    UNIT_ASSERT(event != nullptr);
 }
 
 struct TTestUserAct {
@@ -3337,6 +3430,36 @@ Y_UNIT_TEST_F(EndWriteTimestamp_HeadKeys, TPartitionFixture) {
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
     UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_FromMeta
+
+Y_UNIT_TEST_F(The_DeletePartition_Message_Arrives_Before_The_ApproveWriteQuota_Message, TPartitionFixture)
+{
+    // create a supportive partition
+    const TPartitionId partitionId{1, TWriteId{2, 3}, 4};
+    CreatePartition({.Partition=partitionId});
+
+    // write 2 messages in it
+    SendWrite(1, 0, "owner", 0, "message #1", false, 1, true);
+    SendWrite(2, 1, "owner", 1, "message #2", false, 2, true);
+
+    // delay the response from the quoter
+    auto approveWriteQuota = WaitForRequestQuotaAndHoldApproveWriteQuota();
+
+    // Send a `TEvDeletePartition`. The partition will wait for the response from the quoter to arrive.
+    SendDeletePartition();
+    WaitForDeletePartitionDoneTimeout();
+
+    // The answer is from the quoter
+    SendApproveWriteQuota(std::move(approveWriteQuota));
+    WaitForQuotaConsumed();
+
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    // Write operations fail with an error
+    WaitForWriteError(1, NPersQueue::NErrorCode::ERROR);
+    WaitForDeletePartitionDone();
+    WaitForWriteError(2, NPersQueue::NErrorCode::ERROR);
+}
 
 } // End of suite
 

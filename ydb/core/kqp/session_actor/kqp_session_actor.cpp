@@ -2104,7 +2104,7 @@ public:
                             }
                             case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
                                 auto batch = QueryState->QueryData->GetArrowTxResult(
-                                    phyQuery.GetResultBindings(i), QueryState->TxCtx->TxAlloc->TypeEnv);
+                                    phyQuery.GetResultBindings(i));
 
                                 TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
                                 YQL_ENSURE(serializedBatch);
@@ -2142,7 +2142,7 @@ public:
                     }
                     case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
                         auto batch = QueryState->QueryData->GetArrowTxResult(
-                            phyQuery.GetResultBindings(i), QueryState->TxCtx->TxAlloc->TypeEnv);
+                            phyQuery.GetResultBindings(i));
                         *response->AddResultData() = NArrow::SerializeBatchNoCompression(batch);
 
                         if (!response->HasArrowBatchSettings()) {

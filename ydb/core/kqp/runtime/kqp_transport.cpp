@@ -4,6 +4,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -122,6 +123,8 @@ void TKqpProtoBuilder::BuildArrow(
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
     YQL_ENSURE(batchBuilder.Start(columns).ok());
 
+    TRowBuilder rowBuilder(columns.size());
+
     THolder<TGuard<TScopedAlloc>> guard;
     if (SelfHosted) {
         guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
@@ -142,19 +145,13 @@ void TKqpProtoBuilder::BuildArrow(
         TUnboxedValueBatch rows(mkqlSrcRowType);
         dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
 
-        rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-            TVector<TCell> cells(columns.size());
-            for (ui32 i = 0; i < cells.size(); ++i) {
-                const auto& unboxedValue = value.GetElement(i);
-                const auto& [colName, colType] = columns[i];
-
-                if (!notNullColumns.contains(colName) && !unboxedValue) {
-                    cells[i] = TCell();
-                } else {
-                    cells[i] = MakeCell(colType, unboxedValue, *TypeEnv);
-                }
+        rows.ForEachRow([&](const NUdf::TUnboxedValue& row) {
+            for (size_t i = 0; i < columns.size(); ++i) {
+                const auto& [name, type] = columns[i];
+                rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));
             }
 
+            auto cells = rowBuilder.BuildCells();
             batchBuilder.AddRow(cells);
         });
     }

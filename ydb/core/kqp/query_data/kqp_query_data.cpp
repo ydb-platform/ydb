@@ -4,6 +4,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
@@ -81,9 +82,9 @@ Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMa
     return ydbResult;
 }
 
-std::shared_ptr<arrow::RecordBatch> TKqpExecuterTxResult::GetArrow(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+std::shared_ptr<arrow::RecordBatch> TKqpExecuterTxResult::GetArrow() {
     std::shared_ptr<arrow::RecordBatch> arrowResult = nullptr;
-    FillArrow(arrowResult, typeEnv);
+    FillArrow(arrowResult);
     return arrowResult;
 }
 
@@ -118,7 +119,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsL
     });
 }
 
-void TKqpExecuterTxResult::FillArrow(std::shared_ptr<arrow::RecordBatch> arrowResult, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+void TKqpExecuterTxResult::FillArrow(std::shared_ptr<arrow::RecordBatch> arrowResult) {
     YQL_ENSURE(!Rows.IsWide());
     YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
 
@@ -147,19 +148,14 @@ void TKqpExecuterTxResult::FillArrow(std::shared_ptr<arrow::RecordBatch> arrowRe
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
     YQL_ENSURE(batchBuilder.Start(columns).ok());
 
-    Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
-        TVector<TCell> cells(columns.size());
-        for (ui32 i = 0; i < cells.size(); ++i) {
-            const auto& unboxedValue = value.GetElement(i);
-            const auto& [colName, colType] = columns[i];
-
-            if (!notNullColumns.contains(colName) && !unboxedValue) {
-                cells[i] = TCell();
-            } else {
-                cells[i] = MakeCell(colType, unboxedValue, typeEnv);
-            }
+    TRowBuilder rowBuilder(columns.size());
+    Rows.ForEachRow([&](const NUdf::TUnboxedValue& row) -> bool {
+        for (size_t i = 0; i < columns.size(); ++i) {
+            const auto& [name, type] = columns[i];
+            rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));
         }
 
+        auto cells = rowBuilder.BuildCells();
         batchBuilder.AddRow(cells);
         return true;
     });
@@ -305,13 +301,13 @@ Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding
     return TxResults[txIndex][resultIndex].GetYdb(arena, rowsLimitPerWrite);
 }
 
-std::shared_ptr<arrow::RecordBatch> TQueryData::GetArrowTxResult(const NKqpProto::TKqpPhyResultBinding& rb, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+std::shared_ptr<arrow::RecordBatch> TQueryData::GetArrowTxResult(const NKqpProto::TKqpPhyResultBinding& rb) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
     YQL_ENSURE(HasResult(txIndex, resultIndex));
     auto g = TypeEnv().BindAllocator();
-    return TxResults[txIndex][resultIndex].GetArrow(typeEnv);
+    return TxResults[txIndex][resultIndex].GetArrow();
 }
 
 

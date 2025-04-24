@@ -23,7 +23,7 @@ namespace {
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
-                ActorId = Ctx->Runtime->Register(new NKafka::TKafkaTransactionsCoordinator());
+                ActorId = Ctx->Runtime->Register(new NKafka::TTransactionsCoordinator());
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
@@ -211,7 +211,7 @@ namespace {
                 if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // There will be four events TEvEndTxnRequest. We need only two of them 
                     // with recipient not equal to our TKafkaTransactionCoordinatorActor id. 
-                    // Those are event sent from TKafkaTransactionCoordinatorActor to TKafkaTransactionActor
+                    // Those are event sent from TKafkaTransactionCoordinatorActor to TTransactionActor
                     if (input->Recipient != ActorId) {
                         if (eventCounter == 0) {
                             txnActorId = input->Recipient;

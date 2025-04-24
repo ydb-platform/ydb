@@ -32,7 +32,7 @@ inline void Out<NYdb::Dev::TUuidValue>(IOutputStream& os, const NYdb::Dev::TUuid
 namespace NReplicationTest {
 
 struct IChecker {
-    virtual void Assert(const TString& msg, const ::Ydb::Value& value) = 0;
+    virtual void Assert(const std::string& msg, const ::Ydb::Value& value) = 0;
     virtual ~IChecker() = default;
 };
 
@@ -43,7 +43,7 @@ struct Checker : public IChecker {
         : Expected(std::move(expected))
     {}
 
-    void Assert(const TString& msg, const ::Ydb::Value& value) override {
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
         UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
     }
 
@@ -98,7 +98,7 @@ inline TUuidValue Checker<TUuidValue>::Get(const ::Ydb::Value& value) {
 }
 
 template<typename T>
-std::pair<TString, std::shared_ptr<IChecker>> _C(TString&& name, T&& expected) {
+std::pair<TString, std::shared_ptr<IChecker>> _C(std::string&& name, T&& expected) {
     return {
         std::move(name),
         std::make_shared<Checker<T>>(std::move(expected))
@@ -106,7 +106,7 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(TString&& name, T&& expected) {
 }
 
 template<typename C, typename T>
-std::pair<TString, std::shared_ptr<IChecker>> _T(TString&& name, T&& expected) {
+std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&& expected) {
     return {
         std::move(name),
         std::make_shared<C>(std::move(expected))
@@ -116,8 +116,8 @@ std::pair<TString, std::shared_ptr<IChecker>> _T(TString&& name, T&& expected) {
 struct TMessage {
     TString Message;
     std::optional<ui32> Partition = std::nullopt;
-    std::optional<TString> ProducerId = std::nullopt;
-    std::optional<TString> MessageGroupId = std::nullopt;
+    std::optional<std::string> ProducerId = std::nullopt;
+    std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
 };
 
@@ -131,7 +131,7 @@ inline TMessage _withSeqNo(ui64 seqNo) {
     };
 }
 
-inline TMessage _withProducerId(const TString& producerId) {
+inline TMessage _withProducerId(const std::string& producerId) {
     return {
         .Message = TStringBuilder() << "Message-" << producerId,
         .Partition = 0,
@@ -141,7 +141,7 @@ inline TMessage _withProducerId(const TString& producerId) {
     };
 }
 
-inline TMessage _withMessageGroupId(const TString& messageGroupId) {
+inline TMessage _withMessageGroupId(const std::string& messageGroupId) {
     return {
         .Message = TStringBuilder() << "Message-" << messageGroupId,
         .Partition = 0,
@@ -172,7 +172,7 @@ struct MainTestCase {
         , TableName(TStringBuilder() << "Table_" << Id)
         , ReplicationName(TStringBuilder() << "Replication_" << Id)
         , TransferName(TStringBuilder() << "Transfer_" << Id)
-        , Driver(TDriverConfig(ConnectionString))
+        , Driver(TDriverConfig(ConnectionString)/*.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))*/)
         , TableClient(Driver)
         , Session(TableClient.GetSession().GetValueSync().GetSession())
         , TopicClient(Driver)
@@ -183,11 +183,11 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
-    void ExecuteDDL(const TString& ddl, bool checkResult = true, const TString& expectedMessage = "") {
+    void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::string& expectedMessage = "") {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
-            if (expectedMessage) {
+            if (!expectedMessage.empty()) {
                 UNIT_ASSERT(!res.IsSuccess());
                 Cerr << ">>>>> ACTUAL: " << res.GetIssues().ToOneLineString() << Endl << Flush;
                 Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
@@ -198,21 +198,33 @@ struct MainTestCase {
         }
     }
 
-    auto ExecuteSourceTableQuery(const TString& query) {
+    auto ExecuteQuery(const std::string& query, bool retry = true) {
         for (size_t i = 10; i--;) {
-            auto q = Sprintf(query.data(), SourceTableName.data());
-            Cerr << ">>>>> Query: " << q << Endl << Flush;
-            auto res = Session.ExecuteQuery(q, TTxControl::NoTx()).GetValueSync();
-            if (res.IsSuccess()) {
-                return;
+            Cerr << ">>>>> Query: " << query << Endl << Flush;
+            auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            if (!res.IsSuccess()) {
+                Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
+            }
+            if (res.IsSuccess() || !retry) {
+                return res;
             }
 
             UNIT_ASSERT_C(i, res.GetIssues().ToString());
             Sleep(TDuration::Seconds(1));
         }
+
+        Y_UNREACHABLE();
     }
 
-    void CreateTable(const TString& tableDDL) {
+    auto ExecuteTableQuery(const std::string& query) {
+        return ExecuteQuery(Sprintf(query.data(), TableName.data()));
+    }
+
+    auto ExecuteSourceTableQuery(const std::string& query) {
+        return ExecuteQuery(Sprintf(query.data(), SourceTableName.data()));
+    }
+
+    void CreateTable(const std::string& tableDDL) {
         ExecuteDDL(Sprintf(tableDDL.data(), TableName.data()));
     }
 
@@ -220,7 +232,7 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP TABLE `%s`", TableName.data()));
     }
 
-    void CreateSourceTable(const TString& tableDDL) {
+    void CreateSourceTable(const std::string& tableDDL) {
         ExecuteDDL(Sprintf(tableDDL.data(), SourceTableName.data()));
     }
 
@@ -251,10 +263,17 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP TOPIC `%s`", TopicName.data()));
     }
 
-    void CreateConsumer(const TString& consumerName) {
+    void CreateConsumer(const std::string& consumerName) {
         ExecuteDDL(Sprintf(R"(
             ALTER TOPIC `%s`
             ADD CONSUMER `%s`;
+        )", TopicName.data(), consumerName.data()));
+    }
+
+    void DropConsumer(const std::string& consumerName) {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TOPIC `%s`
+            DROP CONSUMER `%s`;
         )", TopicName.data(), consumerName.data()));
     }
 
@@ -266,14 +285,14 @@ struct MainTestCase {
 
         CreateTransferSettings() {};
 
-        static CreateTransferSettings WithTopic(const TString& topicName, std::optional<TString> consumerName = std::nullopt) {
+        static CreateTransferSettings WithTopic(const std::string& topicName, std::optional<TString> consumerName = std::nullopt) {
             CreateTransferSettings result;
             result.TopicName = topicName;
             result.ConsumerName = consumerName;
             return result;
         }
 
-        static CreateTransferSettings WithConsumerName(const TString& consumerName) {
+        static CreateTransferSettings WithConsumerName(const std::string& consumerName) {
             CreateTransferSettings result;
             result.ConsumerName = consumerName;
             return result;
@@ -287,7 +306,7 @@ struct MainTestCase {
         }
     };
 
-    void CreateTransfer(const TString& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+    void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         TStringBuilder sb;
         if (settings.ConsumerName) {
             sb << ", CONSUMER = '" << *settings.ConsumerName << "'" << Endl;
@@ -331,14 +350,14 @@ struct MainTestCase {
             return result;
         }
 
-        static AlterTransferSettings WithTransformLambda(const TString& lambda) {
+        static AlterTransferSettings WithTransformLambda(const std::string& lambda) {
             AlterTransferSettings result;
             result.TransformLambda = lambda;
             return result;
         }
     };
 
-    void AlterTransfer(const TString& lambda) {
+    void AlterTransfer(const std::string& lambda) {
         AlterTransfer(AlterTransferSettings::WithTransformLambda(lambda));
     }
 
@@ -400,6 +419,30 @@ struct MainTestCase {
         return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
     }
 
+    auto DescribeConsumer(const std::string& consumerName) {
+        TDescribeConsumerSettings settings;
+        settings.IncludeLocation(true);
+        settings.IncludeStats(true);
+
+        auto c = TopicClient.DescribeConsumer(TopicName, consumerName, settings).GetValueSync();
+        UNIT_ASSERT(c.IsSuccess());
+        return c;
+    }
+
+    auto DescribeConsumer() {
+        auto topic = DescribeTopic();
+        auto consumers = topic.GetTopicDescription().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+        return DescribeConsumer(consumers[0].GetConsumerName());
+    }
+
+    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset) {
+        auto d = DescribeConsumer();
+        UNIT_ASSERT(d.IsSuccess());
+        auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
+        UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+    }
+
     void CreateReplication() {
         auto ddl = Sprintf(R"(
             CREATE ASYNC REPLICATION `%s`
@@ -457,7 +500,7 @@ struct MainTestCase {
         )", ReplicationName.data()));
     }
 
-    auto DescribeTopic() {
+    TDescribeTopicResult DescribeTopic() {
         TDescribeTopicSettings settings;
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
@@ -496,11 +539,8 @@ struct MainTestCase {
         }
 
 
-        auto query = Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data());
-        Cerr << ">>>>> Query: " << query << Endl << Flush;
-        auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data()), false);
         if (!res.IsSuccess()) {
-            Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
             TResultSet r{Ydb::ResultSet()};
             return {-1, NYdb::TProtoAccessor::GetProto(r)};
         }
@@ -547,7 +587,7 @@ struct MainTestCase {
         Y_UNREACHABLE();
     }
 
-    void CheckTransferStateError(const TString& expectedMessage) {
+    void CheckTransferStateError(const std::string& expectedMessage) {
         auto result = CheckTransferState(TReplicationDescription::EState::Error);
         Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
         Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;

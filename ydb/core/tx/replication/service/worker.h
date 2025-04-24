@@ -20,6 +20,7 @@ struct TEvWorker {
         EvGone,
         EvStatus,
         EvDataEnd,
+        EvCommit,
 
         EvEnd,
     };
@@ -32,6 +33,13 @@ struct TEvWorker {
         bool SkipCommit;
 
         explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
+
+    struct TEvCommit: public TEventLocal<TEvCommit, EvCommit> {
+        size_t Offset;
+
+        explicit TEvCommit(size_t offset);
         TString ToString() const override;
     };
 

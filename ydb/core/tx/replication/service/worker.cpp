@@ -44,6 +44,17 @@ TString TEvWorker::TEvPoll::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvCommit::TEvCommit(size_t offset)
+    : Offset(offset)
+{
+}
+
+TString TEvWorker::TEvCommit::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Offset: " << Offset
+    << " }";
+}
+
 TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records)
     : PartitionId(partitionId)
     , Source(source)
@@ -214,6 +225,20 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void Handle(TEvWorker::TEvCommit::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        if (ev->Sender != Writer) {
+            LOG_W("Commit from unknown actor"
+                << ": sender# " << ev->Sender);
+            return;
+        }
+
+        if (Reader) {
+            Send(ev->Forward(Reader));
+        }
+    }
+
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
@@ -335,6 +360,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
+            hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);

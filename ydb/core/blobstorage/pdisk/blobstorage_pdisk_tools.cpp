@@ -242,21 +242,13 @@ void ObliterateDisk(TString path) {
     ui64 diskSizeBytes = 0;
     DetectFileParameters(path, diskSizeBytes, isBlockDevice);
 
-    constexpr ui64 GB_BYTES = 4096L * 262144L;
-    if (diskSizeBytes <= GB_BYTES) {
+    constexpr size_t portionSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+    if (diskSizeBytes <= portionSize) {
         ythrow TFileError() << "illegal size " << diskSizeBytes << " for device " << path;
     }
 
-    TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0);
+    TVector<ui8> zeros(portionSize, 0);
     f.Pwrite(zeros.data(), zeros.size(), 0);
-#ifdef DISABLE_PDISK_ENCRYPTION
-    // for non-encrypted pdisks the trailing gigabyte has to be cleared
-    constexpr ui64 GB_BLOCKS = GB_BYTES / NPDisk::FormatSectorSize;
-    ui64 writePos = diskSizeBytes - GB_BYTES;
-    for (ui64 i=0; i<GB_BLOCKS; ++i) {
-        f.Pwrite(zeros.data(), NPDisk::FormatSectorSize, (i64)(writePos + (i * NPDisk::FormatSectorSize)));
-    }
-#endif
     f.Flush();
 }
 

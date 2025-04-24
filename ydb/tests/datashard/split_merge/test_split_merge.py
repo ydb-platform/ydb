@@ -101,24 +101,25 @@ class TestSplitMerge(TestBase):
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
         dml.insert(table_name, all_types, pk_types, index, ttl)
         is_split = wait_for(self.create_predicate(
-            True, index), timeout_seconds=150)
+            True, table_name), timeout_seconds=150)
         assert is_split is True, f"The table {table_name} is not split into partition"
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
         dml.query(
             f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
         is_merge = wait_for(self.create_predicate(
-            False, index), timeout_seconds=150)
+            False, table_name), timeout_seconds=150)
         assert is_merge is True, f"the table {table_name} is not merge into one partition"
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
-    def create_predicate(self, is_split, index):
+    def create_predicate(self, is_split, table_name):
         def predicate():
-            rows = self.query("""SELECT
+            rows = self.query(f"""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
+                WHERE Path = "{self.get_database()}/{table_name}"
                 """)
             if is_split:
-                return rows[0].count != 1 + len(index)
+                return rows[0].count != 1
             else:
-                return rows[0].count == 1 + len(index)
+                return rows[0].count == 1
         return predicate

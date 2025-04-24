@@ -64,10 +64,12 @@ struct TTreeElementBase : public TStaticAttributes {
     bool IsRoot() const {
         return !Parent;
     }
+
     bool IsLeaf() const {
         return Children.empty();
     }
 
+    virtual void AccountFairShare(const TDuration& period);
     virtual void UpdateBottomUp(ui64 totalLimit);
     void UpdateTopDown();
 };
@@ -113,11 +115,13 @@ public:
         Counters.Demand    = group->GetCounter("Demand",    false);
         Counters.Usage     = group->GetCounter("Usage",     true);
         Counters.Throttle  = group->GetCounter("Throttle",  true);
+        Counters.FairShare = group->GetCounter("FairShare", true);
     }
 
     TPool* TakeSnapshot() const override {
         auto* newPool = new TPool(GetId(), *this);
         newPool->Counters.Demand = Counters.Demand;
+        newPool->Counters.FairShare = Counters.FairShare;
 
         Counters.Limit->Set(GetLimit() * 1'000'000);
         Counters.Guarantee->Set(GetGuarantee() * 1'000'000);
@@ -129,6 +133,11 @@ public:
         }
 
         return newPool;
+    }
+
+    void AccountFairShare(const TDuration& period) override {
+        Counters.FairShare->Add(FairShare * period.MicroSeconds());
+        TTreeElementBase::AccountFairShare(period);
     }
 
     void UpdateBottomUp(ui64 totalLimit) override {
@@ -175,6 +184,7 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr Throttle;
+        NMonitoring::TDynamicCounters::TCounterPtr FairShare;
     } Counters;
 };
 
@@ -248,6 +258,9 @@ public:
     void SetSnapshot(const TRootPtr& snapshot) {
         ui8 newSnapshotIdx = 1 - SnapshotIdx;
         Snapshots.at(newSnapshotIdx) = snapshot;
+        if (Snapshots.at(SnapshotIdx)) {
+            Snapshots.at(SnapshotIdx)->AccountFairShare(snapshot->SnapshotTimestamp - Snapshots.at(SnapshotIdx)->SnapshotTimestamp);
+        }
         SnapshotIdx = newSnapshotIdx;
     }
 
@@ -259,6 +272,8 @@ private:
     TRoot() = default;
 
 private:
+    const TMonotonic SnapshotTimestamp = TMonotonic::Now();
+
     THashMap<TString /* name */, TDatabasePtr> Databases;
     std::array<TRootPtr, 2> Snapshots;
     std::atomic<ui8> SnapshotIdx = 0;

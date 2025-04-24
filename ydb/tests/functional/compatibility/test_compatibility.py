@@ -70,9 +70,6 @@ class TestCompatibility(object):
         yield
         self.cluster.stop()
 
-        if hasattr(cls, 'output_f'):
-            cls.output_f.close()
-
     @staticmethod
     def setup_s3():
         s3_endpoint = os.getenv("S3_ENDPOINT")

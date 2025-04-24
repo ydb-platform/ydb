@@ -287,7 +287,7 @@ class TestCompatibility(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
-           # "--partition-size=25",
+           # "--partition-size=25",  # not supported in stable yet
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -318,8 +318,8 @@ class TestCompatibility(object):
             "--exclude",
             "17",  # not working for row tables
             "--check-canonical",
-            "--retries",
-            "5",  # in row tables we have to retry query by design
+            # "--retries", # not supported in stable yet
+            # "5",  # in row tables we have to retry query by design
             "--json",
             result_json_path,
             "--output",

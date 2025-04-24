@@ -60,6 +60,7 @@ target_sources(library-actors-interconnect PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_server.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_session.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_zc_processor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/load.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/packet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_actor.cpp
@@ -84,6 +85,7 @@ target_sources(library-actors-interconnect PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_proxy.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_server.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_session.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_zc_processor.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/load.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/logging.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/packet.h

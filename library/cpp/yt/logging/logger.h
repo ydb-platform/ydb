@@ -327,6 +327,24 @@ void LogStructuredEvent(
 #define YT_LOG_FATAL_IF(condition, ...)        if (Y_UNLIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 #define YT_LOG_FATAL_UNLESS(condition, ...)    if (!Y_LIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 
+/*
+ * A few noteworthy observations:
+ * 1. This function is meant to be used in places where YT_VERIFY won't look out of place, but
+ *    it's safe to just throw an exception. Because of this, this error should not be handled by
+ *    clients in any specific way.
+ * 2. Most places where this could be used have trace_id enabled, which would make it easy for
+ *    administrators to find a correlation between an alert and an error, if a user were to report it.
+ * 3. Administrators will receive this alert, so there is no need to enrich the error with
+ *    additional information.
+ */
+#define YT_LOG_ALERT_AND_THROW(...) \
+    YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, __VA_ARGS__); \
+    THROW_ERROR_EXCEPTION( \
+        ::NYT::EErrorCode::Fatal, \
+        "Malformed request or incorrect state detected");
+#define YT_LOG_ALERT_AND_THROW_IF(condition, ...)     if (condition)    YT_LOG_ALERT_AND_THROW(__VA_ARGS__)
+#define YT_LOG_ALERT_AND_THROW_UNLESS(condition, ...) if (!(condition)) YT_LOG_ALERT_AND_THROW(__VA_ARGS__)
+
 #define YT_LOG_EVENT(logger, level, ...) \
     do { \
         const auto& logger__ = (logger)(); \

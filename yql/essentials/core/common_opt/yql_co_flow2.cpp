@@ -2173,7 +2173,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
         static const char splitFlag[] = "ExtractMembersSplitOnOptional";
         YQL_ENSURE(optCtx.Types);
-        const bool split = IsOptimizerEnabled<splitFlag>(*optCtx.Types) && !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        const bool split = !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
         if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }

@@ -135,28 +135,28 @@ public:
 struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TOwnerRound OwnerRound;
     TVDiskID VDisk;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
     ui64 PDiskGuid;
     TActorId CutLogID; // ask this actor about log cut
     TActorId WhiteboardProxyId;
     ui32 SlotId;
-    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
     TEvYardInit(
             TOwnerRound ownerRound,
             const TVDiskID &vdisk,
+            NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits,
             ui64 pDiskGuid,
             const TActorId &cutLogID = TActorId(),
             const TActorId& whiteboardProxyId = {},
-            ui32 slotId = Max<ui32>(),
-            NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED
+            ui32 slotId = Max<ui32>()
         )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
+        , SlotSizeUnits(slotSizeUnits)
         , PDiskGuid(pDiskGuid)
         , CutLogID(cutLogID)
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
-        , SlotSizeUnits(slotSizeUnits)
     {}
 
     TString ToString() const {
@@ -168,9 +168,9 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << "{EvYardInit ownerRound# " << record.OwnerRound;
         str << " VDisk# " << record.VDisk.ToString();
         str << " PDiskGuid# " << record.PDiskGuid;
+        str << " SlotSizeUnits# " << record.SlotSizeUnits;
         str << " CutLogID# " << record.CutLogID;
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
-        str << " SlotSizeUnits# " << record.SlotSizeUnits;
         str << "}";
         return str.Str();
     }

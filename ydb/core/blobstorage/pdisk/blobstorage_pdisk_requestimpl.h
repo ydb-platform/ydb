@@ -129,20 +129,20 @@ public:
 class TYardInit : public TRequestBase {
 public:
     TVDiskID VDisk;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
     ui64 PDiskGuid;
     TActorId CutLogId;
     TActorId WhiteboardProxyId;
     ui32 SlotId;
-    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
         , VDisk(ev.VDisk)
+        , SlotSizeUnits(ev.SlotSizeUnits)
         , PDiskGuid(ev.PDiskGuid)
         , CutLogId(ev.CutLogID)
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
-        , SlotSizeUnits(ev.SlotSizeUnits)
     {}
 
     ERequestType GetType() const override {

@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 nodeId = runtime.GetNodeId(0);
         TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
         for (;;) {
-            runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
+            runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, guid)), 0);
             TAutoPtr<IEventHandle> handle;
             if (auto initResult = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(handle, TDuration::Seconds(1))) {
                 UNIT_ASSERT(initResult);

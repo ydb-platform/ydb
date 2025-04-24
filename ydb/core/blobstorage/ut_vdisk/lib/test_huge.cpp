@@ -131,6 +131,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         TVDiskID selfVDiskID = HmCtx->Conf->GroupInfo->GetVDiskId(HmCtx->VCtx->ShortSelfVDisk);
         ctx.Send(HmCtx->Config->BaseInfo.PDiskActorID,
             new NPDisk::TEvYardInit(HmCtx->Config->BaseInfo.InitOwnerRound + 50, selfVDiskID,
+                NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
                 HmCtx->Config->BaseInfo.PDiskGuid));
         Become(&TThis::StateFunc);
     }

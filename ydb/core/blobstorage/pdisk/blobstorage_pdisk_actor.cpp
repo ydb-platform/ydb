@@ -59,6 +59,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     struct TInitQueueItem {
         TOwnerRound OwnerRound = 0;
         TVDiskID VDisk = TVDiskID::InvalidId;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
         ui64 PDiskGuid = 0;
         TActorId Sender;
         TActorId CutLogId;
@@ -75,10 +76,19 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             , Cookie(cookie)
         {}
 
-        TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId,
-                TActorId whiteboardProxyId, ui32 slotId)
+        TInitQueueItem(
+                TOwnerRound ownerRound,
+                TVDiskID vDisk,
+                NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits,
+                ui64 pDiskGuid,
+                TActorId sender,
+                TActorId cutLogId,
+                TActorId whiteboardProxyId,
+                ui32 slotId
+        )
             : OwnerRound(ownerRound)
             , VDisk(vDisk)
+            , SlotSizeUnits(slotSizeUnits)
             , PDiskGuid(pDiskGuid)
             , Sender(sender)
             , CutLogId(cutLogId)
@@ -623,7 +633,7 @@ public:
                 request->Cookie = it->Cookie;
                 PDisk->InputRequest(request);
             } else {
-                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
+                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->SlotSizeUnits, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
                     it->SlotId);
                 auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
                 PDisk->InputRequest(request);
@@ -638,7 +648,7 @@ public:
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
         const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.PDiskGuid,
+        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.SlotSizeUnits, evYardInit.PDiskGuid,
             ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
     }
 

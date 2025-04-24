@@ -23,7 +23,7 @@ class TTestInit : public TBaseTest {
             VERBOSE_COUT(" Sending TEvInit");
             TVDiskID vDiskId2 = VDiskID;
             vDiskId2.GroupGeneration = GroupGeneration;
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, vDiskId2, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, vDiskId2, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         }
         case 10:
@@ -125,7 +125,7 @@ class TTestWholeLogRead : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             Ctest << " Sending TEvInit" << Endl;
-            ctx.Send(Yard, new NPDisk::TEvYardInit(5, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(5, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -171,7 +171,7 @@ class TTestLogWriteRead : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -183,7 +183,7 @@ class TTestLogWriteRead : public TBaseTest {
         case 20:
             TEST_RESPONSE(EvLogResult, OK);
             VERBOSE_COUT(" Sending TEvInit 2");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 30:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -226,7 +226,7 @@ class TTestLogWrite : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -313,7 +313,7 @@ private:
         switch (TestStep) {
         case 0:
             Ctest << " Sending TEvInit" << Endl;
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -427,7 +427,7 @@ private:
             ASSERT_YTHROW(EvLogsReceived == EvLogsToSend, "PDUT-0001");
             Ctest << "MyNum# " << MyNum << " recieve event num# " << EvLogsReceived << Endl;
 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         }
         case 70:
@@ -511,7 +511,7 @@ class TTestLogWriteLsnConsistency : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -565,7 +565,7 @@ class TTestLog3Read : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -616,7 +616,7 @@ class TTestLog3Write : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -667,7 +667,7 @@ class TTestChunkReadRandomOffset : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -760,7 +760,7 @@ class TTestChunkWriteRead : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -1061,7 +1061,7 @@ class TTestChunk3WriteRead : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -1157,7 +1157,7 @@ class TTestLogMultipleWriteRead : public TBaseTest {
             Lsn = 1;
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             TestStep += 10;
         } else if (TestStep == 10) {
             if (IsFirstLog) {
@@ -1181,7 +1181,7 @@ class TTestLogMultipleWriteRead : public TBaseTest {
             TEST_RESPONSE(EvLogResult, OK);
             Lsn = 1;
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             TestStep += 10;
         } else if (TestStep == 30) {
             NPDisk::TLogPosition position{0, 0};
@@ -1499,7 +1499,7 @@ class TTestLogMoreSectors : public TBaseTest {
             Data = TRcBuf(PrepareData(Size));
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
             TEST_RESPONSE(EvYardInitResult, OK);
@@ -1657,7 +1657,7 @@ private:
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
             VDiskID.GroupID = TGroupId::FromValue(MyNum);
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -1799,7 +1799,7 @@ private:
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
             VDiskID.GroupID = TGroupId::FromValue(MyNum);
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -1872,7 +1872,7 @@ class TTestCommitChunks : public TBaseTest {
         case 0:
             ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
             VERBOSE_COUT(" Sending TEvInit");
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
             break;
         case 10:
         {
@@ -2185,7 +2185,7 @@ public:
 
 class TActorTestSlayLogWriteRace final : public TCommonBaseTest {
     void HandleBoot(TEvTablet::TEvBoot::TPtr &, const TActorContext &ctx) {
-        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
     }
 
     void Handle(NPDisk::TEvYardInitResult::TPtr &event, const TActorContext &ctx) {

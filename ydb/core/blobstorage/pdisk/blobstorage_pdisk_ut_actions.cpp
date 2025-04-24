@@ -8,14 +8,14 @@ void TTestInitCorruptedError::TestFSM(const TActorContext &ctx) {
     case 0:
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
-        ctx.Send(Yard, new NPDisk::TEvYardInit(1, VDiskID, *PDiskGuid));
-        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
-        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(1, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
         break;
     case 10:
         TEST_RESPONSE(EvYardInitResult, CORRUPTED);
         VERBOSE_COUT(" Sending TEvInit again");
-        ctx.Send(Yard, new NPDisk::TEvYardInit(4, VDiskID, *PDiskGuid));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(4, VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, *PDiskGuid));
         break;
     case 20:
         TEST_RESPONSE(EvYardInitResult, CORRUPTED);

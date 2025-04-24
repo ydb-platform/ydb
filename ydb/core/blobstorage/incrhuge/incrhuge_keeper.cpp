@@ -29,7 +29,7 @@ namespace NKikimr {
             // send yard init message
             TVDiskID myVDiskId(TGroupId::FromValue(~0), ~0, 'H', 'I', 'K');
             ctx.Send(State.Settings.PDiskActorId, new NPDisk::TEvYardInit(State.Settings.InitOwnerRound, myVDiskId,
-                    State.Settings.PDiskGuid, ctx.SelfID));
+                    NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, State.Settings.PDiskGuid, ctx.SelfID));
             Become(&TKeeper::StateFunc);
         }
 

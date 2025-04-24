@@ -29,6 +29,7 @@ struct TPDiskMockState::TImpl {
         ui64 LogDataSize = 0;
         bool Slain = false;
         ui64 LastLsn = 0;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
     };
 
     const ui32 NodeId;
@@ -419,6 +420,7 @@ public:
             owner->OwnerRound = ev->Get()->OwnerRound;
             owner->CutLogId = ev->Get()->CutLogID;
             owner->Slain = false;
+            owner->SlotSizeUnits = ev->Get()->SlotSizeUnits;
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);

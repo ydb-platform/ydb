@@ -6,7 +6,7 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-// Proxy object between any schedulable actor and the scheduler itself
+// The proxy-object between any schedulable actor and the scheduler itself
 struct TSchedulableTask {
     explicit TSchedulableTask(const NHdrf::TQueryPtr& query);
     ~TSchedulableTask();
@@ -23,6 +23,7 @@ public:
         TSchedulableTaskPtr SchedulableTask;
     };
 
+protected:
     explicit TSchedulableActorHelper(TOptions&& options);
 
     static TMonotonic Now();
@@ -97,6 +98,8 @@ private:
         }
 
         const auto now = Now();
+
+        // TODO: account waiting on mailbox?
 
         if (auto delay = CalculateDelay(now)) {
             Throttled = true;

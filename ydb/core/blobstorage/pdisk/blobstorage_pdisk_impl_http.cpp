@@ -306,6 +306,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                         TABLER() {
                             TABLED() { str << (ui32) owner;}
                             TABLED() { str << data.VDiskId.ToStringWOGeneration() << "<br/>(" << data.VDiskId.GroupID << ")"; }
+                            // TODO TABLED() { str << data.SlotSizeUnits; }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
                             TABLED() { str << data.WhiteboardProxyId; }

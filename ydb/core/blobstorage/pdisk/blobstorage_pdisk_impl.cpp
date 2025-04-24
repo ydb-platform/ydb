@@ -251,6 +251,7 @@ TString TPDisk::StartupOwnerInfo() {
         if (data.VDiskId != TVDiskID::InvalidId) {
             str << "{OwnerId: " << (ui32)owner;
             str << " VDiskId: " << data.VDiskId.ToStringWOGeneration();
+            str << " SlotSizeUnits: " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(data.SlotSizeUnits);
             str << " ChunkWrites: " << data.InFlight->ChunkWrites.load();
             str << " ChunkReads: " << data.InFlight->ChunkReads.load();
             str << " LogWrites: " << data.InFlight->LogWrites.load();
@@ -585,6 +586,8 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
 }
 
 ui32 TPDisk::GetNumActiveSlots() const {
+    P_LOG(PRI_NOTICE, PD01, "TPDisk::GetNumActiveSlots()");
+
     ui32 sum = 0;
     for (const auto& ownerData: OwnerData) {
         if (ownerData.VDiskId == TVDiskID::InvalidId) {
@@ -592,7 +595,13 @@ ui32 TPDisk::GetNumActiveSlots() const {
         }
         ui32 u_vdisk = ownerData.SlotSizeUnits ?: 1;
         ui32 u_pdisk = Cfg->SlotSizeUnits ?: 1;
-        sum += int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+        ui32 slots_occupied = int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+        sum += slots_occupied; 
+        P_LOG(PRI_NOTICE, PD02, "Seen owner",
+            (VDiskSlotSizeUnits, u_vdisk),
+            (PDiskSlotSizeUnits, u_pdisk),
+            (Occupied, slots_occupied)
+        );
     }
     return sum;
 }
@@ -1524,6 +1533,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);
             vdiskInfo.SetAllocatedSize(ownerAllocated);
+            vdiskInfo.SetSlotSizeUnits(data.SlotSizeUnits);
 
             NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = reportResult->DiskMetrics->Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vdiskId, vdiskMetrics->MutableVDiskId());
@@ -1843,6 +1853,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 }
 
 bool TPDisk::YardInitStart(TYardInit &evYardInit) {
+    P_LOG(PRI_NOTICE, PD03, "YardInitStart", (evYardInit, evYardInit));
     if (evYardInit.VDisk == TVDiskID::InvalidId) {
         ReplyErrorYardInitResult(evYardInit, "VDisk == InvalidId. Marker# BPD03");
         return false;
@@ -1906,10 +1917,12 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
             << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
     ownerData.OwnerRound = evYardInit.OwnerRound;
+    ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
     return true;
 }
 
 void TPDisk::YardInitFinish(TYardInit &evYardInit) {
+    P_LOG(PRI_NOTICE, PD04, "YardInitFinish", (evYardInit, evYardInit));
     TOwner owner = evYardInit.Owner;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
     {
@@ -1946,6 +1959,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         ownerData.VDiskSlotId = evYardInit.SlotId;
         ownerData.OwnerRound = evYardInit.OwnerRound;
         VDiskOwners[vDiskId] = owner;
+        ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
         ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
         SysLogRecord.OwnerVDisks[owner] = vDiskId;
         ownerRound = ownerData.OwnerRound;

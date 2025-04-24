@@ -506,6 +506,273 @@
         ],
         "TotalGroups": 5
     },
+    "test.test_topic_data": {
+        "both_offset_and_ts": {
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
+        },
+        "no_partition": {
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
+        },
+        "response_compressed": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
+                    "Offset": 11,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 12,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
+                    "Offset": 12,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 13,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
+                    "Offset": 13,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 14,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
+                    "Offset": 14,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 15,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
+                    "Offset": 15,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 16,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_metadata": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=",
+                    "MessageMetadata": [
+                        {
+                            "Key": "key1",
+                            "Value": "value1"
+                        },
+                        {
+                            "Key": "key2",
+                            "Value": "value2"
+                        }
+                    ],
+                    "Offset": 10,
+                    "OriginalSize": 17,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 11,
+                    "StorageSize": 37,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_not_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_read": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 5,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        }
+    },
+    "test.test_transfer_describe": {
+        "connection_params": {
+            "connection_string": "text",
+            "database": "/Root/dedicated_db",
+            "endpoint": "text",
+            "oauth": {}
+        },
+        "error": {
+            "issues": [
+                {
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "severity": 1
+                }
+            ]
+        },
+        "row_consistency": {},
+        "self": {
+            "created_at": {
+                "plan_step": "not-zero-number-text",
+                "tx_id": "not-zero-number-text"
+            },
+            "effective_permissions": [
+                {
+                    "permission_names": [
+                        "ydb.database.connect"
+                    ],
+                    "subject": "USERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.list"
+                    ],
+                    "subject": "METADATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.select_row"
+                    ],
+                    "subject": "DATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.tables.modify"
+                    ],
+                    "subject": "DATA-WRITERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.create_directory",
+                        "ydb.granular.write_attributes",
+                        "ydb.granular.create_table",
+                        "ydb.granular.remove_schema",
+                        "ydb.granular.create_queue",
+                        "ydb.granular.alter_schema"
+                    ],
+                    "subject": "DDL-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.access.grant"
+                    ],
+                    "subject": "ACCESS-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.manage"
+                    ],
+                    "subject": "DATABASE-ADMINS"
+                }
+            ],
+            "name": "TestAsyncReplication",
+            "owner": "root@builtin",
+            "type": "REPLICATION"
+        }
+    },
     "test.test_viewer_acl": {
         "/Root": {
             "Common": {

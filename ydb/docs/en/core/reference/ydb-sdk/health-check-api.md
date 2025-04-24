@@ -190,6 +190,12 @@ The status (severity) of the current issue:
 
 **Description:** This situation is not expected; it is an internal issue.
 
+#### Group layout is incorrect
+
+**Description:** The storage group was configured incorrectly.
+
+**Actions:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and use the known group `id` to check the configuration of nodes and disks on the nodes.
+
 #### Group degraded
 
 **Description:** A number of disks allowed in the group are not available.
@@ -212,7 +218,7 @@ The status (severity) of the current issue:
 
 **Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.```
+**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
 
 ### VDISK
 

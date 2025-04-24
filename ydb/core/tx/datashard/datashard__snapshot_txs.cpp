@@ -69,7 +69,7 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
 }
 
 void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Reply);
+    Y_ENSURE(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }
@@ -140,7 +140,7 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
 }
 
 void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Reply);
+    Y_ENSURE(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }

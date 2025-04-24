@@ -20,19 +20,37 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Helper type to validate keys at compile-time.
+struct TStructuredLogKey
+{
+    std::string_view Key;
+    consteval TStructuredLogKey(const char* key);
+};
+
+template <typename T>
+std::tuple<TStructuredLogKey, T> MakeTuple(TStructuredLogKey k, T&& t);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
 template <typename... Values>
 void LogStructuredEvent(
     const TLogger& logger,
     ELogLevel level,
     std::string_view message,
-    std::tuple<const char*, Values>&&... tags);
+    std::tuple<NDetail::TStructuredLogKey, Values>&&... tags);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging
 
-#define YT_SLOG_TUPLE(x) std::make_tuple x,
-#define YT_SLOG_TUPLE_LAST(x) std::make_tuple x
+#define YT_SLOG_TUPLE(x) NYT::NLogging::NDetail::MakeTuple x,
+#define YT_SLOG_TUPLE_LAST(x) NYT::NLogging::NDetail::MakeTuple x
 
 // YT_SLOG_EVENT enforces that primary structured log messages are known at
 // compile-time, because structured errors (and logs in general) are usually

@@ -105,7 +105,7 @@ public:
         const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
 
         auto unableToMakeABill = [&](const TStringBuf reason) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
                 << ": kind# " << TKind::Name()
                 << ", opId# " << operationId
                 << ", reason# " << reason

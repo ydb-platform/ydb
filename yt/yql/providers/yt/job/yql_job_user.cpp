@@ -150,7 +150,7 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,
         Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider,
-        SecureParamsProvider.Get(), LogProvider.Get());
+        SecureParamsProvider.Get(), LogProvider.Get(), LangVer);
 
     TType* itemType = nullptr;
     if (InputType) {
@@ -171,6 +171,7 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     }
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
+        MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();

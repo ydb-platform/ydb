@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
 #define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " << stream)
@@ -78,6 +80,7 @@ public:
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         const auto& request = *ev.Get()->Get();
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
+        forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
@@ -107,6 +110,18 @@ public:
             forwardResponse->Issues.AddIssue("GrpcCode: " + ToString(status.GRpcStatusCode));
             forwardResponse->Issues.AddIssue("Message: " + status.Msg);
             forwardResponse->Issues.AddIssue("Details: " + status.Details);
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
+        const auto& operation = ev->Get()->Response.operation();
+        if (operation.status() != Ydb::StatusIds::SUCCESS && operation.status() != Ydb::StatusIds::ALREADY_EXISTS) {
+            forwardResponse->Issues.AddIssue(TStringBuilder() << "YDB operation status: " << operation.status());
+
+            NYql::TIssues operationIssues;
+            NYql::IssuesFromMessage(operation.issues(), operationIssues);
+            forwardResponse->Issues.AddIssues(std::move(operationIssues));
+
             Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
             return;
         }

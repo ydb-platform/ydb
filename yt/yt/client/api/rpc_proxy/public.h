@@ -36,6 +36,10 @@ DEFINE_ENUM(EAddressType,
     ((InternalRpc)        (0))
     ((MonitoringHttp)     (1))
     ((TvmOnlyInternalRpc) (2))
+    ((Http)               (3))
+    ((Https)              (4))
+    ((TvmOnlyHttp)        (5))
+    ((TvmOnlyHttps)       (6))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

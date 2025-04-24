@@ -70,14 +70,27 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
-        return Replication->AddPendingAlterTarget(Id);
-    case EDstState::Done:
-        return Replication->RemovePendingAlterTarget(Id);
-    case EDstState::Ready:
-        PendingRemoveWorkers = false;
+        Replication->AddPendingAlterTarget(Id);
         break;
     default:
+        Replication->RemovePendingAlterTarget(Id);
         break;
+    }
+
+    if (DstState != EDstState::Creating) {
+        Reset(DstCreator);
+    }
+    if (DstState != EDstState::Ready) {
+        Reset(WorkerRegistar);
+    }
+    if (DstState != EDstState::Alter) {
+        Reset(DstAlterer);
+    }
+    if (DstState != EDstState::Removing) {
+        Reset(DstRemover);
+    }
+    if (DstState != EDstState::Alter && DstState != EDstState::Removing) {
+        PendingRemoveWorkers = false;
     }
 }
 
@@ -187,6 +200,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
         }
         break;
+    case EDstState::Paused:
+        break;
     case EDstState::Error:
         break;
     }
@@ -204,6 +219,12 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
         if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
+    }
+}
+
+void TTargetBase::Reset(TActorId& id) {
+    if (auto actorId = std::exchange(id, {})) {
+        TlsActivationContext->AsActorContext().Send(actorId, new TEvents::TEvPoison());
     }
 }
 

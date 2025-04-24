@@ -20,8 +20,8 @@ To view a description of the table delete command:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
+| Name        | Description                                                            |
+|-------------|------------------------------------------------------------------------|
 | `--timeout` | The time within which the operation should be completed on the server. |
 
 ## Examples {examples}

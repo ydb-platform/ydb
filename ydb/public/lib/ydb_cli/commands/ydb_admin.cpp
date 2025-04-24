@@ -31,14 +31,14 @@ public:
     TCommandDatabase()
         : TClientCommandTree("database", {}, "Database-wide administration")
     {
-        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
     }
 };
 
-TCommandDatabaseDump::TCommandDatabaseDump() 
-    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory") 
+TCommandDatabaseDump::TCommandDatabaseDump()
+    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory")
 {}
 
 void TCommandDatabaseDump::Config(TConfig& config) {
@@ -66,8 +66,8 @@ int TCommandDatabaseDump::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandDatabaseRestore::TCommandDatabaseRestore() 
-    : TYdbCommand("restore", {}, "Restore database from local dump") 
+TCommandDatabaseRestore::TCommandDatabaseRestore()
+    : TYdbCommand("restore", {}, "Restore database from local dump")
 {}
 
 void TCommandDatabaseRestore::Config(TConfig& config) {
@@ -109,6 +109,7 @@ TCommandAdmin::TCommandAdmin()
     UseOnlyExplicitProfile();
     // keep old commands "safe", to keep old behavior
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(
+                         true,
                          NDynamicConfig::TCommandFlagsOverrides{.Dangerous = false, .OnlyExplicitProfile = false},
                          false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());
@@ -135,7 +136,7 @@ void TCommandAdmin::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());

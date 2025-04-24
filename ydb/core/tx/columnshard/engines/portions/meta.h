@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/stream/output.h>
 
@@ -64,7 +65,7 @@ public:
 class TPortionMeta: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;
-    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;   // first and last PK rows
+    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -127,11 +128,11 @@ public:
 
 class TPortionAddress {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
 
 public:
-    TPortionAddress(const ui64 pathId, const ui64 portionId)
+    TPortionAddress(const TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
     }
@@ -152,6 +153,6 @@ public:
 template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetPathId());
+        return CombineHashes(x.GetPortionId(), x.GetPathId().GetRawValue());
     }
 };

@@ -343,6 +343,18 @@ void TKikimrRunner::CreateSampleTables() {
         WITH (
             PARTITION_AT_KEYS = (105)
         );
+
+        CREATE TABLE `TuplePrimaryDescending` (
+            Col1 Uint32,
+            Col2 Uint64,
+            Col3 Int64,
+            Col4 Int64,
+            PRIMARY KEY (Col2, Col1, Col3)
+        )
+        WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            PARTITION_AT_KEYS = (2, 3)
+        );
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
@@ -453,6 +465,24 @@ void TKikimrRunner::CreateSampleTables() {
             (105, "Two",   "Name4", "Value28"),
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
+
+        REPLACE INTO `TuplePrimaryDescending` (Col1, Col2, Col3, Col4) VALUES
+            (0, 1, 0, 3),
+            (1, 1, 0, 1),
+            (1, 1, 1, 0),
+            (1, 1, 2, 1),
+            (2, 1, 0, 2),
+            (1, 2, 0, 1),
+            (1, 2, 1, 0),
+            (2, 2, 0, 1),
+            (3, 2, 1, 5),
+            (0, 3, 0, 1),
+            (1, 3, 3, 0),
+            (2, 3, 0, 1),
+            (0, 3, 2, 4),
+            (1, 3, 1, 1),
+            (2, 3, 1, 2),
+            (3, 3, 0, 1);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
 }
@@ -529,6 +559,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
+    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
+
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
@@ -685,6 +717,14 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 
     CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
 
+    return result;
+}
+
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
+        .ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
 
@@ -1518,7 +1558,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
             opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
             (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
-            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles)
         ) {
             NJson::TJsonValue newChildren;
 
@@ -1652,6 +1692,53 @@ NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedD
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
     return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
+}
+
+TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
+    auto mbusPort = PortManager.GetPort();
+    auto grpcPort = PortManager.GetPort();
+
+    Settings = new Tests::TServerSettings(mbusPort);
+    EnvSettings = envSettings;
+
+    Settings->SetDomainName("Root");
+    Settings->SetNodeCount(EnvSettings.StaticNodeCount);
+    Settings->SetDynamicNodeCount(EnvSettings.DynamicNodeCount);
+    Settings->SetUseRealThreads(EnvSettings.UseRealThreads);
+    Settings->AddStoragePoolType(EnvSettings.PoolName);
+    Settings->SetFeatureFlags(EnvSettings.FeatureFlags);
+
+    Server = new Tests::TServer(*Settings);
+    Server->EnableGRpc(grpcPort);
+
+    auto sender = Server->GetRuntime()->AllocateEdgeActor();
+    Server->SetupRootStoragePools(sender);
+
+    Client = MakeHolder<Tests::TClient>(*Settings);
+
+    Tenants = MakeHolder<Tests::TTenants>(Server);
+
+    Endpoint = "localhost:" + ToString(grpcPort);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+}
+
+TTestExtEnv::~TTestExtEnv() {
+    Driver->Stop(true);
+}
+
+void TTestExtEnv::CreateDatabase(const TString& databaseName) {
+    auto fullDbName = "/Root/" + databaseName;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(fullDbName);
+
+    auto* resources = request.mutable_resources();
+    auto* storage = resources->add_storage_units();
+    storage->set_unit_kind(EnvSettings.PoolName);
+    storage->set_count(1);
+
+    Tenants->CreateTenant(request, EnvSettings.DynamicNodeCount);
 }
 
 } // namspace NKqp

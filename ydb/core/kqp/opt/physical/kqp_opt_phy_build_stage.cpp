@@ -581,7 +581,9 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
 NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx) {
 
-    if (!node.Maybe<TDqStage>() || !kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TDqStage>()) {
         return node;
     }
 
@@ -608,7 +610,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         << KqpExprToPrettyString(lookupKeys, ctx));
 
     TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;    
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;
@@ -768,12 +770,12 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx, bool ruleEnabled) 
+    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
 {
     if (!ruleEnabled) {
         return node;
     }
-    
+
     if (!node.Maybe<TKqlIndexLookupJoin>()) {
         return node;
     }

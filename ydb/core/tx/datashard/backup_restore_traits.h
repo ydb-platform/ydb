@@ -30,12 +30,12 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur);
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 
-TString PermissionsKeySuffix();
-TString TopicKeySuffix();
-TString ChangefeedKeySuffix();
-TString SchemeKeySuffix();
-TString MetadataKeySuffix();
-TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec);
+TString PermissionsKeySuffix(bool encryptedBackup);
+TString TopicKeySuffix(bool encryptedBackup);
+TString ChangefeedKeySuffix(bool encryptedBackup);
+TString SchemeKeySuffix(bool encryptedBackup);
+TString MetadataKeySuffix(bool encryptedBackup);
+TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec, bool encryptedBackup);
 
 } // NBackupRestoreTraits
 } // NDataShard

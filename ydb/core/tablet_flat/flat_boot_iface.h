@@ -65,7 +65,7 @@ namespace NBoot {
             , Logic(owner->Logic)
             , Back(owner->Back)
         {
-            Y_ABORT_UNLESS(Owner != this, "Boot IStep Cannot be on its own");
+            Y_ENSURE(Owner != this, "Boot IStep Cannot be on its own");
         }
 
         virtual ~IStep() = default;
@@ -74,12 +74,12 @@ namespace NBoot {
 
         virtual bool HandleBio(NSharedCache::TEvResult&)
         {
-            Y_ABORT("Boot IStep got an unhandled NSharedCache::TEvResult event");
+            Y_TABLET_ERROR("Boot IStep got an unhandled NSharedCache::TEvResult event");
         }
 
         virtual void HandleStep(TIntrusivePtr<IStep>)
         {
-            Y_ABORT("Boot IStep got an unhandled child step result");
+            Y_TABLET_ERROR("Boot IStep got an unhandled child step result");
         }
 
         template<typename TStep, typename ... TArgs>
@@ -104,7 +104,7 @@ namespace NBoot {
             if (typeid(*this) == typeid(TStep)) {
                 return static_cast<TStep*>(this);
             } else if (require) {
-                Y_ABORT("Cannot cast IStep to particular unit");
+                Y_TABLET_ERROR("Cannot cast IStep to particular unit");
             } else {
                 return nullptr;
             }

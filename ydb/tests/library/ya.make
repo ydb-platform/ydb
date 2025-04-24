@@ -107,6 +107,7 @@ END()
 RECURSE(
     compatibility
     clients
+    flavours
     serializability
     test_meta
     wardens

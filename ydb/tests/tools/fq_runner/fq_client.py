@@ -48,7 +48,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         t = Timestamp()
         t.FromMilliseconds(int(seconds * 1000))
-        disposition.from_time.timestamp = t
+        disposition.from_time.timestamp.CopyFrom(t)
         return disposition
 
     @staticmethod
@@ -56,7 +56,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         d = Duration()
         d.FromMilliseconds(int(seconds * 1000))
-        disposition.time_ago.duration = d
+        disposition.time_ago.duration.CopyFrom(d)
         return disposition
 
     @staticmethod
@@ -466,6 +466,21 @@ class FederatedQueryClient(object):
         pg.password = password
 
         pg.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_mysql_connection(self, name, database_name, database_id, login, password,
+                                secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        my = request.content.setting.mysql_cluster
+        my.database_name = database_name
+        my.database_id = database_id
+        my.login = login
+        my.password = password
+
+        my.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 

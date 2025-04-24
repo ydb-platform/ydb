@@ -2,6 +2,7 @@
 
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/rows/mass.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/random/mersenne.h>
 
@@ -40,9 +41,9 @@ namespace NTest {
             auto *up = row.Get(NTable::TTag(1));
 
             if (up == nullptr || up->Type != NScheme::NTypeIds::Uint64) {
-                Y_ABORT("Probably got row not from the TMass instance");
+                Y_TABLET_ERROR("Probably got row not from the TMass instance");
             } else if (up->Cell.Size() != sizeof(ui64) || !up->Cell.Data()) {
-                Y_ABORT("Last saved tow reference TCell is invalid in TRow");
+                Y_TABLET_ERROR("Last saved tow reference TCell is invalid in TRow");
             } else {
                 return *reinterpret_cast<const ui64*>(up->Cell.Data());
             }

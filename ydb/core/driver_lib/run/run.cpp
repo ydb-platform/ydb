@@ -55,13 +55,14 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
-#include <ydb/core/protos/http_config.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -947,6 +948,40 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
+        switch(grpcConfig.GetDefaultCompressionAlgorithm()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_NONE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_NONE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_DEFLATE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_DEFLATE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_GZIP: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+                break;
+            }
+        }
+
+        switch(grpcConfig.GetDefaultCompressionLevel()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_NONE: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_NONE);
+                break;
+            }
+
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_LOW: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_LOW);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_MED: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_MED);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_HIGH: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_HIGH);
+                break;
+            }
+        }
 
         if (appConfig.HasDomainsConfig() &&
             appConfig.GetDomainsConfig().HasSecurityConfig() &&
@@ -1093,6 +1128,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
+    if (ModuleFactories) {
+        AppData->TransferWriterFactory = ModuleFactories->TransferWriterFactory;
+    }
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1208,6 +1246,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasHealthCheckConfig()) {
         AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
+    }
+
+    if (runConfig.AppConfig.HasWorkloadManagerConfig()) {
+        AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
     // setup resource profiles

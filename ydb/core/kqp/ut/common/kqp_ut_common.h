@@ -124,6 +124,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
     TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
+    TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }
     TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
@@ -346,6 +347,8 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query);
+
 class TStreamReadError : public yexception {
 public:
     TStreamReadError(NYdb::EStatus status)
@@ -407,6 +410,40 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
+
+class TTestExtEnv {
+public:
+    struct TEnvSettings {
+        size_t StaticNodeCount = 1;
+        size_t DynamicNodeCount = 1;
+        TString PoolName = "hdd1";
+        bool UseRealThreads = true;
+        NKikimrConfig::TFeatureFlags FeatureFlags;
+    };
+
+    TTestExtEnv(TEnvSettings envSettings);
+    ~TTestExtEnv();
+
+    NYdb::TDriver& GetDriver() const {
+        return *Driver;
+    }
+
+    void CreateDatabase(const TString& databaseName);
+
+private:
+    TPortManager PortManager;
+
+    Tests::TServerSettings::TPtr Settings;
+    Tests::TServer::TPtr Server;
+    THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
+
+    TString Endpoint;
+    NYdb::TDriverConfig DriverConfig;
+    THolder<NYdb::TDriver> Driver;
+
+    TEnvSettings EnvSettings;
+};
 
 } // namespace NKqp
 } // namespace NKikimr

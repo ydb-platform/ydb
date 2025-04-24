@@ -3,7 +3,7 @@
 В модуле DateTime существует два внутренних формата представления: `Resource<TM>` для базовых типов дат и `Resource<TM64>` для расширенных.
 
 `Resource<TM>` и `Resource<TM64>` хранят следующие компоненты дат:
-* Year (для `Resource<TM>` 12 бит, беззнаковый; для `Resource<TM64> 19 бит, знаковый);
+* Year (для `Resource<TM>` 12 бит, беззнаковый; для `Resource<TM64>` 19 бит, знаковый);
 * Month (4 бита);
 * Day (5 бит);
 * Hour (5 бит);
@@ -37,16 +37,16 @@
 
 * `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
 * `DateTime::MakeTzDate(Resource<TM>{Flags:AutoMap}) -> TzDate`
-* `DateTime::MakeDate32(Resource<TM>{Flags:AutoMap}) -> Date32`
-* `DateTime::MakeTzDate32(Resource<TM>{Flags:AutoMap}) -> TzDate32`
+* `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`
+* `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`
 * `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`
 * `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`
-* `DateTime::MakeDatetime64(Resource<TM>{Flags:AutoMap}) -> Datetime64`
-* `DateTime::MakeTzDatetime64(Resource<TM>{Flags:AutoMap}) -> TzDatetime64`
+* `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`
+* `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`
 * `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`
 * `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`
-* `DateTime::MakeTimestamp64(Resource<TM>{Flags:AutoMap}) -> Timestamp64`
-* `DateTime::MakeTzTimestamp64(Resource<TM>{Flags:AutoMap}) -> TzTimestamp64`
+* `DateTime::MakeTimestamp64(Resource<TM64>{Flags:AutoMap}) -> Timestamp64`
+* `DateTime::MakeTzTimestamp64(Resource<TM64>{Flags:AutoMap}) -> TzTimestamp64`
 
 #### Примеры
 
@@ -350,18 +350,19 @@ SELECT
       -- "2019-01-01 01:02:03 Europe/Moscow"
 ```
 
-## Parse {#parse}
+## Parse/Parse64 {#parse}
 
 Распарсить строку во внутреннее представление, используя произвольную строку форматирования. Для незаполненных полей используются значения по умолчанию. При возникновении ошибок возвращается NULL.
 
 #### Список функций
 
 * `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`
 
 Реализованные спецификаторы:
 
 * `%%` - символ %;
-* `%Y` - год 4 цифры;
+* `%Y` - год 4 цифры - при использовании `Parse`, или 1-6 цифр и знак для дат до н.э. - при использовани `Parse64`;
 * `%m` - месяц 2 цифры;
 * `%d` - день 2 цифры;
 * `%H` - час 2 цифры;
@@ -378,12 +379,14 @@ $parse1 = DateTime::Parse("%H:%M:%S");
 $parse2 = DateTime::Parse("%S");
 $parse3 = DateTime::Parse("%m/%d/%Y");
 $parse4 = DateTime::Parse("%Z");
+$parse5 = DateTime::Parse64("%m/%d/%Y");
 
 SELECT
     DateTime::MakeDatetime($parse1("01:02:03")), -- 1970-01-01T01:02:03Z
     DateTime::MakeTimestamp($parse2("12.3456")), -- 1970-01-01T00:00:12.345600Z
     DateTime::MakeTimestamp($parse3("02/30/2000")), -- NULL (Feb 30)
-    DateTime::MakeTimestamp($parse4("Canada/Central")); -- 1970-01-01T06:00:00Z (конвертация в UTC)
+    DateTime::MakeTimestamp($parse4("Canada/Central")), -- 1970-01-01T06:00:00Z (конвертация в UTC)
+    DateTime::MakeTimestamp64($parse5("02/10/1931")), -- 1931-02-10T00:00:00Z (конвертация в UTC)
 ```
 
 ## Parse конкретных форматов
@@ -410,25 +413,6 @@ SELECT
     DateTime::MakeTimestamp(DateTime::ParseX509("20091014165533Z"))
       -- 2009-10-14T16:55:33Z
 ```
-
-## Parse64 {#parse64}
-
-Распарсить строку в широкое внутреннее представление, используя произвольную строку форматирования. Для незаполненных полей используются значения по умолчанию. При возникновении ошибок возвращается NULL.
-
-* `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`
-
-Реализованные спецификаторы:
-
-* `%%` - символ %;
-* `%Y` - год 1-6 цифр и знак, для дат до н.э.;
-* `%m` - месяц 2 цифры;
-* `%d` - день 2 цифры;
-* `%H` - час 2 цифры;
-* `%M` - минуты 2 цифры;
-* `%S` - секунды, может принимать и микросекунды в форматах от `XX` до `XX.XXXXXX`;
-* `%Z` - IANA имя таймзоны (GMT);
-* `%b` - короткое трехбуквенное регистронезависимое английское название месяца (Jan);
-* `%B` - полное регистронезависимое английское название месяца (January).
 
 ## Типовые сценарии
 

@@ -17,4 +17,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     llvm16/ut
+    benchmark
 )

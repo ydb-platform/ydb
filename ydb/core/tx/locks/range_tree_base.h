@@ -71,7 +71,7 @@ namespace NDataShard {
 
     public:
         void SetKeyTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
-            Y_ABORT_UNLESS(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
+            Y_ENSURE(keyTypes.size() >= KeyTypes.size(), "Number of key columns must not decrease over time");
             KeyTypes = keyTypes;
         }
 

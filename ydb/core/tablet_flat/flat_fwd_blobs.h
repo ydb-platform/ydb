@@ -5,6 +5,7 @@
 #include "flat_fwd_misc.h"
 #include "flat_part_screen.h"
 #include "flat_part_slice.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -24,17 +25,16 @@ namespace NFwd {
         {
             Tags.resize(Frames->Stats().Tags.size(), 0);
 
-            Y_ABORT_UNLESS(Edge.size() == Tags.size(), "Invalid edges vector");
+            Y_ENSURE(Edge.size() == Tags.size(), "Invalid edges vector");
         }
 
         ~TBlobs()
         {
-            for (auto &it: Pages) it.Release();
         }
 
         TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) override
         {
-            Y_ABORT_UNLESS(ref >= Lower, "Cannot handle backward blob reads");
+            Y_ENSURE(ref >= Lower, "Cannot handle backward blob reads");
 
             auto again = (std::exchange(Tags.at(FrameTo(ref)), 1) == 0);
 
@@ -57,11 +57,11 @@ namespace NFwd {
         void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) override
         {
             if (!Pages || page.PageId < Pages.front().PageId) {
-                Y_ABORT("Blobs fwd cache got page below queue");
+                Y_TABLET_ERROR("Blobs fwd cache got page below queue");
             } else if (page.PageId > Pages.back().PageId) {
-                Y_ABORT("Blobs fwd cache got page above queue");
+                Y_TABLET_ERROR("Blobs fwd cache got page above queue");
             } else if (page.Data.size() > OnFetch) {
-                Y_ABORT("Blobs fwd cache ahead counters is out of sync");
+                Y_TABLET_ERROR("Blobs fwd cache ahead counters is out of sync");
             }
 
             Stat.Saved += page.Data.size();
@@ -98,7 +98,7 @@ namespace NFwd {
             } else {
                 auto it = std::lower_bound(Pages.begin(), end, ref);
 
-                Y_ABORT_UNLESS(it != end && it->PageId == ref);
+                Y_ENSURE(it != end && it->PageId == ref);
 
                 return *it;
             }
@@ -112,7 +112,7 @@ namespace NFwd {
                 return FrameTo(ref, Frames->Relation(ref));
             } else {
                 const auto &page = Lookup(ref);
-                Y_ABORT_UNLESS(page.Size < Max<ui32>(), "Unexpected huge page");
+                Y_ENSURE(page.Size < Max<ui32>(), "Unexpected huge page");
 
                 i16 refer = ref - page.Refer; /* back to relative refer */
 
@@ -135,7 +135,7 @@ namespace NFwd {
             while (Grow != Max<TPageId>() && (Grow < Upper || until())) {
                 const auto next = Propagate(Grow);
 
-                Y_ABORT_UNLESS(Grow < next, "Unexpected frame upper boundary");
+                Y_ENSURE(Grow < next, "Unexpected frame upper boundary");
 
                 Grow = (next < Max<TPageId>() ? Grow : next);
 
@@ -148,7 +148,7 @@ namespace NFwd {
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, EPage::Opaque);
 
-                        Y_ABORT_UNLESS(size == page.Size, "Inconsistent page sizes");
+                        Y_ENSURE(size == page.Size, "Inconsistent page sizes");
 
                         page.Fetch = EFetch::Wait;
                         Stat.Fetch += page.Size;
@@ -165,7 +165,7 @@ namespace NFwd {
             if (Pages && base <= Pages.back().PageId) {
                 return Lookup(base).Refer;
             } else if (Pages && base != Lower && base - Pages.back().PageId != 1) {
-                Y_ABORT("Cannot do so long jumps around of frames");
+                Y_TABLET_ERROR("Cannot do so long jumps around of frames");
             } else {
                 const auto end = Frames->Relation(base).AbsRef(base);
 
@@ -190,7 +190,7 @@ namespace NFwd {
                 if (page.PageId >= until) {
                     break;
                 } else if (page.Size == 0) {
-                    Y_ABORT("Dropping page that hasn't been propagated");
+                    Y_TABLET_ERROR("Dropping page that hasn't been propagated");
                 } else if (auto size = page.Release().size()) {
                     OnHold -= size;
 
@@ -216,6 +216,7 @@ namespace NFwd {
                     Trace->Pass(Pages.front().PageId);
                 }
 
+                Y_ENSURE(Pages.front().Released(), "Forward cache page still holds data");
                 Pages.pop_front();
             }
 

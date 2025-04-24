@@ -2557,6 +2557,11 @@
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         },
         {
+            "Name": "TCoListFromBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ListFromBlocks"}
+        },
+        {
             "Name": "TCoReplicateScalars",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "ReplicateScalars"},
@@ -2568,6 +2573,11 @@
             "Name": "TCoWideToBlocks",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideToBlocks"}
+        },
+        {
+            "Name": "TCoListToBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ListToBlocks"}
         },
         {
             "Name": "TCoPgSelect",

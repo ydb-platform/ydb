@@ -3292,6 +3292,12 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
         return input;
     }
 
+    if (input->GetTypeAnn()->HasErrors()) {
+        TErrorTypeVisitor errorVisitor(ctx);
+        input->GetTypeAnn()->Accept(errorVisitor);
+        return nullptr;
+    }
+
     TCoCalcOverWindowTuple calc(calcs.front());
     if (calc.Frames().Size() != 0 || calc.SessionColumns().Size() != 0) {
         const TStructExprType& outputRowType = *node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

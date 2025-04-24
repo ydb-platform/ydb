@@ -73,7 +73,7 @@ namespace NDataShardReadTableTest {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: {
                     const auto rsData = msg->Record.GetSerializedReadTableResponse();
                     Ydb::ResultSet rsParsed;
-                    Y_ABORT_UNLESS(rsParsed.ParseFromString(rsData));
+                    Y_ENSURE(rsParsed.ParseFromString(rsData));
                     NYdb::TResultSet rs(rsParsed);
                     auto& columns = rs.GetColumnsMeta();
                     NYdb::TResultSetParser parser(rs);
@@ -160,7 +160,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
         }
 
@@ -183,7 +183,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
         }
 

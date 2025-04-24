@@ -201,6 +201,8 @@ public:
             cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
         }
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
+        cmd->SetUserToken(Request_->GetSerializedToken());
+        cmd->SetPeerName(Request_->GetPeerName());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -226,13 +228,19 @@ public:
 
         auto shim = ConvertConfigReplaceRequest(*request);
 
+        const auto& ff = AppData()->FeatureFlags;
+
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
             shim.MainConfig,
             shim.StorageConfig,
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
+            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
+            Request_->GetPeerName(),
+            Request_->GetSerializedToken());
     }
 
 private:

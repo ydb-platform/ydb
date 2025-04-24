@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Paused {
             }
           }
-      )", {NKikimrScheme::StatusInvalidParameter});
+      )");
 
       TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
           Name: "Transfer"
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             StandBy {
             }
           }
-      )", {NKikimrScheme::StatusInvalidParameter});
+      )");
   }
 
 } // TTransferTests

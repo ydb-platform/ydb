@@ -23,8 +23,8 @@ IF (NOT OS_WINDOWS)
     )
 ENDIF()
 
-DISABLE(PROVIDE_GETRANDOM_GETENTROPY)
-DISABLE(PROVIDE_REALLOCARRAY)
+DEFAULT(PROVIDE_GETRANDOM_GETENTROPY "no")
+DEFAULT(PROVIDE_REALLOCARRAY "no")
 
 # Android libc function appearance is documented here:
 # https://android.googlesource.com/platform/bionic/+/master/docs/status.md
@@ -115,7 +115,7 @@ IF (OS_LINUX AND NOT MUSL)
             explicit_bzero.c
         )
     ENDIF()
-    IF (OS_SDK != "ubuntu-20" AND OS_SDK != "ubuntu-22")
+    IF (OS_SDK != "ubuntu-20" AND OS_SDK != "ubuntu-22" AND OS_SDK != "local")
         # reallocarray was added in glibc=2.29
         ENABLE(PROVIDE_REALLOCARRAY)
     ENDIF()

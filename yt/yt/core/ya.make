@@ -153,8 +153,8 @@ SRCS(
     misc/ref_counted_tracker_profiler.cpp
     GLOBAL misc/ref_tracked.cpp
     misc/serialize.cpp
+    misc/serialize_dump.cpp
     misc/shutdown.cpp
-    misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistic_path.cpp
     misc/statistics.cpp
@@ -288,6 +288,7 @@ SRCS(
     ytree/request_complexity_limiter.cpp
     ytree/request_complexity_limits.cpp
     ytree/serialize.cpp
+    ytree/size.cpp
     ytree/static_service_dispatcher.cpp
     ytree/system_attribute_provider.cpp
     ytree/tree_builder.cpp
@@ -369,6 +370,8 @@ PEERDIR(
     yt/yt/library/syncmap
     yt/yt/library/undumpable
     yt/yt/library/ytprof/api
+
+    yt/yt/library/signals
 
     # TODO(prime@): remove this, once yt/core is split into separate libraries.
     yt/yt/library/profiling

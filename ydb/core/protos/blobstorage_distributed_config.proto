@@ -167,6 +167,7 @@ message TEvNodeConfigInvokeOnRoot {
         bool IgnoreDegradedGroupsChecks = 5;
         bool IgnoreVSlotQuotaCheck = 6;
         bool IsSelfHealReasonDecommit = 7;
+        bool FromSelfHeal = 8;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.
@@ -203,6 +204,8 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool SwitchDedicatedStorageSection = 4;
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
+        optional bytes UserToken = 6;
+        optional string PeerName = 7;
     }
 
     message TBootstrapCluster {

@@ -22,6 +22,7 @@ message TTableServiceConfig {
         }
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
+        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        //  48 MB
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];   // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
@@ -44,7 +45,7 @@ message TTableServiceConfig {
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
         optional double SpillingPercent = 22 [default = 80]; // 100 MiB
 
-        optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
+        optional uint64 MinMemAllocSize = 23 [default = 1048576]; // 1 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
 
         optional uint64 MaxNonParallelTasksExecutionLimit = 25 [default = 8];
@@ -84,6 +85,10 @@ message TTableServiceConfig {
         optional uint64 TotalReadSizeLimitBytes = 4;
     }
 
+    message TTxWriteBufferLimits {
+        optional uint64 WriteBufferMemoryLimitBytes = 1;
+    }
+
     message TQueryLimits {
         optional TQueryPhaseLimits PhaseLimits = 1;
         optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000];
@@ -91,6 +96,7 @@ message TTableServiceConfig {
         optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
         optional uint32 ResultRowsLimit = 5;
         optional uint32 WaitCAStatsTimeoutMs = 6 [default = 1000];
+        optional TTxWriteBufferLimits BufferLimits = 7;
     }
 
     message TShutdownSettings {
@@ -235,8 +241,8 @@ message TTableServiceConfig {
     reserved 27; // EnableKqpDataQuerySourceRead
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
-    optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
-    optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
+    reserved 30; // optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
+    reserved 31; // optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
@@ -293,7 +299,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = false];
+    optional bool EnableOltpSink = 60 [default = true];
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -364,5 +370,18 @@ message TTableServiceConfig {
 
     optional bool AllowMultiBroadcasts = 79 [default = false];
 
-    optional bool DefaultEnableShuffleElimination = 80 [default = false];
+    optional bool DefaultEnableShuffleElimination = 80 [default = true];
+
+    message TBatchOperationSettings {
+        optional uint64 MaxBatchSize = 1 [ default = 10000 ];
+        optional uint64 MinBatchSize = 2 [ default = 1 ];
+        optional uint64 StartRetryDelayMs = 3 [ default = 50 ];
+        optional uint64 MaxRetryDelayMs = 4 [ default = 30000 ];
+        optional uint64 PartitionExecutionLimit = 5 [ default = 10 ];
+    }
+
+    optional TBatchOperationSettings BatchOperationSettings = 81;
+
+    optional bool EnableFoldUdfs = 82 [ default = true ];
+
 };

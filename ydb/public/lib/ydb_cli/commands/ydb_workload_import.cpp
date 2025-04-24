@@ -38,7 +38,7 @@ TWorkloadCommandImport::TUploadParams::TUploadParams()
 
 void TWorkloadCommandImport::TUploadCommand::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    Initializer->ConfigureOpts(*config.Opts);
+    Initializer->ConfigureOpts(config.Opts->GetOpts());
 }
 
 TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadParams& workloadParams, const TUploadParams& uploadParams, NYdbWorkload::TWorkloadDataInitializer::TPtr initializer)
@@ -78,7 +78,6 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
             break;
         }
     }
-    TableClient->Stop();
     return AtomicGet(ErrorsCount) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 class TWorkloadCommandImport::TUploadCommand::TDbWriter: public IWriter {

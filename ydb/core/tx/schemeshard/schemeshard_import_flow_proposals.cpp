@@ -144,6 +144,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     task.SetTableName(dstPath.LeafName());
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), item.Scheme);
 
+    if (importInfo->Settings.has_encryption_settings()) {
+        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+        *taskEncryptionSettings.MutableSymmetricKey() = importInfo->Settings.encryption_settings().symmetric_key();
+        if (item.ExportItemIV) {
+            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+        }
+    }
+
     switch (importInfo->Kind) {
     case TImportInfo::EKind::S3:
         {
@@ -153,7 +161,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetBucket(importInfo->Settings.bucket());
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
-            restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
+            restoreSettings.SetObjectKeyPattern(importInfo->GetItemSrcPrefix(itemIdx));
             restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
@@ -338,7 +346,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
-    
+
     for (const auto& consumer : topic.consumers()) {
         auto& addedConsumer = *tabletConfig->AddConsumers();
         auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
@@ -347,7 +355,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
             addedConsumer.SetImportant(true);
         }
     }
-    
+
     return propose;
 }
 

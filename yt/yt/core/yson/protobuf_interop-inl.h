@@ -4,6 +4,8 @@
 #include "protobuf_interop.h"
 #endif
 
+#include <library/cpp/yt/error/error.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,13 +18,6 @@ const TProtobufMessageType* ReflectProtobufMessageType()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <CProtobufElement TElementType>
-consteval std::string_view GetProtobufElementTypeName();
 
 #define MAP_PROTOBUF_ELEMENT_TYPE_NAME(elementType, name) \
 template <> \
@@ -40,22 +35,26 @@ MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAnyElement, "any")
 
 #undef MAP_PROTOBUF_ELEMENT_TYPE_NAME
 
-std::string_view GetProtobufElementTypeName(const NYson::TProtobufElement& element);
-
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NDetail
-
-////////////////////////////////////////////////////////////////////////////////
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads)
+{
+    TOverloaded visitor{std::forward<U>(visitorOverloads)...};
+    return Visit(element, [&] <CProtobufElement TElement> (const std::unique_ptr<TElement>& element) {
+        YT_VERIFY(element);
+        return visitor(*element);
+    });
+}
 
 template <CProtobufElement TElementType>
-const TElementType& GetProtobufElementOrThrow(const NYson::TProtobufElement& element)
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element)
 {
     const auto* result = std::get_if<std::unique_ptr<TElementType>>(&element);
     THROW_ERROR_EXCEPTION_UNLESS(result,
         "Expected protobuf element of type %Qv, but got of type %Qv",
-        NDetail::GetProtobufElementTypeName<TElementType>(),
-        NDetail::GetProtobufElementTypeName(element));
+        GetProtobufElementTypeName<TElementType>(),
+        GetProtobufElementTypeName(element));
     return *result->get();
 }
 

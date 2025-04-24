@@ -22,6 +22,7 @@ PEERDIR(
     contrib/python/jsonschema
     contrib/python/requests
     contrib/python/six
+    contrib/python/ruamel.yaml
     ydb/tools/cfg/walle
     ydb/tools/cfg/k8s_api
     library/cpp/resource

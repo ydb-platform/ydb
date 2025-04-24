@@ -25,9 +25,6 @@ runs:
       mkdir -p ../build
       patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
       
-      # Temporary patch to dix difference between antlr4.9 and 4.13 behaviour
-      sed -i 's/TOKEN(NULL)/TOKEN(NULL_)/g' ydb/public/lib/ydb_cli/commands/interactive/yql_highlight.cpp
-
       cd ../build
       rm -rf *
       export CC=/usr/bin/clang-16
@@ -42,9 +39,6 @@ runs:
     shell: bash
     if: ${{!inputs.sanitizer}}
     run: |
-      # Temporary patch to dix difference between antlr4.9 and 4.13 behaviour
-      sed -i 's/TOKEN(NULL)/TOKEN(NULL_)/g' ydb/public/lib/ydb_cli/commands/interactive/yql_highlight.cpp
-
       mkdir -p ../build
       cd ../build
       rm -rf *

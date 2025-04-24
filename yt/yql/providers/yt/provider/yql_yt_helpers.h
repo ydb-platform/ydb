@@ -19,6 +19,18 @@
 
 namespace NYql {
 
+constexpr TStringBuf YtUnspecifiedCluster = "$runtime";
+
+// Equivalent to Derive* with mode=Auto
+TString GetClusterFromSection(const NNodes::TYtSection& section);
+TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList);
+
+// Derive cluster according to mode. Will return empty optional for mode=Disable if input contains multiple clusters
+TMaybe<TString> DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode);
+TMaybe<TString> DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode);
+
+TString GetRuntimeCluster(const TExprNode& op, const TYtState::TPtr& state);
+
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode);
 bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq, ERuntimeClusterSelectionMode mode);
 bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq);
@@ -142,5 +154,7 @@ size_t GetMapDirectOutputsCount(const NNodes::TYtMapReduce& mapReduce);
 bool HasYtRowNumber(const TExprNode& node);
 
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
+
+NNodes::TMaybeNode<NNodes::TCoLambda> GetMapLambda(const NNodes::TYtWithUserJobsOpBase& op);
 
 }

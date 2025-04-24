@@ -23,7 +23,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
     TVector<bool> isNull;
     static_assert(MaxBlockSizeInBytes % 4 == 0);
 
-    const auto drng = CreateDeterministicRandomProvider(std::time(nullptr));
+    const auto drng = CreateDeterministicRandomProvider(1);
 
     for (size_t i = 0; i < length; i++) {
         const ui64 randomValue = drng->GenRand();

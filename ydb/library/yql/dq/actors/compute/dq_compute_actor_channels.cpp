@@ -240,7 +240,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
 
     outputChannel.RetryState->RetryScheduled = false;
 
-    auto now = Now();
+    auto now = TInstant::Now();
 
     for (auto& inFlight : outputChannel.InFlight) {
         ui64 seqNo = inFlight.first;
@@ -270,6 +270,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
 
         ui32 flags = CalcMessageFlags(*outputChannel.Peer);
         Send(*outputChannel.Peer, retryEv.Release(), flags, /* cookie */ msg->ChannelId);
+        LastOutputMessageTime = TInstant::Now();
     }
 }
 
@@ -354,7 +355,7 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
         return RuntimeError("detected disconnected node");
     }
 
-    auto now = Now();
+    auto now = TInstant::Now();
 
     for (auto& inputChannel : InputChannelsMap) {
         if (!inputChannel.second.IsFromNode(nodeId)) {
@@ -419,7 +420,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NAc
         return RuntimeError(message);
     }
 
-    ScheduleRetryForChannel<TOutputChannelState, TEvDqCompute::TEvRetryChannelData>(outputChannel, Now());
+    ScheduleRetryForChannel<TOutputChannelState, TEvDqCompute::TEvRetryChannelData>(outputChannel, TInstant::Now());
 }
 
 void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason) {
@@ -450,7 +451,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
         return RuntimeError(message);
     }
 
-    ScheduleRetryForChannel<TInputChannelState, TEvDqCompute::TEvRetryChannelDataAck>(inputChannel, Now());
+    ScheduleRetryForChannel<TInputChannelState, TEvDqCompute::TEvRetryChannelDataAck>(inputChannel, TInstant::Now());
 }
 
 template <typename TChannelState, typename TRetryEvent>
@@ -492,10 +493,6 @@ STATEFN(TDqComputeActorChannels::DeadState) {
 void TDqComputeActorChannels::HandlePoison(TEvents::TEvPoison::TPtr&) {
     LOG_D("pass away");
     PassAway();
-}
-
-TInstant TDqComputeActorChannels::Now() const {
-    return TInstant::Now();
 }
 
 void TDqComputeActorChannels::RuntimeError(const TString& message) {
@@ -570,7 +567,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
 
     auto dataEv = MakeHolder<TEvDqCompute::TEvChannelData>();
     dataEv->Record.SetSeqNo(seqNo);
-    dataEv->Record.SetSendTime(Now().MilliSeconds());
+    dataEv->Record.SetSendTime(TInstant::Now().MilliSeconds());
     // copying here since we need to save channelData in InFlight
     *dataEv->Record.MutableChannelData() = channelData.Proto;
     if (channelData.Proto.HasData()) {
@@ -593,6 +590,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     ui32 flags = CalcMessageFlags(*outputChannel.Peer);
     dataEv->Record.SetNoAck(!needAck);
     Send(*outputChannel.Peer, dataEv.Release(), flags, /* cookie */ outputChannel.ChannelId);
+    LastOutputMessageTime = TInstant::Now();
 
     outputChannel.PeerState.AddInFlight(dataBytes, dataChunks);
 }

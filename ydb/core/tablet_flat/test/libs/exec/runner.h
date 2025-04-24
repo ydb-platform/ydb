@@ -197,7 +197,7 @@ namespace NFake {
             const auto begin = ui32(NKikimrServices::EServiceKikimr_MIN);
             const auto end = ui32(NKikimrServices::EServiceKikimr_MAX) + 1;
 
-            Y_ABORT_UNLESS(end < 8192, "Looks like there is too many services");
+            Y_ENSURE(end < 8192, "Looks like there is too many services");
 
             TVector<TString> names(end);
 

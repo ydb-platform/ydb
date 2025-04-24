@@ -109,10 +109,13 @@ private:
                             ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
                             : ETableToIndexCorrespondence::Unknown,
                     };
-                    THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
-                        "Unsupported secondary index kind %Qlv (client not up-to-date)",
-                        indexInfo.Kind);
-                    tableInfo->Indices.push_back(indexInfo);
+
+                    if (protoIndexInfo.has_evaluated_columns_schema()) {
+                        indexInfo.EvaluatedColumnsSchema = New<TTableSchema>(
+                            FromProto<TTableSchema>(protoIndexInfo.evaluated_columns_schema()));
+                    }
+
+                    tableInfo->Indices.push_back(std::move(indexInfo));
                 }
 
                 if (tableInfo->IsSorted()) {

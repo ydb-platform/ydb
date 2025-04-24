@@ -77,6 +77,9 @@ message DescribeReplicationResult {
     message DoneState {
     }
 
+    message PausedState {
+    }
+
     // Description of scheme object.
     Ydb.Scheme.Entry self = 1;
 
@@ -90,6 +93,7 @@ message DescribeReplicationResult {
         RunningState running = 4;
         ErrorState error = 5;
         DoneState done = 6;
+        PausedState paused = 9;
     }
 }
 

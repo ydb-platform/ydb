@@ -53,13 +53,13 @@ namespace NBoot {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
             size_t index = load->Cookie >> 32;
-            Y_ABORT_UNLESS(index < States.size());
+            Y_ENSURE(index < States.size());
             auto& state = States[index];
-            Y_ABORT_UNLESS(state.Pending > 0);
+            Y_ENSURE(state.Pending > 0);
 
             ui32 page = ui32(load->Cookie);
-            Y_ABORT_UNLESS(page < state.Pages.size());
-            Y_ABORT_UNLESS(!state.Pages[page].Data);
+            Y_ENSURE(page < state.Pages.size());
+            Y_ENSURE(!state.Pages[page].Data);
 
             state.Pages[page].PageId = page;
             state.Pages[page].Data = load->PlainData();

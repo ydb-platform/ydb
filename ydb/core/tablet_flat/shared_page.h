@@ -59,9 +59,9 @@ struct TPage
     }
 
     void EnsureNoCacheFlags() {
-        Y_VERIFY_S(CacheId == 0, "Unexpected page " << CacheId << " cache id");
-        Y_VERIFY_S(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
-        Y_VERIFY_S(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
+        Y_ENSURE(CacheId == 0, "Unexpected page " << CacheId << " cache id");
+        Y_ENSURE(CacheFlags1 == 0, "Unexpected page " << CacheFlags1 << " cache flags 1");
+        Y_ENSURE(CacheFlags2 == 0, "Unexpected page " << CacheFlags2 << " cache flags 2");
     }
 };
 

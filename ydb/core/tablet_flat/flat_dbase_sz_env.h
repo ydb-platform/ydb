@@ -18,7 +18,7 @@ namespace NTable {
 
         TResult Locate(const TMemTable*, ui64, ui32) override
         {
-            Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+            Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override

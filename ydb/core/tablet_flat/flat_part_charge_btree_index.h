@@ -73,8 +73,8 @@ public:
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
         const auto& meta = Part->IndexPages.GetBTree({});
-        Y_ABORT_UNLESS(beginRowId < endRowId);
-        Y_ABORT_UNLESS(endRowId <= meta.GetRowCount());
+        Y_ENSURE(beginRowId < endRowId);
+        Y_ENSURE(endRowId <= meta.GetRowCount());
 
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
@@ -223,8 +223,8 @@ public:
         bool ready = true, overshot = true, hasValidRowsRange = Groups || IncludeHistory;
         const TRowId sliceBeginRowId = beginRowId, sliceEndRowId = endRowId;
         const auto& meta = Part->IndexPages.GetBTree({});
-        Y_ABORT_UNLESS(beginRowId < endRowId);
-        Y_ABORT_UNLESS(endRowId <= meta.GetRowCount());
+        Y_ENSURE(beginRowId < endRowId);
+        Y_ENSURE(endRowId <= meta.GetRowCount());
 
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1

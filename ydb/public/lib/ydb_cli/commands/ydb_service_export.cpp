@@ -128,7 +128,7 @@ void TCommandExportToYt::Config(TConfig& config) {
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 
@@ -278,7 +278,7 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from export operation")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
 

@@ -6,6 +6,7 @@
 
 namespace NYql::NS3Util {
 
+TIssues AddParentIssue(const TString& prefix, TIssues&& issues);
 TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 
 // Like UrlEscape with forceEscape = true

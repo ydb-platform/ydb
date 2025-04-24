@@ -1,4 +1,4 @@
-UNITTEST()
+UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
 
@@ -22,6 +22,7 @@ PEERDIR(
 
 SRCS(
     actor_benchmark.cpp
+    waiting_benchs.cpp
 )
 
 END()

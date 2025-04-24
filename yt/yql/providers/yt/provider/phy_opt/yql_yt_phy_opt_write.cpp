@@ -340,10 +340,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     }
 
     auto cluster = TString{write.DataSink().Cluster().Value()};
-    auto srcCluster = GetClusterName(write.Content());
-    if (cluster != srcCluster) {
+    const auto selectionMode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    const auto srcCluster = DeriveClusterFromInput(write.Content(), selectionMode);
+    if (!srcCluster) {
+        return node;
+    }
+    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != *srcCluster) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Result from cluster " << TString{srcCluster}.Quote()
+            << "Result from cluster " << srcCluster->Quote()
             << " cannot be written to a different destination cluster " << cluster.Quote()));
         return {};
     }
@@ -598,12 +602,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
+    TString cluster;
     if (!IsYtProviderInput(input, false)) {
         if (!EnsurePersistable(input.Ref(), ctx)) {
             return {};
         }
 
-        TString cluster;
         TSyncMap syncList;
         if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false, selectionMode)) {
             return node;
@@ -659,10 +663,15 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         auto section = read.Input().Item(0);
         auto scheme = section.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        auto srcCluster = DeriveClusterFromInput(input, selectionMode);
+        if (!srcCluster) {
+            return node;
+        }
+        cluster = *srcCluster;
 
         auto path = CopyOrTrivialMap(section.Pos(),
             GetWorld(input, {}, ctx),
-            GetDataSink(input, ctx),
+            MakeDataSink(section.Pos(), cluster, ctx),
             *scheme,
             Build<TYtSection>(ctx, section.Pos())
                 .InitFrom(section)
@@ -684,6 +693,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         newInput = path.Table().Cast<TYtOutput>();
     } else if (auto op = input.Maybe<TYtOutput>().Operation()) {
         newInput = input.Cast<TYtOutput>();
+        cluster = GetClusterName(input);
     } else {
         YQL_ENSURE(false, "Unexpected operation input: " << input.Ptr()->Content());
     }
@@ -692,7 +702,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
     return Build<TYtStatOut>(ctx, write.Pos())
         .World(GetWorld(input, {}, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(write.Pos(), cluster, ctx))
         .Input(newInput.Cast())
         .Table(table)
         .ReplaceMask(write.ReplaceMask())
@@ -758,7 +768,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
     {
         auto path = write.Table().Name().StringValue();
         auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
-        auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+        auto dstRowSpec = State_->TablesData->GetTable(write.Table().Cluster().StringValue(), path, commitEpoch).RowSpec;
         outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
     }
     auto content = write.Content();

@@ -192,6 +192,8 @@ public:
 
         REGISTER_ALL(TPartitionTablesCommand,              "partition_tables",                Null,       Structured, false, false);
 
+        REGISTER    (TReadTablePartitionCommand,           "read_table_partition",            Null,       Tabular,    false, true , ApiVersion4);
+
         REGISTER    (TInsertRowsCommand,                   "insert_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TLockRowsCommand,                     "lock_rows",                       Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TDeleteRowsCommand,                   "delete_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
@@ -391,10 +393,15 @@ public:
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TFlowExecuteCommand,                  "flow_execute",                    Structured, Structured, true,  true,  ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
+
+        REGISTER    (TStartDistributedWriteSessionCommand, "start_distributed_write_session", Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
+        REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false, true );
@@ -406,11 +413,6 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
-
-            // TODO(arkady-e1ppa): flags past command name might be complete rubbish -- think them through later.
-            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
-            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
-            REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
             REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
         }
 
@@ -535,8 +537,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
-    ISignatureGeneratorPtr SignatureGenerator_;
-    ISignatureValidatorPtr SignatureValidator_;
+    const ISignatureGeneratorPtr SignatureGenerator_;
+    const ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;

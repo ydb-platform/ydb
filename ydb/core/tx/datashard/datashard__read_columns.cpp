@@ -96,7 +96,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
-        Y_ABORT_UNLESS(seq == 0, "Unexpected repeated Seek");
+        Y_ENSURE(seq == 0, "Unexpected repeated Seek");
 
         lead.To(ValueColumns, From.Key.GetCells(), From.Inclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper);
         lead.Until(To.Key.GetCells(), To.Inclusive);
@@ -107,8 +107,8 @@ public:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         const auto& keyTypes = Scheme->Keys->BasicTypes();
 
-        Y_ABORT_UNLESS(key.size() == keyTypes.size());
-        Y_ABORT_UNLESS((*row).size() == ValueColumnTypes.size());
+        Y_ENSURE(key.size() == keyTypes.size());
+        Y_ENSURE((*row).size() == ValueColumnTypes.size());
 
         TDbTupleRef rowKey(keyTypes.data(), key.data(), keyTypes.size());
         TDbTupleRef rowValues(ValueColumnTypes.data(), (*row).data(), ValueColumnTypes.size());

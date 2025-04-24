@@ -133,7 +133,7 @@ public:
         }
 
         void AddSticky(TPageId pageId, TSharedPageRef page) {
-            Y_ABORT_UNLESS(page.IsUsed());
+            Y_ENSURE(page.IsUsed());
             if (StickyPages.emplace(pageId, page).second) {
                 StickyPagesSize += TPinnedPageRef(page)->size();
             }

@@ -92,7 +92,7 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             default:
-                Y_ABORT("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ENSURE(false, "TKqpScan: unexpected event " << Hex(ev->GetTypeRewrite()));
         }
     }
 
@@ -184,8 +184,8 @@ private:
 
 private:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
-        Y_ABORT_UNLESS(scheme);
-        Y_ABORT_UNLESS(driver);
+        Y_ENSURE(scheme);
+        Y_ENSURE(driver);
 
         Driver = driver;
         ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -262,7 +262,7 @@ private:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LastKey = TOwnedCellVec(key);
 
-        Y_ABORT_UNLESS(SkipNullKeys.size() <= key.size());
+        Y_ENSURE(SkipNullKeys.size() <= key.size());
         for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
             if (SkipNullKeys[i] && key[i].IsNull()) {
                 return EScan::Feed;
@@ -457,14 +457,14 @@ private:
                 if (finish) {
                     bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
                     bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return false;
@@ -472,7 +472,7 @@ private:
             }
 
             if (!finish) {
-                Y_ABORT_UNLESS(ChunksLimiter.Take(sendBytes));
+                Y_ENSURE(ChunksLimiter.Take(sendBytes));
                 Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             }
 
@@ -598,7 +598,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto tableInfo = infoIt->second; // copy table info ptr here
     auto& tableColumns = tableInfo->Columns;
-    Y_ABORT_UNLESS(request.GetColumnTags().size() == request.GetColumnTypes().size());
+    Y_ENSURE(request.GetColumnTags().size() == request.GetColumnTypes().size());
 
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())

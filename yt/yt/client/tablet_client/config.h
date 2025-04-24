@@ -80,10 +80,9 @@ DEFINE_REFCOUNTED_TYPE(TRetryingRemoteDynamicStoreReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCollocationOptions
+struct TReplicationCollocationOptions
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<std::vector<std::string>> PreferredSyncReplicaClusters;
 
     REGISTER_YSON_STRUCT(TReplicationCollocationOptions);
@@ -95,14 +94,16 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCollocationOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicatedTableOptions
+struct TReplicatedTableOptions
     : public TReplicationCollocationOptions
 {
-public:
     bool EnableReplicatedTableTracker;
 
     std::optional<int> MaxSyncReplicaCount;
     std::optional<int> MinSyncReplicaCount;
+
+    std::optional<int> MaxSyncQueueReplicaCount;
+    std::optional<int> MinSyncQueueReplicaCount;
 
     TDuration SyncReplicaLagThreshold;
 
@@ -113,7 +114,7 @@ public:
     bool EnablePreloadStateCheck;
     TDuration IncompletePreloadGracePeriod;
 
-    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(int replicaCount) const;
+    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(ETableReplicaContentType contentType, int replicaCount) const;
 
     REGISTER_YSON_STRUCT(TReplicatedTableOptions);
 

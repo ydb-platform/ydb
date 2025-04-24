@@ -2,6 +2,7 @@
 
 #include "flat_util_misc.h"
 #include "util_basics.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -19,10 +20,10 @@ namespace NTable {
             : Types(types)
             , Defs(defs)
         {
-            Y_ABORT_UNLESS(Defs.size() > 0 && Defs.size() == Types.size());
+            Y_ENSURE(Defs.size() > 0 && Defs.size() == Types.size());
             for (size_t index = 0; index < Types.size(); ++index) {
                 if (auto error = NScheme::HasUnexpectedValueSize(Defs[index], Types[index])) {
-                    Y_ABORT("Column default at index %" PRISZT " validation failed: %s", index, error.c_str());
+                    Y_TABLET_ERROR("Column default at index " << index << " validation failed: " << error);
                 }
             }
         }
@@ -72,7 +73,7 @@ namespace NTable {
                 }
             }
 
-            Y_ABORT_UNLESS(data == raw + offD + tail);
+            Y_ENSURE(data == raw + offD + tail);
 
             return ::new(raw) TSelf(
                     { ptrT, types.size() },
@@ -118,7 +119,7 @@ namespace NTable {
                 TArrayRef<const TCell> defs)
             : TCellDefaults(types, defs)
         {
-            Y_ABORT_UNLESS(order.size() == 0);
+            Y_ENSURE(order.size() == 0);
         }
 
     public:
@@ -143,7 +144,7 @@ namespace NTable {
             : TCellDefaults(types, defs)
             , Types(order)
         {
-            Y_ABORT_UNLESS(Types.size() == TCellDefaults::Types.size());
+            Y_ENSURE(Types.size() == TCellDefaults::Types.size());
         }
 
     public:

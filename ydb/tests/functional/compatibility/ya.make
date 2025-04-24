@@ -12,6 +12,7 @@ SIZE(LARGE)
 REQUIREMENTS(cpu:all)
 REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 DEPENDS(
     ydb/apps/ydb
@@ -20,6 +21,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/boto3
     ydb/tests/library
     ydb/tests/stress/simple_queue/workload
 )

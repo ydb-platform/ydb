@@ -352,7 +352,91 @@ bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool su
     return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsDq, ERuntimeClusterSelectionMode::Disable, visited);
 }
 
+TExprNode::TPtr ToOutTableWithHash(TYtOutput output, const TYtState::TPtr& state, TExprContext& ctx) {
+    auto [outTableNode, cluster] = GetOutTableWithCluster(output);
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
+    TYtOutTable outTable = outTableNode.Cast<TYtOutTable>();
+    auto hash = TYtNodeHashCalculator(state, cluster, state->Configuration->Snapshot()).GetHash(output.Ref());
+    return Build<TYtOutTable>(ctx, outTable.Pos())
+        .InitFrom(outTable)
+        .Settings(AddSetting(outTable.Settings().Ref(), EYtSettingType::OpHash, ctx.NewAtom(output.Pos(), HexEncode(hash)), ctx))
+        .Cluster().Value(cluster).Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr ToOutTable(TYtOutput output, TExprContext& ctx) {
+    auto [outTableNode, cluster] = GetOutTableWithCluster(output);
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
+    TYtOutTable outTable = outTableNode.Cast<TYtOutTable>();
+    return Build<TYtOutTable>(ctx, outTable.Pos())
+        .InitFrom(outTable)
+        .Cluster().Value(cluster).Build()
+        .Done().Ptr();
+}
+
+TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERuntimeClusterSelectionMode mode) {
+    TString result;
+    for (const auto& path : section.Paths()) {
+        auto info = TYtTableBaseInfo::Parse(path.Table());
+        YQL_ENSURE(info->Cluster, "Unexpected TYtOutTable in input section");
+        if (!UpdateUsedCluster(result, info->Cluster, mode)) {
+            return {};
+        }
+    }
+    return result;
+}
+
 } // unnamed
+
+TString GetClusterFromSection(const NNodes::TYtSection& section) {
+    auto result = DeriveClusterFromSection(section, ERuntimeClusterSelectionMode::Auto);
+    YQL_ENSURE(result);
+    return *result;
+}
+
+TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList) {
+    auto result = DeriveClusterFromSectionList(sectionList, ERuntimeClusterSelectionMode::Auto);
+    YQL_ENSURE(result);
+    return *result;
+}
+
+TMaybe<TString> DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode) {
+    TString result;
+    for (const auto& section : sectionList) {
+        auto sectionCluster = DeriveClusterFromSection(section, mode);
+        if (!sectionCluster.Defined()) {
+            return {};
+        }
+        if (!UpdateUsedCluster(result, *sectionCluster, mode)) {
+            return {};
+        }
+    }
+    return result;
+}
+
+TMaybe<TString> DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode) {
+    if (auto read = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
+        return DeriveClusterFromSectionList(read.Cast().Input(), mode);
+    } else if (auto output = input.Maybe<TYtOutput>()) {
+        return GetOutputOp(output.Cast()).DataSink().Cluster().StringValue();
+    } else if (auto op = input.Maybe<TCoRight>().Input().Maybe<TYtOutputOpBase>()) {
+        return op.Cast().DataSink().Cluster().StringValue();
+    } else {
+        YQL_ENSURE(false, "Unknown operation input");
+    }
+}
+
+TString GetRuntimeCluster(const TExprNode& op, const TYtState::TPtr& state) {
+    auto settings = state->Configuration->GetSettingsForNode(op);
+    auto cluster =
+        settings->RuntimeCluster.Get("$all").GetOrElse(
+            settings->DefaultRuntimeCluster.Get().GetOrElse(
+                settings->DefaultCluster.Get().GetOrElse(
+                    state->Gateway->GetDefaultClusterName())));
+    YQL_ENSURE(cluster, "Runtime cluster is not configured");
+    YQL_ENSURE(cluster != YtUnspecifiedCluster, "Invalid runtime cluster value '" << cluster << "'");
+    return cluster;
+}
 
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode) {
     YQL_ENSURE(newCluster);
@@ -369,12 +453,12 @@ bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntime
             if (!usedCluster) {
                 usedCluster = newCluster;
             } else if (usedCluster != newCluster) {
-                usedCluster = "$runtime";
+                usedCluster = YtUnspecifiedCluster;
             }
             break;
         }
         case NYql::ERuntimeClusterSelectionMode::Force: {
-            usedCluster = "$runtime";
+            usedCluster = YtUnspecifiedCluster;
             break;
         }
     }
@@ -630,7 +714,7 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
     VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "<", "<=", ">", ">=", "==", "!="})) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
             return true;
         }
         if (node->IsCallable("Member")) {
@@ -866,6 +950,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .OperationHash(calcHash)
             .SecureParams(secureParams)
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
+            .LangVer(state->Types->LangVer)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -1316,16 +1401,6 @@ TMaybeNode<TCoFlatMapBase> GetFlatMapOverInputStream(TCoLambda opLambda) {
     return GetFlatMapOverInputStream(opLambda, parentsMap);
 }
 
-TExprNode::TPtr ToOutTableWithHash(TExprBase output, const TYtState::TPtr& state, TExprContext& ctx) {
-    auto [outTableNode, cluster] = GetOutTableWithCluster(output);
-    auto outTable = outTableNode.Ptr();
-    auto hash = TYtNodeHashCalculator(state, cluster, state->Configuration->Snapshot()).GetHash(output.Ref());
-    outTable = ctx.ChangeChild(*outTable, TYtOutTable::idx_Settings,
-        NYql::AddSetting(*outTable->Child(TYtOutTable::idx_Settings), EYtSettingType::OpHash, ctx.NewAtom(output.Pos(), HexEncode(hash)), ctx)
-    );
-    return outTable;
-}
-
 IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::TPtr& state, bool anonOnly, TExprContext& ctx)
 {
     TProcessedNodesSet processedNodes;
@@ -1383,25 +1458,27 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
             if (auto maybePath = TMaybeNode<TYtPath>(node)) {
                 if (maybePath.Table().Maybe<TYtOutput>()) {
                     auto path = maybePath.Cast();
+                    auto ytOutput = path.Table().Cast<TYtOutput>();
                     toOpt[node.Get()] = Build<TYtPath>(ctx, node->Pos())
                         .InitFrom(path)
-                        .Table(useQueryCache ? ToOutTableWithHash(path.Table(), state, ctx) : GetOutTable(path.Table()).Ptr())
+                        .Table(useQueryCache ? ToOutTableWithHash(ytOutput, state, ctx) : ToOutTable(ytOutput, ctx))
                         .Done().Ptr();
                 }
                 return false;
             }
             if (TMaybeNode<TYtLength>(node).Input().Maybe<TYtOutput>()) {
                 auto length = TYtLength(node);
+                auto ytOutput = length.Input().Cast<TYtOutput>();
                 toOpt[node.Get()] = Build<TYtLength>(ctx, node->Pos())
                     .InitFrom(length)
                     .Input<TYtReadTable>()
                         .World<TCoWorld>().Build()
-                        .DataSource(ctx.RenameNode(GetOutputOp(length.Input().Cast<TYtOutput>()).DataSink().Ref(), TYtDSource::CallableName()))
+                        .DataSource(ctx.RenameNode(GetOutputOp(ytOutput).DataSink().Ref(), TYtDSource::CallableName()))
                         .Input()
                             .Add()
                                 .Paths()
                                     .Add()
-                                        .Table(useQueryCache ? ToOutTableWithHash(length.Input(), state, ctx) : GetOutTable(length.Input()).Ptr())
+                                        .Table(useQueryCache ? ToOutTableWithHash(ytOutput, state, ctx) : ToOutTable(ytOutput, ctx))
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
@@ -1417,16 +1494,17 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
             }
             if (TMaybeNode<TYtTableContent>(node).Input().Maybe<TYtOutput>()) {
                 auto content = TYtTableContent(node);
+                auto ytOutput = content.Input().Cast<TYtOutput>();
                 toOpt[node.Get()] = Build<TYtTableContent>(ctx, node->Pos())
                     .InitFrom(content)
                     .Input<TYtReadTable>()
                         .World<TCoWorld>().Build()
-                        .DataSource(ctx.RenameNode(GetOutputOp(content.Input().Cast<TYtOutput>()).DataSink().Ref(), TYtDSource::CallableName()))
+                        .DataSource(ctx.RenameNode(GetOutputOp(ytOutput).DataSink().Ref(), TYtDSource::CallableName()))
                         .Input()
                             .Add()
                                 .Paths()
                                     .Add()
-                                        .Table(useQueryCache ? ToOutTableWithHash(content.Input(), state, ctx) : GetOutTable(content.Input()).Ptr())
+                                        .Table(useQueryCache ? ToOutTableWithHash(ytOutput, state, ctx) : ToOutTable(ytOutput, ctx))
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
@@ -1450,7 +1528,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                             .Add()
                                 .Paths()
                                     .Add()
-                                        .Table(useQueryCache ? ToOutTableWithHash(out, state, ctx) : GetOutTable(out).Ptr())
+                                        .Table(useQueryCache ? ToOutTableWithHash(out, state, ctx) : ToOutTable(out, ctx))
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
@@ -2326,6 +2404,16 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
     }
 
     return true;
+}
+
+TMaybeNode<TCoLambda> GetMapLambda(const TYtWithUserJobsOpBase& op) {
+    if (auto map = op.Maybe<TYtMap>()) {
+        return map.Cast().Mapper();
+    } else if (auto maybeLambda = op.Maybe<TYtMapReduce>().Mapper().Maybe<TCoLambda>()) {
+        return maybeLambda.Cast();
+    }
+
+    return {};
 }
 
 } // NYql

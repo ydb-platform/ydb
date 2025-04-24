@@ -180,8 +180,11 @@ private:
     TSensorSet* FindSet(const std::string& name, const TSensorOptions& options);
 
     TCounter RegistrationCount_;
-    TEventTimer SensorCollectDuration_, ReadDuration_;
-    TGauge SensorCount_, ProjectionCount_, TagCount_;
+    TEventTimer SensorCollectDuration_;
+    TEventTimer ReadDuration_;
+    TGauge SensorCount_;
+    TGauge ProjectionCount_;
+    TGauge TagCount_;
 
     friend class TRemoteRegistry;
 };

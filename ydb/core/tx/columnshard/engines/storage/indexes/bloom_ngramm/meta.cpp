@@ -10,12 +10,14 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
+#include <util/string/ascii.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
     const ui32 HashesCount;
+    const bool CaseSensitive;
 
     template <ui32 CharsRemained>
     class THashesBuilder {
@@ -133,17 +135,29 @@ private:
             AFL_VERIFY(false);
         }
     };
+    TBuffer LowerStringBuffer;
 
 public:
-    TNGrammBuilder(const ui32 hashesCount)
-        : HashesCount(hashesCount) {
+    TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
+        : HashesCount(hashesCount)
+        , CaseSensitive(caseSensitive) {
     }
 
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
-        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-            (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        if (CaseSensitive) {
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        } else {
+            LowerStringBuffer.Clear();
+            LowerStringBuffer.Resize(dataSize);
+            for (ui32 i = 0; i < dataSize; ++i) {
+                LowerStringBuffer.Data()[i] = AsciiToLower(data[i]);
+            }
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
+        }
     }
 
     template <class TFiller>
@@ -172,7 +186,12 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+        if (CaseSensitive) {
+            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+        } else {
+            const TString lowerString = to_lower(userReq);
+            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
+        }
     }
 };
 
@@ -259,7 +278,7 @@ public:
 
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder(HashesCount);
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
 
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
@@ -311,8 +330,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     return GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
 }
 
-bool TIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
@@ -322,10 +341,11 @@ bool TIndexMeta::DoCheckValueImpl(
             result = false;
         }
     };
-    TNGrammBuilder builder(HashesCount);
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
+    AFL_VERIFY(!CaseSensitive || op.GetCaseSensitive());
 
     NRequest::TLikePart::EOperation opLike;
-    switch (op) {
+    switch (op.GetOperation()) {
         case TSkipIndex::EOperation::Equals:
             opLike = NRequest::TLikePart::EOperation::Equals;
             break;

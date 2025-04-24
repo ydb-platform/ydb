@@ -11,7 +11,7 @@
 #include <util/system/type_name.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/ysaveload.h>
 
 class IInputStream;

@@ -106,7 +106,7 @@ namespace NKikimr::NPQ {
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
-                    TKey key(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
+                    auto key = TKey::ForBody(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
                     auto read = request->Record.AddCmdRead();
                     read->SetKey(key.Data(), key.Size());
                 }
@@ -142,7 +142,7 @@ namespace NKikimr::NPQ {
         }
 
         void Verify(const TRequestedBlob& blob) const {
-            TKey key(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, false);
+            auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
             Y_ABORT_UNLESS(blob.Value.size() == blob.Size);
             TClientBlob::CheckBlob(key, blob.Value);
         }
@@ -324,7 +324,7 @@ namespace NKikimr::NPQ {
                 partitionId.InternalPartitionId = partitionId.OriginalPartitionId;
                 return {partitionId, 0, 0, 0, 0};
             } else {
-                TKey key(s);
+                auto key = TKey::FromString(s);
                 return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount()};
             }
         }

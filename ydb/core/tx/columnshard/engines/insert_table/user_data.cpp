@@ -31,7 +31,7 @@ TUserData::TBlobStorageGuard::~TBlobStorageGuard() {
     Singleton<TInsertTableCacheController>()->Return(Data.size());
 }
 
- TUserData::TUserData(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto,
+ TUserData::TUserData(const TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto,
     const ui64 schemaVersion, const std::optional<TString>& blobData)
     : Meta(proto)
     , BlobRange(blobRange)

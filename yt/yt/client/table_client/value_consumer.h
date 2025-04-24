@@ -129,7 +129,8 @@ public:
     explicit TWritingValueConsumer(
         IUnversionedWriterPtr writer,
         TTypeConversionConfigPtr typeConversionConfig = New<TTypeConversionConfig>(),
-        i64 maxRowBufferSize = 1_MB);
+        i64 maxRowBufferSize = 1_MB,
+        IMemoryUsageTrackerPtr tracker = GetNullMemoryUsageTracker());
 
     TFuture<void> Flush() override;
     const TNameTablePtr& GetNameTable() const override;

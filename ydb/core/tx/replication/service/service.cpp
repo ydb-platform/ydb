@@ -2,7 +2,7 @@
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
-#include "transfer_writer.h"
+#include "transfer_writer_factory.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -417,7 +417,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> TransferWriterFn(
-            const NKikimrReplication::TTransferWriterSettings& writerSettings)
+            const NKikimrReplication::TTransferWriterSettings& writerSettings,
+            const ITransferWriterFactory* transferWriterFactory)
     {
         if (!CompilationService) {
             CompilationService = Register(
@@ -429,9 +430,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             tablePathId = TPathId::FromProto(writerSettings.GetPathId()),
             transformLambda = writerSettings.GetTransformLambda(),
             compilationService = *CompilationService,
-            batchingSettings = writerSettings.GetBatching()
+            batchingSettings = writerSettings.GetBatching(),
+            transferWriterFactory = transferWriterFactory
         ]() {
-            return CreateTransferWriter(transformLambda, tablePathId, compilationService, batchingSettings);
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings});
         };
     }
 
@@ -478,7 +480,12 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             writerFn = WriterFn(writerSettings, consistencySettings);
         } else if (cmd.HasTransferWriter()) {
             const auto& writerSettings = cmd.GetTransferWriter();
-            writerFn = TransferWriterFn(writerSettings);
+            const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
+            if (!transferWriterFactory) {
+                LOG_C("Run transfer but TransferWriterFactory does not exists.");
+                return;
+            }
+            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }

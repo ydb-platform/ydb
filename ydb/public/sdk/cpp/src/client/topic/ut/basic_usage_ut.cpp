@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
- 
+
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -659,6 +659,64 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << ">>> TEST: Session gracefully closed" << Endl;
 
         Sleep(TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(ConfirmPartitionSessionWithCommitOffset) {
+        // TStartPartitionSessionEvent::Confirm(readOffset, commitOffset) should work,
+        // if commitOffset passed to Confirm is greater than the offset committed previously by the consumer.
+        // https://st.yandex-team.ru/KIKIMR-23015
+
+        auto setup = TTopicSdkTestSetup(TEST_CASE_NAME);
+
+        {
+            // Write 2 messages:
+            auto settings = NTopic::TWriteSessionSettings()
+                .Path(setup.GetTopicPath())
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                .ProducerId(TEST_MESSAGE_GROUP_ID);
+            auto client = setup.MakeClient();
+            auto writer = client.CreateSimpleBlockingWriteSession(settings);
+            writer->Write("message");
+            writer->Write("message");
+            writer->Close();
+        }
+
+        {
+            // Read messages:
+            auto settings = NTopic::TReadSessionSettings()
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(std::string(setup.GetTopicPath()));
+
+            auto client = setup.MakeClient();
+            auto reader = client.CreateReadSession(settings);
+
+            {
+                // Start partition session and request to read from offset 1 and commit offset 1:
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(*event));
+                auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+                startPartitionSession.Confirm(/*readOffset=*/ 1, /*commitOffset=*/ 1);
+            }
+
+            {
+                // Receive a message with offset 1 and commit it:
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(*event));
+                auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+
+                // Here we should commit range [1, 2), not [0, 2):
+                dataReceived.Commit();
+            }
+
+            {
+                // And then get a TCommitOffsetAcknowledgementEvent:
+                auto event = reader->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*event));
+            }
+        }
     }
 
     Y_UNIT_TEST(ConflictingWrites) {

@@ -155,10 +155,11 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
 
 TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
-    TType* rightStreamType, const TVector<ui32>& rightKeyDrops
+    TType* rightListType, const TVector<ui32>& rightKeyDrops
 ) {
     const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
-    const auto rightStreamItems = ValidateBlockStreamType(rightStreamType);
+    const auto rightListItemType = AS_TYPE(TListType, rightListType)->GetItemType();
+    const auto rightPlainStructType = AS_TYPE(TStructType, pgmBuilder.ValidateBlockStructType(AS_TYPE(TStructType, rightListItemType)));
 
     TVector<TType*> joinReturnItems;
 
@@ -172,15 +173,17 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
 
     if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
         const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
-        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
-            if (rightKeyDropsSet.contains(i)) {
+        for (size_t i = 0; i < rightPlainStructType->GetMembersCount(); i++) {
+            const auto& memberName = rightPlainStructType->GetMemberName(i);
+            if (rightKeyDropsSet.contains(i) || memberName == NYql::BlockLengthColumnName) {
                 continue;
             }
 
+            auto memberType = rightPlainStructType->GetMemberType(i);
             joinReturnItems.push_back(pgmBuilder.NewBlockType(
-                joinKind == EJoinKind::Inner ? rightStreamItems[i]
-                    : IsOptionalOrNull(rightStreamItems[i]) ? rightStreamItems[i]
-                    : pgmBuilder.NewOptionalType(rightStreamItems[i]),
+                joinKind == EJoinKind::Inner ? memberType
+                    : IsOptionalOrNull(memberType) ? memberType
+                    : pgmBuilder.NewOptionalType(memberType),
                 TBlockType::EShape::Many
             ));
         }

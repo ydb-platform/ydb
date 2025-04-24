@@ -158,6 +158,8 @@ class QuerySessionPool:
         async def wrapped_callee():
             async with self.checkout() as session:
                 async with session.transaction(tx_mode=tx_mode) as tx:
+                    if tx_mode.name in ["serializable_read_write", "snapshot_read_only"]:
+                        await tx.begin()
                     result = await callee(tx, *args, **kwargs)
                     await tx.commit()
                 return result
@@ -212,12 +214,6 @@ class QuerySessionPool:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.stop()
-
-    def __del__(self):
-        if self._should_stop.is_set() or self._loop.is_closed():
-            return
-
-        self._loop.call_soon(self.stop)
 
 
 class SimpleQuerySessionCheckoutAsync:

@@ -77,6 +77,30 @@
                                         "PlanNodeId": 7,
                                         "Plans": [
                                             {
+                                                "Node Type": "TableRangeScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableRangeScan",
+                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
+                                                        "ReadColumns": [
+                                                            "ten",
+                                                            "unique2"
+                                                        ],
+                                                        "ReadRange": [
+                                                            "unique1 (42)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6,
+                                                "Tables": [
+                                                    "postgres_jointest/join0.test_plan/tenk1"
+                                                ]
+                                            },
+                                            {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 5,
                                                 "PlanNodeType": "Connection",
@@ -126,30 +150,6 @@
                                                             }
                                                         ]
                                                     }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "TableRangeScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableRangeScan",
-                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
-                                                        "ReadColumns": [
-                                                            "ten",
-                                                            "unique2"
-                                                        ],
-                                                        "ReadRange": [
-                                                            "unique1 (42)",
-                                                            "unique2 (-\u221e, +\u221e)"
-                                                        ],
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Tables": [
-                                                    "postgres_jointest/join0.test_plan/tenk1"
                                                 ]
                                             }
                                         ]

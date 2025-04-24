@@ -207,7 +207,7 @@ public:
     ui64 GetMemoryConsumption() const;
 
     ui64 GetRequiredMemory() const {
-        Y_ABORT_UNLESS(!GetTxCacheUsage() || !IsTxDataReleased());
+        Y_ENSURE(!GetTxCacheUsage() || !IsTxDataReleased());
         ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize();
         if (!requiredMem)
             requiredMem = GetMemoryConsumption();
@@ -226,7 +226,7 @@ public:
 
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
         if (WriteTx) {
-            Y_ABORT_UNLESS(WriteTx->TxInfo().Loaded);
+            Y_ENSURE(WriteTx->TxInfo().Loaded);
             return WriteTx->TxInfo();
         }
         // For scheme tx global reader and writer flags should

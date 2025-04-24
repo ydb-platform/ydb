@@ -99,7 +99,7 @@ struct TReadIteratorState {
         bool Ack(ui64 seqNo, ui64 rows, ui64 bytes) {
             if (LastAckSeqNo < seqNo && seqNo <= SeqNo) {
                 size_t ackedIndex = seqNo - LastAckSeqNo - 1;
-                Y_ABORT_UNLESS(ackedIndex < Queue.size());
+                Y_ENSURE(ackedIndex < Queue.size());
 
                 auto it = Queue.begin() + ackedIndex;
 

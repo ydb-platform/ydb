@@ -150,7 +150,7 @@ namespace {
 
         ui64 AddToQueue(TPageId pageId, EPage type) override
         {
-            Y_ABORT_UNLESS(type == Part->GetPageType(pageId, { }));
+            Y_ENSURE(type == Part->GetPageType(pageId, { }));
 
             Queue.push_back(pageId);
 

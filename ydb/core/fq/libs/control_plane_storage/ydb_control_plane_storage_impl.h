@@ -25,6 +25,7 @@
 
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
@@ -521,11 +522,13 @@ protected:
 
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::THistogramPtr LeaseLeftMs;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NFq::TControlPlaneStorageConfig& config)
             : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
             , Counters(counters)
+            , LeaseLeftMs(Counters->GetHistogram("LeaseLeftMs", ::NMonitoring::ExplicitHistogram({100, 1000, 5000, 10000, 20000})))
         {
             for (auto& request: CommonRequests) {
                 request->Register(Counters);
@@ -638,6 +641,14 @@ protected:
     std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionInternal> GetCreateConnectionProtos(
         const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
 
+    // List connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const;
+
+    // Describe connections request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const;
+
     // Create binding request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev) const;
@@ -646,6 +657,10 @@ protected:
 
     std::pair<FederatedQuery::Binding, FederatedQuery::Internal::BindingInternal> GetCreateBindingProtos(
         const FederatedQuery::CreateBindingRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const;
+
+    // List bindings request
+
+    NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev) const;
 
     // Write result data request
 
@@ -750,7 +765,7 @@ protected:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
+                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(request)) << "} ERROR: " << internalIssues.ToOneLineString());
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -763,7 +778,7 @@ protected:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(result.DebugString()) << "} SUCCESS");
+                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);
@@ -792,12 +807,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 {
     using TBase = TControlPlaneStorageBase;
 
+    using TQueryQuotasMap = THashMap<TString, std::array<ui32, 3>>; // 3 = max(FederatedQuery::QueryContent::QueryType) + 1
+
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
-
     // Query Quota
-    THashMap<TString, ui32> QueryQuotas;
+    TQueryQuotasMap QueryQuotas;
     THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
     TInstant QuotasUpdatedAt = TInstant::Zero();
     bool QuotasUpdating = false;

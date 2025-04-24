@@ -37,16 +37,16 @@ Making a primitive type from an internal representation. It's always successful 
 
 * `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
 * `DateTime::MakeTzDate(Resource<TM>{Flags:AutoMap}) -> TzDate`
-* `DateTime::MakeDate32(Resource<TM>{Flags:AutoMap}) -> Date32`
-* `DateTime::MakeTzDate32(Resource<TM>{Flags:AutoMap}) -> TzDate32`
+* `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`
+* `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`
 * `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`
 * `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`
-* `DateTime::MakeDatetime64(Resource<TM>{Flags:AutoMap}) -> Datetime64`
-* `DateTime::MakeTzDatetime64(Resource<TM>{Flags:AutoMap}) -> TzDatetime64`
+* `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`
+* `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`
 * `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`
 * `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`
-* `DateTime::MakeTimestamp64(Resource<TM>{Flags:AutoMap}) -> Timestamp64`
-* `DateTime::MakeTzTimestamp64(Resource<TM>{Flags:AutoMap}) -> TzTimestamp64`
+* `DateTime::MakeTimestamp64(Resource<TM64>{Flags:AutoMap}) -> Timestamp64`
+* `DateTime::MakeTzTimestamp64(Resource<TM64>{Flags:AutoMap}) -> TzTimestamp64`
 
 #### Examples
 
@@ -344,18 +344,19 @@ SELECT
       -- "2019-01-01 01:02:03 Europe/Moscow"
 ```
 
-## Parse {#parse}
+## Parse/Parse64 {#parse}
 
 Parse a string into an internal representation using an arbitrary formatting string. Default values are used for empty fields. If errors are raised, NULL is returned.
 
 #### List of functions
 
 * `DateTime::Parse(String) -> (String{Flags:AutoMap}) -> Resource<TM>?`
+* `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`
 
 Implemented specifiers:
 
 * `%%`: the % character;
-* `%Y`: 4-digit year;
+* `%Y`: 4-digit year when using `Parse`, and variable length (1-6 digits) year with minus for the dates BC when using `Parse64`;
 * `%m`: 2-digit month;
 * `%d`: 2-digit day;
 * `%H`: 2-digit hour;
@@ -372,12 +373,14 @@ $parse1 = DateTime::Parse("%H:%M:%S");
 $parse2 = DateTime::Parse("%S");
 $parse3 = DateTime::Parse("%m/%d/%Y");
 $parse4 = DateTime::Parse("%Z");
+$parse5 = DateTime::Parse64("%m/%d/%Y");
 
 SELECT
     DateTime::MakeDatetime($parse1("01:02:03")), -- 1970-01-01T01:02:03Z
     DateTime::MakeTimestamp($parse2("12.3456")), -- 1970-01-01T00:00:12.345600Z
     DateTime::MakeTimestamp($parse3("02/30/2000")), -- NULL (Feb 30)
-    DateTime::MakeTimestamp($parse4("Canada/Central")); -- 1970-01-01T06:00:00Z (conversion to UTC)
+    DateTime::MakeTimestamp($parse4("Canada/Central")), -- 1970-01-01T06:00:00Z (conversion to UTC)
+    DateTime::MakeTimestamp64($parse5("02/10/1931")), -- 1931-02-10T00:00:00Z (conversion to UTC)
 ```
 
 For the common formats, wrappers around the corresponding util methods are supported. You can only get TM with components in the UTC timezone.
@@ -404,25 +407,6 @@ SELECT
     DateTime::MakeTimestamp(DateTime::ParseX509("20091014165533Z"))
       -- 2009-10-14T16:55:33Z
 ```
-
-## Parse64 {#parse64}
-
-Parse a string into a wide internal representation using an arbitrary formatting string. Default values are used for empty fields. If errors are raised, NULL is returned.
-
-* `DateTime::Parse64(String) -> (String{Flags:AutoMap}) -> Resource<TM64>?`
-
-Implemented specifiers:
-
-* `%%`: the % character;
-* `%Y`: Variable length (1-6 digits) year with minus for the dates BC;
-* `%m`: 2-digit month;
-* `%d`: 2-digit day;
-* `%H`: 2-digit hour;
-* `%M`: 2-digit minutes;
-* `%S`: Seconds, can also accept microseconds in the formats from `XX` up to `XX.XXXXXX`;
-* `%Z`: The IANA name of the timezone (GMT);
-* `%b`: A short three-letter case-insensitive English name of the month (Jan);
-* `%B`: A full case-insensitive English name of the month (January).
 
 ## Standard scenarios
 

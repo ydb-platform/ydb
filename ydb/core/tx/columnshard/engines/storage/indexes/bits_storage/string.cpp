@@ -7,6 +7,9 @@
 namespace NKikimr::NOlap::NIndexes {
 
 bool TFixStringBitsStorage::DoGet(const ui32 idx) const {
+    if (!Data.size()) {
+        return false;
+    }
     AFL_VERIFY(idx < Data.size() * 8);
     const ui8 start = (*(ui8*)&Data[idx / 8]);
     return start & (1 << (idx % 8));

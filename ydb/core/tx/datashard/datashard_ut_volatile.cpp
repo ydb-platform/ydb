@@ -2560,7 +2560,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
             NKikimrTxDataShard::TDataTransaction tx;
             bool ok = tx.ParseFromString(msg->Record.GetTxBody());
-            Y_ABORT_UNLESS(ok, "Failed to parse data transaction");
+            Y_ENSURE(ok, "Failed to parse data transaction");
             if (!tx.HasKqpTransaction()) {
                 Cerr << "... skipping TEvProposeTransaction without kqp transaction" << Endl;
                 return;
@@ -2597,7 +2597,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
             kqpLocks->SetArbiterShard(ArbiterShard);
             ok = tx.SerializeToString(msg->Record.MutableTxBody());
-            Y_ABORT_UNLESS(ok, "Failed to serialize data transaction");
+            Y_ENSURE(ok, "Failed to serialize data transaction");
             ++Modified;
         }
 
@@ -2683,7 +2683,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
             NKikimrTxDataShard::TDataTransaction tx;
             bool ok = tx.ParseFromString(msg->Record.GetTxBody());
-            Y_ABORT_UNLESS(ok, "Failed to parse data transaction");
+            Y_ENSURE(ok, "Failed to parse data transaction");
             if (!tx.HasKqpTransaction()) {
                 Cerr << "... skipping TEvProposeTransaction without kqp transaction" << Endl;
                 return;
@@ -2716,7 +2716,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             kqpLock->SetPathId(TableId.PathId.LocalPathId);
 
             ok = tx.SerializeToString(msg->Record.MutableTxBody());
-            Y_ABORT_UNLESS(ok, "Failed to serialize data transaction");
+            Y_ENSURE(ok, "Failed to serialize data transaction");
             ++Modified;
         }
 

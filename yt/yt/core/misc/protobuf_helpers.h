@@ -123,6 +123,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap);
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -143,6 +148,11 @@ template <class TOriginal, class TSerialized>
 void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap);
 
 ////////////////////////////////////////////////////////////////////////////////
 

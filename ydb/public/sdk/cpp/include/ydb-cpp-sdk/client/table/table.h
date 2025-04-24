@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <variant>
 
@@ -1755,8 +1756,6 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
-using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
-
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1897,22 +1896,24 @@ TAsyncStatus TTableClient::RetryOperation(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
-class TTransaction {
+class TTransaction : public TTransactionBase {
     friend class TTableClient;
+
 public:
-    const std::string& GetId() const;
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
     TSession GetSession() const;
-    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
     TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
 
     class TImpl;
 
@@ -1955,6 +1956,7 @@ public:
     const std::string& GetId() const;
     const std::optional<std::string>& GetText() const;
     TParamsBuilder GetParamsBuilder() const;
+    std::map<std::string, TType> GetParameterTypes() const;
 
     TAsyncDataQueryResult Execute(const TTxControl& txControl,
         const TExecDataQuerySettings& settings = TExecDataQuerySettings());

@@ -3,6 +3,8 @@ package NYT.NNodeTrackerClient.NProto;
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/node_tracker_client";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(gritukan): Move it to TReqFullChunkHeartbeat after switching to new heartbeats.

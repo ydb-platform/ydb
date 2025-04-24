@@ -278,7 +278,7 @@ namespace NTabletFlatExecutor {
 
         void AllocStatic(TSeat &seat, ui64 newLimit)
         {
-            Y_ABORT_UNLESS(newLimit >= seat.CurrentTxDataLimit + seat.MemoryTouched);
+            Y_ENSURE(newLimit >= seat.CurrentTxDataLimit + seat.MemoryTouched);
 
             Used.Static -= seat.CurrentMemoryLimit;
             seat.CurrentMemoryLimit = newLimit;
@@ -296,7 +296,7 @@ namespace NTabletFlatExecutor {
             if (seat.TaskId)
                 return;
 
-            Y_ABORT_UNLESS(seat.CurrentMemoryLimit >= hold);
+            Y_ENSURE(seat.CurrentMemoryLimit >= hold);
             ui64 release = seat.CurrentMemoryLimit - hold;
             Used.Static -= release;
 

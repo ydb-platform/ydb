@@ -35,20 +35,11 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.k"
+                                                "TopSortBy": "argument.p.k"
                                             },
                                             {
                                                 "Condition": "p.k = ss.k",
@@ -65,6 +56,30 @@
                                         ],
                                         "PlanNodeId": 7,
                                         "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join3.test_plan/parent",
+                                                        "ReadColumns": [
+                                                            "k",
+                                                            "pd"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "k (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join3.test_plan/parent"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6,
+                                                "Tables": [
+                                                    "postgres_jointest/join3.test_plan/parent"
+                                                ]
+                                            },
                                             {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 5,
@@ -113,36 +128,12 @@
                                                         ]
                                                     }
                                                 ]
-                                            },
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join3.test_plan/parent",
-                                                        "ReadColumns": [
-                                                            "k",
-                                                            "pd"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "k (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join3.test_plan/parent"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Tables": [
-                                                    "postgres_jointest/join3.test_plan/parent"
-                                                ]
                                             }
                                         ]
                                     }
                                 ],
                                 "SortColumns": [
-                                    "k (Asc)"
+                                    "p.k (Asc)"
                                 ]
                             }
                         ]

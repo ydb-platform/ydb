@@ -100,7 +100,8 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     case TExportInfo::EState::CopyTables:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_PREPARING);
         break;
-
+    
+    case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
         for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -110,7 +111,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
             ? Ydb::Export::ExportProgress::PROGRESS_DONE
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
-
+    
     case TExportInfo::EState::Dropping:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_DONE);
         break;
@@ -234,6 +235,10 @@ void TSchemeShard::Handle(TEvExport::TEvListExportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressExport(ev), ctx);
 }
 

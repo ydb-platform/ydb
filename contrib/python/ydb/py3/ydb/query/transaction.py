@@ -11,6 +11,7 @@ from .. import (
     _apis,
     issues,
 )
+from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
 
@@ -42,9 +43,21 @@ class QueryTxStateHelper(abc.ABC):
         QueryTxStateEnum.DEAD: [],
     }
 
+    _SKIP_TRANSITIONS = {
+        QueryTxStateEnum.NOT_INITIALIZED: [],
+        QueryTxStateEnum.BEGINED: [],
+        QueryTxStateEnum.COMMITTED: [QueryTxStateEnum.COMMITTED, QueryTxStateEnum.ROLLBACKED],
+        QueryTxStateEnum.ROLLBACKED: [QueryTxStateEnum.COMMITTED, QueryTxStateEnum.ROLLBACKED],
+        QueryTxStateEnum.DEAD: [],
+    }
+
     @classmethod
     def valid_transition(cls, before: QueryTxStateEnum, after: QueryTxStateEnum) -> bool:
         return after in cls._VALID_TRANSITIONS[before]
+
+    @classmethod
+    def should_skip(cls, before: QueryTxStateEnum, after: QueryTxStateEnum) -> bool:
+        return after in cls._SKIP_TRANSITIONS[before]
 
     @classmethod
     def terminal(cls, state: QueryTxStateEnum) -> bool:
@@ -88,8 +101,8 @@ class QueryTxState:
         if QueryTxStateHelper.terminal(self._state):
             raise RuntimeError(f"Transaction is in terminal state: {self._state.value}")
 
-    def _already_in(self, target: QueryTxStateEnum) -> bool:
-        return self._state == target
+    def _should_skip(self, target: QueryTxStateEnum) -> bool:
+        return QueryTxStateHelper.should_skip(self._state, target)
 
 
 def _construct_tx_settings(tx_state: QueryTxState) -> _ydb_query.TransactionSettings:
@@ -170,7 +183,7 @@ def wrap_tx_rollback_response(
     return tx
 
 
-class BaseQueryTxContext:
+class BaseQueryTxContext(base.CallbackHandler):
     def __init__(self, driver, session_state, session, tx_mode):
         """
         An object that provides a simple transaction context manager that allows statements execution
@@ -196,6 +209,7 @@ class BaseQueryTxContext:
         self._session_state = session_state
         self.session = session
         self._prev_stream = None
+        self._external_error = None
 
     @property
     def session_id(self) -> str:
@@ -215,6 +229,19 @@ class BaseQueryTxContext:
         """
         return self._tx_state.tx_id
 
+    def _tx_identity(self) -> _ydb_topic.TransactionIdentity:
+        if not self.tx_id:
+            raise RuntimeError("Unable to get tx identity without started tx.")
+        return _ydb_topic.TransactionIdentity(self.tx_id, self.session_id)
+
+    def _set_external_error(self, exc: BaseException) -> None:
+        self._external_error = exc
+
+    def _check_external_error_set(self):
+        if self._external_error is None:
+            return
+        raise issues.ClientInternalError("Transaction was failed by external error.") from self._external_error
+
     def _begin_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
         self._tx_state._check_invalid_transition(QueryTxStateEnum.BEGINED)
 
@@ -228,6 +255,7 @@ class BaseQueryTxContext:
         )
 
     def _commit_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
+        self._check_external_error_set()
         self._tx_state._check_invalid_transition(QueryTxStateEnum.COMMITTED)
 
         return self._driver(
@@ -240,6 +268,7 @@ class BaseQueryTxContext:
         )
 
     def _rollback_call(self, settings: Optional[BaseRequestSettings]) -> "BaseQueryTxContext":
+        self._check_external_error_set()
         self._tx_state._check_invalid_transition(QueryTxStateEnum.ROLLBACKED)
 
         return self._driver(
@@ -262,6 +291,7 @@ class BaseQueryTxContext:
         settings: Optional[BaseRequestSettings],
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
         self._tx_state._check_tx_ready_to_use()
+        self._check_external_error_set()
 
         request = base.create_execute_query_request(
             query=query,
@@ -283,18 +313,41 @@ class BaseQueryTxContext:
         )
 
     def _move_to_beginned(self, tx_id: str) -> None:
-        if self._tx_state._already_in(QueryTxStateEnum.BEGINED) or not tx_id:
+        if self._tx_state._should_skip(QueryTxStateEnum.BEGINED) or not tx_id:
             return
         self._tx_state._change_state(QueryTxStateEnum.BEGINED)
         self._tx_state.tx_id = tx_id
 
     def _move_to_commited(self) -> None:
-        if self._tx_state._already_in(QueryTxStateEnum.COMMITTED):
+        if self._tx_state._should_skip(QueryTxStateEnum.COMMITTED):
             return
         self._tx_state._change_state(QueryTxStateEnum.COMMITTED)
 
 
 class QueryTxContext(BaseQueryTxContext):
+    def __init__(self, driver, session_state, session, tx_mode):
+        """
+        An object that provides a simple transaction context manager that allows statements execution
+        in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
+        transaction control logic, and opens new transaction if:
+
+        1) By explicit .begin() method;
+        2) On execution of a first statement, which is strictly recommended method, because that avoids useless round trip
+
+        This context manager is not thread-safe, so you should not manipulate on it concurrently.
+
+        :param driver: A driver instance
+        :param session_state: A state of session
+        :param tx_mode: Transaction mode, which is a one from the following choises:
+         1) QuerySerializableReadWrite() which is default mode;
+         2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
+         3) QuerySnapshotReadOnly();
+         4) QueryStaleReadOnly().
+        """
+
+        super().__init__(driver, session_state, session, tx_mode)
+        self._init_callback_handler(base.CallbackHandlerMode.SYNC)
+
     def __enter__(self) -> "BaseQueryTxContext":
         """
         Enters a context manager and returns a transaction
@@ -309,7 +362,7 @@ class QueryTxContext(BaseQueryTxContext):
         it is not finished explicitly
         """
         self._ensure_prev_stream_finished()
-        if self._tx_state._state == QueryTxStateEnum.BEGINED:
+        if self._tx_state._state == QueryTxStateEnum.BEGINED and self._external_error is None:
             # It's strictly recommended to close transactions directly
             # by using commit_tx=True flag while executing statement or by
             # .commit() or .rollback() methods, but here we trying to do best
@@ -345,7 +398,8 @@ class QueryTxContext(BaseQueryTxContext):
 
         :return: A committed transaction or exception if commit is failed
         """
-        if self._tx_state._already_in(QueryTxStateEnum.COMMITTED):
+        self._check_external_error_set()
+        if self._tx_state._should_skip(QueryTxStateEnum.COMMITTED):
             return
 
         if self._tx_state._state == QueryTxStateEnum.NOT_INITIALIZED:
@@ -354,7 +408,13 @@ class QueryTxContext(BaseQueryTxContext):
 
         self._ensure_prev_stream_finished()
 
-        self._commit_call(settings)
+        try:
+            self._execute_callbacks_sync(base.TxEvent.BEFORE_COMMIT)
+            self._commit_call(settings)
+            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=None)
+        except BaseException as e:  # TODO: probably should be less wide
+            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=e)
+            raise e
 
     def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
@@ -364,7 +424,8 @@ class QueryTxContext(BaseQueryTxContext):
 
         :return: A committed transaction or exception if commit is failed
         """
-        if self._tx_state._already_in(QueryTxStateEnum.ROLLBACKED):
+        self._check_external_error_set()
+        if self._tx_state._should_skip(QueryTxStateEnum.ROLLBACKED):
             return
 
         if self._tx_state._state == QueryTxStateEnum.NOT_INITIALIZED:
@@ -373,7 +434,13 @@ class QueryTxContext(BaseQueryTxContext):
 
         self._ensure_prev_stream_finished()
 
-        self._rollback_call(settings)
+        try:
+            self._execute_callbacks_sync(base.TxEvent.BEFORE_ROLLBACK)
+            self._rollback_call(settings)
+            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=None)
+        except BaseException as e:  # TODO: probably should be less wide
+            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=e)
+            raise e
 
     def execute(
         self,

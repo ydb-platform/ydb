@@ -309,6 +309,10 @@ public:
         return joinTree;
     }
 
+    void DisableShuffleElimination() {
+        EnableShuffleElimination = false;
+    }
+
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
@@ -346,7 +350,7 @@ private:
         if (postEnumerationShuffleElimination) {
             EliminateShuffles(hypergraph, bestJoinOrder, orderingsFSM);
         }
-        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage);
+        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage, EnableShuffleElimination);
         AddMissingConditions(hypergraph, resTree);
         return resTree;
     }
@@ -520,6 +524,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     if (optLevel == 2 && allRowStorage) {
         return node;
+    }
+
+    if (auto optimizer = dynamic_cast<TOptimizerNativeNew*>(&opt); allRowStorage && optimizer != nullptr) {
+        optimizer->DisableShuffleElimination();
     }
 
     equiJoinCounter++;

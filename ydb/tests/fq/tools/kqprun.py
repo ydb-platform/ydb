@@ -110,7 +110,7 @@ class KqpRun(object):
                 yql_utils.log(yql_program)
 
             for query in self.queries:
-                yql_utils.log(yql_program)
+                yql_utils.log(query)
 
             yql_utils.log('RESULTS:')
             yql_utils.log(log_results)

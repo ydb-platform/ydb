@@ -1426,8 +1426,10 @@ TUnversionedValue EncodeUnversionedAnyValue(
 {
     YT_ASSERT(None(value.Flags));
     switch (value.Type) {
-        case EValueType::Any:
         case EValueType::Composite:
+            value.Type = EValueType::Any;
+            [[fallthrough]];
+        case EValueType::Any:
             return value;
 
         case EValueType::Null: {

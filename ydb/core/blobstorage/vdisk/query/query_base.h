@@ -50,12 +50,12 @@ namespace NKikimr {
             if (Span) {
                 Span.Attribute("event", TEvBlobStorage::TEvVGet::ToString(BatcherCtx->OrigEv->Get()->Record));
             }
-            Y_DEBUG_ABORT_UNLESS(Result);
+            Y_VERIFY_DEBUG_S(Result, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
         }
 
         ui8 PDiskPriority() const {
             ui8 priority = 0;
-            Y_ABORT_UNLESS(Record.HasHandleClass());
+            Y_VERIFY_S(Record.HasHandleClass(), QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
             switch (Record.GetHandleClass()) {
                 case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
                     priority = NPriRead::HullOnlineOther;

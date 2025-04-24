@@ -284,6 +284,14 @@ protected:
         if constexpr (std::is_same_v<TResultRecord, Ydb::Config::FetchConfigResult>) {
             TResultRecord result;
             const auto& record = ev->Get()->Record;
+            if (record.HasErrorReason()) {
+                const auto status = record.GetDisabledConfigV2()
+                    ? Ydb::StatusIds::UNSUPPORTED
+                    : Ydb::StatusIds::INTERNAL_ERROR;
+                self->Reply(status, TStringBuilder() << "failed to fetch config: " << record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
             if (record.HasClusterYaml()) {
                 auto conf = ev->Get()->Record.GetClusterYaml();
                 auto metadata = NYamlConfig::GetMainMetadata(conf);
@@ -327,7 +335,10 @@ protected:
                 TResultRecord result;
                 self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
             } else {
-                self->Reply(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "failed to replace configuration: "
+                const auto status = record.GetDisabledConfigV2()
+                    ? Ydb::StatusIds::UNSUPPORTED
+                    : Ydb::StatusIds::INTERNAL_ERROR;
+                self->Reply(status, TStringBuilder() << "failed to replace configuration: "
                     << NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus_Name(record.GetStatus())
                     << ": " << record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             }

@@ -31,10 +31,10 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         auto& schemaVersion = schemaVersions[std::make_pair<ui64, ui64>(item["SinceStep"].GetInteger(), item["SinceTxId"].GetInteger())];
         schemaVersion = item;
     }
-    size_t countVersions = std::min(10ul, schemaVersions.size());
+    size_t countVersions = std::min(size_t(10), schemaVersions.size());
     if (const auto& countVersionsParam = cgi.Get("CountVersions")) {
         try {
-            countVersions = std::min(std::stoul(countVersionsParam), schemaVersions.size());
+            countVersions = std::min(size_t(std::stoul(countVersionsParam)), schemaVersions.size());
         } catch (...) {
             // nothing, use default value
         }

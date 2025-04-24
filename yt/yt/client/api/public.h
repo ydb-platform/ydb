@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/transaction_client/public.h>
 
+#include <yt/yt/client/prerequisite_client/public.h>
+
 #include <yt/yt/client/bundle_controller_client/public.h>
 
 #include <yt/yt/library/auth/authentication_options.h>
@@ -117,7 +119,7 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
 
 struct TConnectionOptions;
 
-using TClientOptions = NAuth::TAuthenticationOptions;
+struct TClientOptions;
 
 struct TTransactionParticipantOptions;
 
@@ -138,6 +140,7 @@ DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
 DECLARE_REFCOUNTED_STRUCT(IInternalClient)
 DECLARE_REFCOUNTED_STRUCT(ITransaction)
+DECLARE_REFCOUNTED_STRUCT(IPrerequisite)
 DECLARE_REFCOUNTED_STRUCT(IStickyTransactionPool)
 
 DECLARE_REFCOUNTED_STRUCT(IRowBatchReader)
@@ -145,6 +148,8 @@ DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
 
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
+
+DECLARE_REFCOUNTED_CLASS(ITablePartitionReader)
 
 DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
 
@@ -168,7 +173,7 @@ DECLARE_REFCOUNTED_STRUCT(TJournalReaderConfig)
 DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TJournalWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterOptions)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TSerializableMasterReadOptions)
 
@@ -177,6 +182,8 @@ DECLARE_REFCOUNTED_STRUCT(TPrerequisiteRevisionConfig)
 DECLARE_REFCOUNTED_STRUCT(TDetailedProfilingInfo)
 
 DECLARE_REFCOUNTED_STRUCT(TQueryFile)
+
+DECLARE_REFCOUNTED_STRUCT(TQuerySecret)
 
 DECLARE_REFCOUNTED_STRUCT(TSchedulingOptions)
 

@@ -4,6 +4,7 @@
 #include "data_accessor.h"
 #include "index_chunk.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
@@ -140,7 +141,7 @@ private:
     }
 
 public:
-    TPortionAccessorConstructor(const ui64 pathId)
+    TPortionAccessorConstructor(const TInternalPathId pathId)
         : PortionInfo(pathId)
     {
 

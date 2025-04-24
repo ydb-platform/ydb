@@ -240,6 +240,10 @@ public:
 
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     static bool IsDefaultAllocatorUsed();
+#else
+    static consteval bool IsDefaultAllocatorUsed() {
+        return false;
+    }
 #endif
 
 protected:

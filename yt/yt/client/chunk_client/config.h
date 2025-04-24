@@ -331,6 +331,8 @@ struct TReplicationWriterConfig
      */
     TDuration NodeRpcTimeout;
 
+    TDuration ProbePutBlocksTimeout;
+
     NRpc::TRetryingChannelConfigPtr NodeChannel;
 
     int UploadReplicationFactor;
@@ -365,6 +367,10 @@ struct TReplicationWriterConfig
 
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
+
+    //! Enable write protocol with probe put blocks.
+    //! Acquiring resources for putting blocks before invoking PutBlocks.
+    bool UseProbePutBlocks;
 
     int GetDirectUploadNodeCount();
 
@@ -422,19 +428,17 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMemoryTrackedWriterOptions
+struct TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterOptions
+struct TEncodingWriterOptions
     : public virtual TMemoryTrackedWriterOptions
 {
-public:
     NCompression::ECodec CompressionCodec;
     bool ChunksEden;
     bool SetChunkCreationTime;

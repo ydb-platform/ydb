@@ -43,16 +43,16 @@
 
   ```bash
   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-  {{ ydb-cli }} -p quickstart table query execute -q 'declare $s as String;select Len($s) as Bytes' \
-  --stdin-format newline-delimited --stdin-par s --stdin-format raw
+  {{ ydb-cli }} -p quickstart sql -s 'declare $s as String;select Len($s) as Bytes' \
+  --input-framing newline-delimited --input-param-name s --input-format raw
   ```
 
 * Исполнение YQL-запроса с адаптивным пакетированием параметров из сообщений, считанных из топика `topic1`
 
   ```bash
   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | \
-  {{ ydb-cli }} -p quickstart table query execute \
-  -q 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
-  --stdin-format newline-delimited --stdin-par s --stdin-format raw \
-  --batch adaptive
+  {{ ydb-cli }} -p quickstart sql \
+  -s 'declare $s as List<String>;select ListLength($s) as Count, $s as Items' \
+  --input-framing newline-delimited --input-param-name s --input-format raw \
+  --input-batch adaptive
   ```

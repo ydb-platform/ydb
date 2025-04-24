@@ -81,20 +81,20 @@ public:
     }
 
     TResult Locate(const TMemTable*, ui64, ui32) override {
-        Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+        Y_ENSURE(false, "IPages::Locate(TMemTable*, ...) shouldn't be used here");
     }
 
     TResult Locate(const TPart*, ui64, ELargeObj) override {
-        Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
+        Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
     const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
+        Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = info->GetPageType(pageId);
-        Y_ABORT_UNLESS(type == EPage::FlatIndex || type == EPage::BTreeIndex);
+        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex);
 
         auto& partPages = Pages[part];
         auto page = partPages.FindPtr(pageId);
@@ -127,7 +127,7 @@ public:
         }
 
         page = partPages.FindPtr(pageId);
-        Y_ABORT_UNLESS(page != nullptr);
+        Y_ENSURE(page != nullptr);
 
         return page;
     }
@@ -231,8 +231,8 @@ private:
 
         auto ev = WaitForSpecificEvent<TEvResourceBroker::TEvResourceAllocated>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
         auto msg = ev->Get();
-        Y_ABORT_UNLESS(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
-        Y_ABORT_UNLESS(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
+        Y_ENSURE(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
+        Y_ENSURE(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
 
         CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }

@@ -44,7 +44,7 @@ namespace NTest {
 
         EReady Seek(TRawVals key, ESeek seek)
         {
-            Y_ABORT_UNLESS(seek == ESeek::Exact, "Db Select(...) is a point lookup");
+            Y_ENSURE(seek == ESeek::Exact, "Db Select(...) is a point lookup");
 
             ITransactionMapPtr txMap;
             if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {

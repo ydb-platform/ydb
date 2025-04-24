@@ -5,6 +5,7 @@
 #include "flat_part_iface.h"
 #include "flat_iterator.h"
 #include "flat_table_subset.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -68,10 +69,10 @@ namespace NTable {
                         return EReady::Gone;
 
                     case EScan::Reset:
-                        Y_ABORT("Unexpected EScan::Reset from IScan::Seek(...)");
+                        Y_TABLET_ERROR("Unexpected EScan::Reset from IScan::Seek(...)");
                 }
 
-                Y_ABORT("Unexpected EScan result from IScan::Seek(...)");
+                Y_TABLET_ERROR("Unexpected EScan result from IScan::Seek(...)");
             } else if (Seek()) {
                 return NotifyPageFault();
             } else {
@@ -201,9 +202,9 @@ namespace NTable {
                             break;
 
                         case EVersionState::SkipUncommitted:
-                            Y_ABORT("Unexpected callback state SkipUncommitted");
+                            Y_TABLET_ERROR("Unexpected callback state SkipUncommitted");
                         case EVersionState::SkipVersion:
-                            Y_ABORT("Unexpected callback state SkipVersion");
+                            Y_TABLET_ERROR("Unexpected callback state SkipVersion");
                     }
 
                     OnPause = (op == EScan::Sleep);
@@ -224,7 +225,7 @@ namespace NTable {
                             return EReady::Gone;
                     }
 
-                    Y_ABORT("Unexpected EScan result from IScan::Feed(...)");
+                    Y_TABLET_ERROR("Unexpected EScan result from IScan::Feed(...)");
                 }
             }
         }
@@ -277,7 +278,7 @@ namespace NTable {
                     return EReady::Gone;
             }
 
-            Y_ABORT("Unexpected EScan result from IScan::PageFault(...)");
+            Y_TABLET_ERROR("Unexpected EScan result from IScan::PageFault(...)");
         }
 
         EReady NotifyExhausted()
@@ -299,21 +300,21 @@ namespace NTable {
                     return EReady::Gone;
 
                 case EScan::Feed:
-                    Y_ABORT("Unexpected EScan::Feed from IScan::Exhausted(...)");
+                    Y_TABLET_ERROR("Unexpected EScan::Feed from IScan::Exhausted(...)");
             }
 
-            Y_ABORT("Unexpected EScan result from IScan::Exhausted(...)");
+            Y_TABLET_ERROR("Unexpected EScan result from IScan::Exhausted(...)");
         }
 
         bool Reset()
         {
             Seeks++;
 
-            Y_ABORT_UNLESS(Lead, "Cannot seek with invalid lead");
+            Y_ENSURE(Lead, "Cannot seek with invalid lead");
 
             auto keyDefaults = Subset.Scheme->Keys;
 
-            Y_ABORT_UNLESS(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
+            Y_ENSURE(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
             Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
@@ -370,13 +371,13 @@ namespace NTable {
                 TVector<const TPartView*> parts;
                 parts.reserve(Subset.Flatten.size() + LoadedParts.size());
                 for (const auto& partView : Subset.Flatten) {
-                    Y_ABORT_UNLESS(partView.Part, "Missing part in subset");
-                    Y_ABORT_UNLESS(partView.Slices, "Missing part slices in subset");
+                    Y_ENSURE(partView.Part, "Missing part in subset");
+                    Y_ENSURE(partView.Slices, "Missing part slices in subset");
                     parts.push_back(&partView);
                 }
                 for (const auto& partView : LoadedParts) {
-                    Y_ABORT_UNLESS(partView.Part, "Missing part in subset");
-                    Y_ABORT_UNLESS(partView.Slices, "Missing part slices in subset");
+                    Y_ENSURE(partView.Part, "Missing part in subset");
+                    Y_ENSURE(partView.Slices, "Missing part slices in subset");
                     parts.push_back(&partView);
                 }
                 std::sort(parts.begin(), parts.end(),
@@ -425,7 +426,7 @@ namespace NTable {
                             break;
 
                         default:
-                            Y_ABORT("Unexpected Seek result");
+                            Y_TABLET_ERROR("Unexpected Seek result");
                     }
                 }
 

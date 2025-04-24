@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
@@ -1245,8 +1246,8 @@ protected:
     }
 
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
-        if (Buckets.GetWeight()) {
-            return TOptimizationPriority::Critical(Buckets.GetWeight());
+        if (const auto weight = Buckets.GetWeight()) {
+            return TOptimizationPriority::Critical(weight);
         } else {
             return TOptimizationPriority::Zero();
         }
@@ -1264,7 +1265,7 @@ public:
         return Buckets.GetBucketPositions();
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
         : TBase(pathId)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)

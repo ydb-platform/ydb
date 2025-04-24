@@ -75,7 +75,7 @@ public:
     STATEFN(Serve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExec, Handle);
-            default: Y_ABORT("unexpected");
+            default: Y_ENSURE(false, "unexpected");
         }
     }
 };

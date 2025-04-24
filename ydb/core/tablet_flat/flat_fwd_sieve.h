@@ -57,7 +57,7 @@ namespace NFwd {
             const auto limit = Blobs ? Blobs->Total() : 0;
 
             for (ui64 seq = 0, off = 0; off <= Holes.size(); off++) {
-                Y_ABORT_UNLESS(off == Holes.size() || Holes.at(off).End <= limit);
+                Y_ENSURE(off == Holes.size() || Holes.at(off).End <= limit);
 
                 auto end = off < Holes.size() ? Holes[off].Begin : limit;
 

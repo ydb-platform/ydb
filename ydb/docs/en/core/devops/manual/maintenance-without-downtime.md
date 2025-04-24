@@ -20,7 +20,7 @@ A *maintenance task* is a set of *actions* that the user asks the CMS to perform
 
 Supported actions:
 
-- Acquiring an exclusive lock on a cluster component (node or host).
+- Acquiring an exclusive lock on a cluster component (node, host, or disk).
 
 Actions in a task are divided into groups. Actions from the same group are performed atomically. Currently, groups can consist of only one action.
 
@@ -76,7 +76,12 @@ To check if the actions of a maintenance task can be performed, the CMS sequenti
   - Whether it's possible to lock the State Storage ring of the node according to the availability mode.
   - Whether it's possible to lock the node according to the limit of unavailable nodes on which cluster system tablets can run.
 
-The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
+- If the action's object is a disk, the CMS checks:
+
+  - Whether there is a lock on the disk.
+  - Whether it's possible to lock all VDisks of the disk according to the availability mode.
+
+The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes, hosts, or disks. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
 
 ## Examples {#examples}
 

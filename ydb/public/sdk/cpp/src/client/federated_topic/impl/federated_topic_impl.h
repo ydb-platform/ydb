@@ -65,6 +65,8 @@ public:
     std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
+    NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllClusterInfo();
+
     std::shared_ptr<TFederatedDbObserver> GetObserver() {
         std::lock_guard guard(Lock);
         return Observer;

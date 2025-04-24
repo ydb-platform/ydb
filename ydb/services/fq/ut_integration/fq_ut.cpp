@@ -8,7 +8,7 @@
 #include <ydb/core/fq/libs/private_client/private_client.h>
 
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
-#include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 

@@ -33,11 +33,6 @@ namespace NWriter {
         {
         }
 
-        ~TBlocks()
-        {
-            Y_ABORT_UNLESS(!Writer.Grab(), "Block writer still has some blobs");
-        }
-
         explicit operator bool() const noexcept
         {
             return Writer || Result.RegularPages || Result.StickyPages;
@@ -54,7 +49,7 @@ namespace NWriter {
                 Result.PageCollection = MakeIntrusiveConst<NPageCollection::TPageCollection>(largeGlobId, std::move(meta));
             }
 
-            Y_ABORT_UNLESS(!Writer, "Block writer is not empty after Finish");
+            Y_ENSURE(!Writer, "Block writer is not empty after Finish");
 
             return std::exchange(Result, {});
         }

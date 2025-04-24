@@ -34,24 +34,24 @@ namespace NTable {
 
             TResult Locate(const TMemTable*, ui64, ui32) override
             {
-                Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+                Y_TABLET_ERROR("IPages::Locate(TMemTable*, ...) shouldn't be used here");
             }
 
             TResult Locate(const TPart*, ui64, ELargeObj) override
             {
-                Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
+                Y_TABLET_ERROR("IPages::Locate(TPart*, ...) shouldn't be used here");
             }
 
             void ProvidePart(const TPart* part)
             {
-                Y_ABORT_IF(Part);
+                Y_ENSURE(!Part);
                 Part = part;
             }
 
             const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
             {
-                Y_ABORT_UNLESS(part == Part, "Unsupported part");
-                Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
+                Y_ENSURE(part == Part, "Unsupported part");
+                Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
                 auto savedPage = SavedPages.find(pageId);
                 
@@ -75,7 +75,7 @@ namespace NTable {
 
             void EnsureNoNeedPages() const
             {
-                Y_ABORT_UNLESS(!NeedPages);
+                Y_ENSURE(!NeedPages);
             }
 
             TAutoPtr<NPageCollection::TFetch> GetFetch()
@@ -167,7 +167,7 @@ namespace NTable {
 
                 if (fetch) {
                     if (!fetch->Pages) {
-                        Y_Fail("TLoader is trying to fetch 0 pages");
+                        Y_TABLET_ERROR("TLoader is trying to fetch 0 pages");
                     }
                     return { fetch };
                 }
@@ -192,17 +192,17 @@ namespace NTable {
 
         TPartView Result()
         {
-            Y_ABORT_UNLESS(Stage == EStage::Result);
-            Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
-            Y_ABORT_UNLESS(PartView.Slices, "Missing slices in Result stage");
+            Y_ENSURE(Stage == EStage::Result);
+            Y_ENSURE(PartView, "Result may only be grabbed once");
+            Y_ENSURE(PartView.Slices, "Missing slices in Result stage");
             
             return std::move(PartView);
         }
 
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
-            Y_ABORT_UNLESS(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ABORT_UNLESS(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
 
             const auto &meta = pc.PageCollectionComponents[0].Packet->Meta;
 
@@ -212,13 +212,13 @@ namespace NTable {
                 {
                     TProtoBox<NProto::TRoot> root(meta.GetPageInplaceData(page));
 
-                    Y_ABORT_UNLESS(root.HasEpoch());
+                    Y_ENSURE(root.HasEpoch());
 
                     return TEpoch(root.GetEpoch());
                 }
             }
 
-            Y_ABORT("Cannot locate part metadata in page collections of PartComponents");
+            Y_TABLET_ERROR("Cannot locate part metadata in page collections of PartComponents");
         }
 
         static TLogoBlobID BlobsLabelFor(const TLogoBlobID &base) noexcept
@@ -246,8 +246,8 @@ namespace NTable {
         {
             TMemoryInput stream(plain.data(), plain.size());
             bool parsed = Root.ParseFromArcadiaStream(&stream);
-            Y_ABORT_UNLESS(parsed && stream.Skip(1) == 0, "Cannot parse TPart meta");
-            Y_ABORT_UNLESS(Root.HasEpoch(), "TPart meta has no epoch info");
+            Y_ENSURE(parsed && stream.Skip(1) == 0, "Cannot parse TPart meta");
+            Y_ENSURE(Root.HasEpoch(), "TPart meta has no epoch info");
         }
 
         void StageParseMeta();

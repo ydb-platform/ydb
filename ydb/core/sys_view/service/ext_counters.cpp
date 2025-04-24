@@ -170,7 +170,7 @@ private:
             }
             ui64 total = 0;
             for (ui32 n = 0; n < count; ++n) {
-                ui64 value = snapshot->Value(n);;
+                ui64 value = snapshot->Value(n);
                 ui64 diff = value - ExecuteLatencyMsPrevValues[n];
                 total += diff;
                 ExecuteLatencyMsValues[n] = diff;
@@ -182,7 +182,7 @@ private:
             }
             metrics->AddMetric("queries.requests", total);
             if (total != 0) {
-                metrics->AddHistogramMetric("queries.latencies", ExecuteLatencyMsValues, ExecuteLatencyMsBounds);
+                metrics->AddHistogramMetric("queries.latencies", ExecuteLatencyMsBounds, ExecuteLatencyMsValues);
             }
         }
         if (metrics->Record.MetricsSize() > 0) {

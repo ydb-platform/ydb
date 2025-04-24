@@ -41,18 +41,18 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsSchemeTx());
-    Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
+    Y_ENSURE(op->IsSchemeTx());
+    Y_ENSURE(!op->IsAborted() && !op->IsInterrupted());
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
     ui64 ssTabletId = tx->GetSchemeShardId();
 
     if (DataShard.GetCurrentSchemeShardId() == INVALID_TABLET_ID) {
         DataShard.PersistCurrentSchemeShardId(ssTabletId, txc);
     } else {
-        Y_ABORT_UNLESS(DataShard.GetCurrentSchemeShardId() == ssTabletId,
-                 "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId);
+        Y_ENSURE(DataShard.GetCurrentSchemeShardId() == ssTabletId,
+                 "Got scheme transaction from unknown SchemeShard " << ssTabletId);
     }
 
     if (ui64 subDomainPathId = tx->GetSubDomainPathId()) {

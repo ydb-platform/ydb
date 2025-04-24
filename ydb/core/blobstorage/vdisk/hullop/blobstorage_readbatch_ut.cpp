@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
         }
 
         TReallyFastRng32 rng(100500);
-        TCompactReadBatcher<TPayload> batcher(4 << 20, 4 << 20, 0.5);
+        TCompactReadBatcher<TPayload> batcher("", 4 << 20, 4 << 20, 0.5);
 
         // generate requests
         const ui32 numRequests = 10000;

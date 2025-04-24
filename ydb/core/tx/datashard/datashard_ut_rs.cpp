@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                         break;
                     }
                     NKikimrTx::TReadSetData genericData;
-                    Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Y_ENSURE(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;
                     UNIT_ASSERT(genericData.HasDecision());
                     UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                         break;
                     }
                     NKikimrTx::TReadSetData genericData;
-                    Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
+                    Y_ENSURE(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;
                     UNIT_ASSERT(genericData.HasDecision());
                     UNIT_ASSERT(genericData.GetDecision() == NKikimrTx::TReadSetData::DECISION_ABORT);

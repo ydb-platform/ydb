@@ -71,13 +71,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     }
 
     auto keySelectorLambda = sort.KeySelectorLambda();
-    // FIXME
-    auto cluster = TString{GetClusterName(sort.Input())};
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(sort.Input(), selectionMode);
 
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false, selectionMode)) {
+    if (!cluster || !IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -137,7 +136,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         sortInput = Build<TYtOutput>(ctx, node.Pos())
             .Operation<TYtMap>()
                 .World(world)
-                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                 .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, NPrivate::TConvertInputOpts().MakeUnordered(unordered)))
                 .Output()
                     .Add(mapOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -169,7 +168,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         sortInput = Build<TYtOutput>(ctx, node.Pos())
             .Operation<TYtMerge>()
                 .World(world)
-                .DataSink(NPrivate::GetDataSink(sort.Input(), ctx))
+                .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                 .Input(NPrivate::ConvertInputTable(sort.Input(), ctx, opts.MakeUnordered(unordered)))
                 .Output()
                     .Add(mergeOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -220,7 +219,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     auto res = canUseMerge ?
         TExprBase(Build<TYtMerge>(ctx, node.Pos())
             .World(world)
-            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.ClearUnordered()))
             .Output()
                 .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -235,7 +234,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
         .Done()):
         TExprBase(Build<TYtSort>(ctx, node.Pos())
             .World(world)
-            .DataSink(NPrivate::GetDataSink(sortInput, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(NPrivate::ConvertInputTable(sortInput, ctx, opts.MakeUnordered(unordered)))
             .Output()
                 .Add(sortOut.ToExprNode(ctx, node.Pos()).Cast<TYtOutTable>())
@@ -476,6 +475,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         return assume;
     }
 
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+
     auto sorted = assume.Ref().GetConstraint<TSortedConstraintNode>();
 
     auto maybeOp = input.Maybe<TYtOutput>().Operation();
@@ -560,7 +563,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             return Build<TYtOutput>(ctx, assume.Pos())
                 .Operation<TYtMerge>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(GetDataSink(input, ctx))
+                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, opts))
                     .Output()
                         .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
@@ -621,7 +624,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
             return Build<TYtOutput>(ctx, assume.Pos())
                 .Operation<TYtMap>()
                     .World(GetWorld(input, {}, ctx))
-                    .DataSink(GetDataSink(input, ctx))
+                    .DataSink(MakeDataSink(assume.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx))
                     .Output()
                         .Add(outTable.ToExprNode(ctx, assume.Pos()).Cast<TYtOutTable>())
@@ -671,7 +674,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         const size_t index = FromString(input.Cast<TYtOutput>().OutIndex().Value());
         TYtOutTableInfo outTable(op.Output().Item(index));
         if (builder) {
-            YQL_ENSURE(!builder->NeedMap());
+            YQL_ENSURE(!builder->NeedMap() || op.Maybe<TYtDqProcessWrite>());
             builder->FillRowSpecSort(*outTable.RowSpec);
         }
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());

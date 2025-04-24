@@ -12,6 +12,12 @@ namespace NYql {
 
 TExprNode::TPtr TAggregateExpander::ExpandAggregate() {
     YQL_CLOG(DEBUG, Core) << "Expand " << Node->Content();
+    if (Node->Head().GetTypeAnn()->HasErrors()) {
+        TErrorTypeVisitor errorVisitor(Ctx);
+        Node->Head().GetTypeAnn()->Accept(errorVisitor);
+        return nullptr;
+    }
+
     auto result = ExpandAggregateWithFullOutput();
     if (result) {
         auto outputColumns = GetSetting(*Node->Child(NNodes::TCoAggregate::idx_Settings), "output_columns");

@@ -1,11 +1,12 @@
 #pragma once
 
-#include "util_fmt_flat.h"
 #include "flat_util_misc.h"
 #include "logic_redo_eggs.h"
 #include "logic_redo_entry.h"
 #include "logic_redo_table.h"
 #include "flat_exec_commit.h"
+#include "util_fmt_abort.h"
+#include "util_fmt_flat.h"
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
 #include <ydb/core/util/queue_inplace.h>
@@ -47,7 +48,7 @@ namespace NRedo {
         void Push(TEntry *entry)
         {
             if (bool(entry->Embedded) == bool(entry->LargeGlobId)) {
-                Y_Fail(NFmt::Do(*entry) << " has incorrect payload");
+                Y_TABLET_ERROR(NFmt::Do(*entry) << " has incorrect payload");
             }
 
             Log->Push(entry);
@@ -60,7 +61,7 @@ namespace NRedo {
                 const auto *edge = Edges.FindPtr(table);
 
                 if (edge && edge->TxStamp >= entry->Stamp) {
-                    Y_Fail(
+                    Y_TABLET_ERROR(
                         "Entry " << NFmt::Do(*entry) << " queued below table"
                         << table << " edge " << NFmt::TStamp(edge->TxStamp));
                 } else if (auto *over = Overhead[table].Push(table, entry)) {
@@ -68,13 +69,14 @@ namespace NRedo {
                 }
             }
 
-            if (entry->References == 0)
-                Y_Fail(NFmt::Do(*entry) << " has no effects on data");
+            if (entry->References == 0) {
+                Y_TABLET_ERROR(NFmt::Do(*entry) << " has no effects on data");
+            }
         }
 
         void Cut(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc)
         {
-            Y_ABORT_UNLESS(edge.TxStamp != Max<ui64>(), "Undefined TxStamp of edge");
+            Y_ENSURE(edge.TxStamp != Max<ui64>(), "Undefined TxStamp of edge");
 
             auto &cur = Edges[table];
 
@@ -116,7 +118,7 @@ namespace NRedo {
 
                     Push(entry.Release());
                 } else {
-                    Y_ABORT_UNLESS(entry->References == 0);
+                    Y_ENSURE(entry->References == 0);
                 }
             }
         }

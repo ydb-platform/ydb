@@ -305,7 +305,9 @@ from_chars_float_advanced(UC const *first, UC const *last, T &value,
     return answer;
   }
   parsed_number_string_t<UC> pns =
-      parse_number_string<UC>(first, last, options);
+      uint64_t(fmt & detail::basic_json_fmt)
+          ? parse_number_string<true, UC>(first, last, options)
+          : parse_number_string<false, UC>(first, last, options);
   if (!pns.valid) {
     if (uint64_t(fmt & chars_format::no_infnan)) {
       answer.ec = std::errc::invalid_argument;

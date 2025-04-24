@@ -828,7 +828,7 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     const TEvWriteRow& ProcessRow(const TTableId& tableId, ui64 txId) {
         bool allTablesEmpty = std::all_of(begin(), end(), [](const auto& row) { return !bool(row.TableId); });
         auto row = std::find_if(begin(), end(), [tableId, allTablesEmpty](const auto& row) { return !row.IsUsed && (allTablesEmpty || row.TableId == tableId); });
-        Y_VERIFY_S(row != end(), "There should be at least one EvWrite row to process.");
+        Y_ENSURE(row != end(), "There should be at least one EvWrite row to process.");
 
         row->IsUsed = true;
         Cerr << "Processing EvWrite row " << txId << Endl;

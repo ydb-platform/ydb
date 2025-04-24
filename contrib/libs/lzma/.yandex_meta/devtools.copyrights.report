@@ -55,7 +55,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        COPYING [46:46]
+        COPYING [52:52]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8cf91579d8cb4087b6bd775cd2b2bbed
 BELONGS ya.make

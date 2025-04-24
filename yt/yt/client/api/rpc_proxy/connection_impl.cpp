@@ -1,10 +1,7 @@
 #include "connection_impl.h"
-#include "discovery_service_proxy.h"
 #include "connection_impl.h"
 #include "client_impl.h"
 #include "config.h"
-#include "helpers.h"
-#include "private.h"
 
 #include <yt/yt/core/net/local_address.h>
 #include <yt/yt/core/net/address.h>

@@ -79,4 +79,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    tools/combiner_perf/bin
 )

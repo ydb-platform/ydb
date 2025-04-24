@@ -23,7 +23,7 @@ class _ParseResultsWithOffset:
     tup: tuple[ParseResults, int]
     __slots__ = ["tup"]
 
-    def __init__(self, p1: ParseResults, p2: int):
+    def __init__(self, p1: ParseResults, p2: int) -> None:
         self.tup: tuple[ParseResults, int] = (p1, p2)
 
     def __getitem__(self, i):

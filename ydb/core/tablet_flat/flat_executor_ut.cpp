@@ -1,5 +1,6 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
@@ -174,7 +175,7 @@ namespace NTabletFlatExecutor {
         }
 
         const NTable::TSubset& Result() const {
-            Y_ABORT_UNLESS(Subset);
+            Y_ENSURE(Subset);
             return *Subset;
         }
 
@@ -220,8 +221,8 @@ namespace NTabletFlatExecutor {
             {
                 const ui32 table = Self->Tables.at(0);
                 Self->Subset = txc.DB.Subset(table, Self->Edge(table).Head, { }, { });
-                Y_ABORT_UNLESS(Self->Subset != nullptr);
-                Y_ABORT_UNLESS(Self->Subset->Frozen.empty());
+                Y_ENSURE(Self->Subset != nullptr);
+                Y_ENSURE(Self->Subset->Frozen.empty());
                 txc.Env.DropSnapshot(Self);
                 return true;
             }
@@ -309,7 +310,7 @@ private:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow &) override
     {
-        Y_ABORT_UNLESS(key[0].AsValue<ui64>() == ExpectedRowId);
+        Y_ENSURE(key[0].AsValue<ui64>() == ExpectedRowId);
         ++ExpectedRowId;
         ++StoredRows;
         return EScan::Feed;
@@ -322,18 +323,18 @@ private:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) override
     {
-        Y_ABORT_UNLESS((int)Abort == (int)abort);
+        Y_ENSURE((int)Abort == (int)abort);
 
         auto ctx = ActorContext();
         if (abort == EAbort::None) {
             if (ExpectedRows != StoredRows) {
                 Cerr << "Expected " << ExpectedRows << " rows but got " << StoredRows << Endl;
             }
-            Y_ABORT_UNLESS(ExpectedRows == StoredRows);
+            Y_ENSURE(ExpectedRows == StoredRows);
             if (ExpectedPageFaults != Max<ui64>() && ExpectedPageFaults != PageFaults) {
                 Cerr << "Expected " << ExpectedPageFaults << " page faults but got " << PageFaults << Endl;
             }
-            Y_ABORT_UNLESS(ExpectedPageFaults == Max<ui64>() || ExpectedPageFaults == PageFaults);
+            Y_ENSURE(ExpectedPageFaults == Max<ui64>() || ExpectedPageFaults == PageFaults);
         }
 
         Die(ctx);
@@ -481,7 +482,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Scan->ExpectedPageFaults = ev->Get()->ExpectedPageFaults;
         TScanOptions options;
         if (snap) {
-            Y_ABORT_UNLESS(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
+            Y_ENSURE(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
             options.SetSnapshotId(snap);
         } else if (!ev->Get()->ReadVersion.IsMax()) {
             options.SetSnapshotRowVersion(ev->Get()->ReadVersion);
@@ -702,7 +703,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reschedule) {
     class TTxRollbackOnReschedule : public ITransaction {
     public:
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            Y_ABORT_UNLESS(!Done);
+            Y_ENSURE(!Done);
 
             i64 keyId = 42;
 
@@ -717,7 +718,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reschedule) {
                 if (ready == NTable::EReady::Page) {
                     return false;
                 }
-                Y_ABORT_UNLESS(ready == NTable::EReady::Gone);
+                Y_ENSURE(ready == NTable::EReady::Gone);
             }
 
             TString valueText = "value";
@@ -736,7 +737,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reschedule) {
         }
 
         void Complete(const TActorContext& ctx) override {
-            Y_ABORT_UNLESS(Done);
+            Y_ENSURE(Done);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -1120,7 +1121,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
                         match = true;
                     }
                 } else {
-                    Y_ABORT_UNLESS(!event.TaskType);
+                    Y_ENSURE(!event.TaskType);
                     match = true;
                 }
             }
@@ -1894,15 +1895,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ColumnGroups) {
                 }
 
                 ui64 key = it->Row().Get(0).AsValue<ui64>();
-                Y_ABORT_UNLESS(key == next,
-                    "Found key %" PRIu64 ", expected %" PRIu64, key, next);
+                Y_ENSURE(key == next,
+                    "Found key " << key << ", expected " << next);
 
                 ++next;
                 last = key;
             }
 
-            Y_ABORT_UNLESS(last == ToKey,
-                "Last key %" PRIu64 ", expected %" PRIu64, last, ToKey);
+            Y_ENSURE(last == ToKey,
+                "Last key " << last << ", expected " << ToKey);
 
             return true;
         }
@@ -2069,12 +2070,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             for (keyId = 1000000; keyId < 1000512; ++keyId) {
                 NTable::TRowState row;
                 auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
-                Y_ABORT_UNLESS(ready == NTable::EReady::Data);
-                Y_ABORT_UNLESS(row.GetRowState() == NTable::ERowOp::Upsert);
+                Y_ENSURE(ready == NTable::EReady::Data);
+                Y_ENSURE(row.GetRowState() == NTable::ERowOp::Upsert);
                 TStringBuf selected = row.Get(0).AsBuf();
-                Y_ABORT_UNLESS(selected.size() == 1024);
+                Y_ENSURE(selected.size() == 1024);
                 TString expected(1024, (char)keyId);
-                Y_ABORT_UNLESS(selected == expected);
+                Y_ENSURE(selected == expected);
             }
 
             return true;
@@ -2294,13 +2295,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
                 const auto& row = it->Row();
 
                 i64 key = row.Get(0).AsValue<i64>();
-                Y_VERIFY_S(key == expectedKey,
+                Y_ENSURE(key == expectedKey,
                     "Found key " << key << ", expected " << expectedKey << " at snapshot " << Snapshot);
 
                 TStringBuf selected = row.Get(1).AsBuf();
-                Y_ABORT_UNLESS(selected.size() == 1024);
+                Y_ENSURE(selected.size() == 1024);
                 TString expected(1024, (char)key);
-                Y_ABORT_UNLESS(selected == expected);
+                Y_ENSURE(selected == expected);
 
                 Y_DEBUG_ABORT_UNLESS(rit != KeysRanges.end());
                 if (++expectedKey == rit->second) {
@@ -2308,7 +2309,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
                 }
             }
 
-            Y_VERIFY_S(expectedKey == -1,
+            Y_ENSURE(expectedKey == -1,
                 "Expected key " << expectedKey << " not found at snapshot " << Snapshot);
 
             return true;
@@ -2929,7 +2930,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
                 // Alter destination and stop keeping erase markers
                 {
                     TCompactionPolicy policy = *scheme.GetTableInfo(dst)->CompactionPolicy;
-                    Y_ABORT_UNLESS(policy.KeepEraseMarkers);
+                    Y_ENSURE(policy.KeepEraseMarkers);
                     policy.KeepEraseMarkers = false;
                     txc.DB.Alter().SetCompactionPolicy(dst, policy);
                 }
@@ -3470,13 +3471,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
 
         void ReadyForSecondAttach() {
-            Y_ABORT_UNLESS(State == EState::Idle);
-            Y_ABORT_UNLESS(SnapshotCommitResult);
+            Y_ENSURE(State == EState::Idle);
+            Y_ENSURE(SnapshotCommitResult);
             State = EState::WaitForSecondAttach;
         }
 
         void UnblockSnapshot(TTestActorRuntimeBase& runtime) {
-            Y_ABORT_UNLESS(SnapshotCommitResult);
+            Y_ENSURE(SnapshotCommitResult);
             runtime.Send(SnapshotCommitResult.Release(), 0, true);
         }
     };
@@ -3609,11 +3610,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
 
         EScan Seek(TLead&, ui64) override {
-            Y_ABORT("unreachable");
+            Y_TABLET_ERROR("unreachable");
         }
 
         EScan Feed(TArrayRef<const TCell>, const TRow&) override {
-            Y_ABORT("unreachable");
+            Y_TABLET_ERROR("unreachable");
         }
 
         TAutoPtr<IDestructable> Finish(EAbort) override {
@@ -4045,8 +4046,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto parts = txc.DB.GetTableParts(TRowsModel::TableId);
             auto coldParts = txc.DB.GetTableColdParts(TRowsModel::TableId);
-            Y_ABORT_UNLESS(parts.empty());
-            Y_ABORT_UNLESS(!coldParts.empty());
+            Y_ENSURE(parts.empty());
+            Y_ENSURE(!coldParts.empty());
             return true;
         }
 
@@ -4058,7 +4059,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
     struct TTxCheckNoColdParts : public ITransaction {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto coldParts = txc.DB.GetTableColdParts(TRowsModel::TableId);
-            Y_ABORT_UNLESS(coldParts.empty());
+            Y_ENSURE(coldParts.empty());
             return true;
         }
 
@@ -5438,13 +5439,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_SnapshotWithCommits) {
             for (keyId = 1; keyId <= 104; ++keyId) {
                 NTable::TRowState row;
                 auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
-                if (ready == NTable::EReady::Page)
+                if (ready == NTable::EReady::Page) {
                     return false;
-                Y_VERIFY_S(ready == NTable::EReady::Data, "Failed to find key " << keyId);
-                Y_ABORT_UNLESS(row.GetRowState() == NTable::ERowOp::Upsert);
+                }
+                Y_ENSURE(ready == NTable::EReady::Data, "Failed to find key " << keyId);
+                Y_ENSURE(row.GetRowState() == NTable::ERowOp::Upsert);
                 TStringBuf selected = row.Get(0).AsBuf();
                 TString expected = "value";
-                Y_ABORT_UNLESS(selected == expected);
+                Y_ENSURE(selected == expected);
             }
 
             return true;
@@ -7207,32 +7209,32 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
         env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
                 id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
-                Y_ABORT_UNLESS(tx1.Executed == 0);
+                Y_ENSURE(tx1.Executed == 0);
                 id2 = x->Enqueue(new TSimpleTx(tx2));
-                Y_ABORT_UNLESS(tx2.Executed == 0);
+                Y_ENSURE(tx2.Executed == 0);
                 id3 = x->Enqueue(new TSimpleTx(tx3));
-                Y_ABORT_UNLESS(tx3.Executed == 0);
+                Y_ENSURE(tx3.Executed == 0);
                 // Validate this new mailbox event is handled after tx3 is executed and destroyed, i.e. it's high priority
                 ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
-                    Y_ABORT_UNLESS(tx3.Executed == 1);
-                    Y_ABORT_UNLESS(tx3.Destroyed == 1);
+                    Y_ENSURE(tx3.Executed == 1);
+                    Y_ENSURE(tx3.Destroyed == 1);
                 }});
             }});
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto&) {
-                Y_ABORT_UNLESS(id1 != 0);
-                Y_ABORT_UNLESS(tx1.Executed == 0);
-                Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                Y_ENSURE(id1 != 0);
+                Y_ENSURE(tx1.Executed == 0);
+                Y_ENSURE(tx1.Destroyed == 0);
                 bool ok = x->CancelTransaction(id1);
-                Y_ABORT_UNLESS(ok);
-                Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                Y_ENSURE(ok);
+                Y_ENSURE(tx1.Destroyed == 1);
             }});
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto&) {
-                Y_ABORT_UNLESS(id2 != 0);
-                Y_ABORT_UNLESS(tx2.Executed == 0);
-                Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                Y_ENSURE(id2 != 0);
+                Y_ENSURE(tx2.Executed == 0);
+                Y_ENSURE(tx2.Destroyed == 0);
                 bool ok = x->CancelTransaction(id2);
-                Y_ABORT_UNLESS(ok);
-                Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                Y_ENSURE(ok);
+                Y_ENSURE(tx2.Destroyed == 1);
             }});
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
                 ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
@@ -7253,19 +7255,19 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
         env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
                 id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
-                Y_ABORT_UNLESS(tx1.Executed == 0);
+                Y_ENSURE(tx1.Executed == 0);
                 id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
-                Y_ABORT_UNLESS(tx2.Executed == 0);
+                Y_ENSURE(tx2.Executed == 0);
                 ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
-                    Y_ABORT_UNLESS(tx1.Executed == 1);
-                    Y_ABORT_UNLESS(tx1.Completed == 1);
-                    Y_ABORT_UNLESS(tx1.Destroyed == 1);
-                    Y_ABORT_UNLESS(tx2.Executed == 0);
-                    Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                    Y_ENSURE(tx1.Executed == 1);
+                    Y_ENSURE(tx1.Completed == 1);
+                    Y_ENSURE(tx1.Destroyed == 1);
+                    Y_ENSURE(tx2.Executed == 0);
+                    Y_ENSURE(tx2.Destroyed == 0);
                     ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
-                        Y_ABORT_UNLESS(tx2.Executed == 1);
-                        Y_ABORT_UNLESS(tx2.Completed == 1);
-                        Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                        Y_ENSURE(tx2.Executed == 1);
+                        Y_ENSURE(tx2.Completed == 1);
+                        Y_ENSURE(tx2.Destroyed == 1);
                         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
                     }});
                 }});
@@ -7284,35 +7286,35 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
         env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
                 id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
-                Y_ABORT_UNLESS(tx1.Executed == 0);
+                Y_ENSURE(tx1.Executed == 0);
                 id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
-                Y_ABORT_UNLESS(tx2.Executed == 0);
+                Y_ENSURE(tx2.Executed == 0);
                 // The next new mailbox event is supposed to execute after tx1 is executed, but before tx2
                 ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
-                    Y_ABORT_UNLESS(tx1.Executed == 1);
-                    Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                    Y_ENSURE(tx1.Executed == 1);
+                    Y_ENSURE(tx1.Destroyed == 1);
                     bool ok1 = x->CancelTransaction(id1);
-                    Y_ABORT_UNLESS(!ok1); // cannot cancel executed transaction
-                    Y_ABORT_UNLESS(tx2.Executed == 0);
-                    Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                    Y_ENSURE(!ok1); // cannot cancel executed transaction
+                    Y_ENSURE(tx2.Executed == 0);
+                    Y_ENSURE(tx2.Destroyed == 0);
                     bool ok2 = x->CancelTransaction(id2);
-                    Y_ABORT_UNLESS(ok2);
-                    Y_ABORT_UNLESS(tx2.Executed == 0);
-                    Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                    Y_ENSURE(ok2);
+                    Y_ENSURE(tx2.Executed == 0);
+                    Y_ENSURE(tx2.Destroyed == 1);
                     ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
                         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
                     }});
                 }});
             }});
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
-                Y_ABORT_UNLESS(id1 != 0);
-                Y_ABORT_UNLESS(tx1.Executed == 0);
-                Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                Y_ENSURE(id1 != 0);
+                Y_ENSURE(tx1.Executed == 0);
+                Y_ENSURE(tx1.Destroyed == 0);
             }});
             ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
-                Y_ABORT_UNLESS(id2 != 0);
-                Y_ABORT_UNLESS(tx2.Executed == 0);
-                Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                Y_ENSURE(id2 != 0);
+                Y_ENSURE(tx2.Executed == 0);
+                Y_ENSURE(tx2.Destroyed == 0);
             }});
         }});
     }
@@ -7330,22 +7332,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
                 id1 = x->EnqueueLowPriority(new TAllocatingTx(tx1));
                 id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
                 ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
-                    Y_ABORT_UNLESS(tx1.Executed == 1);
-                    Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                    Y_ENSURE(tx1.Executed == 1);
+                    Y_ENSURE(tx1.Destroyed == 0);
                     bool ok = x->CancelTransaction(id1);
-                    Y_ABORT_UNLESS(ok);
+                    Y_ENSURE(ok);
                     // Transaction is requesting more memory and cannot be destroyed
-                    Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                    Y_ENSURE(tx1.Destroyed == 0);
                     ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
-                        Y_ABORT_UNLESS(tx2.Executed == 1);
-                        Y_ABORT_UNLESS(tx2.Completed == 1);
-                        Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                        Y_ENSURE(tx2.Executed == 1);
+                        Y_ENSURE(tx2.Completed == 1);
+                        Y_ENSURE(tx2.Destroyed == 1);
                     }});
                     ctx.Schedule(TDuration::MilliSeconds(1), new NFake::TEvExecute{[&](auto*, const auto& ctx) {
                         // We should observe tx1 destroyed eventually, not executing again
-                        Y_ABORT_UNLESS(tx1.Executed == 1);
-                        Y_ABORT_UNLESS(tx1.Completed == 0);
-                        Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                        Y_ENSURE(tx1.Executed == 1);
+                        Y_ENSURE(tx1.Completed == 0);
+                        Y_ENSURE(tx1.Destroyed == 1);
                         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
                     }});
                 }});

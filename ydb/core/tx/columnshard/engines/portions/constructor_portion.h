@@ -3,6 +3,7 @@
 #include "portion_info.h"
 
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -15,7 +16,7 @@ class TPortionAccessorConstructor;
 class TPortionInfoConstructor {
 private:
     bool Constructed = false;
-    YDB_ACCESSOR(ui64, PathId, 0);
+    YDB_ACCESSOR_DEF(TInternalPathId, PathId);
     std::optional<ui64> PortionId;
 
     TPortionMetaConstructor MetaConstructor;
@@ -105,14 +106,14 @@ public:
         return !!RemoveSnapshot;
     }
 
-    TPortionInfoConstructor(const ui64 pathId, const ui64 portionId)
+    TPortionInfoConstructor(const TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
     }
 
-    TPortionInfoConstructor(const ui64 pathId)
+    TPortionInfoConstructor(const TInternalPathId pathId)
         : PathId(pathId) {
         AFL_VERIFY(PathId);
     }

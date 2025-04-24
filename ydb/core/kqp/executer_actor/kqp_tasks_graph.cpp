@@ -148,14 +148,17 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     YQL_ENSURE(sink.GetOutputIndex() == 0);
                     YQL_ENSURE(stage.SinksSize() == 1);
-                    meta.TableId = MakeTableId(settings.GetTable());
                     meta.TablePath = settings.GetTable().GetPath();
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                         meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
                     } else {
                         meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
                     }
-                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                    if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                        meta.TableId = MakeTableId(settings.GetTable());
+                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                    }
                 }
             }
 
@@ -545,7 +548,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             columnShardHashV1Params.SourceTableKeyColumnTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
             for (const auto& keyColumnType: columnShardHashV1.GetKeyColumnTypes()) {
                 auto typeId = static_cast<NScheme::TTypeId>(keyColumnType);
-                auto typeInfo = NScheme::TTypeInfo{typeId};
+                auto typeInfo =
+                    typeId == NScheme::NTypeIds::Decimal? NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType::Default()): NScheme::TTypeInfo(typeId);
                 columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(typeInfo);
             }
             break;
@@ -983,7 +987,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                     protoColumn->SetName(column.Name);
                 }
                 protoReadMeta->SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-                protoReadMeta->SetReverse(task.Meta.ReadInfo.Reverse);
+                protoReadMeta->SetReverse(task.Meta.ReadInfo.IsReverse());
             }
         }
         if (task.Meta.Writes) {
@@ -1054,7 +1058,8 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         YQL_ENSURE(!task.Meta.Writes);
 
         if (!task.Meta.Reads->empty()) {
-            protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
+            protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
+            protoTaskMeta.SetOptionalSorting((ui32)task.Meta.ReadInfo.GetSorting());
             protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
             if (task.Meta.HasEnableShardsSequentialScan()) {
                 protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());

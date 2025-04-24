@@ -41,7 +41,7 @@ namespace NBoot {
         TCookie(EType type, EIdx index, ui32 sub)
             : Raw((ui32(type) << OffType) | (ui32(index) << OffIdx) | sub)
         {
-            Y_ABORT_UNLESS(sub <= MaskSub, "TCookue sub value is out of capacity");
+            Y_ENSURE(sub <= MaskSub, "TCookue sub value is out of capacity");
         }
 
         EType Type() const { return EType((Raw & MaskType) >> OffType); }

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "util/string/builder.h"
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
 #include <util/system/yassert.h>
 #include <util/stream/output.h>
 
@@ -13,7 +14,7 @@ namespace NTest {
     public:
         TImpl& To(size_t seq)
         {
-            Y_ABORT_UNLESS(seq >= Seq, "Invalid sequence flow");
+            Y_ENSURE(seq >= Seq, "Invalid sequence flow");
 
             Seq = seq;
 

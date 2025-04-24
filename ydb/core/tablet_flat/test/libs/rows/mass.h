@@ -5,6 +5,7 @@
 
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
 #include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/random/mersenne.h>
 
@@ -67,7 +68,7 @@ namespace NTest {
             auto it = Model->Base(row);
 
             if (it > Saved.Size()) {
-                Y_ABORT("Last saved TMass row slot is out of store range");
+                Y_TABLET_ERROR("Last saved TMass row slot is out of store range");
             } else if (next) {
                 return it >= Saved.Size() ? nullptr : &Saved[it];
             } else if (hole) {

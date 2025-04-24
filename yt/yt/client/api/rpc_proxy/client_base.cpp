@@ -254,7 +254,7 @@ TFuture<TYsonString> TClientBase::GetNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
@@ -290,7 +290,7 @@ TFuture<TYsonString> TClientBase::ListNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);

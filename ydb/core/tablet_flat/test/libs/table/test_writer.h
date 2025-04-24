@@ -13,6 +13,7 @@
 #include <ydb/core/tablet_flat/flat_part_iface.h>
 #include <ydb/core/tablet_flat/flat_part_scheme.h>
 #include <ydb/core/tablet_flat/flat_part_writer.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 
 #include <util/generic/cast.h>
@@ -37,7 +38,7 @@ namespace NTest {
             using NPage::TExtBlobs;
             using NPage::TBloom;
 
-            Y_ABORT_UNLESS(Store, "Cannot load from an empty store");
+            Y_ENSURE(Store, "Cannot load from an empty store");
 
             if (Store->PageCollectionPagesCount(0 /* primary room */) == 0) {
                 return nullptr;
@@ -47,7 +48,7 @@ namespace NTest {
 
             if (auto *raw = Store->GetMeta()) {
                 TMemoryInput stream(raw->data(), raw->size());
-                Y_ABORT_UNLESS(root.ParseFromArcadiaStream(&stream));
+                Y_ENSURE(root.ParseFromArcadiaStream(&stream));
             } else {
                 root.SetEpoch(0); /* for loading from abi blobs */
             }
@@ -185,8 +186,8 @@ namespace NTest {
 
         TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWriteStats &written)
         {
-            Y_ABORT_UNLESS(!Store, "Writer has not been flushed");
-            Y_ABORT_UNLESS(written.Parts == Parts.size());
+            Y_ENSURE(!Store, "Writer has not been flushed");
+            Y_ENSURE(written.Parts == Parts.size());
 
             return
                 { new TWriteStats(written), std::move(scheme), std::move(Parts) };
@@ -221,7 +222,7 @@ namespace NTest {
 
         void Finish(TString overlay) override
         {
-            Y_ABORT_UNLESS(Store, "Finish called without any writes");
+            Y_ENSURE(Store, "Finish called without any writes");
 
             Growth->Unwrap();
             Store->Finish();
@@ -292,7 +293,7 @@ namespace NTest {
             if (const auto *written = eggs.Written.Get()) {
                 mass.Model->Check({ &written->Rows, 1 });
             } else {
-                Y_ABORT("Got part eggs without TWriteStats result");
+                Y_TABLET_ERROR("Got part eggs without TWriteStats result");
             }
 
             return eggs;
@@ -381,7 +382,7 @@ namespace NTest {
             }
 
             if (NextTxId != 0) {
-                Y_ABORT_UNLESS(CurrentVersions == 0, "Cannot write deltas after committed versions");
+                Y_ENSURE(CurrentVersions == 0, "Cannot write deltas after committed versions");
                 Writer->AddKeyDelta(row, NextTxId);
                 ++CurrentDeltas;
             } else {

@@ -270,7 +270,7 @@ public:
 
     void SetCompletionAction(TCompletionAction *completionAction) {
         AtomicSet(CompletionActionPtr, (TAtomicBase)completionAction);
-        Y_ABORT_UNLESS(AtomicGet(PartsPending) > 0);
+        Y_VERIFY(AtomicGet(PartsPending) > 0);
     }
 
     void Ref() {

@@ -3,6 +3,7 @@
 #include "flat_sausage_meta.h"
 #include "flat_sausage_solid.h"
 #include "flat_sausage_gut.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NPageCollection {
@@ -15,8 +16,9 @@ namespace NPageCollection {
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)
         {
-            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup)
-                Y_ABORT("Invalid TLargeGlobId of page collection meta blob");
+            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
+                Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
+            }
         }
 
         const TLogoBlobID& Label() const noexcept override

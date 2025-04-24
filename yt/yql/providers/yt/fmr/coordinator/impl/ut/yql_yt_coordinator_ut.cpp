@@ -46,7 +46,7 @@ private:
 
 TDownloadOperationParams downloadOperationParams{
     .Input = TYtTableRef{"Path","Cluster"},
-    .Output = TFmrTableRef{"TableId"}
+    .Output = TFmrTableRef{{"TestCluster", "TestPath"}}
 };
 
 TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
@@ -54,7 +54,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
         .TaskType = taskType,
         .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+        .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
 }
 
@@ -67,7 +67,7 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
             .TaskType = taskType,
             .OperationParams = operationParams,
             .IdempotencyKey = "IdempotencyKey_" + ToString(i),
-            .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn", .Token = "token"}
+            .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
         };
     }
     return startOperationRequests;
@@ -172,7 +172,10 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{});
+        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{
+            {{"Cluster", "Path"}},
+            {}
+        });
         auto uploadOperationResponse = coordinator->StartOperation(uploadOperationRequest).GetValueSync();
         auto uploadOperationId = uploadOperationResponse.OperationId;
 
@@ -231,8 +234,8 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::InProgress);
     }
     Y_UNIT_TEST(RetryRunningOperationAfterIdempotencyKeyClear) {
-        TFmrCoordinatorSettings coordinatorSettings{
-            .WorkersNum = 1, .RandomProvider = CreateDeterministicRandomProvider(2), .IdempotencyKeyStoreTime = TDuration::Seconds(1)};
+        auto coordinatorSettings = TFmrCoordinatorSettings();
+        coordinatorSettings.IdempotencyKeyStoreTime = TDuration::Seconds(1);
         auto coordinator = MakeFmrCoordinator(coordinatorSettings);
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = defaultTaskFunction};
@@ -314,7 +317,8 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Failed);
         UNIT_ASSERT(errorMessages.size() == 1);
         auto& error = errorMessages[0];
-        UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Function crashed");
+        TString expectedErrorMessage = "Function crashed";
+        UNIT_ASSERT(error.ErrorMessage.Contains(expectedErrorMessage));
         UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Job);
     }
 

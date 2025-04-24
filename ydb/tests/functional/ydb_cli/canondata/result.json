@@ -611,6 +611,9 @@
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv_sql_/result.output"
     },
+    "test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax/result.output"
+    },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/result.output"
     },

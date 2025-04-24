@@ -617,6 +617,10 @@ TOwnedCellVecBatch::TOwnedCellVecBatch()
     : Pool(std::make_unique<TMemoryPool>(InitialPoolSize)) {
 }
 
+TOwnedCellVecBatch::TOwnedCellVecBatch(std::unique_ptr<TMemoryPool> pool)
+    : Pool(std::move(pool)) {
+}
+
 size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
     size_t cellsSize = cells.size();
     if (cellsSize == 0) {

@@ -42,15 +42,17 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TSyncFullRecoverState {
     public:
-        TSyncFullRecoverState(const TVDiskIdShort &self,
+        TSyncFullRecoverState(const TString& logPrefix,
+                              const TVDiskIdShort &self,
                               const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top)
-            : Neighbors(self, top)
+            : VDiskLogPrefix(logPrefix)
+            , Neighbors(self, top)
             , QuorumTracker(self, top, false)
             , Sublog(false, self.ToString() + ": ")
         {}
 
         void FullSyncedWithPeer(const TVDiskIdShort &vdisk) {
-            Y_ABORT_UNLESS(Neighbors[vdisk].VDiskIdShort == vdisk);
+            Y_VERIFY_S(Neighbors[vdisk].VDiskIdShort == vdisk, VDiskLogPrefix);
 
             Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString() << " full synced";
 
@@ -79,6 +81,7 @@ namespace NKikimr {
         }
 
     private:
+        const TString VDiskLogPrefix;
         NSync::TVDiskNeighbors<TPeerState> Neighbors;
         NSync::TQuorumTracker QuorumTracker;
         TSublog<> Sublog;
@@ -118,8 +121,9 @@ namespace NKikimr {
         // UTILITIES
         ////////////////////////////////////////////////////////////////////////
         void StopAllRunningProxy(const TActorContext &ctx) {
-            auto stopFunc = [&ctx] (TVDiskInfo<TPeerState>& x) {
-                Y_ABORT_UNLESS(x.Get().ProxyId);
+            const TString& logPrefix = SyncerCtx->VCtx->VDiskLogPrefix;
+            auto stopFunc = [&ctx, &logPrefix] (TVDiskInfo<TPeerState>& x) {
+                Y_VERIFY_S(x.Get().ProxyId, logPrefix);
                 ctx.Send(x.Get().ProxyId, new NActors::TEvents::TEvPoisonPill());
             };
             State.NotifyAliveProxies(stopFunc);
@@ -255,8 +259,9 @@ namespace NKikimr {
             // recreate JobCtx
             JobCtx = TSjCtx::Create(SyncerCtx, GInfo);
             // reconfigure alive proxies
-            auto reconfigureFunc = [&ctx, &msg] (TVDiskInfo<TPeerState>& x) {
-                Y_ABORT_UNLESS(x.Get().ProxyId);
+            const TString& logPrefix = SyncerCtx->VCtx->VDiskLogPrefix;
+            auto reconfigureFunc = [&ctx, &msg, &logPrefix] (TVDiskInfo<TPeerState>& x) {
+                Y_VERIFY_S(x.Get().ProxyId, logPrefix);
                 ctx.Send(x.Get().ProxyId, msg->Clone());
             };
             State.NotifyAliveProxies(reconfigureFunc);
@@ -275,7 +280,7 @@ namespace NKikimr {
             : TActorBootstrapped<TSyncerRecoverLostDataActor>()
             , SyncerCtx(sc)
             , GInfo(info)
-            , State(SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top)
+            , State(SyncerCtx->VCtx->VDiskLogPrefix, SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top)
             , CommitterId(committerId)
             , NotifyId(notifyId)
             , Guid(guid)

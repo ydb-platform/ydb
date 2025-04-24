@@ -38,7 +38,7 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
-    MOCK_METHOD(std::optional<std::string>, GetClusterName, (bool fetchIfNull), (override));
+    MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,
@@ -378,6 +378,11 @@ public:
         const TTransactionAttachOptions& options),
         (override));
 
+    MOCK_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
         const TMountTableOptions& options),
@@ -514,6 +519,11 @@ public:
     MOCK_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (
         const std::vector<NYPath::TRichYPath>& paths,
         const TPartitionTablesOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& partition,
+        const TReadTablePartitionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, TruncateJournal, (
@@ -847,6 +857,13 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (

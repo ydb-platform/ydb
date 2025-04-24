@@ -176,6 +176,12 @@ namespace NActors {
         Y_ABORT_UNLESS(success);
     }
 
+    static void CheckEventMemory(const TIntrusivePtr<TEventSerializedData>& buffer) {
+        for (auto iter = buffer->GetBeginIter(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+            NSan::CheckMemIsInitialized(iter.ContiguousData(), iter.ContiguousSize());
+        }
+    }
+
     template <TActorSystem::TEPSendFunction EPSpecificSend>
     bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
         if (Y_UNLIKELY(!ev))
@@ -195,10 +201,11 @@ namespace NActors {
             if (ev->HasEvent()) {
                 CheckEventMemory(ev->GetBase());
             }
-            Y_ABORT_UNLESS(ev->Recipient == recipient,
-                "Event rewrite from %s to %s would be lost via interconnect",
-                ev->Recipient.ToString().c_str(),
-                recipient.ToString().c_str());
+            if (ev->HasBuffer()) {
+                CheckEventMemory(ev->GetChainBuffer());
+            }
+            Y_ENSURE(ev->Recipient == recipient,
+                "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
             ev->Rewrite(TEvInterconnect::EvForward, recipient);
         }

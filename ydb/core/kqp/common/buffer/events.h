@@ -11,9 +11,7 @@ namespace NKqp {
 
 struct TEvKqpBuffer {
 
-struct TEvPrepare : public TEventLocal<TEvPrepare, TKqpBufferWriterEvents::EvPrepare> {
-    TActorId ExecuterActorId;
-};
+// To BufferActor
 
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
@@ -28,6 +26,11 @@ struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> 
     TActorId ExecuterActorId;
 };
 
+struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::EvTerminate> {
+};
+
+// From BufferActor
+
 struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
     TEvResult() = default;
     TEvResult(NYql::NDqProto::TDqTaskStats&& stats) : Stats(std::move(stats)) {}
@@ -40,9 +43,6 @@ struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> 
     NYql::TIssues Issues;
 
     TEvError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues);
-};
-
-struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::EvTerminate> {
 };
 
 };

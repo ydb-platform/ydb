@@ -21,11 +21,6 @@ class FunctionalTestBase:
         if memory_controller_config:
             config_generator.yaml_config["memory_controller_config"] = memory_controller_config
 
-        config_generator.yaml_config['actor_system_config'] = {
-            'use_auto_config': True,
-            'cpu_count': 16
-        }
-
         cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
@@ -44,6 +39,21 @@ class FunctionalTestBase:
         )
         cls.cluster.register_and_start_slots(db, count=YdbCluster.get_dyn_nodes_count())
         cls.cluster.wait_tenant_up(db)
+
+    def setup_method(self, method):
+        for node in self.cluster.nodes.values():
+            node.start()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        self.cluster.wait_tenant_up(f'/{YdbCluster.ydb_database}')
+
+    def teardown_method(self, method):
+        for node in self.cluster.nodes.values():
+            if not node.is_alive():
+                node.stop()
+        for slot in self.cluster.slots.values():
+            if not slot.is_alive():
+                slot.stop()
 
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:

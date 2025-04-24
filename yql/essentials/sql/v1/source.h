@@ -105,7 +105,7 @@ namespace NSQLTranslationV1 {
         virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
 
         virtual bool InitFilters(TContext& ctx);
-        void AddDependentSource(ISource* usedSource);
+        void AddDependentSource(TSourcePtr usedSource);
         bool IsAlias(EExprSeat exprSeat, const TString& label) const;
         bool IsExprAlias(const TString& label) const;
         bool IsExprSeat(EExprSeat exprSeat, EExprType type = EExprType::WithExpression) const;
@@ -144,7 +144,7 @@ namespace NSQLTranslationV1 {
         TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
         TNodePtr SessionWindow;
         TNodePtr HoppingWindow;
-        TVector<ISource*> UsedSources;
+        TVector<TSourcePtr> UsedSources;
         TString FlattenMode;
         bool FlattenColumns = false;
         THashMap<TString, ui32> GenIndexes;
@@ -318,7 +318,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped);
-    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
+    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped);
     TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped);
     TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});

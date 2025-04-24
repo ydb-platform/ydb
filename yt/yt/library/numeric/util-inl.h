@@ -45,7 +45,7 @@ TInt Midpoint(TInt a, TInt b) noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs)
+Y_FORCE_INLINE i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs) noexcept
 {
     if (lhs == 0 || rhs == 0) {
         return 0;
@@ -71,7 +71,7 @@ Y_FORCE_INLINE i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs)
     }
 }
 
-Y_FORCE_INLINE i64 UnsignedSaturationArithmeticMultiply(i64 lhs, i64 rhs, i64 max)
+Y_FORCE_INLINE i64 UnsignedSaturationArithmeticMultiply(i64 lhs, i64 rhs, i64 max) noexcept
 {
     i64 result;
     if (__builtin_mul_overflow(lhs, rhs, &result) || result > max) {
@@ -81,7 +81,7 @@ Y_FORCE_INLINE i64 UnsignedSaturationArithmeticMultiply(i64 lhs, i64 rhs, i64 ma
     }
 }
 
-Y_FORCE_INLINE i64 SignedSaturationArithmeticAdd(i64 lhs, i64 rhs)
+Y_FORCE_INLINE i64 SignedSaturationArithmeticAdd(i64 lhs, i64 rhs) noexcept
 {
     // NB: If operands have different signs, no overflow is possible.
     i64 sign = 1;
@@ -101,7 +101,7 @@ Y_FORCE_INLINE i64 SignedSaturationArithmeticAdd(i64 lhs, i64 rhs)
     }
 }
 
-Y_FORCE_INLINE i64 UnsignedSaturationArithmeticAdd(i64 lhs, i64 rhs, i64 max)
+Y_FORCE_INLINE i64 UnsignedSaturationArithmeticAdd(i64 lhs, i64 rhs, i64 max) noexcept
 {
     i64 result;
     if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
@@ -109,6 +109,21 @@ Y_FORCE_INLINE i64 UnsignedSaturationArithmeticAdd(i64 lhs, i64 rhs, i64 max)
     } else {
         return result;
     }
+}
+
+Y_FORCE_INLINE i64 SignedSaturationConversion(double value) noexcept
+{
+    // 2^63 is exactly represented as double.
+    static_assert(std::numeric_limits<i64>::max() == static_cast<ui64>(static_cast<double>(1ull << 63)) - 1ull);
+    if (value >= static_cast<double>(1ull << 63)) {
+        return std::numeric_limits<i64>::max();
+    }
+    // -2^63 is also exactly represented as double.
+    static_assert(std::numeric_limits<i64>::min() == static_cast<i64>(-static_cast<double>(1ull << 63)));
+    if (value < static_cast<double>(std::numeric_limits<i64>::min())) {
+        return std::numeric_limits<i64>::min();
+    }
+    return static_cast<i64>(value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

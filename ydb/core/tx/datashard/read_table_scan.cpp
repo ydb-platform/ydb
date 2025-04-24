@@ -474,7 +474,7 @@ private:
 
     void Handle(TEvTxProcessing::TEvStreamDataAck::TPtr &, const TActorContext &ctx)
     {
-        Y_ABORT_UNLESS(PendingAcks);
+        Y_ENSURE(PendingAcks);
         --PendingAcks;
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,

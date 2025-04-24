@@ -151,4 +151,66 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(0), msg.GetPayloadId(0));
         UNIT_ASSERT_VALUES_EQUAL(record.GetPayloadId(1), msg.GetPayloadId(1));
     }
+
+    Y_UNIT_TEST(MalformedEventType) {
+        // First, verify the happy path
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(), 0);
+            UNIT_ASSERT(ev->Get<TEvMessageWithPayload>() != nullptr);
+        }
+        // Next, verify the type mismatch
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvArenaMessage, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(MalformedEventData) {
+        auto ev = MakeHolder<IEventHandle>(
+            EvMessageWithPayload, 0, TActorId(), TActorId(),
+            MakeIntrusive<TEventSerializedData>(TString("\xff", 1), TEventSerializationInfo{}), 0);
+        UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+    }
+
+    Y_UNIT_TEST(MalformedEventPayload) {
+        // Invalid marker
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(TString("\xff", 1), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+        // Valid marker, missing payload count
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(TString("\x07", 1), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+        // Valid marker, one payload, missing payload length
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(TString("\x07\x01", 2), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+        // Valid marker, one payload, valid length, not enough data
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(TString("\x07\x01\x02\x00", 4), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+        // Valid marker, one payload, valid length, enough data, message malformed
+        {
+            auto ev = MakeHolder<IEventHandle>(
+                EvMessageWithPayload, 0, TActorId(), TActorId(),
+                MakeIntrusive<TEventSerializedData>(TString("\x07\x01\x02\x00\x00\xff", 6), TEventSerializationInfo{.IsExtendedFormat = true}), 0);
+            UNIT_ASSERT_EXCEPTION(ev->Get<TEvMessageWithPayload>(), yexception);
+        }
+    }
 }

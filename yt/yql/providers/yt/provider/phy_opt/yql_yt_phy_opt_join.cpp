@@ -49,8 +49,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             }
         } else {
             hasYtInput = true;
-            auto cluster = ToString(GetClusterName(list));
-            if (!UpdateUsedCluster(inputClusters[i], cluster, selectionMode)) {
+            auto cluster = DeriveClusterFromInput(list, selectionMode);
+            if (!cluster || !UpdateUsedCluster(inputClusters[i], *cluster, selectionMode)) {
                 return node;
             }
         }

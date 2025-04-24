@@ -30,6 +30,7 @@ class AbstractKiKiMRTest(object):
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
+                                             simple_config=True,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -77,6 +78,7 @@ class TestGenerateDynamicConfigFromConfigDir(AbstractKiKiMRTest):
             use_in_memory_pdisks=False,
             use_config_store=True,
             separate_node_configs=True,
+            simple_config=True,
         )
 
         cls.cluster = KiKiMR(configurator=configurator)

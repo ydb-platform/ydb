@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util_fmt_abort.h"
+
 #include <util/system/yassert.h>
 #include <util/generic/ylimits.h>
 
@@ -48,8 +50,7 @@ namespace NBoot {
         TLeft& operator +=(size_t inc)
         {
             if (Value > Max<decltype(Value)>() - inc) {
-
-                Y_ABORT("TLeft counter is overflowed");
+                Y_TABLET_ERROR("TLeft counter is overflowed");
             }
 
             Value += inc;
@@ -59,7 +60,7 @@ namespace NBoot {
 
         TLeft& operator -=(size_t dec)
         {
-            Y_ABORT_UNLESS(Value >= dec, "TLeft counter is underflowed");
+            Y_ENSURE(Value >= dec, "TLeft counter is underflowed");
 
             Value -= dec;
 

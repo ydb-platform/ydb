@@ -152,6 +152,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
+        CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzTimestamp);
@@ -935,9 +936,7 @@ void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
 
 void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
     LOG_I("Remove temporary directory " << path.Quote() << " in database");
-    NScheme::TSchemeClient schemeClient(driver);
-    NTable::TTableClient tableClient(driver);
-    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
+    TStatus status = NConsoleClient::RemoveDirectoryRecursive(driver, path);
     VerifyStatus(status, TStringBuilder() << "Remove temporary directory " << path.Quote() << " failed");
 }
 
@@ -1476,8 +1475,12 @@ void BackupCluster(const TDriver& driver, TFsPath folderPath) {
 
         BackupClusterRoot(driver, folderPath);
         auto databases = ListDatabases(driver);
+        TDriverConfig dbDriverCfg = driver.GetConfig();
         for (const auto& database : databases.GetPaths()) {
-            BackupDatabaseImpl(driver, TString(database), folderPath.Child("." + database), {
+            dbDriverCfg.SetDatabase(database);
+            TDriver dbDriver(dbDriverCfg);
+
+            BackupDatabaseImpl(dbDriver, TString(database), folderPath.Child("." + database), {
                 .WithRegularUsers = false,
                 .WithContent = false,
             });

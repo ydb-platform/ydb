@@ -208,19 +208,19 @@ namespace NKqpHelpers {
     }
 
     inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        Y_ABORT_UNLESS(!txId.empty(), "continue on empty transaction");
+        Y_ENSURE(!txId.empty(), "continue on empty transaction");
         auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
-        Y_ABORT_UNLESS(result.tx_meta().id() == txId);
+        Y_ENSURE(result.tx_meta().id() == txId);
         return FormatResult(result);
     }
 
     inline auto KqpSimpleSendCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        Y_ABORT_UNLESS(!txId.empty(), "commit on empty transaction");
+        Y_ENSURE(!txId.empty(), "commit on empty transaction");
         return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
     }
 
@@ -231,7 +231,7 @@ namespace NKqpHelpers {
         }
         Ydb::Table::ExecuteQueryResult result;
         response.operation().result().UnpackTo(&result);
-        Y_ABORT_UNLESS(result.tx_meta().id().empty(), "must be empty transaction");
+        Y_ENSURE(result.tx_meta().id().empty(), "must be empty transaction");
         return FormatResult(result);
     }
 

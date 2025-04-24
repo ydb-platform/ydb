@@ -226,69 +226,13 @@ namespace NMonitoring {
     void TMetricRegistry::Reset() {
         TWriteGuard g{*Lock_};
         for (auto& [label, metricValue] : Metrics_) {
-            auto metric = metricValue.Metric;
-            switch (metric->Type()) {
-            case EMetricType::GAUGE:
-                static_cast<TGauge*>(metric.Get())->Set(.0);
-                break;
-            case EMetricType::IGAUGE:
-                static_cast<TIntGauge*>(metric.Get())->Set(0);
-                break;
-            case EMetricType::COUNTER:
-                static_cast<TCounter*>(metric.Get())->Reset();
-                break;
-            case EMetricType::RATE:
-                static_cast<TRate*>(metric.Get())->Reset();
-                break;
-            case EMetricType::HIST:
-            case EMetricType::HIST_RATE:
-                static_cast<THistogram*>(metric.Get())->Reset();
-                break;
-            case EMetricType::UNKNOWN:
-            case EMetricType::DSUMMARY:
-            case EMetricType::LOGHIST:
-                break;
-            }
+            metricValue.Metric->Reset();
         }
     }
 
     void TMetricRegistry::Clear() {
         TWriteGuard g{*Lock_};
         Metrics_.clear();
-    }
-
-    template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
-    TMetric* TMetricRegistry::Metric(TLabelsType&& labels, TMetricOpts&& opts, Args&&... args) {
-        {
-            TReadGuard g{*Lock_};
-
-            auto it = Metrics_.find(labels);
-            if (it != Metrics_.end()) {
-                Y_ENSURE(it->second.Metric->Type() == type, "cannot create metric " << labels
-                        << " with type " << MetricTypeToStr(type)
-                        << ", because registry already has same metric with type " << MetricTypeToStr(it->second.Metric->Type()));
-                Y_ENSURE(it->second.Opts.MemOnly == opts.MemOnly,"cannot create metric " << labels
-                        << " with memOnly=" << opts.MemOnly
-                        << ", because registry already has same metric with memOnly=" << it->second.Opts.MemOnly);
-                return static_cast<TMetric*>(it->second.Metric.Get());
-            }
-        }
-
-        {
-            IMetricPtr metric = MakeIntrusive<TMetric>(std::forward<Args>(args)...);
-
-            TWriteGuard g{*Lock_};
-            // decltype(Metrics_)::iterator breaks build on windows
-            THashMap<ILabelsPtr, TMetricValue>::iterator it;
-            TMetricValue metricValue = {metric, opts};
-            if constexpr (!std::is_convertible_v<TLabelsType, ILabelsPtr>) {
-                it = Metrics_.emplace(new TLabels{std::forward<TLabelsType>(labels)}, std::move(metricValue)).first;
-            } else {
-                it = Metrics_.emplace(std::forward<TLabelsType>(labels), std::move(metricValue)).first;
-            }
-
-            return static_cast<TMetric*>(it->second.Metric.Get());
-        }
     }
 
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {

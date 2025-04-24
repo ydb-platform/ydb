@@ -548,6 +548,12 @@ TString GetPostgresServerVersionStr() {
 
 namespace NYql {
 
+namespace NCommon {
+    std::shared_ptr<void> CreateMemoryArenaContext() {
+        throw yexception() << "PG types are not supported";
+    }
+}
+
 ui64 HexEncode(const char *src, size_t len, char *dst) {
     Y_UNUSED(src);
     Y_UNUSED(len);
@@ -555,7 +561,6 @@ ui64 HexEncode(const char *src, size_t len, char *dst) {
 
     throw yexception() << "HexEncode in pg_dummy does nothing";
 }
-
 
 std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& /* builder */, const NKikimr::NMiniKQL::TPgType* /* targetType */) {
     throw yexception() << "PG types are not supported";

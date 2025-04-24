@@ -205,27 +205,32 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     ? credentialsProviderFactory->CreateProvider(strongState)
                     : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
 
-            DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+            if (discoveryMode != EDiscoveryMode::Off) {
+                DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+            }
             Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
             break;
         }
     }
-    auto updateResult = strongState->EndpointPool.UpdateAsync();
-    if (updateResult.second) {
-        auto cb = [strongState](const NThreading::TFuture<TEndpointUpdateResult>&) {
-            strongState->SignalDiscoveryCompleted();
-        };
-        updateResult.first.Subscribe(cb);
-    }
 
-    if (strongState->DiscoveryMode == EDiscoveryMode::Sync) {
-        const auto& discoveryStatus = updateResult.first.GetValueSync().DiscoveryStatus;
-        // Almost always true, except the situation when the current thread was
-        // preempted just before UpdateAsync call and other one get
-        // state from cache and call UpdateAsync before us.
-        if (Y_LIKELY(updateResult.second)) {
-            std::unique_lock guard(strongState->LastDiscoveryStatusRWLock);
-            strongState->LastDiscoveryStatus = discoveryStatus;
+    if (strongState->DiscoveryMode != EDiscoveryMode::Off) {
+        auto updateResult = strongState->EndpointPool.UpdateAsync();
+        if (updateResult.second) {
+            auto cb = [strongState](const NThreading::TFuture<TEndpointUpdateResult>&) {
+                strongState->SignalDiscoveryCompleted();
+            };
+            updateResult.first.Subscribe(cb);
+        }
+
+        if (strongState->DiscoveryMode == EDiscoveryMode::Sync) {
+            const auto& discoveryStatus = updateResult.first.GetValueSync().DiscoveryStatus;
+            // Almost always true, except the situation when the current thread was
+            // preempted just before UpdateAsync call and other one get
+            // state from cache and call UpdateAsync before us.
+            if (Y_LIKELY(updateResult.second)) {
+                std::unique_lock guard(strongState->LastDiscoveryStatusRWLock);
+                strongState->LastDiscoveryStatus = discoveryStatus;
+            }
         }
     }
 

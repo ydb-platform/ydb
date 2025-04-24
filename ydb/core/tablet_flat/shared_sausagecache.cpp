@@ -7,6 +7,7 @@
 #include "shared_cache_switchable.h"
 #include "shared_page.h"
 #include "shared_sausagecache.h"
+#include "util_fmt_abort.h"
 #include <util/stream/format.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
@@ -124,7 +125,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
             ui32 generation_ = static_cast<ui32>(generation);
-            Y_ABORT_UNLESS(generation_ < (1 << 4));
+            Y_ENSURE(generation_ < (1 << 4));
             page->CacheFlags1 = generation_;
         }
     };
@@ -161,7 +162,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
             ui32 location_ = static_cast<ui32>(location);
-            Y_ABORT_UNLESS(location_ < (1 << 4));
+            Y_ENSURE(location_ < (1 << 4));
             page->CacheFlags1 = location_;
         }
 
@@ -170,7 +171,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         static void SetFrequency(TPage* page, ui32 frequency) {
-            Y_ABORT_UNLESS(frequency < (1 << 4));
+            Y_ENSURE(frequency < (1 << 4));
             page->CacheFlags2 = frequency;
         }
     };
@@ -211,7 +212,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         static void SetLocation(TPage* page, EClockProPageLocation location) {
             ui32 location_ = static_cast<ui32>(location);
-            Y_ABORT_UNLESS(location_ < (1 << 4));
+            Y_ENSURE(location_ < (1 << 4));
             page->CacheFlags1 = location_;
         }
 
@@ -234,7 +235,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         static void SetCacheId(TPage* page, ui32 id) {
-            Y_ABORT_UNLESS(id < (1 << 4));
+            Y_ENSURE(id < (1 << 4));
             page->CacheId = id;
         }
     };
@@ -370,14 +371,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
-            Y_ABORT_UNLESS(pageCollectionId);
+            Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
             collection.PageMap.resize(pageCollection.Total());
         } else {
             Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
-            Y_ABORT_UNLESS(collection.PageMap.size() == pageCollection.Total(),
-                "Page collection %s changed number of pages from %" PRISZT " to %" PRIu32 " by %s",
-                pageCollectionId.ToString().c_str(), collection.PageMap.size(), pageCollection.Total(), owner.ToString().c_str());
+            Y_ENSURE(collection.PageMap.size() == pageCollection.Total(),
+                "Page collection " << pageCollectionId
+                << " changed number of pages from " << collection.PageMap.size()
+                << " to " << pageCollection.Total() << " by " << owner);
         }
 
         if (collection.Owners.insert(owner).second) {
@@ -407,17 +409,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " owner " << ev->Sender
             << " compacted pages " << msg->Pages);
 
-        Y_ABORT_UNLESS(pageCollectionId);
-        Y_ABORT_IF(Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
+        Y_ENSURE(pageCollectionId);
+        Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
         TCollection &collection = Collections[pageCollectionId];
         collection.Id = pageCollectionId;
         collection.PageMap.resize(pageCollection.Total());
 
         for (auto &page : msg->Pages) {
-            Y_ABORT_UNLESS(page->PageId < collection.PageMap.size());
+            Y_ENSURE(page->PageId < collection.PageMap.size());
 
             auto emplaced = collection.PageMap.emplace(page->PageId, page);
-            Y_ABORT_UNLESS(emplaced, "Pages should be unique");
+            Y_ENSURE(emplaced, "Pages should be unique");
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
@@ -460,12 +462,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         for (const ui32 reqIdx : xrange(msg->Fetch->Pages.size())) {
             const ui32 pageId = msg->Fetch->Pages[reqIdx];
-            Y_ABORT_UNLESS(pageId < collection.PageMap.size(),
-                "Page collection %s requested page %" PRIu32 " out of %" PRISZT " pages",
-                pageCollectionId.ToString().c_str(), pageId, collection.PageMap.size());
+            Y_ENSURE(pageId < collection.PageMap.size(),
+                "Page collection " << pageCollectionId
+                << " requested page " << pageId
+                << " out of " << collection.PageMap.size() << " pages");
             auto* page = collection.PageMap[pageId].Get();
             if (!page) {
-                Y_ABORT_UNLESS(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
+                Y_ENSURE(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
             }
 
             Counters.RequestedPages->Inc();
@@ -473,7 +476,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             switch (page->State) {
             case PageStateEvicted:
-                Y_ABORT_UNLESS(page->Use()); // still in PageMap, guaranteed to be alive
+                Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
                 page->State = PageStateLoaded;
                 RemovePassivePage(page);
                 AddActivePage(page);
@@ -539,7 +542,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 collection.PendingRequests[pageId].emplace_back(request, reqIdx);
                 ++request->PendingBlocks;
                 auto* page = collection.PageMap[pageId].Get();
-                Y_ABORT_UNLESS(page);
+                Y_ENSURE(page);
 
                 if (qpages)
                     qpages->Request->PagesToRequest.push_back(pageId);
@@ -571,7 +574,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     }
                     break;
                 default:
-                    Y_ABORT("must not happens");
+                    Y_TABLET_ERROR("must not happens");
                 }
             }
 
@@ -620,7 +623,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             // request whole limit from one page collection for better locality (if possible)
             // should be 'request from one logoblobid
             auto &owner = it->second;
-            Y_ABORT_UNLESS(!owner.Listed.Empty());
+            Y_ENSURE(!owner.Listed.Empty());
 
             ui32 nthToRequest = 0;
             ui32 nthToLoad = 0;
@@ -630,7 +633,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             if (wa.Sender) { // is request already served?
                 auto *collection = Collections.FindPtr(wa.Label);
-                Y_ABORT_UNLESS(collection);
+                Y_ENSURE(collection);
 
                 for (ui32 pageId : wa.PagesToRequest) {
                     ++nthToRequest;
@@ -678,14 +681,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (!wa.Sender || nthToRequest == wa.PagesToRequest.size()) {
                 {
                     auto reqit = owner.Index.find(wa.Label);
-                    Y_ABORT_UNLESS(reqit != owner.Index.end());
+                    Y_ENSURE(reqit != owner.Index.end());
                     reqit->second.pop_front();
 
                     if (reqit->second.empty())
                         owner.Index.erase(reqit);
                 }
 
-                Y_ABORT_UNLESS(bool(owner.Listed) == bool(owner.Index));
+                Y_ENSURE(bool(owner.Listed) == bool(owner.Index));
 
                 if (owner.Listed.Empty())
                     it = queue.Requests.erase(it);
@@ -724,7 +727,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             for (auto pageId : touchedPages) {
-                Y_ABORT_UNLESS(pageId < collection->PageMap.size());
+                Y_ENSURE(pageId < collection->PageMap.size());
                 auto* page = collection->PageMap[pageId].Get();
                 if (!page) {
                     droppedPages[pageCollectionId].insert(pageId);
@@ -733,13 +736,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 switch (page->State) {
                 case PageStateNo:
-                    Y_ABORT("unexpected uninitialized page found");
+                    Y_TABLET_ERROR("unexpected uninitialized page found");
                 case PageStateRequested:
                 case PageStateRequestedAsync:
                 case PageStatePending:
                     break;
                 case PageStateEvicted:
-                    Y_ABORT_UNLESS(page->Use());
+                    Y_ENSURE(page->Use());
                     page->State = PageStateLoaded;
                     RemovePassivePage(page);
                     AddActivePage(page);
@@ -748,7 +751,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Evict(Cache.Touch(page));
                     break;
                 default:
-                    Y_ABORT("unknown load state");
+                    Y_TABLET_ERROR("unknown load state");
                 }
             }
         }
@@ -825,8 +828,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         RemoveInFlyPages(msg->Fetch->Pages.size(), msg->Fetch->Cookie);
 
         if (TRequestQueue *queue = (TRequestQueue *)ev->Cookie) {
-            Y_ABORT_UNLESS(queue == &ScanRequests || queue == &AsyncRequests);
-            Y_ABORT_UNLESS(queue->InFly >= msg->Fetch->Cookie);
+            Y_ENSURE(queue == &ScanRequests || queue == &AsyncRequests);
+            Y_ENSURE(queue->InFly >= msg->Fetch->Cookie);
             queue->InFly -= msg->Fetch->Cookie;
             RequestFromQueue(*queue);
         }
@@ -840,7 +843,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         } else {
             TCollection &collection = collectionIt->second;
             for (auto &paged : msg->Blocks) {
-                Y_ABORT_UNLESS(paged.PageId < collection.PageMap.size());
+                Y_ENSURE(paged.PageId < collection.PageMap.size());
                 auto* page = collection.PageMap[paged.PageId].Get();
                 if (!page || !page->HasMissingBody()) {
                     continue;
@@ -876,7 +879,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             break;
         }
         default:
-            Y_ABORT("Unknown wakeup tag: %lu", ev->Get()->Tag);
+            Y_TABLET_ERROR("Unknown wakeup tag: " << ev->Get()->Tag);
         }
     }
 
@@ -899,14 +902,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (page->TryDrop()) {
             // We have successfully dropped the page
             // We are guaranteed no new uses for this page are possible
-            Y_ABORT_UNLESS(page->State == PageStateEvicted);
+            Y_ENSURE(page->State == PageStateEvicted);
             RemovePassivePage(page);
 
             Y_VERIFY_DEBUG_S(page->Collection, "Evicted pages are expected to have collection");
             if (auto* collection = page->Collection) {
                 auto pageId = page->PageId;
                 Y_DEBUG_ABORT_UNLESS(collection->PageMap[pageId].Get() == page);
-                Y_ABORT_UNLESS(collection->PageMap.erase(pageId));
+                Y_ENSURE(collection->PageMap.erase(pageId));
                 // Note: don't use page after erase as it may be deleted
                 if (collection->Owners) {
                     collection->DroppedPages.push_back(pageId);
@@ -963,7 +966,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto &xpair : pendingRequestsIt->second) {
             auto &r = xpair.first;
             auto &rblock = r->ReadyPages[xpair.second];
-            Y_ABORT_UNLESS(rblock.PageId == page->PageId);
+            Y_ENSURE(rblock.PageId == page->PageId);
             rblock.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--r->PendingBlocks == 0)
@@ -1095,7 +1098,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->EnsureNoCacheFlags();
 
-            Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
+            Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
             page->State = PageStateEvicted;
 
             RemoveActivePage(page);
@@ -1109,7 +1112,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void EvictNow(TPage* page, THashSet<TCollection*>& recheck) {
         page->EnsureNoCacheFlags();
 
-        Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
+        Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
         page->State = PageStateEvicted;
 
         RemoveActivePage(page);
@@ -1196,7 +1199,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void RemoveInFlyPages(ui64 count, ui64 size) {
-        Y_ABORT_UNLESS(StatLoadInFlyBytes >= size);
+        Y_ENSURE(StatLoadInFlyBytes >= size);
         StatLoadInFlyBytes -= size;
         Counters.LoadInFlyPages->Sub(count);
         Counters.LoadInFlyBytes->Sub(size);

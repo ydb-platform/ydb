@@ -11,6 +11,20 @@
 namespace NYql {
 namespace NUdf {
 
+#define UDF_LOG(logger, component, level, msg)              \
+do {                                                        \
+    if ((logger) && (logger)->IsActive(component, level)) { \
+        (logger)->Log(component, level, msg);               \
+    }                                                       \
+} while (0)
+
+#define UDF_LOG_IF(condition, logger, component, level, msg)               \
+do {                                                                       \
+    if ((logger) && (condition) && (logger)->IsActive(component, level)) { \
+        (logger)->Log(component, level, msg);                              \
+    }                                                                      \
+} while (0)
+
 #define UDF_LOG_LEVEL(XX) \
     XX(Fatal, 0)  \
     XX(Error, 1)  \

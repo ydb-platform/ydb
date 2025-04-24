@@ -372,6 +372,9 @@ namespace NSQLTranslationV1 {
         bool AnsiImplicitCrossJoin = false; // select * from A,B
         bool DistinctOverWindow = false;
         bool SeqMode = false;
+        bool DistinctOverKeys = false;
+        bool GroupByExprAfterWhere = false;
+        bool FailOnGroupByExprOverride = false;
         bool EmitUnionMerge = false;
         TVector<size_t> ForAllStatementsParts;
 
@@ -471,4 +474,6 @@ namespace NSQLTranslationV1 {
     protected:
         TContext& Ctx;
     };
+
+    void EnumerateSqlFlags(std::function<void(std::string_view)> callback);
 }  // namespace NSQLTranslationV1

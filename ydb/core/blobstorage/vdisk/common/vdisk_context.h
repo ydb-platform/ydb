@@ -100,6 +100,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDisk,
                 TActorSystem *as,   // can be nullptr for tests
                 NPDisk::EDeviceType type,
+                ui32 pDiskId = 0,
                 bool donorMode = false,
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,

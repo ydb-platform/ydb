@@ -98,20 +98,22 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
-        if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
-            || dbState->Database.empty()
-            || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
-        {
-            SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
-        } else {
-            auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
-            if (!endpoint) {
-                return {nullptr, TEndpointKey()};
-            }
-            clientConfig.Locator = endpoint.Endpoint;
-            clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
-            if (GRpcKeepAliveTimeout_) {
-                SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
+        if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
+            if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
+                || dbState->Database.empty()
+                || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
+            {
+                SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+            } else {
+                auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
+                if (!endpoint) {
+                    return {nullptr, TEndpointKey()};
+                }
+                clientConfig.Locator = endpoint.Endpoint;
+                clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
+                if (GRpcKeepAliveTimeout_) {
+                    SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
+                }
             }
         }
 
@@ -609,7 +611,17 @@ private:
         TEndpointKey endpoint;
         std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
         if (!serviceConnection) {
-            if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
+            if (dbState->DiscoveryMode == EDiscoveryMode::Off) {
+                TStringStream errString;
+                errString << "No endpoint for database " << dbState->Database;
+                errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;
+                dbState->StatCollector.IncReqFailNoEndpoint();
+                callback(
+                    TPlainStatus(EStatus::UNAVAILABLE, errString.Str()),
+                    TConnection{nullptr},
+                    TEndpointKey{ });
+
+            } else if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
                 TStringStream errString;
                 errString << "Endpoint list is empty for database " << dbState->Database;
                 errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;

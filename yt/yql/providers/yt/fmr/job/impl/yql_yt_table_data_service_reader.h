@@ -5,11 +5,11 @@
 #include <util/stream/input.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/interface/table_data_service.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
 
 namespace NYql::NFmr {
 
-struct TFmrTableDataServiceReaderSettings {
+struct TFmrReaderSettings {
     ui64 ReadAheadChunks = 1;
 };
 
@@ -24,7 +24,7 @@ public:
         const TString& tableId,
         const std::vector<TTableRange>& tableRanges,
         ITableDataService::TPtr tableDataService,
-        const TFmrTableDataServiceReaderSettings& settings = TFmrTableDataServiceReaderSettings{}
+        const TFmrReaderSettings& settings = TFmrReaderSettings{}
     );
 
     bool Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) override;

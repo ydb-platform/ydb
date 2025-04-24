@@ -67,7 +67,7 @@ namespace NFwd {
             const auto meta = pageCollection->Page(pageId);
 
             if (EPage(meta.Type) != type || meta.Size == 0) {
-                Y_ABORT("Got an invalid page");
+                Y_TABLET_ERROR("Got an invalid page");
             }
 
             fetch->Pages.emplace_back(pageId);
@@ -102,8 +102,8 @@ namespace NFwd {
             , MemTable(new TMemTableHandler(Keys, Conf.Edge,
                                         Conf.Trace ? &subset.Frozen : nullptr))
         {
-            Y_ABORT_UNLESS(Conf.AheadHi >= Conf.AheadLo);
-            Y_ABORT_UNLESS(std::is_sorted(Keys.begin(), Keys.end()));
+            Y_ENSURE(Conf.AheadHi >= Conf.AheadLo);
+            Y_ENSURE(std::is_sorted(Keys.begin(), Keys.end()));
 
             for (auto &one: Subset.Flatten)
                 AddPartView(one);
@@ -112,7 +112,7 @@ namespace NFwd {
         void AddCold(const TPartView& partView)
         {
             auto r = ColdParts.insert(partView.Part.Get());
-            Y_ABORT_UNLESS(r.second, "Cannot add a duplicate cold part");
+            Y_ENSURE(r.second, "Cannot add a duplicate cold part");
 
             AddPartView(partView);
         }
@@ -142,7 +142,7 @@ namespace NFwd {
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+                Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
             ui32 room = part->GroupsCount + (lob == ELargeObj::Extern ? 1 : 0);
@@ -156,13 +156,13 @@ namespace NFwd {
             if (epoch < Epoch) {
                 return; // ignore pages requested before Reset
             }
-            Y_ABORT_UNLESS(epoch == Epoch, "Got an invalid part cookie on pages absorption");
+            Y_ENSURE(epoch == Epoch, "Got an invalid part cookie on pages absorption");
 
             const ui32 groupQueueIndex = cookie >> 32;
-            Y_ABORT_UNLESS(groupQueueIndex < GroupQueues.size(), "Got save request for unknown TPart cookie index");
+            Y_ENSURE(groupQueueIndex < GroupQueues.size(), "Got save request for unknown TPart cookie index");
             auto& queue = GroupQueues.at(groupQueueIndex);
 
-            Y_ABORT_UNLESS(pages.size() <= Pending, "Page fwd cache got more pages than was requested");
+            Y_ENSURE(pages.size() <= Pending, "Page fwd cache got more pages than was requested");
             Pending -= pages.size();
 
             for (auto& page : pages) {
@@ -170,10 +170,10 @@ namespace NFwd {
                 auto data = NSharedCache::TPinnedPageRef(page.Page).GetData();
                 NPageCollection::TLoadedPage loadedPage{page.PageId, std::move(data)};
                 if (IsIndexPage(type)) {
-                    Y_ABORT_UNLESS(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
+                    Y_ENSURE(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
                     queue->Fill(loadedPage, std::move(page.Page), type);
                 } else {
-                    Y_ABORT_UNLESS(queue.GroupPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
+                    Y_ENSURE(queue.GroupPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
                     queue->Fill(loadedPage, std::move(page.Page), type);
                 }
             }
@@ -185,7 +185,7 @@ namespace NFwd {
                 parts and cannot handle backward jumps. This call is temporary
                 workaround for clients that wants to go back. */
 
-            Y_ABORT_UNLESS(!Conf.Trace, "Cannot reset NFwd in blobs tracing state");
+            Y_ENSURE(!Conf.Trace, "Cannot reset NFwd in blobs tracing state");
 
             // Ignore all pages fetched before Reset
             Pending = 0;
@@ -222,12 +222,12 @@ namespace NFwd {
                 }
 
                 if (auto request = std::move(queue->IndexFetch)) {
-                    Y_ABORT_UNLESS(request->Pages, "Shouldn't send empty requests");
+                    Y_ENSURE(request->Pages, "Shouldn't send empty requests");
                     Pending += request->Pages.size();
                     return request;
                 }
                 if (auto request = std::move(queue->GroupFetch)) {
-                    Y_ABORT_UNLESS(request->Pages, "Shouldn't send empty requests");
+                    Y_ENSURE(request->Pages, "Shouldn't send empty requests");
                     Pending += request->Pages.size();
                     return request;
                 }
@@ -256,7 +256,7 @@ namespace NFwd {
                     auto &q = GetQueue(part, part->GroupsCount + 1);
                     auto &line = dynamic_cast<TBlobs&>(*q.PageLoadingLogic);
 
-                    Y_ABORT_UNLESS(q.PartIndex < (sieves.size() - 1));
+                    Y_ENSURE(q.PartIndex < (sieves.size() - 1));
                     sieves.at(q.PartIndex) = {
                         blobs,
                         line.GetFrames(),
@@ -283,7 +283,7 @@ namespace NFwd {
             if (queue.Grow || queue.IndexFetch || queue.GroupFetch) {
                 FetchingQueues.PushBack(&queue);
             } else {
-                Y_ABORT_IF(got.Need && got.Page == nullptr, "Cache line head don't want to do fetch but should");
+                Y_ENSURE(!(got.Need && got.Page == nullptr), "Cache line head don't want to do fetch but should");
             }
 
             return { got.Need, got.Page };
@@ -294,7 +294,7 @@ namespace NFwd {
             const auto *part = partView.Part.Get();
 
             auto it = PartGroupQueues.find(part);
-            Y_ABORT_UNLESS(it == PartGroupQueues.end(), "Cannot handle multiple part references in the same subset");
+            Y_ENSURE(it == PartGroupQueues.end(), "Cannot handle multiple part references in the same subset");
 
             ui32 partIndex = PartGroupQueues.size();
 
@@ -320,11 +320,11 @@ namespace NFwd {
         TPartGroupLoadingQueue& GetQueue(const TPart *part, ui16 room)
         {
             auto it = PartGroupQueues.FindPtr(part);
-            Y_ABORT_UNLESS(it, "NFwd cache trying to access part outside of subset");
-            Y_ABORT_UNLESS(room < it->size(), "NFwd cache trying to access room out of bounds");
+            Y_ENSURE(it, "NFwd cache trying to access part outside of subset");
+            Y_ENSURE(room < it->size(), "NFwd cache trying to access room out of bounds");
             
             auto queue = it->at(room);
-            Y_ABORT_UNLESS(queue, "NFwd cache trying to access room that is not assigned");
+            Y_ENSURE(queue, "NFwd cache trying to access room that is not assigned");
 
             return *queue;
         }
@@ -348,7 +348,7 @@ namespace NFwd {
         {
             auto *partStore = CheckedCast<const TPartStore*>(part);
 
-            Y_ABORT_UNLESS(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
+            Y_ENSURE(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
 
             return {CreateCache(part, PartIndexPageLocator[part], groupId, slices), 
                 partStore->PageCollections[0]->PageCollection,

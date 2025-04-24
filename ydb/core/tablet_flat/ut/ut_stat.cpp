@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
                 << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
             for (ui32 sample : xrange(1u, samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
-                Y_ABORT_UNLESS(index->Seek(rowId) == EReady::Data);
+                Y_ENSURE(index->Seek(rowId) == EReady::Data);
                 TSmallVec<TCell> keyCells;
                 index->GetKeyCells(keyCells);
                 Cerr << "(";
@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             for (auto c : subset.Scheme->Cols) {
                 tags.push_back(c.Tag);
             }
-            Y_ABORT_UNLESS(ChargeRange(&env, {}, key.GetCells(), run, keyDefaults, tags, 0, 0, true));
+            Y_ENSURE(ChargeRange(&env, {}, key.GetCells(), run, keyDefaults, tags, 0, 0, true));
         }
 
         bytes = env.TouchedBytes;

@@ -1,5 +1,6 @@
 #include "actors.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kqp_helper.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/services/metadata/abstract/initialization.h>
@@ -24,7 +25,7 @@ namespace NKafka {
                 SELECT,
                 INSERT,
                 UPDATE,
-                DELETE,
+                DELETE_REQ, // we can't call it DELETE, cause DELETE macros is already defined in contrib/restricted/cprocsp/include/cpcsp/CSP_WinDef.h
                 BEGIN_TRANSACTION
             };
 
@@ -34,6 +35,8 @@ namespace NKafka {
 
         private:
             const TContext::TPtr Context;
+            // This field is used to temporaly save producer state when we send to KafkaTransactionCoordinator and await its response
+            TProducerState PersistedProducerState;
             // Kafka related fields
             const ui64 CorrelationId;
             const TString TransactionalId;
@@ -54,21 +57,27 @@ namespace NKafka {
                     HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
                     HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
                     HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                    HFunc(NKafka::TEvKafka::TEvSaveTxnProducerResponse, Handle);
 
                     SFunc(TEvents::TEvPoison, Die);
                 }
             }
+            // events for KQP interaction
             void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
             void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
             void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
             void RequestFullRetry(const TActorContext& ctx);
+            // event from KafkaTransactionCoordinator actor about successful or unsuccessful save of producer new state
+            void Handle(NKafka::TEvKafka::TEvSaveTxnProducerResponse::TPtr& ev, const TActorContext& ctx);
+            
+
             void Die(const TActorContext& ctx);
 
             // methods with main logic
             void StartTxProducerInitCycle(const TActorContext& ctx);
             void HandleQueryResponseFromKqp(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
             void OnTxProducerStateReceived(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-            void OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+            void OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
 
             // requests to producer_state table
             void SendSelectRequest(const TActorContext& ctx);
@@ -84,6 +93,7 @@ namespace NKafka {
             // send responses methods
             void SendResponseFail(EKafkaErrors error, const TString& message);
             void SendSuccessfullResponseForTxProducer(const TProducerState& producerState, const TActorContext& ctx);
+            void SendSaveTxnProducerStateRequest(const TProducerState& producerState);
 
             // helper methods
             bool IsTransactionalProducerInitialization();

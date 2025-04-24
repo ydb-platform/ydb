@@ -79,6 +79,9 @@ class TpcInitBase(InitBase):
     def test_s1_column_decimal_ydb(self):
         return self.canonical_result(self.execute_init(scale=1, args=['--store', 'column', '--float-mode', 'decimal_ydb']), self.tmp_path('s1_column_decimal_ydb'))
 
+    def test_s100_column(self):
+        return self.canonical_result(self.execute_init(scale=1, args=['--store', 'column', '--scale', '100']), self.tmp_path('s100_column'))
+
 
 class TestTpchInit(TpcInitBase):
     workload = 'tpch'

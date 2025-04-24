@@ -1,6 +1,7 @@
 #include "line_reader.h"
 
-#include "yql_highlight.h"
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/string_util.h>
@@ -37,10 +38,6 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle& fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
-    return replxx::Replxx::Color::DEFAULT;
-}
-
 class TLineReader: public ILineReader {
 public:
     TLineReader(std::string prompt, std::string historyFilePath);
@@ -53,7 +50,8 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    NSQLComplete::ISqlCompletionEngine::TPtr CompletionEngine;
+    IYQLCompleter::TPtr YQLCompleter;
+    IYQLHighlighter::TPtr YQLHighlighter;
     replxx::Replxx Rx;
 };
 
@@ -61,32 +59,24 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , CompletionEngine(NSQLComplete::MakeSqlCompletionEngine())
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco()))
+    , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();
 
-    auto completion_callback = [this](const std::string& prefix, size_t contextLen) {
-        auto completion = CompletionEngine->Complete({
-            .Text = prefix,
-            .CursorPosition = prefix.length(),
-        });
-
-        contextLen = completion.CompletedToken.SourcePosition;
-
-        replxx::Replxx::completions_t entries;
-        for (auto& candidate : completion.Candidates) {
-            candidate.Content += ' ';
-            entries.emplace_back(std::move(candidate.Content), ReplxxColorOf(candidate.Kind));
+    Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
+        return YQLCompleter->Apply(prefix, contextLen);
+    });
+    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+        replxx::Replxx::hints_t hints;
+        for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
+            hints.emplace_back(std::move(candidate.text()));
         }
-        return entries;
-    };
-
-    auto highlighter_callback = [](const auto& text, auto& colors) {
-        return YQLHighlight(YQLHighlight::ColorSchema::Monaco()).Apply(text, colors);
-    };
-
-    Rx.set_completion_callback(completion_callback);
-    Rx.set_highlighter_callback(highlighter_callback);
+        return hints;
+    });
+    Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
+        YQLHighlighter->Apply(text, colors);
+    });
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
     Rx.set_complete_on_empty(true);

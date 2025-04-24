@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             TAutoPtr<IEventHandle> handle;
 
             size_t shard = 0;
-            std::set<ui64> pathids;
+            std::set<NColumnShard::TInternalPathId> pathids;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
                 for (auto&& j : csController->GetPathIds(i)) {
@@ -258,12 +258,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
 
             UNIT_ASSERT(pathids.size() == 1);
-            ui64 pathId = *pathids.begin();
+            const auto& pathId = *pathids.begin();
 
             shard = 0;
             for (auto&& i : csController->GetShardActualIds()) {
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId);
+                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId.GetRawValue());
 
                 runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), i, false));
                 if (++shard == 3) {

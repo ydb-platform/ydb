@@ -12,6 +12,7 @@
 
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
@@ -20,6 +21,9 @@ namespace NKikimrConfig {
 }
 
 namespace NKikimr::NKqp {
+
+    bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth);
+
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
@@ -146,4 +150,16 @@ namespace NKikimr::NKqp {
 
     // Used only for unit tests
     bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout = TDuration::Minutes(1), TDuration refreshPeriod = TDuration::MilliSeconds(100));
+
+    NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels = 50, ui32 keepTailLevels = 3);
+
+    template <typename TIssueMessage>
+    void TruncateIssues(google::protobuf::RepeatedPtrField<TIssueMessage>* issuesProto, ui32 maxLevels = 50, ui32 keepTailLevels = 3) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(*issuesProto, issues);
+        NYql::IssuesToMessage(TruncateIssues(issues, maxLevels, keepTailLevels), issuesProto);
+    }
+
+    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
+
 }  // namespace NKikimr::NKqp

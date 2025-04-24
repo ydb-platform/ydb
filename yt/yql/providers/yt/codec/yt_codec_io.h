@@ -164,4 +164,6 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NKikimr::NU
 
 THolder<NCommon::IBlockReader> MakeBlockReader(NYT::TRawTableReader& source, size_t blockCount, size_t blockSize);
 
+ui32 GetBlockSizeStructIndex(const TMkqlIOSpecs& specs, size_t tableIndex);
+
 } // NYql

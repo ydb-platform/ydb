@@ -28,16 +28,16 @@ TOneShotFluentLogEventImpl<TParent>::TOneShotFluentLogEventImpl(
 template <class TParent>
 NYTree::TFluentYsonBuilder::TAny<TOneShotFluentLogEventImpl<TParent>&&> TOneShotFluentLogEventImpl<TParent>::Item(TStringBuf key)
 {
-    this->Consumer->OnKeyedItem(key);
-    return NYTree::TFluentYsonBuilder::TAny<TThis&&>(this->Consumer, std::move(*this));
+    this->Consumer_->OnKeyedItem(key);
+    return NYTree::TFluentYsonBuilder::TAny<TThis&&>(this->Consumer_, std::move(*this));
 }
 
 template <class TParent>
 NYTree::TFluentYsonBuilder::TAny<TOneShotFluentLogEventImpl<TParent>&&> TOneShotFluentLogEventImpl<TParent>::Items(const NYson::TYsonString& attributes)
 {
     YT_VERIFY(attributes.GetType() == NYson::EYsonType::MapFragment);
-    this->Consumer->OnRaw(attributes);
-    return NYTree::TFluentYsonBuilder::TAny<TThis&&>(this->Consumer, std::move(*this));
+    this->Consumer_->OnRaw(attributes);
+    return NYTree::TFluentYsonBuilder::TAny<TThis&&>(this->Consumer_, std::move(*this));
 }
 
 template <class TParent>
@@ -55,8 +55,8 @@ typename TOneShotFluentLogEventImpl<TParent>::TThis& TOneShotFluentLogEventImpl<
     using NYTree::Serialize;
 
     if (optionalValue) {
-        this->Consumer->OnKeyedItem(key);
-        Serialize(optionalValue, this->Consumer, std::forward<TExtraArgs>(extraArgs)...);
+        this->Consumer_->OnKeyedItem(key);
+        Serialize(optionalValue, this->Consumer_, std::forward<TExtraArgs>(extraArgs)...);
     }
     return *this;
 }

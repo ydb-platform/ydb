@@ -61,6 +61,7 @@ RECURSE(
     lexer
     perf
     proto_parser
+    reflect
 )
 
 RECURSE_FOR_TESTS(

@@ -678,18 +678,19 @@ TCoLambda FallbackLambdaOutput(TCoLambda lambda, TExprContext& ctx) {
     return lambda;
 }
 
-TYtDSink GetDataSink(TExprBase input, TExprContext& ctx) {
-    if (auto read = input.Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
-        return TYtDSink(ctx.RenameNode(read.Cast().DataSource().Ref(), "DataSink"));
-    } else if (auto out = input.Maybe<TYtOutput>()) {
-        return GetOutputOp(out.Cast()).DataSink();
-    } else {
-        YQL_ENSURE(false, "Unknown operation input");
-    }
-}
-
 TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
     return Build<TYtDSink>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
+}
+
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSource>(ctx, pos)
         .Category()
             .Value(YtProviderName)
         .Build()

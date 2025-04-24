@@ -35,47 +35,11 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.name"
+                                                "TopSortBy": "argument.c.name"
                                             },
                                             {
                                                 "Condition": "c.a = ss.a.code",
@@ -92,6 +56,30 @@
                                         ],
                                         "PlanNodeId": 14,
                                         "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join4.test_plan/c",
+                                                        "ReadColumns": [
+                                                            "a",
+                                                            "name"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join4.test_plan/c"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 13,
+                                                "Tables": [
+                                                    "postgres_jointest/join4.test_plan/c"
+                                                ]
+                                            },
                                             {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 12,
@@ -244,36 +232,12 @@
                                                         ]
                                                     }
                                                 ]
-                                            },
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join4.test_plan/c",
-                                                        "ReadColumns": [
-                                                            "a",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join4.test_plan/c"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 13,
-                                                "Tables": [
-                                                    "postgres_jointest/join4.test_plan/c"
-                                                ]
                                             }
                                         ]
                                     }
                                 ],
                                 "SortColumns": [
-                                    "name (Asc)"
+                                    "c.name (Asc)"
                                 ]
                             }
                         ]

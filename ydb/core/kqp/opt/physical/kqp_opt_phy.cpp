@@ -124,6 +124,9 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
+        AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
+        AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
+
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
@@ -448,11 +451,11 @@ protected:
     {
         // TODO: Allow push to left stage for data queries.
         // It is now possible as we don't use datashard transactions for reads in data queries.
-        bool pushLeftStage = (KqpCtx.IsScanQuery() || KqpCtx.Config->EnableKqpDataQueryStreamLookup) && AllowFuseJoinInputs(node);
-        bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(false);
+        bool pushLeftStage = AllowFuseJoinInputs(node);
+        bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->AllowMultiBroadcasts;
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(false), shuffleEliminationWithMap,
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination), shuffleEliminationWithMap,
             rightCollectStage
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
@@ -525,6 +528,13 @@ protected:
     {
         TExprBase output = KqpBuildWriteConstraint(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildWriteConstraint", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> AddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx)
+    {
+        TExprBase output = KqpAddColumnForEmptyColumnsOlapRead(node, ctx, KqpCtx);
+        DumpAppliedRule("AddColumnForEmptyColumnsOlapRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

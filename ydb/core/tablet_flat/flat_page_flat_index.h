@@ -65,11 +65,11 @@ namespace NPage {
             : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::FlatIndex);
-            Y_ABORT_UNLESS(data == ECodec::Plain && (data.Version == 2 || data.Version == 3));
+            Y_ENSURE(data == ECodec::Plain && (data.Version == 2 || data.Version == 3));
 
             auto *recordsHeader = TDeref<const TRecordsHeader>::At(data.Page.data(), 0);
             auto count = recordsHeader->Count;
-            Y_ABORT_UNLESS(count >= 1u + (data.Version == 3 ? 1 : 0));
+            Y_ENSURE(count >= 1u + (data.Version == 3 ? 1 : 0));
 
             Page.Base = Raw.data();
             auto offsetsOffset = data.Page.size() - count * sizeof(TPgSize);

@@ -1,9 +1,10 @@
-service: arcadia-unassigned
+service: cppcommittee
 title: clang-format default config
 
 arcanum:
   review:
     auto_assign: true
+    min_approvers_count: 1
     groups:
       - name: cppcommittee
         roles: cppcommittee:consultant
@@ -13,4 +14,4 @@ arcanum:
           - name: cppcommittee
             assign: 1
             ship: 0
-            min_approvers_count: 1
+            ignore_self_ship: false

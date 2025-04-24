@@ -35,38 +35,11 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.x1"
+                                                "TopSortBy": "argument.x_1.x1"
                                             },
                                             {
                                                 "Condition": "x_1.x1 = xx.x1",
@@ -216,33 +189,12 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "x1 (Asc)"
+                                    "x_1.x1 (Asc)"
                                 ]
                             }
                         ]
                     }
                 ]
-            },
-            {
-                "Node Type": "Precompute_0_1",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 3,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Collect",
-                        "PlanNodeId": 2,
-                        "Plans": [
-                            {
-                                "CTE Name": "Union_5",
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 1,
-                                "PlanNodeType": "Connection"
-                            }
-                        ]
-                    }
-                ],
-                "Subplan Name": "CTE precompute_0_1"
             },
             {
                 "Node Type": "Precompute_0_0",
@@ -320,6 +272,27 @@
                     }
                 ],
                 "Subplan Name": "CTE precompute_0_0"
+            },
+            {
+                "Node Type": "Precompute_0_1",
+                "Parent Relationship": "InitPlan",
+                "PlanNodeId": 3,
+                "PlanNodeType": "Materialize",
+                "Plans": [
+                    {
+                        "Node Type": "Collect",
+                        "PlanNodeId": 2,
+                        "Plans": [
+                            {
+                                "CTE Name": "Union_5",
+                                "Node Type": "UnionAll",
+                                "PlanNodeId": 1,
+                                "PlanNodeType": "Connection"
+                            }
+                        ]
+                    }
+                ],
+                "Subplan Name": "CTE precompute_0_1"
             }
         ],
         "Stats": {

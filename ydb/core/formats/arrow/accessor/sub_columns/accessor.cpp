@@ -1,4 +1,6 @@
 #include "accessor.h"
+#include "direct_builder.h"
+#include "signals.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
@@ -14,9 +16,8 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std::shared_ptr<IChunkedArray>& sourceArray,
-    const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings) {
-    AFL_VERIFY(adapter);
+TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
+    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings) {
     AFL_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(sourceArray->GetDataType(), settings);
     IChunkedArray::TReader reader(sourceArray);
@@ -24,7 +25,7 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std:
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
         storage.emplace_back(address.GetArray());
-        auto conclusion = adapter->AddDataToBuilders(address.GetArray(), builder);
+        auto conclusion = settings.GetDataExtractor()->AddDataToBuilders(address.GetArray(), builder);
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -67,19 +68,26 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         proto.SetOtherStatsSize(0);
     }
     ui32 columnIdx = 0;
+    TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
         TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(
-            ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
+        TMonotonic next = TMonotonic::Now();
+        NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);
+        pred = next;
         ++columnIdx;
     }
 
     if (OthersData.GetRecords()->GetRecordsCount()) {
+        TMonotonic pred = TMonotonic::Now();
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
             blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            TMonotonic next = TMonotonic::Now();
+            NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size(), next - pred);
+            pred = next;
             auto* cInfo = proto.AddOtherColumns();
             cInfo->SetSize(blobRanges.back().size());
         }
@@ -105,42 +113,160 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     return result;
 }
 
-IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
-    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+class TJsonRestorer {
+private:
+    NJson::TJsonValue Result;
+
+public:
+    bool IsNull() const {
+        return !Result.IsDefined();
+    }
+
+    TConclusion<NBinaryJson::TBinaryJson> Finish() {
+        auto str = Result.GetStringRobust();
+        auto bJson = NBinaryJson::SerializeToBinaryJson(Result.GetStringRobust());
+        if (const TString* val = std::get_if<TString>(&bJson)) {
+            return TConclusionStatus::Fail(*val);
+        } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
+            return std::move(*val);
+        } else {
+            return TConclusionStatus::Fail("undefined case for binary json construction");
+        }
+    }
+
+    void SetValueByPath(const TString& path, const TString& valueStr) {
+        ui32 start = 0;
+        bool enqueue = false;
+        bool wasEnqueue = false;
+        NJson::TJsonValue* current = &Result;
+        for (ui32 i = 0; i < path.size(); ++i) {
+            if (path[i] == '\\') {
+                ++i;
+                continue;
+            }
+            if (path[i] == '\'' || path[i] == '\"') {
+                wasEnqueue = true;
+                enqueue = !enqueue;
+                continue;
+            }
+            if (enqueue) {
+                continue;
+            }
+            if (path[i] == '.') {
+                if (wasEnqueue) {
+                    AFL_VERIFY(i > start + 2);
+                    TStringBuf key(path.data() + start + 1, (i - 1) - start - 1);
+                    NJson::TJsonValue* currentNext = nullptr;
+                    if (current->GetValuePointer(key, &currentNext)) {
+                        current = currentNext;
+                    } else {
+                        current = &current->InsertValue(key, NJson::JSON_MAP);
+                    }
+                } else {
+                    AFL_VERIFY(i > start);
+                    TStringBuf key(path.data() + start, i - start);
+                    NJson::TJsonValue* currentNext = nullptr;
+                    if (current->GetValuePointer(key, &currentNext)) {
+                        current = currentNext;
+                    } else {
+                        ui32 keyIndex;
+                        if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
+                            AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
+                            current->SetType(NJson::JSON_ARRAY);
+                            if (current->GetArraySafe().size() <= keyIndex) {
+                                current->GetArraySafe().resize(keyIndex + 1);
+                            }
+                            current = &current->GetArraySafe()[keyIndex];
+                        } else {
+                            AFL_VERIFY(!current->IsArray())("current_type", current->GetType())("current", current->GetStringRobust());
+                            current = &current->InsertValue(key, NJson::JSON_MAP);
+                        }
+                    }
+                }
+                wasEnqueue = false;
+                start = i + 1;
+            }
+        }
+        if (wasEnqueue) {
+            AFL_VERIFY(path.size() > start + 2)("path", path)("start", start);
+            TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
+            current->InsertValue(key, valueStr);
+        } else {
+            AFL_VERIFY(path.size() > start);
+            TStringBuf key(path.data() + start, (path.size()) - start);
+            ui32 keyIndex;
+            if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
+                AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
+                current->SetType(NJson::JSON_ARRAY);
+
+                if (current->GetArraySafe().size() <= keyIndex) {
+                    current->GetArraySafe().resize(keyIndex + 1);
+                }
+                current->GetArraySafe()[keyIndex] = valueStr;
+            } else {
+                AFL_VERIFY(!current->IsArray())("key", key)("current", current->GetStringRobust())("full", Result.GetStringRobust())(
+                    "current_type", current->GetType());
+                current->InsertValue(key, valueStr);
+            }
+        }
+    }
+};
+
+std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
-    for (ui32 recordIndex = 0; recordIndex < GetRecordsCount(); ++recordIndex) {
-        NJson::TJsonValue value;
+    const ui32 start = context.GetStartIndex().value_or(0);
+    const ui32 finish = start + context.GetRecordsCount().value_or(GetRecordsCount() - start);
+    std::optional<std::vector<bool>> simpleFilter;
+    if (context.GetFilter()) {
+        simpleFilter = context.GetFilter()->BuildSimpleFilter();
+    }
+    for (ui32 recordIndex = start; recordIndex < finish; ++recordIndex) {
+        if (simpleFilter && !(*simpleFilter)[recordIndex]) {
+            continue;
+        }
+        it.SkipRecordTo(recordIndex);
+        TJsonRestorer value;
         auto onStartRecord = [&](const ui32 index) {
             AFL_VERIFY(recordIndex == index)("count", recordIndex)("index", index);
         };
         auto onFinishRecord = [&]() {
-            auto str = value.GetStringRobust();
-            //            NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(str.data(), str.size()));
-            //
-            auto bJson = NBinaryJson::SerializeToBinaryJson(value.GetStringRobust());
-            if (const TString* val = std::get_if<TString>(&bJson)) {
-                AFL_VERIFY(false)("error", *val);
-            } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-                if (value.IsNull() || !value.IsDefined()) {
-                    TStatusValidator::Validate(builder->AppendNull());
-                } else {
-                    NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(val->data(), val->size()));
-                }
+            if (value.IsNull()) {
+                TStatusValidator::Validate(builder->AppendNull());
             } else {
-                AFL_VERIFY(false);
+                const TConclusion<NBinaryJson::TBinaryJson> bJson = value.Finish();
+                NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(bJson->data(), bJson->size()));
             }
         };
+
+        const auto addValueToJson = [&](const TString& path, const TString& valueStr) {
+            value.SetValueByPath(path, valueStr);
+        };
+
         auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {
-                value.InsertValue(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             } else {
-                value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
     }
-    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builder)), 0, 0);
+    return NArrow::FinishBuilder(std::move(builder));
+}
+
+std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    auto chunk = BuildBJsonArray(context);
+    if (chunk->length()) {
+        return std::make_shared<arrow::ChunkedArray>(chunk);
+    } else {
+        return std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector(), GetDataType());
+    }
+}
+
+IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
+    const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
+    return TLocalDataAddress(BuildBJsonArray(TColumnConstructionContext()), 0, 0);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

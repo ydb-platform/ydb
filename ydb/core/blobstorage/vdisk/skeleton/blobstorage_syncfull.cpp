@@ -104,14 +104,14 @@ namespace NKikimr {
                     pres = Process(ctx, FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
                     if (pres & (MsgFullFlag | LongProcessing))
                         break;
-                    Y_ABORT_UNLESS(pres & EmptyFlag);
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
                     pres = Process(ctx, FullSnap.BlocksSnap, KeyBlock, FakeFilter);
                     if (pres & (MsgFullFlag | LongProcessing))
                         break;
-                    Y_ABORT_UNLESS(pres & EmptyFlag);
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;

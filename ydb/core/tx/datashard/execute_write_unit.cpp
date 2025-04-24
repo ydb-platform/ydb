@@ -73,7 +73,7 @@ public:
             for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                 writeOp.AddVolatileDependency(txId);
                 bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, writeOp.GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
+                Y_ENSURE(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
             }
 
             ResetChanges(userDb, writeOp, txc);
@@ -119,7 +119,7 @@ public:
 
         auto fillOps = [&](ui32 rowIdx) {
             ops.clear();
-            Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
+            Y_ENSURE(matrix.GetColCount() >= userTable.KeyColumnIds.size());
             ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
 
             for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
@@ -173,7 +173,7 @@ public:
                 }
                 default:
                     // Checked before in TWriteOperation
-                    Y_FAIL_S(operationType << " operation is not supported now");
+                    Y_ENSURE(false, operationType << " operation is not supported now");
             }
         }
 
@@ -192,7 +192,7 @@ public:
             }
             default:
                 // Checked before in TWriteOperation
-                Y_FAIL_S(operationType << " operation is not supported now");
+                Y_ENSURE(false, operationType << " operation is not supported now");
         }
     }
 
@@ -230,13 +230,13 @@ public:
                 case ERestoreDataStatus::Error:
                     // For immediate transactions we want to translate this into a propose failure
                     if (op->IsImmediate()) {
-                        Y_ABORT_UNLESS(!writeTx->Ready());
+                        Y_ENSURE(!writeTx->Ready());
                         writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
                         return EExecutionStatus::Executed;
                     }
 
                     // For planned transactions errors are not expected
-                    Y_ABORT("Failed to restore tx data: %s", writeTx->GetErrStr().c_str());
+                    Y_ENSURE(false, "Failed to restore tx data: " << writeTx->GetErrStr());
             }
         }
 
@@ -245,7 +245,7 @@ public:
 
         if (op->IsImmediate() && !writeOp->ReValidateKeys(txc.DB.GetScheme())) {
             // Immediate transactions may be reordered with schema changes and become invalid
-            Y_ABORT_UNLESS(!writeTx->Ready());
+            Y_ENSURE(!writeTx->Ready());
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
             return EExecutionStatus::Executed;
         }
@@ -436,9 +436,9 @@ public:
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
         } catch (const TNeedGlobalTxId&) {
-            Y_VERIFY_S(op->GetGlobalTxId() == 0,
+            Y_ENSURE(op->GetGlobalTxId() == 0,
                 "Unexpected TNeedGlobalTxId exception for write operation with TxId# " << op->GetGlobalTxId());
-            Y_VERIFY_S(op->IsImmediate(),
+            Y_ENSURE(op->IsImmediate(),
                 "Unexpected TNeedGlobalTxId exception for a non-immediate write operation with TxId# " << op->GetTxId());
 
             ctx.Send(MakeTxProxyID(),
@@ -458,7 +458,7 @@ public:
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << tabletId << " cannot write more uncommitted changes");
 
             for (auto& table : guardLocks.AffectedTables) {
-                Y_ABORT_UNLESS(guardLocks.LockTxId);
+                Y_ENSURE(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
                     tabletId,

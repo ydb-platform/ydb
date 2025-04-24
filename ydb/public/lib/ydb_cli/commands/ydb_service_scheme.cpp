@@ -87,11 +87,10 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
 
     if (Recursive) {
-        NTable::TTableClient tableClient(driver);
-        NTopic::TTopicClient topicClient(driver);
-        NQuery::TQueryClient queryClient(driver);
-        const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
+        const auto settings = TRemoveDirectoryRecursiveSettings()
+            .Prompt(Prompt.GetOrElse(ERecursiveRemovePrompt::Once))
+            .CreateProgressBar(true);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(driver, Path, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {

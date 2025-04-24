@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -92,8 +93,7 @@ public:
 };
 
 class TTableInfo {
-public:
-    ui64 PathId;
+    const TInternalPathId PathId;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -102,7 +102,7 @@ public:
         return Versions.empty();
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -130,33 +130,32 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo() = default;
-
-    TTableInfo(const ui64 pathId)
+    TTableInfo(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
     template <class TRow>
-    bool InitFromDB(const TRow& rowset) {
-        PathId = rowset.template GetValue<Schema::TableInfo::PathId>();
+    static TTableInfo InitFromDB(const TRow& rowset) {
+        const auto pathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+        TTableInfo result(pathId);
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
-            DropVersion.emplace(
+            result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
-        return true;
+        return result;
     }
 };
 
 class TTtlVersions {
 private:
-    THashMap<ui64, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
+    THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
 
-    void AddVersion(const ui64 pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
+    void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         AFL_VERIFY(Ttl[pathId].emplace(snapshot, ttl).second)("snapshot", snapshot);
     }
 
 public:
-    void AddVersionFromProto(const ui64 pathId, const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings) {
+    void AddVersionFromProto(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings) {
         std::optional<NOlap::TTiering> ttlVersion;
         if (ttlSettings.HasEnabled()) {
             NOlap::TTiering deserializedTtl;
@@ -166,7 +165,7 @@ public:
         AddVersion(pathId, snapshot, ttlVersion);
     }
 
-    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+    std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         auto findTable = Ttl.FindPtr(pathId);
         if (!findTable) {
             return std::nullopt;
@@ -189,10 +188,10 @@ public:
 
 class TTablesManager {
 private:
-    THashMap<ui64, TTableInfo> Tables;
+    THashMap<TInternalPathId, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
-    std::map<NOlap::TSnapshot, THashSet<ui64>> PathsToDrop;
+    std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -214,11 +213,11 @@ public:
         return LoadTimeCounters;
     }
 
-    bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
-    bool TryFinalizeDropPathOnComplete(const ui64 pathId);
+    bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const;
+    bool TryFinalizeDropPathOnComplete(const TInternalPathId pathId);
 
-    THashMap<ui64, NOlap::TTiering> GetTtl(const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
-        THashMap<ui64, NOlap::TTiering> ttl;
+    THashMap<TInternalPathId, NOlap::TTiering> GetTtl(const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        THashMap<TInternalPathId, NOlap::TTiering> ttl;
         for (const auto& [pathId, info] : Tables) {
             if (info.IsDropped(snapshot)) {
                 continue;
@@ -230,16 +229,16 @@ public:
         return ttl;
     }
 
-    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+    std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 
-    const std::map<NOlap::TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {
+    const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
 
-    THashSet<ui64> GetPathsToDrop(const NOlap::TSnapshot& minReadSnapshot) const {
-        THashSet<ui64> result;
+    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::TSnapshot& minReadSnapshot) const {
+        THashSet<TInternalPathId> result;
         for (auto&& i : PathsToDrop) {
             if (minReadSnapshot < i.first) {
                 break;
@@ -249,7 +248,7 @@ public:
         return result;
     }
 
-    const THashMap<ui64, TTableInfo>& GetTables() const {
+    const THashMap<TInternalPathId, TTableInfo>& GetTables() const {
         return Tables;
     }
 
@@ -308,15 +307,15 @@ public:
 
     bool InitFromDB(NIceDb::TNiceDb& db);
 
-    const TTableInfo& GetTable(const ui64 pathId) const;
+    const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
 
-    bool HasTable(const ui64 pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
-    bool IsReadyForStartWrite(const ui64 pathId, const bool withDeleted) const;
-    bool IsReadyForFinishWrite(const ui64 pathId, const NOlap::TSnapshot& minReadSnapshot) const;
+    bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
+    bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
+    bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
-    void DropTable(const ui64 pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+    void DropTable(const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
@@ -324,11 +323,11 @@ public:
 
     void AddSchemaVersion(
         const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
-    void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo,
+    void AddTableVersion(const TInternalPathId pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo,
         const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, NIceDb::TNiceDb& db);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId,
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const TInternalPathId pathId,
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 };
 

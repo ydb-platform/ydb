@@ -3,6 +3,7 @@ RECURSE(
     generic
     pq_async_io
     solomon
+    streaming_optimize
     tools
     yt
 )

@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     arrow
+    batch_operations
     cost
     data
     data_integrity
@@ -16,7 +17,7 @@ RECURSE_FOR_TESTS(
     scan
     scheme
     service
-    spilling
+    runtime
     sysview
     tx
     view

@@ -30,7 +30,8 @@ namespace NYql {
                 const TString& LLVMSettings,
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
-                TMaybe<ui64> deterministicTimeProviderSeed
+                TMaybe<ui64> deterministicTimeProviderSeed,
+                TLangVersion langver
             );
 
             ~TWorkerGraph();
@@ -80,7 +81,8 @@ namespace NYql {
                 const TString& LLVMSettings,
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
-                TMaybe<ui64> deterministicTimeProviderSeed
+                TMaybe<ui64> deterministicTimeProviderSeed,
+                TLangVersion langver
             );
 
         public:

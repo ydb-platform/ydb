@@ -25,8 +25,8 @@ namespace NTest {
             TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
             for (auto &partView: Flatten) {
-                Y_ABORT_UNLESS(partView.Part, "Creating TWrapIter without a part");
-                Y_ABORT_UNLESS(partView.Slices, "Creating TWrapIter without slices");
+                Y_ENSURE(partView.Part, "Creating TWrapIter without a part");
+                Y_ENSURE(partView.Slices, "Creating TWrapIter without slices");
                 TOverlay{partView.Screen, partView.Slices}.Validate();
                 parts.push_back(&partView);
             }

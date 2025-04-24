@@ -174,6 +174,11 @@ public:
         return ColumnFeatures[colIndex]->GetIsNullable();
     }
 
+    const TColumnFeatures& GetColumnFeaturesVerifiedByIndex(const ui32 colIndex) const {
+        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        return *ColumnFeatures[colIndex];
+    }
+
     bool IsNullableVerified(const ui32 colId) const {
         return GetColumnFeaturesVerified(colId).GetIsNullable();
     }
@@ -330,7 +335,7 @@ public:
     }
 
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
-        const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::EIndexCheckOperation op) const;
+        const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
@@ -377,6 +382,16 @@ public:
         return PKColumnIds[0];
     }
 
+    std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
+        AFL_VERIFY(size);
+        AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
+        if (size == (ui32)PrimaryKey->num_fields()) {
+            return PrimaryKey;
+        } else {
+            std::vector<std::shared_ptr<arrow::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
+            return std::make_shared<arrow::Schema>(std::move(fields));
+        }
+    }
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }

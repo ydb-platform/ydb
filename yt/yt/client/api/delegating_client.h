@@ -23,7 +23,7 @@ public:
     // IClientBase methods
     DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
 
-    DELEGATE_METHOD(std::optional<std::string>, GetClusterName,
+    DELEGATE_METHOD(TFuture<std::optional<std::string>>, GetClusterName,
         (bool fetchIfNull),
         (fetchIfNull))
 
@@ -256,6 +256,11 @@ public:
         const TTransactionAttachOptions& options),
         (transactionId, options))
 
+    DELEGATE_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (prerequisiteId, options))
+
     // Tables
     DELEGATE_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
@@ -394,6 +399,11 @@ public:
         const std::vector<NYPath::TRichYPath>& paths,
         const TPartitionTablesOptions& options),
         (paths, options))
+
+    DELEGATE_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& descriptor,
+        const TReadTablePartitionOptions& options),
+        (descriptor, options))
 
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
@@ -860,6 +870,13 @@ public:
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
         (pipelinePath, viewPath, options))
+
+    DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}),
+        (pipelinePath, command, argument, options))
 
     // Distributed client
     DELEGATE_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (

@@ -87,7 +87,7 @@ namespace NActors {
 
         void DropConfirmed(ui64 confirm);
 
-        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed);
+        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial);
 
         bool IsEmpty() const {
             return Queue.empty();
@@ -142,11 +142,11 @@ namespace NActors {
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
 
-        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
 
-        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 
         void AccountTraffic() {
             if (const ui64 amount = std::exchange(UnaccountedTraffic, 0)) {

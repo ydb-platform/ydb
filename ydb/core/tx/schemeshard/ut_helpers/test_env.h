@@ -77,6 +77,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
         OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
         OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
 
         #undef OPTION
     };
@@ -149,6 +150,7 @@ namespace NSchemeShardUT_Private {
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);
+        NKikimrConfig::TAppConfig GetAppConfig() const;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

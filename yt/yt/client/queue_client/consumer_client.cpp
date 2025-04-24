@@ -672,12 +672,13 @@ ISubConsumerClientPtr CreateSubConsumerClient(
 {
     auto queueCluster = queuePath.GetCluster();
     if (!queueCluster && queueClusterClient) {
-        if (auto queueClusterFromClient = queueClusterClient->GetClusterName()) {
+        // `CreateSubConsumerClient` function calls `WaitFor` already, it will be fixed later.
+        if (auto queueClusterFromClient = WaitFor(queueClusterClient->GetClusterName()).ValueOrThrow()) {
             queueCluster = *queueClusterFromClient;
         }
     }
     if (!queueCluster) {
-        if (auto clientCluster = consumerClusterClient->GetClusterName()) {
+        if (auto clientCluster = WaitFor(consumerClusterClient->GetClusterName()).ValueOrThrow()) {
             queueCluster = *clientCluster;
         }
     }

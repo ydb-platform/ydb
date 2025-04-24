@@ -30,7 +30,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return static_cast<const NUdf::TUnboxedValuePod&>(state);
+            return state;
         } else if (state.HasValue()) {
             if constexpr (UseCtx) {
                 CleanupCurrentContext();
@@ -105,7 +105,7 @@ public:
         block = step;
 
         if constexpr (UseCtx) {
-            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&CleanupCurrentContext>());
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
             CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
@@ -409,7 +409,7 @@ private:
         block = step;
 
         if constexpr (UseCtx) {
-            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&CleanupCurrentContext>());
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
             CallInst::Create(cleanupType, cleanupPtr, {}, "", block);

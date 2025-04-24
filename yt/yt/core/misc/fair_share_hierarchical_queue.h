@@ -47,7 +47,6 @@ struct IFairShareHierarchicalSlotQueueResource
     virtual void ReleaseResource() = 0;
 };
 
-DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 DEFINE_REFCOUNTED_TYPE(IFairShareHierarchicalSlotQueueResource)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,6 +67,9 @@ private:
     const TTag Tag_;
     const double Weight_;
 };
+
+template <typename TTag>
+std::vector<TFairShareHierarchyLevel<TTag>> CreateHierarchyLevels(const std::vector<std::pair<TTag, double>>& tags);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -5,6 +5,7 @@
 #include <arrow/compute/exec_internal.h>
 #include <arrow/array/builder_primitive.h>
 
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
@@ -60,6 +61,89 @@ namespace {
             arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
             datums[i + topology->InputArgsCount] = output;
         }
+    }
+
+    // Hand-made variant using WideFromBlocks (in order to test ListToBlocks by well-tested nodes rather than actual ListFromBlocks)
+    TRuntimeNode ListFromBlocks(TProgramBuilder& pb, TRuntimeNode blockList) {
+        const auto wideBlocksStream = pb.FromFlow(pb.ExpandMap(pb.ToFlow(blockList), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+            return {
+                pb.Member(item, "key"),
+                pb.Member(item, "value"),
+                pb.Member(item, NYql::BlockLengthColumnName)
+            };
+        }));
+
+        return pb.ForwardList(pb.NarrowMap(pb.ToFlow(pb.WideFromBlocks(wideBlocksStream)), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewStruct({
+                {"key", items[0]},
+                {"value", items[1]}
+            });
+        }));
+    }
+
+    // Hand-made variant using WideToBlocks (in order to test ListFromBlocks by well-tested nodes rather than actual ListToBlocks)
+    TRuntimeNode ListToBlocks(TProgramBuilder& pb, TRuntimeNode list) {
+        const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+            return {
+                pb.Member(item, "key"),
+                pb.Member(item, "value")
+            };
+        })));
+
+        return pb.Collect(pb.NarrowMap(pb.ToFlow(wideBlocksStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewStruct({
+                {"key", items[0]},
+                {"value", items[1]},
+                {NYql::BlockLengthColumnName, items[2]}
+            });
+        }));
+    }
+
+    using TListTransformer = std::function<TRuntimeNode(TProgramBuilder&, TRuntimeNode)>;
+
+    void DoTestListToAndFromBlocks(TSetup<false>& setup, TListTransformer listToBlocksImpl, TListTransformer listFromBlocksImpl) {
+        constexpr size_t TEST_SIZE = 1 << 16;
+        const TString hugeString(128, '1');
+
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+        const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+
+        const auto structType = pb.NewStructType({
+            {"key", ui64Type},
+            {"value", strType},
+        });
+
+        TVector<TRuntimeNode> listItems;
+        for (size_t i = 0; i < TEST_SIZE; i++) {
+            const auto str = hugeString + ToString(i);
+            listItems.push_back(pb.NewStruct({
+                {"key", pb.NewDataLiteral<ui64>(i)},
+                // Huge string is used to make less rows fit into one block (in order to test output slicing)
+                {"value", pb.NewDataLiteral<NUdf::EDataSlot::String>(str)},
+            }));
+        }
+
+        const auto list = pb.NewList(structType, listItems);
+        const auto blockList = listToBlocksImpl(pb, list);
+
+        const auto graph = setup.BuildGraph(listFromBlocksImpl(pb, blockList));
+        const auto iterator = graph->GetValue().GetListIterator();
+
+        NUdf::TUnboxedValue structValue;
+        for (size_t i = 0; i < TEST_SIZE; i++) {
+            const auto str = hugeString + ToString(i);
+            UNIT_ASSERT(iterator.Next(structValue));
+
+            const auto key = structValue.GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
+            const auto value = structValue.GetElement(1);
+            UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
+        }
+
+        UNIT_ASSERT(!iterator.Next(structValue));
+        UNIT_ASSERT(!iterator.Next(structValue));
     }
 }
 
@@ -148,6 +232,70 @@ Y_UNIT_TEST_LLVM(TestWideToBlocks) {
 
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST(TestListToBlocks) {
+    TSetup<false> setup;
+
+    DoTestListToAndFromBlocks(
+        setup,
+        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
+        ListFromBlocks
+    );
+}
+
+Y_UNIT_TEST(TestListToBlocksMultiUsage) {
+    constexpr size_t TEST_SIZE = 1 << 10;
+
+    TSetup<false> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+
+    const auto structType = pb.NewStructType({
+        {"key", ui64Type},
+        {"value", strType},
+    });
+
+    TVector<TRuntimeNode> listItems;
+    for (size_t i = 0; i < TEST_SIZE; i++) {
+        const auto str = ToString(i);
+        listItems.push_back(pb.NewStruct({
+            {"key", pb.NewDataLiteral<ui64>(i)},
+            {"value", pb.NewDataLiteral<NUdf::EDataSlot::String>(str)},
+        }));
+    }
+
+    const auto list = pb.NewList(structType, listItems);
+    const auto blockList1 = pb.ListToBlocks(list);
+    const auto blockList2 = pb.ListToBlocks(list);
+
+    const auto result = pb.Zip({ListFromBlocks(pb, blockList1), ListFromBlocks(pb, blockList2)});
+
+    const auto graph = setup.BuildGraph(result);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue tupleValue;
+    for (size_t i = 0; i < TEST_SIZE; i++) {
+        const auto str = ToString(i);
+        UNIT_ASSERT(iterator.Next(tupleValue));
+
+        auto structValue = tupleValue.GetElement(0);
+        auto key = structValue.GetElement(0);
+        UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
+        auto value = structValue.GetElement(1);
+        UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
+
+        structValue = tupleValue.GetElement(1);
+        key = structValue.GetElement(0);
+        UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
+        value = structValue.GetElement(1);
+        UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
+    }
+
+    UNIT_ASSERT(!iterator.Next(tupleValue));
+    UNIT_ASSERT(!iterator.Next(tupleValue));
 }
 
 namespace {
@@ -581,6 +729,16 @@ Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
+Y_UNIT_TEST(TestListFromBlocks) {
+    TSetup<false> setup;
+
+    DoTestListToAndFromBlocks(
+        setup,
+        ListToBlocks,
+        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); }
+    );
+}
+
 Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -621,6 +779,16 @@ Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
 
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST(TestListToAndFromBlocks) {
+    TSetup<false> setup;
+
+    DoTestListToAndFromBlocks(
+        setup,
+        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
+        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); }
+    );
 }
 }
 

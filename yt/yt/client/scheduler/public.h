@@ -22,6 +22,12 @@ extern const TJobTraceId NullJobTraceId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
+
+constexpr TAllocationId NullAllocationId{};
+
+////////////////////////////////////////////////////////////////////////////////
+
 using NJobTrackerClient::TJobId;
 using NJobTrackerClient::TOperationId;
 
@@ -155,6 +161,7 @@ DEFINE_ENUM(EAbortReason,
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
     ((JobCountChangedByUserRequest)    ( 59))
+    ((NbdErrors)                       ( 60))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -188,7 +195,7 @@ DEFINE_ENUM(EAutoMergeMode,
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
 
-DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+DECLARE_REFCOUNTED_STRUCT(TSpecPatch);
 using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////

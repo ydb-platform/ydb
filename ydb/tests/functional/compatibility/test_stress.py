@@ -31,6 +31,10 @@ class TestStress(object):
             binary_paths=binary_paths,
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
+
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            },
         )
 
         self.cluster = KiKiMR(self.config)
@@ -56,22 +60,7 @@ class TestStress(object):
             + ["--path", path]
         )
 
-    def set_auto_partitioning_size_mb(self, path, size_mb):
-        yatest.common.execute(
-            [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "--endpoint",
-                "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database=/Root",
-                "sql", "-s",
-                "ALTER TABLE `{}` SET (AUTO_PARTITIONING_PARTITION_SIZE_MB={})".format(path, size_mb),
-            ],
-            stdout=self.output_f,
-            stderr=self.output_f,
-        )
-
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_log(self, store_type):
         timeout_scale = 60
 
@@ -137,13 +126,13 @@ class TestStress(object):
         select.wait()
 
     @pytest.mark.skip(reason="Too huge logs")
-    @pytest.mark.parametrize("mode", ["row"])
-    def test_simple_queue(self, mode: str):
-        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, mode) as workload:
+    @pytest.mark.parametrize("store_type", ["row", "column"])
+    def test_simple_queue(self, store_type: str):
+        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, store_type) as workload:
             for handle in workload.loop():
                 handle()
 
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_kv(self, store_type):
         init_command_prefix = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -213,7 +202,7 @@ class TestStress(object):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_tpch1(self, store_type):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -228,6 +217,7 @@ class TestStress(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -256,31 +246,18 @@ class TestStress(object):
             "run",
             "--scale=1",
             "--exclude",
-            # not working for row tables
-            "17",
+            "17",  # not working for row tables
             "--check-canonical",
+            "--retries",
+            "5",  # in row tables we have to retry query by design
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-
-        # make tables distributed across nodes
-        tables = [
-            "lineitem",
-            "nation",
-            "orders",
-            "part",
-            "partsupp",
-            "region",
-            "supplier",
-        ]
-        for table in tables:
-            self.set_auto_partitioning_size_mb("tpch/{}".format(table), 25)
-
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Not stabilized yet")
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_tpcds1(self, store_type):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -296,6 +273,7 @@ class TestStress(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -327,39 +305,10 @@ class TestStress(object):
             "--exclude",
             # not working for row tables
             "5,7,14,18,22,23,24,26,27,31,33,39,46,51,54,56,58,60,61,64,66,67,68,72,75,77,78,79,80,93",
+            "--retries",
+            "5",  # in row tables we have to retry query by design
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-
-        # make table distributed across nodes
-        tables = [
-            "call_center",
-            "catalog_page",
-            "catalog_returns",
-            "catalog_sales",
-            "customer",
-            "customer_demographics",
-            "date_dim",
-            "household_demographics",
-            "income_band",
-            "inventory",
-            "item",
-            "promotion",
-            "reason",
-            "ship_mode",
-            "store",
-            "store_returns",
-            "store_sales",
-            "time_dim",
-            "warehouse",
-            "web_page",
-            "web_returns",
-            "web_sales",
-            "web_site",
-        ]
-
-        for table in tables:
-            self.set_auto_partitioning_size_mb("tpcds/{}".format(table), 25)
-
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)

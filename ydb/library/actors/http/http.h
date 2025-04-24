@@ -141,8 +141,10 @@ public:
     bool EnsureEnoughSpaceAvailable(size_t need) {
         size_t avail = Avail();
         if (avail < need) {
+            auto data1 = Data();
             Reserve(Capacity() + std::max(need, BUFFER_MIN_STEP));
-            return false;
+            auto data2 = Data();
+            return data1 == data2;
         }
         return true;
     }
@@ -532,13 +534,13 @@ public:
 
     void Set(TStringBuf name, TStringBuf value) {
         Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
+        EnsureEnoughSpaceAvailable(name.size() + 2 + value.size() + 2);
         Append(name);
         Append(": ");
-        auto data = TSocketBuffer::Pos();
         Append(value);
         auto cit = HeaderType::HeadersLocation.find(name);
         if (cit != HeaderType::HeadersLocation.end()) {
-            (this->*cit->second) = TStringBuf(data, TSocketBuffer::Pos());
+            (this->*cit->second) = TStringBuf(TSocketBuffer::Pos() - value.size(), TSocketBuffer::Pos());
         }
         Append("\r\n");
         HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), TSocketBuffer::Pos() - HeaderType::Headers.data());

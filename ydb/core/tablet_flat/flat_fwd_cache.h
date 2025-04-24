@@ -6,6 +6,7 @@
 #include "flat_fwd_page.h"
 #include "flat_table_part.h"
 #include "flat_part_slice.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -23,7 +24,7 @@ namespace NFwd {
                     }
                 }
 
-                Y_ABORT("Failed to locate page within forward trace");
+                Y_TABLET_ERROR("Failed to locate page within forward trace");
             }
 
             // next pages may be requested, ignore them
@@ -33,7 +34,7 @@ namespace NFwd {
         // returns released data size
         ui64 Emplace(TPage &page)
         {
-            Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
+            Y_ENSURE(page, "Cannot push invalid page to trace cache");
 
             Offset = (Offset + 1) % Capacity;
 
@@ -68,18 +69,18 @@ namespace NFwd {
 
     public:
         void Add(TPageId pageId, TGroupId groupId, ui32 level) {
-            Y_ABORT_UNLESS(Map.emplace(pageId, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
+            Y_ENSURE(Map.emplace(pageId, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
         }
 
         ui32 GetLevel(TPageId pageId) const {
             auto ptr = Map.FindPtr(pageId);
-            Y_ABORT_UNLESS(ptr, "Unknown page");
+            Y_ENSURE(ptr, "Unknown page");
             return ptr->Level;
         }
 
         TGroupId GetGroup(TPageId pageId) {
             auto ptr = Map.FindPtr(pageId);
-            Y_ABORT_UNLESS(ptr, "Unknown page");
+            Y_ENSURE(ptr, "Unknown page");
             return ptr->GroupId;
         }
 
@@ -113,16 +114,12 @@ namespace NFwd {
 
         ~TFlatIndexCache()
         {
-            IndexPage.Release();
-            for (auto &it : Pages) {
-                it.Release();
-            }
         }
 
         TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
         {
             if (type == EPage::FlatIndex) {
-                Y_ABORT_UNLESS(pageId == IndexPage.PageId);
+                Y_ENSURE(pageId == IndexPage.PageId);
 
                 // Note: doesn't affect read ahead limits, only stats
                 if (IndexPage.Fetch == EFetch::None) {
@@ -132,7 +129,7 @@ namespace NFwd {
                 return {IndexPage.Touch(pageId, Stat), false, true};
             }
 
-            Y_ABORT_UNLESS(type == EPage::DataPage);
+            Y_ENSURE(type == EPage::DataPage);
 
             if (auto *page = Trace.Get(pageId)) {
                 return {page, false, true};
@@ -166,19 +163,19 @@ namespace NFwd {
             
             if (type == EPage::FlatIndex) {
                 // Note: doesn't affect read ahead limits, only stats
-                Y_ABORT_UNLESS(page.PageId == IndexPage.PageId);
+                Y_ENSURE(page.PageId == IndexPage.PageId);
                 Index.emplace(page.Data);
                 Iter = Index->LookupRow(BeginRowId);
                 IndexPage.Settle(page, std::move(sharedPageRef));
                 return;
             }
 
-            Y_ABORT_UNLESS(type == EPage::DataPage);
+            Y_ENSURE(type == EPage::DataPage);
 
             auto it = std::lower_bound(Pages.begin(), Pages.end(), page.PageId);
-            Y_ABORT_UNLESS(it != Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
+            Y_ENSURE(it != Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
             
-            Y_ABORT_UNLESS(page.Data.size() <= OnFetch, "Forward cache ahead counters is out of sync");
+            Y_ENSURE(page.Data.size() <= OnFetch, "Forward cache ahead counters is out of sync");
             OnFetch -= page.Data.size();
             OnHold += it->Settle(page, std::move(sharedPageRef)); // settle of a dropped page returns 0 and releases its data
 
@@ -196,7 +193,7 @@ namespace NFwd {
                 }
 
                 if (page.Size == 0) {
-                    Y_ABORT("Dropping page that has not been touched");
+                    Y_TABLET_ERROR("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep && page) {
                     OnHold -= Trace.Emplace(page);
                 } else {
@@ -212,6 +209,7 @@ namespace NFwd {
         void ShrinkPages()
         {
             while (PagesBeginOffset && Pages.front().Ready()) {
+                Y_ENSURE(Pages.front().Released(), "Forward cache page still holds data");
                 Pages.pop_front();
                 PagesBeginOffset--;
             }
@@ -219,26 +217,26 @@ namespace NFwd {
 
         void AdvanceNextPage(TPageId pageId)
         {
-            Y_ABORT_UNLESS(Iter);
-            Y_ABORT_UNLESS(Iter->GetPageId() <= pageId);
+            Y_ENSURE(Iter);
+            Y_ENSURE(Iter->GetPageId() <= pageId);
             while (Iter && Iter->GetPageId() < pageId) {
                 Iter++;
             }
 
-            Y_ABORT_UNLESS(Iter);
-            Y_ABORT_UNLESS(Iter->GetPageId() == pageId);
+            Y_ENSURE(Iter);
+            Y_ENSURE(Iter->GetPageId() == pageId);
         }
 
         void RequestNextPage(IPageLoadingQueue *head)
         {
-            Y_ABORT_UNLESS(Iter);
+            Y_ENSURE(Iter);
 
             auto size = head->AddToQueue(Iter->GetPageId(), EPage::DataPage);
 
             Stat.Fetch += size;
             OnFetch += size;
 
-            Y_ABORT_UNLESS(!Pages || Pages.back().PageId < Iter->GetPageId());
+            Y_ENSURE(!Pages || Pages.back().PageId < Iter->GetPageId());
             Pages.emplace_back(Iter->GetPageId(), size, 0, Max<TPageId>());
             Pages.back().Fetch = EFetch::Wait;
 
@@ -309,11 +307,6 @@ namespace NFwd {
 
         ~TBTreeIndexCache()
         {
-            for (auto &level : Levels) {
-                for (auto &it : level.Pages) {
-                    it.Release();
-                }
-            }
         }
 
         TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
@@ -361,12 +354,12 @@ namespace NFwd {
             auto& level = Levels[levelId];
 
             auto it = level.Pages.begin() + level.PagesPendingOffset;
-            Y_ABORT_UNLESS(it != level.Pages.end(), "No pending pages");
-            Y_ABORT_UNLESS(it->PageId <= page.PageId, "Got page that hasn't been requested for load");
+            Y_ENSURE(it != level.Pages.end(), "No pending pages");
+            Y_ENSURE(it->PageId <= page.PageId, "Got page that hasn't been requested for load");
             if (it->PageId < page.PageId) {
                 it = std::lower_bound(it, level.Pages.end(), page.PageId);
             }
-            Y_ABORT_UNLESS(it != level.Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
+            Y_ENSURE(it != level.Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
 
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
@@ -389,7 +382,7 @@ namespace NFwd {
                 case EPage::DataPage:
                     return Levels.size() - 1;
                 default:
-                    Y_ABORT("Unknown page type");
+                    Y_TABLET_ERROR("Unknown page type");
             }
         }
 
@@ -403,7 +396,7 @@ namespace NFwd {
                 }
 
                 if (page.Size == 0) {
-                    Y_ABORT("Dropping page that has not been touched");
+                    Y_TABLET_ERROR("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep && page) {
                     level.Trace.Emplace(page);
                     // Note: keep dropped pages in IndexPageLocator for simplicity
@@ -436,7 +429,7 @@ namespace NFwd {
                         if (child.GetRowCount() <= BeginRowId) {
                             continue;
                         }
-                        Y_ABORT_UNLESS(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.GetPageId());
+                        Y_ENSURE(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.GetPageId());
                         Levels[levelId + 1].Queue.push_back({child.GetPageId(), child.GetDataSize()});
                         if (child.GetRowCount() >= EndRowId) {
                             break;
@@ -451,6 +444,7 @@ namespace NFwd {
         void ShrinkPages(TLevel& level)
         {
             while (level.PagesBeginOffset && level.Pages.front().Ready()) {
+                Y_ENSURE(level.Pages.front().Released(), "Forward cache page still holds data");
                 level.Pages.pop_front();
                 level.PagesBeginOffset--;
                 if (level.PagesPendingOffset) {
@@ -479,19 +473,19 @@ namespace NFwd {
         {
             auto& queue = level.Queue;
 
-            Y_ABORT_UNLESS(!queue.empty());
-            Y_ABORT_UNLESS(queue.front().PageId <= pageId);
+            Y_ENSURE(!queue.empty());
+            Y_ENSURE(queue.front().PageId <= pageId);
             while (!queue.empty() && queue.front().PageId < pageId) {
                 queue.pop_front();
             }
 
-            Y_ABORT_UNLESS(!queue.empty());
-            Y_ABORT_UNLESS(queue.front().PageId == pageId);
+            Y_ENSURE(!queue.empty());
+            Y_ENSURE(queue.front().PageId == pageId);
         }
 
         void RequestNextPage(TLevel& level, IPageLoadingQueue *head)
         {
-            Y_ABORT_UNLESS(!level.Queue.empty());
+            Y_ENSURE(!level.Queue.empty());
             auto pageId = level.Queue.front().PageId;
 
             auto type = &level == &Levels.back() ? EPage::DataPage : EPage::BTreeIndex;
@@ -499,7 +493,7 @@ namespace NFwd {
 
             Stat.Fetch += size;
 
-            Y_ABORT_UNLESS(!level.Pages || level.Pages.back().PageId < pageId);
+            Y_ENSURE(!level.Pages || level.Pages.back().PageId < pageId);
             level.Pages.push_back({TPage(pageId, size, 0, Max<TPageId>()), level.Queue.front().EndDataSize});
             level.Pages.back().Fetch = EFetch::Wait;
 

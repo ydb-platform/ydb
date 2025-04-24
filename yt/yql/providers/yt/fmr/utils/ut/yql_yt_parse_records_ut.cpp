@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <yt/yql/providers/yt/fmr/utils/parse_records.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/yt_service/mock/yql_yt_yt_service_mock.h>
@@ -16,9 +16,11 @@ Y_UNIT_TEST_SUITE(ParseRecordTests) {
         std::unordered_map<TYtTableRef, TString> outputTables;
 
         auto ytService = MakeMockYtService(inputTables, outputTables);
+
         auto reader = ytService->MakeReader(testYtTable, TClusterConnection());
         auto writer = ytService->MakeWriter(testYtTable, TClusterConnection());
-        ParseRecords(*reader, *writer, 1, 10);
+        auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();
         UNIT_ASSERT_VALUES_EQUAL(outputTables.size(), 1);
         UNIT_ASSERT(outputTables.contains(testYtTable));

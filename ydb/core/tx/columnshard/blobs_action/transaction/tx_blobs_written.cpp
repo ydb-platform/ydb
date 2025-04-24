@@ -1,6 +1,7 @@
 #include "tx_blobs_written.h"
 
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
@@ -74,7 +75,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
-            lock.SetPathId(writeMeta.GetTableId());
+            lock.SetPathId(writeMeta.GetTableId().GetRawValue());
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
@@ -94,12 +95,13 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     for (auto&& i : Results) {
         i.DoSendReply(ctx);
     }
-    std::set<ui64> pathIds;
+    std::set<TInternalPathId> pathIds;
     for (auto&& writeResult : Pack.GetWriteResults()) {
+        const auto& writeMeta = writeResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
         if (writeResult.GetNoDataToWrite()) {
             continue;
         }
-        const auto& writeMeta = writeResult.GetWriteMeta();
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId());
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
@@ -145,13 +147,16 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& /* ctx */) {
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
+        writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
         Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
 
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
-            NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, "cannot write blob: " + ::ToString(PutBlobResult));
+            wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
+                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

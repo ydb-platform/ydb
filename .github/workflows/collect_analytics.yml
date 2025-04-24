@@ -1,25 +1,23 @@
 name: Collect-analytics-run
 on:
   schedule:
-    - cron: "0 * * * *"  # Every 1 h
+    - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
   workflow_dispatch:
-    inputs:
-      commit_sha:
-        type: string
-        default: ""
-        
+
+
 defaults:
   run:
     shell: bash
+
 jobs:
   main:
-    name: Checkout and setup
-    runs-on: [ self-hosted ]
+    name: Checkout, setup and collect testowners
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
+        ref: ${{ github.ref }}
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -27,27 +25,48 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
-    - name: Collect testowners 
+    - name: Collect testowners
       run: python3 .github/scripts/analytics/upload_testowners.py
-    - name: Collect test history data with window 1 days relwithdebinfo for main
-      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1
-    - name: Collect test history data with window 1 days release-asan for main
-      run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --build_type=release-asan
+
+  matrix-job:
+    name: Test collection on ${{ matrix.branch }} with ${{ matrix.build_type }}
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    needs: main
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ main, stable-25-1, stable-25-1-1 ]
+        build_type: [ relwithdebinfo, release-asan, release-msan, release-tsan ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect test history data
+      run: |
+        python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch ${{ matrix.branch }} --build_type ${{ matrix.build_type }}
     - name: Collect all muted and not muted tests
-      run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch main
+      run: |
+        # Save the original muted_ya.txt file
+        cp .github/config/muted_ya.txt .github/config/muted_ya.txt.bak
+
+        # Download muted_ya.txt from the specified branch
+        BRANCH=${{ matrix.branch }}
+        URL="https://raw.githubusercontent.com/ydb-platform/ydb/${BRANCH}/.github/config/muted_ya.txt"
+        wget -O .github/config/muted_ya.txt $URL
+
+        # Run the script
+        python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH 
+
+        # Restore the original muted_ya.txt file
+        mv .github/config/muted_ya.txt.bak .github/config/muted_ya.txt
     - name: Collect all test monitor (how long tests in state)
-      run: python3 .github/scripts/analytics/tests_monitor.py --branch main
-    - name: Collect test history data with window 10 run relwithdebinfo for main 
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 
-    - name: Collect test history data with window 10 run release-asan for main
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=10 --build_type=release-asan
-    - name: Collect test history data with window 50 run relwithdebinfo for main
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 
-    - name: Collect test history data with window 50 run release-asan for main
-      run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
-      
-
-
+      run: python3 .github/scripts/analytics/tests_monitor.py --branch ${{ matrix.branch }} --build_type ${{ matrix.build_type }}
+  

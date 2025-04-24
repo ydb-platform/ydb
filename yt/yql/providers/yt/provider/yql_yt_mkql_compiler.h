@@ -17,7 +17,6 @@ class TExprNode;
 class TTypeAnnotationNode;
 
 NKikimr::NMiniKQL::TRuntimeNode BuildTableContentCall(NKikimr::NMiniKQL::TType* outItemType,
-    TStringBuf clusterName,
     const TExprNode& input,
     const TMaybe<ui64>& itemsCount,
     NCommon::TMkqlBuildContext& ctx,
@@ -27,7 +26,6 @@ NKikimr::NMiniKQL::TRuntimeNode BuildTableContentCall(NKikimr::NMiniKQL::TType* 
 
 NKikimr::NMiniKQL::TRuntimeNode BuildTableContentCall(TStringBuf callName,
     NKikimr::NMiniKQL::TType* outItemType,
-    TStringBuf clusterName,
     const TExprNode& input,
     const TMaybe<ui64>& itemsCount,
     NCommon::TMkqlBuildContext& ctx,

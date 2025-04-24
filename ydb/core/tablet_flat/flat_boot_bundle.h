@@ -7,6 +7,7 @@
 #include "flat_sausage_packet.h"
 #include "flat_part_loader.h"
 #include "flat_dbase_naked.h"
+#include "util_fmt_abort.h"
 
 #include <util/generic/xrange.h>
 
@@ -52,7 +53,7 @@ namespace NBoot {
 
         bool HandleBio(NSharedCache::TEvResult &msg) override
         {
-            Y_ABORT_UNLESS(Loader, "PageCollections loader got un unexpected pages fetch");
+            Y_ENSURE(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 
@@ -75,11 +76,11 @@ namespace NBoot {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 
             if (Loader) {
-                Y_ABORT("Got an unexpected load blobs result");
+                Y_TABLET_ERROR("Got an unexpected load blobs result");
             } else if (load->Cookie >= PageCollections.size()) {
-                Y_ABORT("Got blobs load step with an invalid cookie");
+                Y_TABLET_ERROR("Got blobs load step with an invalid cookie");
             } else if (PageCollections[load->Cookie]) {
-                Y_ABORT("Page collection is already loaded at room %zu", load->Cookie);
+                Y_TABLET_ERROR("Page collection is already loaded at room " << load->Cookie);
             } else {
                 auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
 

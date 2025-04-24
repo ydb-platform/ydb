@@ -3,6 +3,7 @@
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
 #include "flat_util_binary.h"
+#include "util_fmt_abort.h"
 
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
@@ -28,15 +29,15 @@ namespace NPage {
             Tags.resize(TagsCount + (TagsCount & 1), 0);
             Cook.reserve(tags);
 
-            Y_ABORT_UNLESS(tags <= ui32(-Min<i16>()), "Too many column tags");
+            Y_ENSURE(tags <= ui32(-Min<i16>()), "Too many column tags");
         }
 
         void Put(TRowId row, ui16 tag, ui32 bytes)
         {
             if (row < Last && Last != Max<TRowId>()) {
-                Y_ABORT("Frame items have to follow sorted by row");
+                Y_TABLET_ERROR("Frame items have to follow sorted by row");
             } else if (tag >= TagsCount) {
-                Y_ABORT("Frame item component tag is out of range");
+                Y_TABLET_ERROR("Frame item component tag is out of range");
             } else if (Last != row) {
                 Flush();
             }
@@ -103,8 +104,8 @@ namespace NPage {
 
             out.Put(Tags).Put(Array);
 
-            Y_ABORT_UNLESS(*out == buf.mutable_end());
-            Y_ABORT_UNLESS(buf.size() % alignof(TEntry) == 0);
+            Y_ENSURE(*out == buf.mutable_end());
+            Y_ENSURE(buf.size() % alignof(TEntry) == 0);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;
@@ -190,8 +191,8 @@ namespace NPage {
 
             out.Put(Globs);
 
-            Y_ABORT_UNLESS(*out == buf.mutable_end());
-            Y_ABORT_UNLESS(buf.size() % alignof(TEntry) == 0);
+            Y_ENSURE(*out == buf.mutable_end());
+            Y_ENSURE(buf.size() % alignof(TEntry) == 0);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;

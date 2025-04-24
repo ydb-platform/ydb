@@ -7,7 +7,7 @@ namespace NYql::NFmr {
 class TFmrJobFactory: public IFmrJobFactory {
 public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
-        : NumThreads_(settings.NumThreads), Function_(settings.Function)
+        : NumThreads_(settings.NumThreads), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
     {
         Start();
     }
@@ -23,19 +23,18 @@ public:
             ETaskStatus finalTaskStatus;
             TStatistics finalTaskStatistics;
             TMaybe<TFmrError> taskErrorMessage;
+            TString jobId = GetGuidAsString(RandomProvider_->GenGuid());
             try {
-                TString sessionId;
-                if (task) {
-                    sessionId = task->SessionId;
-                }
-                YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+                TString sessionId = task->SessionId;
+                TString taskId = task->TaskId;
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId, jobId);
                 YQL_CLOG(DEBUG, FastMapReduce) << "Starting job with taskId " << task->TaskId;
                 auto taskResult = Function_(task, cancelFlag);
                 finalTaskStatus = taskResult.TaskStatus;
                 finalTaskStatistics = taskResult.Stats;
-            } catch (const std::exception& exc) {
+            } catch (...) {
                 finalTaskStatus = ETaskStatus::Failed;
-                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .ErrorMessage = exc.what()};
+                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .ErrorMessage = CurrentExceptionMessage(), .TaskId = task->TaskId, .JobId = jobId};
             }
             promise.SetValue(MakeTaskState(finalTaskStatus, task->TaskId, taskErrorMessage, finalTaskStatistics));
         };
@@ -55,6 +54,7 @@ private:
     THolder<IThreadPool> ThreadPool_;
     i32 NumThreads_;
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function_;
+    const TIntrusivePtr<IRandomProvider> RandomProvider_;
 };
 
 TFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings) {

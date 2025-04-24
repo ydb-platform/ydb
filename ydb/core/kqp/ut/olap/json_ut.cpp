@@ -5,14 +5,19 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <ydb/library/signals/object_counter.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/strip.h>
 
@@ -106,15 +111,15 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
             if (ExpectIndexSkip) {
                 AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
-                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
+                                            "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
             }
             if (ExpectIndexNoData) {
                 AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
-                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
+                                        "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
             }
             if (ExpectIndexApprove) {
                 AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
-                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
+                                          "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
             }
             return TConclusionStatus::Success();
         }
@@ -243,6 +248,47 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     };
 
+    class TBulkUpsertCommand: public ICommand {
+    private:
+        TString TableName;
+        TString ArrowBatch;
+        Ydb::StatusIds_StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS;
+
+    public:
+        TBulkUpsertCommand() = default;
+
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            TLocalHelper lHelper(kikimr);
+            lHelper.SendDataViaActorSystem(TableName,
+                NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(ArrowBatch)), ExpectedCode);
+            return TConclusionStatus::Success();
+        }
+
+        bool DeserializeFromString(const TString& info) {
+            auto lines = StringSplitter(info).SplitBySet("\n").SkipEmpty().ToList<TString>();
+            if (lines.size() < 2 || lines.size() > 3) {
+                return false;
+            }
+            TableName = Strip(lines[0]);
+            ArrowBatch = Base64Decode(Strip(lines[1]));
+            AFL_VERIFY(!!ArrowBatch);
+            if (lines.size() == 3) {
+                if (!Ydb::StatusIds_StatusCode_Parse(Strip(lines[2]), &ExpectedCode)) {
+                    return false;
+                }
+                //                if (lines[2] == "SUCCESS") {
+                //                } else if (lines[2] = "INTERNAL_ERROR") {
+                //                    ExpectedCode = Ydb::StatusIds::INTERNAL_ERROR;
+                //                } else if (lines[2] == "BAD_REQUEST") {
+                //                    ExpectedCode = Ydb::StatusIds::BAD_REQUEST;
+                //                } else {
+                //                    return false;
+                //                }
+            }
+            return true;
+        }
+    };
+
     class TScriptExecutor {
     private:
         std::vector<std::shared_ptr<ICommand>> Commands;
@@ -275,7 +321,12 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     private:
         std::vector<TScriptExecutor> Scripts;
         std::shared_ptr<ICommand> BuildCommand(TString command) {
-            if (command.StartsWith("SCHEMA:")) {
+            if (command.StartsWith("BULK_UPSERT:")) {
+                command = command.substr(12);
+                auto result = std::make_shared<TBulkUpsertCommand>();
+                AFL_VERIFY(result->DeserializeFromString(command));
+                return result;
+            } else if (command.StartsWith("SCHEMA:")) {
                 command = command.substr(7);
                 return std::make_shared<TSchemaCommand>(command);
             } else if (command.StartsWith("DATA:")) {
@@ -341,7 +392,13 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     public:
         TScriptVariator(const TString& script) {
-            auto commands = StringSplitter(script).SplitByString("------").ToList<TString>();
+            auto lines = StringSplitter(script).SplitByString("\n").ToList<TString>();
+            lines.erase(std::remove_if(lines.begin(), lines.end(),
+                            [](const TString& l) {
+                                return Strip(l).StartsWith("#");
+                            }),
+                lines.end());
+            auto commands = StringSplitter(JoinSeq("\n", lines)).SplitByString("------").ToList<TString>();
             std::vector<std::vector<std::shared_ptr<ICommand>>> commandsDescription;
             for (auto&& i : commands) {
                 auto& cVariants = commandsDescription.emplace_back();
@@ -380,8 +437,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES (1u), (2u), (3u), (4u)
@@ -413,7 +470,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5|1$$`)
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`$$true|false$$`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5|1$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "", "b" : "", "c" : ""}'))
@@ -441,7 +498,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1", "b.c.d" : "b1", "c.d.e" : "c1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')),
@@ -469,18 +526,147 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
-            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1", "d" : null, "e.v" : {"c" : 1, "e" : {"c.a" : 2}}}')), (2u, JsonDocument('{"a" : "a2"}')),
                                                                     (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a2" ORDER BY Col1;
             EXPECTED: [[2u;["{\"a\":\"a2\"}"]]]
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"e.v\".c") = "1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"e.v\".e.\"c.a\"") = "2" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(RestoreFirstLevelVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1", "d" : null, "e.v" : {"c" : 1, "e" : {"c.a" : 2}}}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3", "e" : ["a", {"v" : ["c", 5]}]}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":\"{\\\"c\\\":1,\\\"e\\\":{\\\"c.a\\\":2}}\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":\"[\\\"a\\\",{\\\"v\\\":[\\\"c\\\",5]}]\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(RestoreFullJsonVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1", "d" : null, "e.v" : {"c" : 1, "e" : {"c.a" : 2}}}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3", "e" : ["a", {"v" : ["c", 5]}]}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":[\"a\",{\"v\":[\"c\",\"5\"]}]}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(BrokenJsonWriting) {
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c}");
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+
+        TString script = Sprintf(R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                BAD_REQUEST
+        )",
+            arrowString.data());
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(RestoreJsonArrayVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`, 
+                      `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                      `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('["a", {"v" : 4}, 1,2,3,4,5,6,7,8,9,10,11,12]'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["[\"a\",{\"v\":\"4\"},\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"11\",\"12\"]"]]]
             
         )";
         TScriptVariator(script).Execute();
@@ -502,7 +688,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
@@ -534,7 +720,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
@@ -564,7 +750,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
@@ -594,7 +780,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
@@ -624,7 +810,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
@@ -653,7 +839,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
@@ -682,7 +868,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
@@ -711,7 +897,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
@@ -742,7 +928,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
@@ -765,7 +951,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         TScriptVariator(script).Execute();
     }
 
-    Y_UNIT_TEST(BloomIndexesVariants) {
+    Y_UNIT_TEST(BloomMixIndexesVariants) {
         TString script = R"(
             STOP_COMPACTION
             ------
@@ -776,14 +962,16 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$2$$);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `SCAN_FIRST_LEVEL_ONLY`=`$$true|false$$`,
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10$$`,
+                      `MEM_LIMIT_CHUNK`=`$$0|1000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')), 
@@ -800,7 +988,12 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
-                           "records_count" : 1024, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "b.c.d"}}`);
+                           "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_a, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
+                           "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
@@ -826,7 +1019,31 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
-            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b5" ORDER BY Col1;
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "%1b4%" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
+#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+#            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
+#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+#            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
+#            EXPECTED: []
+#            IDX_ND_SKIP_APPROVE: 0, 5, 0
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
+#            EXPECTED: []
+#            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a4" ORDER BY Col1;
+            EXPECTED: [[4u;["{\"a\":\"a4\",\"b.c.d\":\"b4\"}"]];[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 2
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d111\"") = "1b5" ORDER BY Col1;
             EXPECTED: []
             IDX_ND_SKIP_APPROVE: 0, 5, 0
             ------
@@ -838,6 +1055,172 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: []
             IDX_ND_SKIP_APPROVE: 0, 5, 0
             
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(BloomCategoryIndexesVariants) {
+        TString script = R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `SCAN_FIRST_LEVEL_ONLY`=`$$true|false$$`,
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10$$`,
+                      `MEM_LIMIT_CHUNK`=`$$0|1000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b.c.d" : "b3"}')), (4u, JsonDocument('{"b.c.d" : "b4", "a" : "a4"}'))
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a.b.c" : "1a1"}')), (12u, JsonDocument('{"a.b.c" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=$$CATEGORY_BLOOM_FILTER|BLOOM_FILTER$$,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
+            ------
+            ONE_ACTUALIZATION
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=a_index)
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "1a1" ORDER BY Col1;
+            EXPECTED: [[11u;["{\"a.b.c\":\"1a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=b_index, TYPE=CATEGORY_BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`)
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a4" ORDER BY Col1;
+            EXPECTED: [[4u;["{\"a\":\"a4\",\"b.c.d\":\"b4\"}"]];[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 2
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d111\"") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(BloomNGrammIndexesVariants) {
+        TString script = R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `SCAN_FIRST_LEVEL_ONLY`=`$$true|false$$`,
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10$$`,
+                      `MEM_LIMIT_CHUNK`=`$$0|1000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b.c.d" : "b3"}')), (4u, JsonDocument('{"b.c.d" : "b4", "a" : "a4"}'))
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a.b.c" : "1a1"}')), (12u, JsonDocument('{"a.b.c" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
+                           "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_a, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
+                           "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
+            ------
+            ONE_ACTUALIZATION
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 5, 0, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "%1b4%" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1b4%" ORDER BY Col1;
+#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+#            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "%1B4" ORDER BY Col1;
+#            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+#            IDX_ND_SKIP_APPROVE: 0, 4, 1
+#            ------
+#            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") ilike "1b5" ORDER BY Col1;
+#            EXPECTED: []
+#            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a4" ORDER BY Col1;
+            EXPECTED: [[4u;["{\"a\":\"a4\",\"b.c.d\":\"b4\"}"]];[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 2
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d111\"") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 5, 0, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b3" ORDER BY Col1;
+            EXPECTED: [[13u;["{\"b.c.d\":\"1b3\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1B3" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
         )";
         TScriptVariator(script).Execute();
     }
@@ -864,7 +1247,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
@@ -901,7 +1284,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+                      `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 

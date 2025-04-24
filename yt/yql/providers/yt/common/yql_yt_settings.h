@@ -122,6 +122,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
+    NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -182,6 +183,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> DockerImage;
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
+    NCommon::TConfSetting<NYT::TNode, true> FmrOperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
     NCommon::TConfSetting<NYT::TNode, true> StartedBy;
     NCommon::TConfSetting<NYT::TNode, true> Description;
@@ -220,6 +222,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
     NCommon::TConfSetting<TString, true> RuntimeCluster;
+    NCommon::TConfSetting<bool, true> _AllowRemoteClusterInput;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -313,6 +316,8 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> CompactForDistinct;
     NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
     NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
+    NCommon::TConfSetting<bool, false> UseColumnGroupsFromInputTables;
+    NCommon::TConfSetting<bool, false> UseNativeDynamicTableRead;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

@@ -13,6 +13,7 @@
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -50,6 +51,8 @@ public:
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TString& runner);
 
+    void SetLanguageVersion(TLangVersion version);
+    void SetMaxLanguageVersion(TLangVersion version);
     void AddUserDataTable(const TUserDataTable& userDataTable);
     void SetCredentials(TCredentials::TPtr credentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
@@ -61,6 +64,7 @@ public:
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing);
     void EnableRangeComputeFor();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
+    void SetUdfResolverLogfile(const TString& path);
 
     TProgramPtr Create(
             const TFile& file,
@@ -83,6 +87,8 @@ private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
+    TLangVersion LangVer_ = UnknownLangVersion;
+    TLangVersion MaxLangVer_ = UnknownLangVersion;
     TUserDataTable UserDataTable_;
     TCredentials::TPtr Credentials_;
     const TGatewaysConfig* GatewaysConfig_;
@@ -96,6 +102,7 @@ private:
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
     IArrowResolver::TPtr ArrowResolver_;
+    TMaybe<TString> UdfResolverLogfile_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -110,6 +117,9 @@ public:
 
 public:
     ~TProgram();
+
+    void SetLanguageVersion(TLangVersion version);
+    void SetMaxLanguageVersion(TLangVersion version);
 
     void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
     void ClearCredentials();
@@ -334,6 +344,8 @@ private:
         const TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
+        TLangVersion langVer,
+        TLangVersion maxLangVer,
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
@@ -359,6 +371,7 @@ private:
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
     bool CollectUsedClusters();
     bool CheckParameters();
+    bool ValidateLangVersion();
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
@@ -395,6 +408,8 @@ private:
     const IModuleResolver::TPtr Modules_;
 
     TVector<TDataProviderInitializer> DataProvidersInit_;
+    TLangVersion LangVer_;
+    TLangVersion MaxLangVer_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;

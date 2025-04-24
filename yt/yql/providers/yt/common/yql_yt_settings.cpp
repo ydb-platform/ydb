@@ -366,6 +366,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             OperationSpec[cluster] = spec;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, FmrOperationSpec)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
     REGISTER_SETTING(*this, Annotations)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
         .Validator([] (const TString&, const NYT::TNode& value) {
@@ -541,6 +548,15 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
+    REGISTER_SETTING(*this, DefaultRuntimeCluster)
+        .Validator([this] (const TString&, TString value) {
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
+    REGISTER_SETTING(*this, _AllowRemoteClusterInput);
+    REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
+    REGISTER_SETTING(*this, UseNativeDynamicTableRead);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

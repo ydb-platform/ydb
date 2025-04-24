@@ -341,11 +341,39 @@ protected:
                 streamEv->Record.SetChannelId(channel.Id);
 
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-                protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
-                    txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
 
-                LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
-                    << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
+                switch (ResultSetType) {
+                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE: {
+                        protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
+                            txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
+
+                        LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
+                            << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
+                        break;
+                    }
+                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
+                        std::shared_ptr<arrow::RecordBatch> recordBatch = nullptr;
+                        protoBuilder.BuildArrow(recordBatch, std::move(batches),
+                            txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
+
+                        YQL_ENSURE(recordBatch);
+
+                        TString serializedBatch = NArrow::SerializeBatchNoCompression(recordBatch);
+                        YQL_ENSURE(serializedBatch);
+
+                        TString serializedSchema = NArrow::SerializeSchema(*recordBatch->schema());
+                        YQL_ENSURE(serializedSchema);
+
+                        streamEv->Record.SetResultData(serializedBatch);
+                        streamEv->Record.MutableArrowBatchSettings()->set_schema(serializedSchema);
+
+                        LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
+                            << ", nRows: " << recordBatch->num_rows());
+                        break;
+                    }
+                    default:
+                        YQL_ENSURE(false);
+                }
 
                 this->Send(Target, streamEv.Release());
 

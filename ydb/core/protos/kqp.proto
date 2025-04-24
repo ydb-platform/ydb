@@ -517,6 +517,9 @@ message TEvExecuterStreamData {
     optional uint32 QueryResultIndex = 3;
     optional uint32 ChannelId = 4;
     optional NActorsProto.TActorId ChannelActorId = 5;
+    optional Ydb.Formats.ArrowBatchSettings ArrowBatchSettings = 6;
+
+    optional bytes ResultData = 1000;
 };
 
 message TEvExecuterStreamDataAck {

@@ -2093,7 +2093,8 @@ public:
                         YQL_ENSURE(trailingResultsCount <= 1);
 
                         switch (QueryState->GetResultSetType()) {
-                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED: {
+                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED:
+                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE: {
                                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                                     phyQuery.GetResultBindings(i), response->GetArena(), {});
 
@@ -2104,7 +2105,11 @@ public:
                             case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
                                 auto batch = QueryState->QueryData->GetArrowTxResult(
                                     phyQuery.GetResultBindings(i), QueryState->TxCtx->TxAlloc->TypeEnv);
-                                *response->AddResultData() = NArrow::SerializeBatchNoCompression(batch);
+
+                                TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+                                YQL_ENSURE(serializedBatch);
+
+                                *response->AddResultData() = serializedBatch;
 
                                 if (!response->HasArrowBatchSettings()) {
                                     TString serializedSchema = NArrow::SerializeSchema(*batch->schema());

@@ -168,7 +168,7 @@ class TestTTL(TestBase):
             table_name, all_types, value, pk_types, value, index, value, "", value)
         wait_for(self.create_predicate(
             sql_select, expected_count_rows), timeout_seconds=200)
-        rows = self.query(sql_select)
+        rows = dml.query(sql_select)
         assert len(
             rows) == 1 and rows[0].count == expected_count_rows, f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"
 
@@ -211,7 +211,5 @@ class TestTTL(TestBase):
     def create_predicate(self, sql_select, expected_count_rows):
         def predicate():
             rows = self.query(sql_select)
-            if expected_count_rows == 1:
-                return True
             return len(rows) == 1 and rows[0].count == expected_count_rows
         return predicate

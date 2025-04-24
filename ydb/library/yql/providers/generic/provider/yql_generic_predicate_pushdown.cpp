@@ -272,6 +272,9 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStartsWith, STARTS_WITH);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEndsWith, ENDS_WITH);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStringContains, CONTAINS);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
                 ctx.Err << "unknown compare operation: " << compare.Raw()->Content();

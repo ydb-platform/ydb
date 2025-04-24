@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupTest, TBackupTestFixture)
 
         {
             auto res = YdbQueryClient().ExecuteQuery(R"sql(
-                SELECT * FROM `/local/EncryptedExportAndImport/RestoredExport/dir1/dir2/EncryptedExportAndImportTable`
+                SELECT * FROM `/local/EncryptedExportAndImport/RestoredExport/dir2/EncryptedExportAndImportTable`
             )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetStatus() << ": " << res.GetIssues().ToString());
         }

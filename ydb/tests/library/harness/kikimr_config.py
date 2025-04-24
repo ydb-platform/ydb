@@ -408,7 +408,7 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
-        if pg_compatible_expirement:
+        if pg_compatible_expirement or 'YDB_EXPERIMENTAL_PG' in os.environ:
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True

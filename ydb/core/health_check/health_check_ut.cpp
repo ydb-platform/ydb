@@ -2373,7 +2373,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     for (auto& entry : *record.mutable_entries()) {
-                        entry.mutable_info()->set_statusv2("UNKNOWN_STATE?");
+                        entry.mutable_info()->set_state("UNKNOWN_STATE?");
                     }
                     break;
                 }

@@ -26,7 +26,11 @@ columns {
 columns {
   name: "value"
   type {
-    type_id: DOUBLE
+    optional_type {
+      item {
+        type_id: DOUBLE
+      }
+    }
   }
 }
 rows {

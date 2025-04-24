@@ -55,7 +55,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
         if (systemColumn == SOLOMON_SCHEME_TS) {
             type = ctx.MakeType<TDataExprType>(EDataSlot::Datetime);
         } else if (systemColumn == SOLOMON_SCHEME_VALUE) {
-            type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+            type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
         } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
             type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
         } else if (systemColumn = SOLOMON_SCHEME_TYPE) {

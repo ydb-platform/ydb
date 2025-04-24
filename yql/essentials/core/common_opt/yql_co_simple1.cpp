@@ -4002,7 +4002,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["FilterNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(optCtx.Types);
         static const char optName[] = "FilterNullMembersOverJust";
-        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
             return node;
         }
         const auto self = TCoFilterNullMembers(node);

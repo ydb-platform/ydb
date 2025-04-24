@@ -37,7 +37,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 15, ctx)) {
+        if (!EnsureArgsCount(*input, 16, ctx)) {
             return TStatus::Error;
         }
 
@@ -149,7 +149,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7U, 8U, ctx)) {
             return TStatus::Error;
         }
 

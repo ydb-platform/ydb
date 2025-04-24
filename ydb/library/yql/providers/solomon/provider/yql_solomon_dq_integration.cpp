@@ -78,9 +78,13 @@ public:
         if (const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>()) {
             const auto soSourceSettings = maybeSettings.Cast();
             if (!soSourceSettings.Selectors().StringValue().empty()) {
-                for (size_t i = 0; i < settings.MaxPartitions; ++i) {
+                ui64 totalMetricsCount;
+                YQL_ENSURE(TryFromString(soSourceSettings.TotalMetricsCount().StringValue(), totalMetricsCount));
+
+                for (size_t i = 0; i < std::min(settings.MaxPartitions, totalMetricsCount); ++i) {
                     partitions.push_back(TStringBuilder() << "partition" << i);
                 }
+
                 return 0;
             }
         }
@@ -255,6 +259,7 @@ public:
                     .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation ? *downsamplingAggregation : "")
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill ? *downsamplingFill : "")
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec ? *downsamplingGridSec : 0)).Build()
+                    .TotalMetricsCount(soReadObject.TotalMetricsCount())
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(soReadObject.RowType())
@@ -334,6 +339,8 @@ public:
         }
 
         auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
+        ui64 totalMetricsCount;
+        YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
 
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
@@ -361,7 +368,7 @@ public:
 
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    maxTasksPerStage,
+                    std::min(maxTasksPerStage, totalMetricsCount),
                     readParams,
                     credentialsProvider
                 ),

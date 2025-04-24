@@ -47,7 +47,7 @@ where
 
 select
     l_orderkey,
-    $round(sum(l_extendedprice * ($z1_12 - l_discount)), -2) as revenue,
+    $round(sum(l_extendedprice * ($z1_12 - l_discount)), -3) as revenue,
     o_orderdate,
     o_shippriority
 from

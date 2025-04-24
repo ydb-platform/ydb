@@ -113,6 +113,7 @@ message TIssuesIds {
         YT_MISSING_PROTO_FIELD = 3017;
         YT_FOLDER_INPUT_IS_NOT_A_FOLDER = 3018;
         YT_SECURE_DATA_IN_COMMON_TMP = 3019;
+        YT_OP_SPEC_CONTAINS_SECRETS = 3020;
 
 // yql parser warnings
         YQL_PRAGMA_WARNING_MSG = 4500;

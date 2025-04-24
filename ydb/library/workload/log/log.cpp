@@ -429,6 +429,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 // .DefaultValue(TimestampStandardDeviationMinutes)
                 .Optional()
                 .StoreResult(&TimestampStandardDeviationMinutes);
+            // TODO: maybe it shoudn't be optional
             
             opts.AddLongOption("date-from", "Left boundary of the interval to generate "
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
@@ -469,6 +470,21 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         break;
     default:
         break;
+    }
+}
+
+void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& config) {
+    // TODO: should I check if it's a specific command type: run ?
+    auto timestamp_dev_passed = config.ParseResult->Has("timestamp_deviation");
+    auto date_from_passed = config.ParseResult->Has("date-from");
+    auto date_to_passed = config.ParseResult->Has("date-to");
+
+    if (timestamp_dev_passed && (date_from_passed || date_to_passed)) {
+        throw yexception() << "timestamp_deviation and date_from, date_to are mutually exclusive and shouldn't be passed at once";
+    }
+
+    if ((date_from_passed && !date_to_passed) || (!date_from_passed && date_to_passed)) {
+        throw yexception() << "The `date_from` and `date_to` parameters must be provided together to specify the interval for uniform PK generation";
     }
 }
 

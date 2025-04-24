@@ -374,6 +374,10 @@ void TWorkloadCommandBase::Config(TConfig& config) {
     Params.ConfigureOpts(config.Opts->GetOpts(), CommandType, Type);
 }
 
+void TWorkloadCommandBase::Parse(TConfig& config) {
+    Params.Parse(config);
+}
+
 int TWorkloadCommandBase::Run(TConfig& config) {
     Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
     if (!DryRun) {

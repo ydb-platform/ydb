@@ -89,6 +89,7 @@ public:
         const TString& description = TString(),
         int type = 0);
     virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override final;
 
 protected:

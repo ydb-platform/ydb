@@ -14,6 +14,7 @@ public:
     };
 
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
+    void Parse(NYdb::NConsoleClient::TClientCommand::TConfig& config) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     ui64 MinPartitions = 40;

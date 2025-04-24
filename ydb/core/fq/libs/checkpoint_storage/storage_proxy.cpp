@@ -47,7 +47,7 @@ using TStorageProxyMetricsPtr = TIntrusivePtr<TStorageProxyMetrics>;
 
 struct TRequestContext : public TThrRefBase {
     TInstant StartTime = TInstant::Now();
-    TStorageProxyMetricsPtr Metrics;
+    const TStorageProxyMetricsPtr Metrics;
     
     TRequestContext(const TStorageProxyMetricsPtr& metrics)
         : Metrics(metrics) {
@@ -73,7 +73,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     TActorId ActorGC;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
-    TStorageProxyMetricsPtr Metrics;
+    const TStorageProxyMetricsPtr Metrics;
 
 public:
     explicit TStorageProxy(

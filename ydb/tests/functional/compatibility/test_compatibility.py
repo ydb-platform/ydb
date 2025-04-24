@@ -44,7 +44,7 @@ class TestCompatibility(object):
 
         if hasattr(cls, 'cluster'):
             cls.cluster.stop(kill=True)  # TODO fix
-        
+
         if hasattr(cls, 'output_f'):
             cls.output_f.close()
 
@@ -195,5 +195,5 @@ class TestCompatibility(object):
         bucket = s3_resource.Bucket(s3_bucket)
         keys = [x.key for x in list(bucket.objects.all())]
         keys.sort()
-        
+
         assert keys == keys_expected

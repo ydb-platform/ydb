@@ -958,6 +958,15 @@ public:
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
+            for (const auto& operation : evWrite->Record.GetOperations()) {
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                       || operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                    Counters->WriteActorReadWriteOperations->Inc();
+                } else {
+                    Counters->WriteActorWriteOnlyOperations->Inc();
+                }
+            }
+
             SendTime[shardId] = TInstant::Now();
         } else {
             YQL_ENSURE(!isPrepare);

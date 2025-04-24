@@ -494,6 +494,38 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
+    def prepare_node(self, configurator=None):
+        try:
+            new_node_object = self.__register_node(configurator)
+            self.__write_node_config(new_node_object.node_id, configurator)
+            logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
+            return new_node_object
+        except Exception as e:
+            logger.error(f"Failed to register new node: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to register new node: {e}")
+
+    def start_node(self, node_id):
+        if node_id not in self._nodes:
+            logger.error(f"Cannot start node: Node ID {node_id} not found in registered nodes.")
+            raise KeyError(f"Node ID {node_id} not found.")
+
+        logger.info(f"Starting registered node {node_id}.")
+        try:
+            self._KiKiMR__run_node(node_id)
+            logger.info(f"Successfully started node {node_id}.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to start node {node_id}: {e}")
+
+    def update_nodes_configurator(self, configurator):
+        for node in self.nodes.values():
+            node.stop()
+        self.__configurator = configurator
+        self.__initialy_prepared = False
+        self._node_index_allocator = itertools.count(1)
+        self.prepare()
+        for node in self.nodes.values():
+            node.start()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:

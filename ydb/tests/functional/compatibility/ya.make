@@ -2,6 +2,11 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
+FORK_TEST_FILES()
+FORK_TESTS()
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
+
 TEST_SRCS(
     test_followers.py
     test_compatibility.py

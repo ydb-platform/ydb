@@ -549,6 +549,18 @@ class KikimrConfigGenerator(object):
             binary_paths = [kikimr_driver_path()]
         return binary_paths[node_id % len(binary_paths)]
 
+    def get_ydb_cli_path(self):
+        return ydb_cli_path()
+
+    def get_binary_paths(self):
+        binary_paths = self.__binary_paths
+        if not binary_paths:
+            binary_paths = [kikimr_driver_path()]
+        return binary_paths
+
+    def set_binary_paths(self, binary_paths):
+        self.__binary_paths = binary_paths
+
     def write_tls_data(self):
         if self.__grpc_ssl_enable:
             for fpath, data in (

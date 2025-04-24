@@ -287,7 +287,7 @@ class TestCompatibility(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
-            "--partition-size=25",
+           # "--partition-size=25",
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),

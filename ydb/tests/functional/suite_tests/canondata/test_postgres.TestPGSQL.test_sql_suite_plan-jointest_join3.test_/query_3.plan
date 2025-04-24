@@ -35,20 +35,11 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.k"
+                                                "TopSortBy": "argument.p.k"
                                             },
                                             {
                                                 "Condition": "p.k = ss.k",
@@ -142,7 +133,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "k (Asc)"
+                                    "p.k (Asc)"
                                 ]
                             }
                         ]

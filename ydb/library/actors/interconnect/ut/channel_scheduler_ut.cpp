@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;
-        TChannelScheduler scheduler(1, {}, ctr, pool, 64 << 20, p);
+        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p);
 
         ui32 numEvents = 0;
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             auto ev = MakeHolder<IEventHandle>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, TEventSerializationInfo{}), 0);
             auto& ch = scheduler.GetOutputChannel(channel);
             const bool wasWorking = ch.IsWorking();
-            ch.Push(*ev);
+            ch.Push(*ev, pool);
             if (!wasWorking) {
                 scheduler.AddToHeap(ch, 0);
             }

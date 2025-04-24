@@ -3725,7 +3725,7 @@ TExprNode::TPtr MemberNthOverFlatMapWithOptional(const TExprNode::TPtr& node, TE
     YQL_ENSURE(node->IsCallable({"Member", "Nth"}));
     YQL_ENSURE(optCtx.Types);
     static const char optName[] = "MemberNthOverFlatMap";
-    if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
         return node;
     }
     if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(node->HeadPtr())) {

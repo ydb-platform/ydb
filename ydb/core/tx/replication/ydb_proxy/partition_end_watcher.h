@@ -14,7 +14,7 @@ class TPartitionEndWatcher {
             return;
         }
 
-        ActorOps->Send(client, new TEvYdbProxy::TEvTopicEndPartition(*EndPartitionSessionEvent));
+        ActorOps->Send(client, new TEvYdbProxy::TEvEndTopicPartition(*EndPartitionSessionEvent));
     }
 
 public:

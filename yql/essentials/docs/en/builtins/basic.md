@@ -369,6 +369,15 @@ SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 SELECT Version();
 ```
 
+## CurrentLanguageVersion {#current-language-version}
+
+`CurrentLanguageVersion()` returns a string describing the current version of the language selected for the current request if it is defined, or an empty string.
+
+#### Examples
+
+```yql
+SELECT CurrentLanguageVersion();
+```
 
 
 ## MAX_OF, MIN_OF, GREATEST, and LEAST {#max-min}

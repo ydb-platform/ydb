@@ -1,10 +1,28 @@
 #include "name_service.h"
 
+#include "name_index.h"
 #include "ranking.h"
 
 #include <yql/essentials/sql/v1/complete/text/case.h>
 
 namespace NSQLComplete {
+
+    const TVector<TStringBuf> FilteredByPrefix(const TString& prefix, const TNameIndex& index Y_LIFETIME_BOUND) {
+        TNameIndexEntry normalized = {
+            .Normalized = NormalizeName(prefix),
+            .Original = "",
+        };
+
+        auto range = std::ranges::equal_range(
+            std::begin(index), std::end(index),
+            normalized, NameIndexCompareLimit(normalized.Normalized.size()));
+
+        TVector<TStringBuf> filtered;
+        for (const TNameIndexEntry& entry : range) {
+            filtered.emplace_back(TStringBuf(entry.Original));
+        }
+        return filtered;
+    }
 
     const TVector<TStringBuf> FilteredByPrefix(
         const TString& prefix,
@@ -55,15 +73,18 @@ namespace NSQLComplete {
     class TStaticNameService: public INameService {
     public:
         explicit TStaticNameService(NameSet names, IRanking::TPtr ranking)
-            : NameSet_(std::move(names))
+            : Pragmas_(BuildNameIndex(std::move(names.Pragmas), NormalizeName))
+            , Types_(BuildNameIndex(std::move(names.Types), NormalizeName))
+            , Functions_(BuildNameIndex(std::move(names.Functions), NormalizeName))
+            , Hints_([hints = std::move(names.Hints)] {
+                THashMap<EStatementKind, TNameIndex> index;
+                for (auto& [k, hints] : hints) {
+                    index.emplace(k, BuildNameIndex(std::move(hints), NormalizeName));
+                }
+                return index;
+            }())
             , Ranking_(std::move(ranking))
         {
-            Sort(NameSet_.Pragmas, NoCaseCompare);
-            Sort(NameSet_.Types, NoCaseCompare);
-            Sort(NameSet_.Functions, NoCaseCompare);
-            for (auto& [_, hints] : NameSet_.Hints) {
-                Sort(hints, NoCaseCompare);
-            }
         }
 
         TFuture<TNameResponse> Lookup(TNameRequest request) override {
@@ -76,19 +97,19 @@ namespace NSQLComplete {
 
             if (request.Constraints.Pragma) {
                 auto prefix = Prefixed(request.Prefix, ".", *request.Constraints.Pragma);
-                auto names = FilteredByPrefix(prefix, NameSet_.Pragmas);
+                auto names = FilteredByPrefix(prefix, Pragmas_);
                 AppendAs<TPragmaName>(response.RankedNames, names);
             }
 
             if (request.Constraints.Type) {
                 AppendAs<TTypeName>(
                     response.RankedNames,
-                    FilteredByPrefix(request.Prefix, NameSet_.Types));
+                    FilteredByPrefix(request.Prefix, Types_));
             }
 
             if (request.Constraints.Function) {
                 auto prefix = Prefixed(request.Prefix, "::", *request.Constraints.Function);
-                auto names = FilteredByPrefix(prefix, NameSet_.Functions);
+                auto names = FilteredByPrefix(prefix, Functions_);
                 AppendAs<TFunctionName>(response.RankedNames, names);
             }
 
@@ -96,7 +117,7 @@ namespace NSQLComplete {
                 const auto stmt = request.Constraints.Hint->Statement;
                 AppendAs<THintName>(
                     response.RankedNames,
-                    FilteredByPrefix(request.Prefix, NameSet_.Hints[stmt]));
+                    FilteredByPrefix(request.Prefix, Hints_[stmt]));
             }
 
             Ranking_->CropToSortedPrefix(response.RankedNames, request.Limit);
@@ -109,7 +130,10 @@ namespace NSQLComplete {
         }
 
     private:
-        NameSet NameSet_;
+        TNameIndex Pragmas_;
+        TNameIndex Types_;
+        TNameIndex Functions_;
+        THashMap<EStatementKind, TNameIndex> Hints_;
         IRanking::TPtr Ranking_;
     };
 

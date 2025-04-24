@@ -290,6 +290,37 @@ private:
         };
     }
 
+    std::vector<TTaskTableRef> TaskInputTablesFromOperationInputTables(const std::vector<TOperationTableRef>& operationTables) {
+        std::vector<TTaskTableRef> taskInputTables;
+        for (auto& elem: operationTables) {
+            if (const TYtTableRef* ytTableRef = std::get_if<TYtTableRef>(&elem)) {
+                taskInputTables.emplace_back(*ytTableRef);
+            } else {
+                TFmrTableRef fmrTableRef = std::get<TFmrTableRef>(elem);
+                TString inputTableId = fmrTableRef.FmrTableId.Id;
+                TFmrTableInputRef tableInput{
+                    .TableId = inputTableId,
+                    .TableRanges = {GetTableRangeFromId(inputTableId)}
+                };
+                taskInputTables.emplace_back(tableInput);
+            }
+        }
+        return taskInputTables;
+    }
+
+    std::vector<TFmrTableOutputRef> TaskOutputTablesFromOperationOutputTables(const std::vector<TFmrTableRef>& operationTables) {
+        std::vector<TFmrTableOutputRef> taskOutputTables;
+        for (auto& fmrTableRef: operationTables) {
+                TString outputTableId = fmrTableRef.FmrTableId.Id;
+                TFmrTableOutputRef tableOutput{
+                    .TableId = outputTableId,
+                    .PartId = GetTableRangeFromId(outputTableId).PartId
+                };
+                taskOutputTables.emplace_back(tableOutput);
+            }
+        return taskOutputTables;
+    }
+
     TTaskParams MakeDefaultTaskParamsFromOperation(const TOperationParams& operationParams) {
         if (const TUploadOperationParams* uploadOperationParams = std::get_if<TUploadOperationParams>(&operationParams)) {
             TUploadTaskParams uploadTaskParams{};
@@ -311,27 +342,20 @@ private:
             };
             downloadTaskParams.Output = fmrTableOutput;
             return downloadTaskParams;
-        } else {
-            TMergeOperationParams mergeOperationParams = std::get<TMergeOperationParams>(operationParams);
+        } else if (const TMergeOperationParams* mergeOperationParams = std::get_if<TMergeOperationParams>(&operationParams)) {
             TMergeTaskParams mergeTaskParams;
-            std::vector<TTaskTableRef> mergeInputTasks;
-            for (auto& elem: mergeOperationParams.Input) {
-                if (const TYtTableRef* ytTableRef = std::get_if<TYtTableRef>(&elem)) {
-                    mergeInputTasks.emplace_back(*ytTableRef);
-                } else {
-                    TFmrTableRef fmrTableRef = std::get<TFmrTableRef>(elem);
-                    TString inputTableId = fmrTableRef.FmrTableId.Id;
-                    TFmrTableInputRef tableInput{
-                        .TableId = inputTableId,
-                        .TableRanges = {GetTableRangeFromId(inputTableId)}
-                    };
-                    mergeInputTasks.emplace_back(tableInput);
-                }
-            }
-            mergeTaskParams.Input = mergeInputTasks;
+            mergeTaskParams.Input = TaskInputTablesFromOperationInputTables(mergeOperationParams->Input);
             TFmrTableOutputRef outputTable;
-            mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams.Output.FmrTableId.Id};
+            mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams->Output.FmrTableId.Id};
             return mergeTaskParams;
+        } else if (const TMapOperationParams* mapOperationParams = std::get_if<TMapOperationParams>(&operationParams)) {
+            TMapTaskParams mapTaskParams;
+            mapTaskParams.Input = TaskInputTablesFromOperationInputTables(mapOperationParams->Input);
+            mapTaskParams.Output = TaskOutputTablesFromOperationOutputTables(mapOperationParams->Output);
+            mapTaskParams.Executable = mapOperationParams->Executable;
+            return mapTaskParams;
+        } else {
+            ythrow yexception() << "Unknown operation params";
         }
     }
 

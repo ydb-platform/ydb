@@ -181,7 +181,11 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             setData(*messageProto, std::move(*dataChunk.MutableData()));
         }
         messageProto->SetCodec(dataChunk.GetCodec());
-        messageProto->SetProducerId(r.GetSourceId());
+        TString decodedSrcId;
+        if (!r.GetSourceId().empty()) {
+            decodedSrcId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
+        }
+        messageProto->SetProducerId(decodedSrcId);
         messageProto->SetSeqNo(r.GetSeqNo());
 
         if (dataChunk.MessageMetaSize() > 0) {

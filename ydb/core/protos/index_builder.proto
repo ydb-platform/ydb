@@ -4,6 +4,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 
 
 package NKikimrIndexBuilder;
@@ -51,6 +52,9 @@ message TIndexBuild {
     optional Ydb.Table.IndexBuildState.State State = 3;
     optional TIndexBuildSettings Settings = 4;
     optional float Progress = 5 [default = 0];
+    optional google.protobuf.Timestamp StartTime = 6;
+    optional google.protobuf.Timestamp EndTime = 7;
+    optional string UserSID = 8;
 }
 
 message TEvCreateRequest {
@@ -60,6 +64,7 @@ message TEvCreateRequest {
     optional TIndexBuildSettings Settings = 4;
     // Internal flag is true for system-generated operations and is false for those initiated directly by the user.
     optional bool Internal = 5 [default = false];
+    optional string UserSID = 6;
 }
 
 message TEvCreateResponse {

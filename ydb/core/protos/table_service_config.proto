@@ -384,4 +384,9 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
+    // YQL core optimizer flags.
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
+    optional bool FuseEquiJoinsInputMultiLabels = 84 [ default = true ];
+    optional bool PullUpFlatMapOverJoinMultipleLabels = 85 [ default = true ];
+    optional bool EqualityFilterOverJoin = 86 [ default = true ];
 };

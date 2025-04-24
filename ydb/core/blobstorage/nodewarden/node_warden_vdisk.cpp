@@ -174,7 +174,7 @@ namespace NKikimr::NStorage {
         }
 
         TVDiskConfig::TBaseInfo baseInfo(vdiskId, pdiskServiceId, pdiskGuid, vslotId.PDiskId, deviceType,
-            vslotId.VDiskSlotId, kind, NextLocalPDiskInitOwnerRound(), groupInfo->GetStoragePoolName(), donorMode,
+            vslotId.VDiskSlotId, groupInfo->SlotSizeUnits, kind, NextLocalPDiskInitOwnerRound(), groupInfo->GetStoragePoolName(), donorMode,
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;

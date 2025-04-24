@@ -29,6 +29,7 @@ namespace NKikimr {
             ui32 PDiskId = 0;
             NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
             ui32 VDiskSlotId = 0;
+            NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
             EKind Kind = NKikimrBlobStorage::TVDiskKind::Default;
             // name of the storage pool this VDisk belongs to
             TString StoragePoolName;
@@ -54,6 +55,7 @@ namespace NKikimr {
                     ui32 pdiskId,
                     NPDisk::EDeviceType deviceType,
                     ui32 vdiskSlotId,
+                    NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits,
                     EKind kind,
                     ui64 initOwnerRound,
                     TString storagePoolName,
@@ -70,6 +72,7 @@ namespace NKikimr {
                 , PDiskId(pdiskId)
                 , DeviceType(deviceType)
                 , VDiskSlotId(vdiskSlotId)
+                , SlotSizeUnits(slotSizeUnits)
                 , Kind(kind)
                 , StoragePoolName(storagePoolName)
                 , DonorMode(donorMode)

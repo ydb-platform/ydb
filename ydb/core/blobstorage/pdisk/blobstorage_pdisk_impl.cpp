@@ -586,8 +586,6 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
 }
 
 ui32 TPDisk::GetNumActiveSlots() const {
-    P_LOG(PRI_NOTICE, PD01, "TPDisk::GetNumActiveSlots()");
-
     ui32 sum = 0;
     for (const auto& ownerData: OwnerData) {
         if (ownerData.VDiskId == TVDiskID::InvalidId) {
@@ -595,13 +593,7 @@ ui32 TPDisk::GetNumActiveSlots() const {
         }
         ui32 u_vdisk = ownerData.SlotSizeUnits ?: 1;
         ui32 u_pdisk = Cfg->SlotSizeUnits ?: 1;
-        ui32 slots_occupied = int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
-        sum += slots_occupied; 
-        P_LOG(PRI_NOTICE, PD02, "Seen owner",
-            (VDiskSlotSizeUnits, u_vdisk),
-            (PDiskSlotSizeUnits, u_pdisk),
-            (Occupied, slots_occupied)
-        );
+        sum += int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
     }
     return sum;
 }
@@ -1853,7 +1845,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 }
 
 bool TPDisk::YardInitStart(TYardInit &evYardInit) {
-    P_LOG(PRI_NOTICE, PD03, "YardInitStart", (evYardInit, evYardInit));
+    P_LOG(PRI_NOTICE, PD03, "YardInitStart", (TYardInit, evYardInit));
     if (evYardInit.VDisk == TVDiskID::InvalidId) {
         ReplyErrorYardInitResult(evYardInit, "VDisk == InvalidId. Marker# BPD03");
         return false;
@@ -1922,7 +1914,7 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
 }
 
 void TPDisk::YardInitFinish(TYardInit &evYardInit) {
-    P_LOG(PRI_NOTICE, PD04, "YardInitFinish", (evYardInit, evYardInit));
+    P_LOG(PRI_NOTICE, PD04, "YardInitFinish", (TYardInit, evYardInit));
     TOwner owner = evYardInit.Owner;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
     {

@@ -159,9 +159,9 @@ public:
         TStringStream str;
         str << "TYardInit {";
         str << "VDisk# " << VDisk.ToString();
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits);
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
-        str << " SlotSizeUnits# " << SlotSizeUnits;
         str << "}";
         return str.Str();
     }

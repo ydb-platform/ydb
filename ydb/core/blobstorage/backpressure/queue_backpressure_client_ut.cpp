@@ -198,6 +198,7 @@ public:
             1,
             NPDisk::DEVICE_TYPE_ROT,
             0,
+            NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
             NKikimrBlobStorage::TVDiskKind::Default,
             2,
             {});

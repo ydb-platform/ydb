@@ -167,8 +167,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         TStringStream str;
         str << "{EvYardInit ownerRound# " << record.OwnerRound;
         str << " VDisk# " << record.VDisk.ToString();
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(record.SlotSizeUnits);
         str << " PDiskGuid# " << record.PDiskGuid;
-        str << " SlotSizeUnits# " << record.SlotSizeUnits;
         str << " CutLogID# " << record.CutLogID;
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
         str << "}";

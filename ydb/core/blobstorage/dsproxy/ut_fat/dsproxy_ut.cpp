@@ -4291,6 +4291,7 @@ public:
                     i + 1,
                     args.DeviceType,
                     0,
+                    NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
                     NKikimrBlobStorage::TVDiskKind::Default,
                     2,
                     {});

@@ -101,6 +101,12 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {}
 
+        TEvLookup(const TEvLookup& ev)            
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProxyOptions(ev.ProxyOptions)
+        {}
+
         TString ToString() const {
             TStringStream str;
             str << "{EvLookup TabletID: " << TabletID;
@@ -134,6 +140,20 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {
             Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvUpdate(const TEvUpdate& ev) 
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedLeaderTablet(ev.ProposedLeaderTablet)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , ProposedStep(ev.ProposedStep)
+            , SignatureSz(ev.SignatureSz)
+            , Signature(new ui64[ev.SignatureSz])
+            , ProxyOptions(ev.ProxyOptions) 
+        {
+            Copy(ev.Signature.Get(), ev.Signature.Get() + ev.SignatureSz, Signature.Get());
         }
 
         TString ToString() const {
@@ -223,6 +243,18 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {
             Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvLock(const TEvLock& ev)
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , SignatureSz(ev.SignatureSz)
+            , Signature(new ui64[ev.SignatureSz])
+            , ProxyOptions(ev.ProxyOptions) 
+        {
+            Copy(ev.Signature.Get(), ev.Signature.Get() + ev.SignatureSz, Signature.Get());
         }
 
         TString ToString() const {

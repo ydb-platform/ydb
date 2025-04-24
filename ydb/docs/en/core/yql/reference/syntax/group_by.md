@@ -299,7 +299,8 @@ In each partition defined by the values of all the grouping columns, the window 
 Since records in streams can be somewhat out of order, the `delay` parameter allows you to delay the closing of the window by a specified period. Events arriving before the current window are ignored.
 {% endif %}
 
-The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals are rounded down.
+The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals are prohibited in the current implementation.
+The `interval` and `hop` parameters must be positive.
 
 {% if select_command != "SELECT STREAM" %}
 The `delay` parameter is not used in the current implementation because the data in one partition is already sorted.

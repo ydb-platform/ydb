@@ -1,6 +1,6 @@
 # admin cluster config replace
 
-С помощью команды `admin cluster config replace` вы можете загрузить [динамическую конфигурацию](../../../../../maintenance/manual/dynamic-config.md) на кластер {{ ydb-short-name }}.
+С помощью команды `admin cluster config replace` вы можете загрузить [конфигурацию](../../../../../devops/configuration-management/configuration-v2/index.md) на кластер {{ ydb-short-name }}.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -41,7 +41,7 @@ ydb admin cluster config replace --help
 Загрузите файл динамической конфигурации на кластер:
 
 ```bash
-ydb admin cluster config replace --filename сonfig.yaml
+ydb admin cluster config replace --filename config.yaml
 ```
 
 Загрузите файл динамической конфигурации на кластер, игнорируя локальные проверки применимости:
@@ -50,7 +50,7 @@ ydb admin cluster config replace --filename сonfig.yaml
 ydb admin cluster config replace -f config.yaml --ignore-local-validation
 ```
 
-Загрузите файл динамиической конфигурации на кластер, игнорируя проверку конфигурации на неизвестные поля:
+Загрузите файл динамической конфигурации на кластер, игнорируя проверку конфигурации на неизвестные поля:
 
 ```bash
 ydb admin cluster config replace -f config.yaml --allow-unknown-fields

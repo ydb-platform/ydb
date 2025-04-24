@@ -674,4 +674,3 @@ def test_topic_data():
         'both_offset_and_ts': response_both_offset_and_ts
     }
     return result
-

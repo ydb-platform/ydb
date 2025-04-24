@@ -605,7 +605,8 @@ TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSch
     request->Record.SetSchemeshardId(schemeShardId);
     request->Record.SetPath(path);
     request->Record.MutableOptions()->CopyFrom(options);
-    auto response = MakeRequestToTablet<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.release(), cookie);
+    auto pipe = ConnectTabletPipe(schemeShardId);
+    auto response = MakeRequestToPipe<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(pipe, request.release(), cookie);
     if (response.Span) {
         response.Span.Attribute("path", path);
     }

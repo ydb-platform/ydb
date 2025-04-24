@@ -586,7 +586,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         except Exception as e:
             raise RuntimeError(f"Failed to start node {node_id}: {e}")
 
-    def change_node_version(self, configurator):
+    def update_nodes_configurator(self, configurator):
         for node in self.nodes.values():
             node.stop()
         self.__configurator = configurator

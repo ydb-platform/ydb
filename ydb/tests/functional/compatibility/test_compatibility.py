@@ -92,7 +92,7 @@ class TestCompatibility(object):
         elif not isinstance(new_binary_paths, list):
             raise ValueError("binary_paths must be a string or a list of strings")
         self.config.set_binary_paths(new_binary_paths)
-        self.cluster.change_node_version(self.config)
+        self.cluster.update_nodes_configurator(self.config)
         time.sleep(60)
         versions_on_after = self.get_nodes_version()
         if binary_path_before != new_binary_paths:

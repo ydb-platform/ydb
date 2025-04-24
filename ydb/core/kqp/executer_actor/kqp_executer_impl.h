@@ -164,6 +164,10 @@ public:
         , ResultSetType(resultSetType)
         , BatchOperationSettings(std::move(batchOperationSettings))
     {
+        if (ResultSetType == Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED) {
+            ResultSetType = Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE;
+        }
+
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
         }
@@ -2270,7 +2274,7 @@ protected:
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;
 
-    Ydb::Query::ResultSetType ResultSetType = Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED;
+    Ydb::Query::ResultSetType ResultSetType;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
 private:

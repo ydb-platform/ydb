@@ -36,7 +36,7 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {
         for (auto* cq: CQS) {
             MakeIntrusive<TGRpcRequest<PlainGrpcRequest, PlainGrpcResponse, TGRpcYdbDebugService>>(this, &Service_, cq,
-                [](NYdbGrpc::IRequestContextBase* ctx) {
+                [this](NYdbGrpc::IRequestContextBase* ctx) {
                     NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
                     PlainGrpcResponse response;
                     auto ts = TInstant::Now();

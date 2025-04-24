@@ -2,6 +2,8 @@
 
 В {{ ydb-short-name }} поддерживается два механизма управления конфигурацией: [V1](../configuration-management/configuration-v1/index.md) и [V2](../configuration-management/configuration-v2/config-overview.md) (рекомендуемый, доступен с версии 25.1). Ключевые различия между ними описаны в статье [Сравнение конфигураций V1 и V2](../configuration-management/compare-configs.md).
 
+{% include [_](../_includes/configuration-version-note.md) %}
+
 В зависимости от текущего состояния вашего кластера, вы можете выполнить миграцию:
 
 *   **[На конфигурацию V2](migration-to-v2.md):** Если ваш кластер работает под управлением конфигурации V1 (например, был развернут на версии {{ ydb-short-name }} до 25.1 и не обновлялся), вы можете перейти на механизм конфигурации V2.

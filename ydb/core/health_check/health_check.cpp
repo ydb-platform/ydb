@@ -2155,6 +2155,9 @@ public:
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                  TStringBuilder() << "Unknown PDisk state: " << statusString,
                                  ETags::PDiskState);
+            storagePDiskStatus.set_overall(context.GetOverallStatus());
+            context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
+            return;
         }
         switch (status->number()) {
             case NKikimrBlobStorage::ACTIVE:

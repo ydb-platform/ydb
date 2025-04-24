@@ -377,7 +377,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings) {
+    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -394,6 +394,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
+            .AutoCommit(autoCommit)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -473,6 +474,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
+        bool autoCommit = true;
         std::function<IActor*(void)> writerFn;
         if (cmd.HasLocalTableWriter()) {
             const auto& writerSettings = cmd.GetLocalTableWriter();
@@ -485,12 +487,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 LOG_C("Run transfer but TransferWriterFactory does not exists.");
                 return;
             }
+            autoCommit = false;
             writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), std::move(writerFn)));
+            CreateWorker(SelfId(), ReaderFn(readerSettings, autoCommit), std::move(writerFn)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 

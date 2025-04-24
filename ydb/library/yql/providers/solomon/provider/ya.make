@@ -28,6 +28,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/solomon/actors
+    ydb/library/yql/providers/solomon/common
     ydb/library/yql/providers/solomon/expr_nodes
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/scheme

@@ -134,12 +134,12 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"SERVICE_ACCOUNT"}, {"folder_id"}, hostnamePatternsRegEx)
         },
         {
-            ToString(NYql::EDatabaseType::Iceberg),
-            BuildIcebergSource(hostnamePatternsRegEx)
+            ToString(NYql::EDatabaseType::Solomon),
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
-            ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_port"}, hostnamePatternsRegEx)
+            ToString(NYql::EDatabaseType::Iceberg),
+            BuildIcebergSource(hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

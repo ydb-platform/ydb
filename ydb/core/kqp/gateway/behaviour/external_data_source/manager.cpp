@@ -80,7 +80,9 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "service_name", // oracle
         "folder_id", // logging
         "use_ssl", // solomon
-        "grpc_port" // solomon
+        "grpc_location", // solomon
+        "project", // solomon
+        "cluster" // solomon
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

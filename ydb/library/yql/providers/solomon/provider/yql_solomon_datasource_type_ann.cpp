@@ -4,6 +4,9 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
+#include <util/string/strip.h>
+#include <util/string/split.h>
+
 namespace NYql {
 
 using namespace NNodes;

@@ -36,9 +36,11 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {
         for (auto* cq: CQS) {
             MakeIntrusive<TGRpcRequest<PlainGrpcRequest, PlainGrpcResponse, TGRpcYdbDebugService>>(this, &Service_, cq,
-                [this](NYdbGrpc::IRequestContextBase* ctx) {
+                [](NYdbGrpc::IRequestContextBase* ctx) {
                     NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
                     PlainGrpcResponse response;
+                    auto ts = TInstant::Now();
+                    response.SetCallBackTs(ts.MicroSeconds());
                     ctx->Reply(&response, 0);
                 }, &Ydb::Debug::V1::DebugService::AsyncService::RequestPingPlainGrpc,
                 "PingPlainGrpc", logger, getCounterBlock("ping", "PingPlainGrpc"))->Run();

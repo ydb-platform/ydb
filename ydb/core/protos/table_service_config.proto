@@ -320,6 +320,6 @@ message TTableServiceConfig {
     reserved 68;
     optional TComputeSchedulerSettings ComputeSchedulerSettings = 70;
 
-    optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
-    optional bool EnableFoldUdfs = 70 [ default = true ];
+    optional bool EnableRowsDuplicationCheck = 71 [ default = false ];
+    optional bool EnableFoldUdfs = 72 [ default = true ];
 };

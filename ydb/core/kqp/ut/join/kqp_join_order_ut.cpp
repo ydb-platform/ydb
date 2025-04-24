@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
     
     Y_UNIT_TEST_TWIN(UdfConstantFold, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/udf_constant_fold.sql", "stats/basic.json", false, ColumnStore);
+        ExecuteJoinOrderTestDataQueryWithStats("queries/udf_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(DatetimeConstantFold, StreamLookupJoin, ColumnStore) {

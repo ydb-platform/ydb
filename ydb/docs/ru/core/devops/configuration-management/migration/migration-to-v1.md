@@ -11,6 +11,7 @@
 ## Исходное состояние
 
 Миграция на конфигурацию V1 возможна только в том случае, если в кластере используется [конфигурация V2](../../configuration-management/configuration-v2/config-overview.md). Это может быть достигнуто:
+
 - в результате [миграции на конфигурацию V2](migration-to-v2.md);
 - при [первоначальном развёртывании](../../deployment-options/manual/initial-deployment.md) кластера.
 
@@ -59,7 +60,7 @@
 
     {% endcut %}
 
-5. Получить текущую конфигурацию кластера:
+5. Получить текущую конфигурацию кластера с помощью `ydb admin cluster config fetch`:
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml

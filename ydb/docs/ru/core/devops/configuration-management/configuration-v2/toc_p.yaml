@@ -6,7 +6,7 @@ items:
 - name: DSL конфигурации кластера
   href: dynamic-config-selectors.md
 - name: Параметры конфигурации
-  href: config-setting.md
+  href: config-settings.md
 - name: Расширение кластера
   href: cluster-expansion.md
 - name: Перемещение State Storage

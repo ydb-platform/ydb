@@ -50,6 +50,10 @@ UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
 
+{% if feature_batch_operations %}
+
 ## See also
 
 * [BATCH UPDATE](batch-update.md)
+
+{% endif %}

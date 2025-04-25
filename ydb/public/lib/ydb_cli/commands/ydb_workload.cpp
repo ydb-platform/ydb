@@ -359,6 +359,10 @@ void TWorkloadCommandRun::Config(TConfig& config) {
     Params.ConfigureOpts(config.Opts->GetOpts(), NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
 }
 
+void TWorkloadCommandRun::Parse(TConfig& config) {
+    Params.Parse(config);
+}
+
 TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)
     : TYdbCommand(name, std::initializer_list<TString>(), description)
     , CommandType(commandType)
@@ -372,10 +376,6 @@ void TWorkloadCommandBase::Config(TConfig& config) {
     config.Opts->AddLongOption("dry-run", "Dry run")
         .Optional().StoreTrue(&DryRun);
     Params.ConfigureOpts(config.Opts->GetOpts(), CommandType, Type);
-}
-
-void TWorkloadCommandBase::Parse(TConfig& config) {
-    Params.Parse(config);
 }
 
 int TWorkloadCommandBase::Run(TConfig& config) {

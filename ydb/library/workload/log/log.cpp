@@ -286,6 +286,7 @@ public:
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
+            // TODO: check if it's correct to get interval params here
             result.back().Ts = Params.TimestampDateFrom.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
@@ -485,6 +486,15 @@ void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& co
 
     if ((date_from_passed && !date_to_passed) || (!date_from_passed && date_to_passed)) {
         throw yexception() << "The `date_from` and `date_to` parameters must be provided together to specify the interval for uniform PK generation";
+    }
+
+    if (date_from_passed && date_to_passed) {
+        auto date_from_val = config.ParseResult->Get("date_from");
+        auto date_to_val = config.ParseResult->Get("date_to");
+
+        if (date_from_val >= date_to_val) {
+            throw yexception() << "Invalid interval [`date_from`, `date_to`)";
+        }
     }
 }
 

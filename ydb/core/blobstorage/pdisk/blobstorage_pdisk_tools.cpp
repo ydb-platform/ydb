@@ -244,7 +244,8 @@ void ObliterateDisk(TString path) {
 
     constexpr size_t portionSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
     if (diskSizeBytes <= portionSize) {
-        ythrow TFileError() << "illegal size " << diskSizeBytes << " for device " << path;
+        ythrow yexception() << "file is too small to be the YDB storage device, path# " << path.Quote() <<
+            " diskSizeBytes# " << diskSizeBytes;
     }
 
     TVector<ui8> zeros(portionSize, 0);

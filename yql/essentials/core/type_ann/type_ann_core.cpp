@@ -7841,7 +7841,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        if (!EnsureMaxArgsCount(*input, 5, ctx.Expr)) {
+        if (!EnsureMaxArgsCount(*input, 6, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7900,6 +7900,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
         auto canonizedModuleName = isCustomPython ? moduleName : NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool foundModule = false;
+        TStringBuf fileAlias = ""_sb;
 
         // resolve script udf from external resources (files / urls)
         // (main usage of CustomPython)
@@ -7910,7 +7911,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            foundModule = ctx.Types.UdfModules.find(canonizedModuleName) != ctx.Types.UdfModules.end();
+            if (auto udfInfo = ctx.Types.UdfModules.FindPtr(canonizedModuleName)) {
+                foundModule = true;
+                fileAlias = udfInfo->FileAlias;
+            }
         }
 
         // fallback for preinstalled CustomPython case
@@ -7930,7 +7934,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->ChildrenSize() == 5) {
+        if (input->ChildrenSize() > 4) {
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -7968,6 +7972,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (input->ChildrenSize() > 5) {
+            if (!EnsureAtom(*input->Child(5), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (fileAlias) {
+            auto children = input->ChildrenList();
+            if (children.size() < 5) {
+                children.push_back(ctx.Expr.NewList(input->Pos(), {}));
+            }
+            children.push_back(ctx.Expr.NewAtom(input->Pos(), fileAlias));
+            YQL_ENSURE(children.size() == 6);
+            output = ctx.Expr.ChangeChildren(*input, std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         input->SetTypeAnn(callableType);

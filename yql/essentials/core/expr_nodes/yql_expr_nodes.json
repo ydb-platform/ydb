@@ -1460,7 +1460,8 @@
                 {"Index": 1, "Name": "FunctionName", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "FunctionType", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Script", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true},
+                {"Index": 5, "Name": "FileAlias", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

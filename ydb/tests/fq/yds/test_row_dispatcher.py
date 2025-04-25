@@ -358,6 +358,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init_topics("test_filters_non_optional_field")
 
         sql = Rf'''
+            PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL, nested Json NOT NULL)) WHERE '''

@@ -30,6 +30,7 @@ target_link_libraries(tools-ytrun-lib PUBLIC
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-log
+  lib-secret_masker-dummy
   providers-common-provider
   essentials-core-cbo
   essentials-core-peephole_opt

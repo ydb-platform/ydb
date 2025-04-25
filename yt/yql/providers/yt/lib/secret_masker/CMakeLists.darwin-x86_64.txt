@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tools-ytrun-lib)
+add_subdirectory(dummy)
+
+add_library(yt-lib-secret_masker INTERFACE)
 
 
-target_compile_options(tools-ytrun-lib PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tools-ytrun-lib PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(yt-lib-secret_masker INTERFACE
   contrib-libs-cxxsupp
   yutil
-  providers-yt-provider
-  yt-fmr-fmr_tool_lib
-  yt-gateway-native
-  yt-gateway-fmr
-  yt-lib-config_clusters
-  yt-lib-yt_download
-  yt-lib-yt_url_lister
-  yt-lib-log
-  lib-secret_masker-dummy
-  providers-common-provider
-  essentials-core-cbo
-  essentials-core-peephole_opt
-  core-cbo-simple
-  essentials-core-services
-  essentials-utils-backtrace
-  essentials-tools-yql_facade_run
-  cpp-mapreduce-client
-  cpp-mapreduce-interface
-  cpp-digest-md5
-  cpp-malloc-api
-  library-cpp-sighandler
-)
-
-target_sources(tools-ytrun-lib PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yql/tools/ytrun/lib/ytrun_lib.cpp
 )
 

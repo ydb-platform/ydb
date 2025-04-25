@@ -62,6 +62,7 @@ target_link_libraries(yt-gateway-native PUBLIC
   yt-lib-mkql_helpers
   yt-lib-res_pull
   yt-lib-schema
+  yt-lib-secret_masker
   yt-lib-skiff
   yt-lib-url_mapper
   yt-lib-yson_helpers

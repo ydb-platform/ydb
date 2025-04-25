@@ -1241,7 +1241,7 @@ public:
     // } // NLongRunningCommon
 
     // namespace NExport {
-    THashMap<ui64, TExportInfo::TPtr> Exports;
+    TMap<ui64, TExportInfo::TPtr> Exports;
     THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
@@ -1294,7 +1294,7 @@ public:
     // } // NExport
 
     // namespace NImport {
-    THashMap<ui64, TImportInfo::TPtr> Imports;
+    TMap<ui64, TImportInfo::TPtr> Imports;
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
     THashSet<TActorId> RunningImportSchemeGetters;
@@ -1365,7 +1365,7 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
 
-    THashMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
+    TMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
     THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 

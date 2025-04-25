@@ -49,6 +49,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true);
     EventPatch = EventGroup->GetCounter("EvPatch", true);
     EventAssimilate = EventGroup->GetCounter("EvAssimilate", true);
+    EventCheckIntegrity = EventGroup->GetCounter("EvCheckIntegrity", true);
 
     PutsSentViaPutBatching = EventGroup->GetCounter("PutsSentViaPutBatching", true);
     PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true);

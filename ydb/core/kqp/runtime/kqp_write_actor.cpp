@@ -1068,7 +1068,7 @@ public:
                     << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
             return;
         } else {
-            AF_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
+            AFL_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
         }
     }
 

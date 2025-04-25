@@ -42,6 +42,7 @@ public:
         }
 
         if (record.HasSchemeShardId()) {
+//            Y_VERIFY(Self->CurrentSchemeShardId);
             if (Self->CurrentSchemeShardId == 0) {
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);

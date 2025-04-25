@@ -3,6 +3,7 @@
 namespace NKikimr::NColumnShard {
 
 void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& ctx) {
+    AFL_VERIFY(owner.CurrentSchemeShardId);
     if (owner.CurrentSchemeShardId) {
         AFL_VERIFY(owner.CurrentSchemeShardId);
         ctx.Send(MakePipePerNodeCacheID(false),

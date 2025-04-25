@@ -434,6 +434,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
+//    Y_VERIFY(CurrentSchemeShardId);
     if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;

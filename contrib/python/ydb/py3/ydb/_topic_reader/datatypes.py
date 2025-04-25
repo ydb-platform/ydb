@@ -56,6 +56,10 @@ class PublicMessage(ICommittable, ISessionAlive):
     def alive(self) -> bool:
         return not self._partition_session.closed
 
+    @property
+    def partition_id(self) -> int:
+        return self._partition_session.partition_id
+
 
 @dataclass
 class PartitionSession:

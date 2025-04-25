@@ -61,66 +61,93 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
     return samples;
 }
 
+template<typename K, typename V, typename R, typename Next>
+THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
+{
+    if (implType == EHashMapImpl::UnorderedMap) {
+        return next(TUnorderedMapImpl<K, V>());
+    } else {
+        return next(TAbslMapImpl<K, V>());
+    }
+}
+
 THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
 {
     Y_ENSURE(params.RandomSeed.has_value());
 
     switch (params.SamplerType) {
     case ESamplerType::StringKeysUI64Values:
-        return MakeHolder<TString64DataSampler>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
+        return DispatchByMap<std::string, ui64, IDataSampler>(params.ReferenceHashType, [&](auto&& impl) {
+            using MapImpl = std::decay_t<decltype(impl)>;
+            using SamplerType = TString64DataSampler<MapImpl>;
+            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
+        });
     case ESamplerType::UI64KeysUI64Values:
-        return MakeHolder<T6464DataSampler>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
+        return DispatchByMap<ui64, ui64, IDataSampler>(params.ReferenceHashType, [&](auto&& impl) {
+            using MapImpl = std::decay_t<decltype(impl)>;
+            using SamplerType = T6464DataSampler<MapImpl>;
+            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
+        });
     }
 }
 
-template<typename K>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<K, ui64>& result);
-
-template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<ui64, ui64>& result)
+template<typename TMapType, typename K>
+struct TUpdateMapFromBlocks
 {
-    auto datumKey = TArrowBlock::From(key).GetDatum();
-    auto datumValue = TArrowBlock::From(value).GetDatum();
-    UNIT_ASSERT(datumKey.is_array());
-    UNIT_ASSERT(datumValue.is_array());
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result);
+};
 
-    const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
-    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-    UNIT_ASSERT(!!ui64keys);
-    UNIT_ASSERT(!!ui64values);
-    UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
-
-    const size_t length = ui64keys->length();
-    for (size_t i = 0; i < length; ++i) {
-        result[ui64keys->Value(i)] += ui64values->Value(i);
-    }
-}
-
-template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<std::string, ui64>& result)
+template<typename TMapType>
+struct TUpdateMapFromBlocks<TMapType, ui64>
 {
-    auto datumKey = TArrowBlock::From(key).GetDatum();
-    auto datumValue = TArrowBlock::From(value).GetDatum();
-    UNIT_ASSERT(datumKey.is_arraylike());
-    UNIT_ASSERT(datumValue.is_array());
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result)
+    {
 
-    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-    UNIT_ASSERT(!!ui64values);
+        auto datumKey = TArrowBlock::From(key).GetDatum();
+        auto datumValue = TArrowBlock::From(value).GetDatum();
+        UNIT_ASSERT(datumKey.is_array());
+        UNIT_ASSERT(datumValue.is_array());
 
-    int64_t valueOffset = 0;
+        const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
+        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+        UNIT_ASSERT(!!ui64keys);
+        UNIT_ASSERT(!!ui64values);
+        UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
 
-    for (const auto& chunk : datumKey.chunks()) {
-        auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
-        UNIT_ASSERT(barray != nullptr);
-        for (int64_t i = 0; i < barray->length(); ++i) {
-            auto key = barray->GetString(i);
-            auto val = ui64values->Value(valueOffset);
-            result[key] += val;
-            ++valueOffset;
+        const size_t length = ui64keys->length();
+        for (size_t i = 0; i < length; ++i) {
+            result[ui64keys->Value(i)] += ui64values->Value(i);
         }
     }
-}
+};
 
+template<typename TMapType>
+struct TUpdateMapFromBlocks<TMapType, std::string>
+{
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result)
+    {
+        auto datumKey = TArrowBlock::From(key).GetDatum();
+        auto datumValue = TArrowBlock::From(value).GetDatum();
+        UNIT_ASSERT(datumKey.is_arraylike());
+        UNIT_ASSERT(datumValue.is_array());
+
+        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+        UNIT_ASSERT(!!ui64values);
+
+        int64_t valueOffset = 0;
+
+        for (const auto& chunk : datumKey.chunks()) {
+            auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
+            UNIT_ASSERT(barray != nullptr);
+            for (int64_t i = 0; i < barray->length(); ++i) {
+                auto key = barray->GetString(i);
+                auto val = ui64values->Value(valueOffset);
+                result[key] += val;
+                ++valueOffset;
+            }
+        }
+    }
+};
 
 template<typename T>
 TType* GetVerySimpleDataType(const TTypeEnvironment& env)
@@ -134,7 +161,7 @@ TType* GetVerySimpleDataType<std::string>(const TTypeEnvironment& env)
     return TDataType::Create(NUdf::TDataType<char*>::Id, env);
 }
 
-template<typename K, typename V>
+template<typename K, typename V, typename TMapImpl>
 class TBlockSampler : public IBlockSampler
 {
     using TSamples = TBlockKVStream<K, V>::TSamples;
@@ -190,7 +217,7 @@ public:
         NUdf::TUnboxedValue columns[3];
 
         while (refStream.WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
-            UpdateMapFromBlocks(columns[0], columns[1], RefResult);
+            TUpdateMapFromBlocks<typename TMapImpl::TMapType, K>::Update(columns[0], columns[1], RefResult);
         }
     }
 
@@ -215,7 +242,7 @@ public:
         size_t numResultItems = blockList.GetListLength();
         Cerr << "Result block count: " << numResultItems << Endl;
 
-        std::unordered_map<K, V> graphResult;
+        typename TMapImpl::TMapType graphResult;
 
         const auto ptr = blockList.GetElements();
         for (size_t i = 0ULL; i < numResultItems; ++i) {
@@ -224,7 +251,7 @@ public:
 
             const auto elements = ptr[i].GetElements();
 
-            UpdateMapFromBlocks(elements[0], elements[1], graphResult);
+            TUpdateMapFromBlocks<typename TMapImpl::TMapType, K>::Update(elements[0], elements[1], graphResult);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), graphResult.size());
@@ -240,8 +267,8 @@ private:
     size_t NumIters;
     size_t BlockSize;
 
-    std::unordered_map<K, V> RawResult;
-    std::unordered_map<K, V> RefResult;
+    TMapImpl::TMapType RawResult;
+    TMapImpl::TMapType RefResult;
 };
 
 THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
@@ -250,13 +277,21 @@ THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
 
     switch(params.SamplerType) {
     case ESamplerType::StringKeysUI64Values:
-        return MakeHolder<TBlockSampler<std::string, ui64>>(
-            params,
-            MakeKeyedString64Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.LongStringKeys));
+        return DispatchByMap<std::string, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
+            using MapImpl = std::decay_t<decltype(impl)>;
+            using SamplerType = TBlockSampler<std::string, ui64, MapImpl>;
+            return MakeHolder<SamplerType>(
+                params,
+                MakeKeyedString64Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.LongStringKeys));
+        });
     case ESamplerType::UI64KeysUI64Values:
-        return MakeHolder<TBlockSampler<ui64, ui64>>(
-            params,
-            MakeKeyed6464Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1));
+        return DispatchByMap<ui64, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
+            using MapImpl = std::decay_t<decltype(impl)>;
+            using SamplerType = TBlockSampler<ui64, ui64, MapImpl>;
+            return MakeHolder<SamplerType>(
+                params,
+                MakeKeyed6464Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1));
+        });
     }
 }
 

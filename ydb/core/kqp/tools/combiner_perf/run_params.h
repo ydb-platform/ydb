@@ -18,9 +18,15 @@ enum class ESamplerType {
     UI64KeysUI64Values,
 };
 
+enum class EHashMapImpl {
+    UnorderedMap,
+    Absl,
+};
+
 struct TRunParams {
     ETestMode TestMode = ETestMode::Full;
     ESamplerType SamplerType = ESamplerType::StringKeysUI64Values;
+    EHashMapImpl ReferenceHashType = EHashMapImpl::UnorderedMap;
     std::optional<ui64> RandomSeed;
     int NumAttempts = 0;
     size_t RowsPerRun = 0;

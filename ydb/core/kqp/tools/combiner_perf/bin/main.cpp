@@ -99,9 +99,9 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
 
     TJsonResultCollector printout;
 
-    // const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000, 30'000'000};
+    const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000};
     // const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
-    const std::vector<size_t> numKeys = {30'000'000u};
+    //const std::vector<size_t> numKeys = {30'000'000u};
     const std::vector<size_t> blockSizes = {128u, 8192u};
 
     auto doSimple = [&printout, numKeys](const TRunParams& params) {
@@ -243,6 +243,19 @@ int main(int argc, const char* argv[])
             }
         })
         .Help("Input data type: string key -> ui64 numeric value or ui64 numeric key -> ui64 numeric value");
+
+    options.AddLongOption("hashmap")
+        .Choices({"std", "absl"})
+        .RequiredArgument()
+        .Handler1([&](const NLastGetopt::TOptsParser* option) {
+            auto val = TStringBuf(option->CurVal());
+            if (val == "std") {
+                runParams.ReferenceHashType = NKikimr::NMiniKQL::EHashMapImpl::UnorderedMap;
+            } else {
+                runParams.ReferenceHashType = NKikimr::NMiniKQL::EHashMapImpl::Absl;
+            }
+        })
+        .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options
         .AddLongOption('t', "test")

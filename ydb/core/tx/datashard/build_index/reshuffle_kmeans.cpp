@@ -46,32 +46,28 @@ protected:
 
     std::vector<TString> Clusters;
 
-    // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
-
-    TString TargetTable;
-
-    TBufferData ReadBuf;
-    TBufferData WriteBuf;
+    TBatchRowsUploader Uploader;
+    
+    TBufferData* PostingBuf = nullptr;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
     ui32 RetryCount = 0;
 
-    TActorId Uploader;
     const TIndexBuildScanSettings ScanSettings;
 
-    TTags UploadScan;
+    TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
     ui64 UploadRows = 0;
     ui64 UploadBytes = 0;
 
-    // Response
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
+
+    bool IsExhausted = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -92,7 +88,7 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
-        , TargetTable{request.GetPostingName()}
+        , Uploader(request.GetScanSettings())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -101,9 +97,10 @@ public:
         const auto& data = request.GetDataColumns();
         // scan tags
         NTable::TTag embeddingTag;
-        UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
+        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
+        Lead.SetTags(ScanTags);
         // upload types
-        TargetTypes = MakeUploadTypes(table, UploadState, embedding, data);
+        PostingBuf = Uploader.AddDestination(request.GetPostingName(), MakeUploadTypes(table, UploadState, embedding, data));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -112,51 +109,18 @@ public:
         LOG_I("Prepare " << Debug());
 
         Driver = driver;
-        return {EScan::Feed, {}};
-    }
+        Uploader.SetOwner(SelfId());
 
-    EScan Seek(TLead& lead, ui64 seq) final
-    {
-        LOG_D("Seek " << Debug());
-        if (seq == 0) {
-            lead = std::move(Lead);
-            lead.SetTags(UploadScan);
-            return EScan::Feed;
-        }
-        if (!WriteBuf.IsEmpty()) {
-            return EScan::Sleep;
-        }
-        if (!ReadBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-            return EScan::Sleep;
-        }
-        if (UploadStatus.IsNone()) {
-            UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
-        }
-        return EScan::Final;
+        return {EScan::Feed, {}};
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        if (Uploader) {
-            Send(Uploader, new TEvents::TEvPoison);
-            Uploader = {};
-        }
-
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
-        record.SetUploadRows(UploadRows);
-        record.SetUploadBytes(UploadBytes);
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        } else if (UploadStatus.IsSuccess()) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-        } else {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        }
-        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+        
+        Uploader.Finish(record, abort);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -179,8 +143,8 @@ public:
     {
         return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
             << " Parent: " << Parent << " Child: " << Child
-            << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
+            << " K: " << K << " Clusters: " << Clusters.size()
+            << " " << Uploader.Debug();
     }
 
     EScan PageFault() final
@@ -193,90 +157,46 @@ protected:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
                 LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
-    void HandleWakeup()
+    void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_I("Retry upload " << Debug());
+        LOG_D("Retry upload " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
-            Upload(true);
-        }
+        Uploader.RetryUpload();
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev)
+    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug() << " Uploader: " << Uploader.ToString()
-                                              << " ev->Sender: " << ev->Sender.ToString());
+        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " ev->Sender: " << ev->Sender.ToString());
 
-        if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
-                << " Uploader: " << Uploader.ToString()
-                << " Sender: " << ev->Sender.ToString());
-        } else {
-            Y_ENSURE(Driver == nullptr);
+        if (!Driver) {
             return;
         }
 
-        UploadStatus.StatusCode = ev->Get()->Status;
-        UploadStatus.Issues = ev->Get()->Issues;
-        if (UploadStatus.IsSuccess()) {
-            UploadRows += WriteBuf.GetRows();
-            UploadBytes += WriteBuf.GetBytes();
-            WriteBuf.Clear();
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
-                ReadBuf.FlushTo(WriteBuf);
-                Upload(false);
-            }
+        Uploader.Handle(ev);
 
+        if (Uploader.GetUploadStatus().IsSuccess()) {
             Driver->Touch(EScan::Feed);
             return;
         }
 
-        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
-
-            Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
+        if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
+            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
-    }
-
-    EScan FeedUpload()
-    {
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
-            return EScan::Feed;
-        }
-        if (!WriteBuf.IsEmpty()) {
-            return EScan::Sleep;
-        }
-        ReadBuf.FlushTo(WriteBuf);
-        Upload(false);
-        return EScan::Feed;
-    }
-
-    void Upload(bool isRetry)
-    {
-        if (isRetry) {
-            ++RetryCount;
-        } else {
-            RetryCount = 0;
-        }
-
-        auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable, TargetTypes, WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
-
-        Uploader = this->Register(actor);
     }
 };
 
@@ -291,67 +211,94 @@ public:
         LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
+    EScan Seek(TLead& lead, ui64 seq) final
+    {
+        LOG_D("Seek " << seq << " " << Debug());
+
+        if (IsExhausted) {
+            return Uploader.CanFinish()
+                ? EScan::Final
+                : EScan::Sleep;
+        }
+
+        lead = Lead;
+
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
-        
+
         ++ReadRows;
-        ReadBytes += CountBytes(key, row_);
-        auto row = *row_;
+        ReadBytes += CountBytes(key, row);
+
+        Feed(key, *row);
+
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    }
+
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        IsExhausted = true;
         
-        switch (UploadState) {
-            case EState::UPLOAD_MAIN_TO_BUILD:
-                return FeedUploadMain2Build(key, row);
-            case EState::UPLOAD_MAIN_TO_POSTING:
-                return FeedUploadMain2Posting(key, row);
-            case EState::UPLOAD_BUILD_TO_BUILD:
-                return FeedUploadBuild2Build(key, row);
-            case EState::UPLOAD_BUILD_TO_POSTING:
-                return FeedUploadBuild2Posting(key, row);
-            default:
-                return EScan::Final;
-        }
+        // call Seek to wait uploads
+        return EScan::Reset;
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        switch (UploadState) {
+            case EState::UPLOAD_MAIN_TO_BUILD:
+                FeedUploadMain2Build(key, row);
+                break;
+            case EState::UPLOAD_MAIN_TO_POSTING:
+                FeedUploadMain2Posting(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_BUILD:
+                FeedUploadBuild2Build(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_POSTING:
+                FeedUploadBuild2Posting(key, row);
+                break;
+            default:
+                Y_ASSERT(false);
         }
-        AddRowMain2Build(ReadBuf, Child + pos, key, row);
-        return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (pos < K) {
+            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
         }
-        AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
-        return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (pos < K) {
+            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
         }
-        AddRowBuild2Build(ReadBuf, Child + pos, key, row);
-        return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos >= K) {
-            return EScan::Feed;
+        if (pos < K) {
+            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
         }
-        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
-        return FeedUpload();
+    }
+
+    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    {
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
+        if (pos < K) {
+            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        }
     }
 };
 

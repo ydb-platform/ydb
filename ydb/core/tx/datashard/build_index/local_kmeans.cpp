@@ -163,7 +163,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
-        
+
         return {EScan::Feed, {}};
     }
 

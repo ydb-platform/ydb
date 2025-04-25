@@ -43,7 +43,7 @@ The binary representation of the vector can be stored in the {{ ydb-short-name }
 
 Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
 
-{% note info %}
+{% endnote %}
 
 {% note info %}
 

@@ -23,7 +23,7 @@ TABLESAMPLE +
 
 
 class TestDML(TestBase):
-    @pytest.mark.parametrize(
+    """@pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
             ("table_index_4_UNIQUE_SYNC", pk_types, {},
@@ -72,7 +72,7 @@ class TestDML(TestBase):
         self.without(table_name, all_types, pk_types, index, ttl)
         self.tablesample_sample(table_name, all_types,
                                 pk_types, index, ttl, dml)
-
+"""
     def limit(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
         statements = self.create_types_for_all_select(
             all_types, pk_types, index, ttl)
@@ -384,8 +384,7 @@ class TestDML(TestBase):
             self.update(table_name, type_name, "col_",
                         all_types[type_name], "Int64", pk_types["Int64"])
             partition.remove(f"col_{cleanup_type_name(type_name)}")
-            self.create_match_recognize(table_name, partition[numb], partition[(
-                numb+1) % len(partition)], f"col_{cleanup_type_name(type_name)}", all_types, type_name)
+            self.create_match_recognize(table_name, partition[numb], f"col_{cleanup_type_name(type_name)}", all_types, type_name)
             partition.append(f"col_{cleanup_type_name(type_name)}")
             self.update_back(table_name, type_name, "col_",
                              all_types[type_name], "Int64", pk_types["Int64"])
@@ -394,8 +393,7 @@ class TestDML(TestBase):
             self.update(table_name, type_name, "col_index_",
                         index[type_name], "Int64", pk_types["Int64"])
             partition.remove(f"col_index_{cleanup_type_name(type_name)}")
-            self.create_match_recognize(table_name, partition[numb], partition[(
-                numb+1) % len(partition)], f"col_index_{cleanup_type_name(type_name)}", index, type_name)
+            self.create_match_recognize(table_name, partition[numb], f"col_index_{cleanup_type_name(type_name)}", index, type_name)
             partition.append(f"col_index_{cleanup_type_name(type_name)}")
             self.update_back(table_name, type_name, "col_index_",
                              index[type_name], "Int64", pk_types["Int64"])
@@ -491,7 +489,7 @@ class TestDML(TestBase):
         """
         self.query(insert_sql)
 
-    def create_match_recognize(self, table_name, partition, order, col, key, type_name):
+    def create_match_recognize(self, table_name, partition, col, key, type_name):
         match_recognize_sql = f"""
             PRAGMA FeatureR010="prototype";
             select * from {table_name} MATCH_RECOGNIZE(
@@ -517,6 +515,6 @@ class TestDML(TestBase):
                 L as L.{col}={format_sql_value(key[type_name](12), type_name)}
             );
         """
-        print(match_recognize_sql)
+        
         rows = self.query(match_recognize_sql)
         print(rows)

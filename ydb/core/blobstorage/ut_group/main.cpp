@@ -422,7 +422,8 @@ private:
 
     void StartVDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
         TVDiskConfig::TBaseInfo baseInfo(disk.VDiskId, disk.PDiskActorId, disk.PDiskGuid, disk.PDiskId,
-            NPDisk::DEVICE_TYPE_SSD, disk.VDiskSlotId, NKikimrBlobStorage::TVDiskKind::Default, ++Round,
+            NPDisk::DEVICE_TYPE_SSD, disk.VDiskSlotId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
+            NKikimrBlobStorage::TVDiskKind::Default, ++Round,
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = true;

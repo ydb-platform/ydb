@@ -171,7 +171,8 @@ namespace NKikimr {
 
             // create vdisk config
             TVDiskConfig::TBaseInfo baseInfo(VDiskId, PDiskServiceId, PDiskGuid, PDiskId,
-                NPDisk::DEVICE_TYPE_SSD, VSlotId, NKikimrBlobStorage::TVDiskKind::Default, 1,
+                NPDisk::DEVICE_TYPE_SSD, VSlotId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
+                NKikimrBlobStorage::TVDiskKind::Default, 1,
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
             VDiskConfig->UseCostTracker = false;

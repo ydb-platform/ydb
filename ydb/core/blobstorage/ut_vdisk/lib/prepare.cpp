@@ -250,7 +250,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
     vdisk.VDiskID = TVDiskID(TGroupId::Zero(), 1, 0, d, j);
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
-            pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId,
+            pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
             NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {}, false, {}, 0, 0, pdisk.ReadOnly);
     vdisk.Cfg = MakeIntrusive<NKikimr::TVDiskConfig>(baseInfo);
 

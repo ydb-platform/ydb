@@ -268,6 +268,7 @@ private:
                 pdisk.PDiskId,
                 NPDisk::DEVICE_TYPE_SSD,
                 0,
+                NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED,
                 NKikimrBlobStorage::TVDiskKind::Default,
                 2, // InitOwnerRound
                 ""

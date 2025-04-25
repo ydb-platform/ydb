@@ -39,7 +39,7 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    NKMeans::TSampler<TString> Sampler;
+    NKMeans::TSampler Sampler;
 
     IDriver* Driver = nullptr;
 
@@ -144,7 +144,8 @@ public:
 
     TString Debug() const {
         return TStringBuilder() << "TSampleKScan TabletId: " << TabletId << " Id: " << BuildId
-            << " K: " << K << " Clusters: " << Sampler.MaxRows.size();
+            << " K: " << K
+            << " " << Sampler.Debug();
     }
 
 private:
@@ -157,8 +158,7 @@ private:
     }
 
     void FillResponse() {
-        auto& maxRows = Sampler.MaxRows;
-        auto& dataRows = Sampler.DataRows;
+        auto [maxRows, dataRows] = Sampler.Finish();
 
         std::sort(maxRows.begin(), maxRows.end());
         auto& record = Response->Record;

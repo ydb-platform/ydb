@@ -62,6 +62,8 @@ protected:
     EState State;
     const EState UploadState;
 
+    NKMeans::TSampler Sampler;
+
     IDriver* Driver = nullptr;
 
     TLead Lead;
@@ -72,18 +74,6 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    // Sample
-    ui64 MaxProbability = std::numeric_limits<ui64>::max();
-    TReallyFastRng32 Rng;
-
-    struct TProbability {
-        ui64 P = 0;
-        ui64 I = 0;
-
-        auto operator<=>(const TProbability&) const noexcept = default;
-    };
-
-    std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
     std::vector<ui64> ClusterSizes;
 
@@ -137,10 +127,10 @@ public:
         , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
+        , Sampler(request.GetK(), request.GetSeed())
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Rng{request.GetSeed()}
         , Uploader(request.GetScanSettings())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
@@ -206,7 +196,7 @@ public:
     {
         return TStringBuilder() << "TLocalKMeansScan TabletId: " << TabletId << " Id: " << BuildId
             << " Parent: " << Parent << " Child: " << Child
-            << " K: " << K << " Clusters: " << Clusters.size()
+            << " K: " << K << " Clusters: " << Clusters.size() << " " << Sampler.Debug()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " " << Uploader.Debug();
     }
@@ -275,11 +265,6 @@ protected:
             ++pos;
         }
     }
-
-    ui64 GetProbability()
-    {
-        return Rng.GenRand64();
-    }
 };
 
 template <typename TMetric>
@@ -304,8 +289,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
         IsFirstPrefixFeed = true;
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
-        MaxProbability = std::numeric_limits<ui64>::max();
-        MaxRows.clear();
+        Sampler.Finish();
         Clusters.clear();
         ClusterSizes.clear();
         AggregatedClusters.clear();
@@ -451,6 +435,7 @@ private:
 
     bool InitAggregatedClusters()
     {
+        Clusters = Sampler.Finish().second;
         if (Clusters.size() == 0) {
             return false;
         }
@@ -561,22 +546,9 @@ private:
             return;
         }
 
-        const auto probability = GetProbability();
-        if (Clusters.size() < K) {
-            MaxRows.push_back({probability, Clusters.size()});
-            Clusters.emplace_back(embedding.data(), embedding.size());
-            if (Clusters.size() == K) {
-                std::make_heap(MaxRows.begin(), MaxRows.end());
-                MaxProbability = MaxRows.front().P;
-            }
-        } else if (probability < MaxProbability) {
-            // TODO(mbkkt) use tournament tree to make less compare and swaps
-            std::pop_heap(MaxRows.begin(), MaxRows.end());
-            Clusters[MaxRows.back().I].assign(embedding.data(), embedding.size());
-            MaxRows.back().P = probability;
-            std::push_heap(MaxRows.begin(), MaxRows.end());
-            MaxProbability = MaxRows.front().P;
-        }
+        Sampler.Add([&embedding](){
+            return TString(embedding.data(), embedding.size());
+        });
     }
 
     void FeedKMeans(TArrayRef<const TCell> row)

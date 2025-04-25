@@ -262,7 +262,6 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
     }
 }
 
-template<typename T>
 class TSampler {
     struct TProbability {
         ui64 P = 0;
@@ -277,10 +276,10 @@ class TSampler {
 
     // We are using binary heap, because we don't want to do batch processing here,
     // serialization is more expensive than compare
+    std::vector<TProbability> MaxRows;
+    std::vector<TString> DataRows;
 
 public:
-    std::vector<TProbability> MaxRows;
-    std::vector<T> DataRows;
 
     TSampler(ui64 k, ui64 seed,  ui64 maxProbability = Max<ui64>())
         : K(k)
@@ -312,8 +311,20 @@ public:
         }
     }
 
+    std::pair<std::vector<TProbability>, std::vector<TString>> Finish() {
+        MaxProbability = Max<ui64>();
+        return {
+            std::exchange(MaxRows, {}),
+            std::exchange(DataRows, {})
+        };
+    }
+
     ui64 GetMaxProbability() const {
         return MaxProbability;
+    }
+
+    TString Debug() const {
+        return TStringBuilder() << "Sample: " << DataRows.size();
     }
 
 private:

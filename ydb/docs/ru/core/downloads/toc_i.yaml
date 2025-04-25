@@ -1,7 +1,7 @@
 items:
-- name: YDB Open-Source Server
-  href: ydb-oss-server.md
-- name: Корпоративная СУБД Яндекса
+- name: YDB Open-Source Database
+  href: ydb-open-source-database.md
+- name: Yandex Enterprise Database
   href: yandex-enterprise-database.md
 - name: YDB CLI
   href: ydb-cli.md

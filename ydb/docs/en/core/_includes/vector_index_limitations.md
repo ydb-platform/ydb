@@ -1,11 +1,11 @@
 {% note alert %}
 
-The functionality of vector indexes is available in the test mode in main. The stable version is planned for 25.1.
+The functionality of vector indexes is available in the test mode in main. This functionality will be fully available in version 25.1.
 
-Currently not supported:
+The following features are not supported:
 
 * modifying rows in tables with vector indexes
-* using bit vectors
+* building an index for vectors with bit quantization
 
 These limitations may be removed in future versions.
 

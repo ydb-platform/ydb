@@ -87,25 +87,15 @@ protected:
     std::vector<TString> Clusters;
     std::vector<ui64> ClusterSizes;
 
-    // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> LevelTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> PostingTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> UploadTypes;
+    TBatchRowsUploader Uploader;
 
-    const TString LevelTable;
-    const TString PostingTable;
-    TString UploadTable;
-
-    TBufferData LevelBuf;
-    TBufferData PostingBuf;
-    TBufferData UploadBuf;
+    TBufferData* LevelBuf = nullptr;
+    TBufferData* PostingBuf = nullptr;
+    TBufferData* UploadBuf = nullptr;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
-    ui32 RetryCount = 0;
-
-    TActorId Uploader;
     const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
@@ -151,8 +141,7 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
-        , LevelTable{request.GetLevelName()}
-        , PostingTable{request.GetPostingName()}
+        , Uploader(request.GetScanSettings())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -166,14 +155,15 @@ public:
         // upload types
         {
             Ydb::Type type;
-            LevelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
+            auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
             type.set_type_id(NTableIndex::ClusterIdType);
-            (*LevelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*LevelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            (*levelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
+            (*levelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        PostingTypes = MakeUploadTypes(table, UploadState, embedding, data);
+        PostingBuf = Uploader.AddDestination(request.GetPostingName(), MakeUploadTypes(table, UploadState, embedding, data));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -182,29 +172,18 @@ public:
         LOG_I("Prepare " << Debug());
 
         Driver = driver;
+        Uploader.SetOwner(SelfId());
+        
         return {EScan::Feed, {}};
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        if (Uploader) {
-            Send(Uploader, new TEvents::TEvPoison);
-            Uploader = {};
-        }
-
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
-        record.SetUploadRows(UploadRows);
-        record.SetUploadBytes(UploadBytes);
-        if (abort != EAbort::None) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-        } else {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        }
-        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+        
+        Uploader.Finish(record, abort);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -229,8 +208,7 @@ public:
             << " Parent: " << Parent << " Child: " << Child
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size()
-            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size() << " RetryCount: " << RetryCount;
+            << " " << Uploader.Debug();
     }
 
     EScan PageFault() final
@@ -255,115 +233,34 @@ protected:
     {
         LOG_D("Retry upload " << Debug());
 
-        if (UploadInProgress()) {
-            RetryUpload();
-        }
+        Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
         LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " Uploader: " << (Uploader ? Uploader.ToString() : "<null>")
             << " ev->Sender: " << ev->Sender.ToString());
 
-        if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
-                << " Uploader: " << Uploader.ToString()
-                << " Sender: " << ev->Sender.ToString());
-            Uploader = {};
-        } else {
-            Y_ENSURE(Driver == nullptr);
+        if (!Driver) {
             return;
         }
 
-        UploadStatus.StatusCode = ev->Get()->Status;
-        UploadStatus.Issues = ev->Get()->Issues;
-        if (UploadStatus.IsSuccess()) {
-            UploadRows += UploadBuf.GetRows();
-            UploadBytes += UploadBuf.GetBytes();
-            UploadBuf.Clear();
+        Uploader.Handle(ev);
 
-            TryUpload(LevelBuf, LevelTable, LevelTypes, true)
-                || TryUpload(PostingBuf, PostingTable, PostingTypes, true);
-
+        if (Uploader.GetUploadStatus().IsSuccess()) {
             Driver->Touch(EScan::Feed);
             return;
         }
 
-        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
-
-            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+        if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
+            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
-    }
-
-    bool ShouldWaitUpload()
-    {
-        if (!HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings)) {
-            return false;
-        }
-
-        if (UploadInProgress()) {
-            return true;
-        }
-        
-        TryUpload(LevelBuf, LevelTable, LevelTypes, true)
-            || TryUpload(PostingBuf, PostingTable, PostingTypes, true);
-
-        return !HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings);
-    }
-
-    void UploadImpl()
-    {
-        LOG_D("Uploading " << Debug());
-
-        Y_ASSERT(!UploadBuf.IsEmpty());
-        Y_ASSERT(!Uploader);
-        auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), UploadTable, UploadTypes, UploadBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
-
-        Uploader = this->Register(actor);
-    }
-
-    void InitUpload(std::string_view table, std::shared_ptr<NTxProxy::TUploadTypes> types)
-    {
-        RetryCount = 0;
-        UploadTable = table;
-        UploadTypes = std::move(types);
-        UploadImpl();
-    }
-
-    void RetryUpload()
-    {
-        ++RetryCount;
-        UploadImpl();
-    }
-
-    bool UploadInProgress()
-    {
-        return !UploadBuf.IsEmpty();
-    }
-
-    bool TryUpload(TBufferData& buffer, const TString& table, const std::shared_ptr<NTxProxy::TUploadTypes>& types, bool byLimit)
-    {
-        if (Y_UNLIKELY(UploadInProgress())) {
-            // already uploading something
-            return true;
-        }
-
-        if (!buffer.IsEmpty() && (!byLimit || HasReachedLimits(buffer, ScanSettings))) {
-            buffer.FlushTo(UploadBuf);
-            InitUpload(table, types);
-            return true;
-        }
-
-        return false;
     }
 
     void FormLevelRows()
@@ -374,7 +271,7 @@ protected:
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            LevelBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
     }
@@ -429,13 +326,9 @@ public:
         LOG_D("Seek " << seq << " " << Debug());
 
         if (IsExhausted) {
-            if (UploadInProgress()
-                || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
-                || TryUpload(PostingBuf, PostingTable, PostingTypes, false))
-            {
-                return EScan::Sleep;
-            }
-            return EScan::Final;
+            return Uploader.CanFinish()
+                ? EScan::Final
+                : EScan::Sleep;
         }
 
         lead = Lead;
@@ -474,7 +367,7 @@ public:
 
         Feed(key, *row);
 
-        return ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
     EScan Exhausted() final
@@ -696,7 +589,7 @@ private:
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
-            AddRowMain2Build(PostingBuf, Child + pos, key, row);
+            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
         }
     }
 
@@ -704,7 +597,7 @@ private:
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
-            AddRowMain2Posting(PostingBuf, Child + pos, key, row, DataPos);
+            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
         }
     }
 
@@ -712,7 +605,7 @@ private:
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
-            AddRowBuild2Build(PostingBuf, Child + pos, key, row);
+            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
         }
     }
 
@@ -720,7 +613,7 @@ private:
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos < K) {
-            AddRowBuild2Posting(PostingBuf, Child + pos, key, row, DataPos);
+            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
         }
     }
 };

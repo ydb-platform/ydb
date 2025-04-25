@@ -66,7 +66,6 @@ protected:
     std::vector<TString> Clusters;
     std::vector<ui64> ClusterSizes;
 
-    // Upload
     TBatchRowsUploader Uploader;
 
     TBufferData* LevelBuf = nullptr;
@@ -368,7 +367,6 @@ public:
 
         Feed(key, *row);
 
-        Cerr << "this->SelfId() " << this->SelfId() << Endl;
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 

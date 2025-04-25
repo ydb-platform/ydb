@@ -104,6 +104,10 @@ public:
 
     void RetryUpload()
     {
+        if (!Uploading) {
+            return;
+        }
+
         ++RetryCount;
         StartUploadRowsInternal();
     }

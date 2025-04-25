@@ -30,8 +30,6 @@ protected:
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
-    ui32 K = 0;
-
     EState UploadState;
 
     IDriver* Driver = nullptr;
@@ -44,12 +42,11 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    std::vector<TString> Clusters;
-
     TBatchRowsUploader Uploader;
     
     TBufferData* PostingBuf = nullptr;
 
+    const ui32 Dimensions = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
@@ -69,6 +66,8 @@ protected:
 
     bool IsExhausted = false;
 
+    virtual TString Debug() const = 0;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
@@ -82,13 +81,12 @@ public:
         : TActor{&TThis::StateWork}
         , Parent{request.GetParent()}
         , Child{request.GetChild()}
-        , K{static_cast<ui32>(request.ClustersSize())}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , Uploader(request.GetScanSettings())
+        , Dimensions(request.GetSettings().vector_dimension())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -137,14 +135,6 @@ public:
     void Describe(IOutputStream& out) const final
     {
         out << Debug();
-    }
-
-    TString Debug() const
-    {
-        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
-            << " Parent: " << Parent << " Child: " << Child
-            << " K: " << K << " Clusters: " << Clusters.size()
-            << " " << Uploader.Debug();
     }
 
     EScan PageFault() final
@@ -201,13 +191,23 @@ protected:
 };
 
 template <typename TMetric>
-class TReshuffleKMeansScan final: public TReshuffleKMeansScanBase, private TCalculation<TMetric> {
+class TReshuffleKMeansScan final : public TReshuffleKMeansScanBase {
+    TClusters<TMetric> Clusters;
+
+    TString Debug() const
+    {
+        return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " Parent: " << Parent << " Child: " << Child
+            << " " << Clusters.Debug()
+            << " " << Uploader.Debug();
+    }
+
 public:
     TReshuffleKMeansScan(ui64 tabletId, const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvReshuffleKMeansRequest& request,
                          const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse>&& response)
         : TReshuffleKMeansScanBase{tabletId, table, std::move(lead), request, responseActorId, std::move(response)}
+        , Clusters(TVector<TString>{request.GetClusters().begin(), request.GetClusters().end()}, request.GetSettings().vector_dimension())
     {
-        this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
     }
 
@@ -271,32 +271,28 @@ private:
 
     void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowMain2Build(*PostingBuf, Child + pos, key, row);
         }
     }
 
     void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
         }
     }

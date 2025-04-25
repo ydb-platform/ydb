@@ -22,21 +22,12 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// If less than 1% of vectors are reassigned to new clusters we want to stop
-static constexpr double MinVectorsNeedsReassigned = 0.01;
-
 class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
-
-    ui32 Round = 0;
-    const ui32 MaxRounds = 0;
-
-    const ui32 InitK = 0;
-    ui32 K = 0;
 
     EState State;
     const EState UploadState;
@@ -53,15 +44,13 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    std::vector<TString> Clusters;
-    std::vector<ui64> ClusterSizes;
-
     TBatchRowsUploader Uploader;
 
     TBufferData* LevelBuf = nullptr;
     TBufferData* PostingBuf = nullptr;
     TBufferData* PrefixBuf = nullptr;
 
+    const ui32 Dimensions = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
@@ -82,6 +71,8 @@ protected:
 
     bool IsExhausted = false;
 
+    virtual TString Debug() const = 0;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
@@ -95,15 +86,13 @@ public:
         : TActor{&TThis::StateWork}
         , Parent{request.GetChild()}
         , Child{Parent + 1}
-        , MaxRounds{request.GetNeedsRounds()}
-        , InitK{request.GetK()}
-        , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Sampler(request.GetK(), request.GetSeed())
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetScanSettings())
+        , Dimensions(request.GetSettings().vector_dimension())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -189,15 +178,6 @@ public:
         out << Debug();
     }
 
-    TString Debug() const
-    {
-        return TStringBuilder() << "TPrefixKMeansScan TabletId: " << TabletId << " Id: " << BuildId
-            << " Parent: " << Parent << " Child: " << Child
-            << " K: " << K << " Clusters: " << Clusters.size() << " " << Sampler.Debug()
-            << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " " << Uploader.Debug();
-    }
-
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
@@ -249,37 +229,15 @@ protected:
 
         Driver->Touch(EScan::Final);
     }
-
-    void FormLevelRows()
-    {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
-        for (NTable::TPos pos = 0; const auto& row : Clusters) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
-            ++pos;
-        }
-    }
 };
 
 template <typename TMetric>
-class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculation<TMetric> {
-    // KMeans
-    using TEmbedding = std::vector<typename TMetric::TSum>;
-
-    struct TAggregatedCluster {
-        TEmbedding Cluster;
-        ui64 Size = 0;
-    };
-    std::vector<TAggregatedCluster> AggregatedClusters;
-
+class TPrefixKMeansScan final : public TPrefixKMeansScanBase {
+    TClusters<TMetric> Clusters;
+    
     void StartNewPrefix() {
-        Parent = Child + K;
+        Parent = Child + Clusters.GetK();
         Child = Parent + 1;
-        Round = 0;
-        K = InitK;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
@@ -287,17 +245,25 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
         Sampler.Finish();
-        Clusters.clear();
-        ClusterSizes.clear();
-        AggregatedClusters.clear();
+        Clusters.Clear();
+    }
+
+    TString Debug() const
+    {
+        return TStringBuilder() << "TPrefixKMeansScan TabletId: " << TabletId << " Id: " << BuildId
+            << " State: " << State
+            << " Parent: " << Parent << " Child: " << Child
+            << " " << Sampler.Debug()
+            << " " << Clusters.Debug()
+            << " " << Uploader.Debug();
     }
 
 public:
     TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                       const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
         : TPrefixKMeansScanBase{tabletId, table, request, responseActorId, std::move(response)}
+        , Clusters(request.GetK(), request.GetSettings().vector_dimension(), request.GetNeedsRounds())
     {
-        this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
     }
 
@@ -405,22 +371,20 @@ private:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
-            if (!InitAggregatedClusters()) {
+            if (!Clusters.InitAggregatedClusters(Sampler)) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
-            Round = 1;
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (RecomputeClusters()) {
+            if (Clusters.RecomputeClusters()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
             } else {
-                ++Round;
                 return false; // recompute KMEANS
             }
         }
@@ -430,86 +394,6 @@ private:
         }
 
         Y_ASSERT(false);
-        return true;
-    }
-
-    bool InitAggregatedClusters()
-    {
-        Clusters = Sampler.Finish().second;
-        if (Clusters.size() == 0) {
-            return false;
-        }
-        if (Clusters.size() < K) {
-            // if this datashard have less than K valid embeddings for this parent
-            // lets make single centroid for it
-            K = 1;
-            Clusters.resize(K);
-        }
-        Y_ASSERT(Clusters.size() == K);
-        ClusterSizes.resize(K, 0);
-        AggregatedClusters.resize(K);
-        for (auto& aggregate : AggregatedClusters) {
-            aggregate.Cluster.resize(this->Dimensions, 0);
-        }
-        return true;
-    }
-
-    void AggregateToCluster(ui32 pos, const char* embedding)
-    {
-        if (pos >= K) {
-            return;
-        }
-        auto& aggregate = AggregatedClusters[pos];
-        auto* coords = aggregate.Cluster.data();
-        for (auto coord : this->GetCoords(embedding)) {
-            *coords++ += coord;
-        }
-        ++aggregate.Size;
-    }
-
-    bool RecomputeClusters()
-    {
-        Y_ASSERT(K >= 1);
-        ui64 vectorCount = 0;
-        ui64 reassignedCount = 0;
-        for (size_t i = 0; auto& aggregate : AggregatedClusters) {
-            vectorCount += aggregate.Size;
-
-            auto& clusterSize = ClusterSizes[i];
-            reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
-            clusterSize = aggregate.Size;
-
-            if (aggregate.Size != 0) {
-                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
-                Y_ASSERT(aggregate.Size == 0);
-            }
-            ++i;
-        }
-        Y_ASSERT(vectorCount >= K);
-        Y_ASSERT(reassignedCount <= vectorCount);
-        if (K == 1) {
-            return true;
-        }
-
-        bool last = Round >= MaxRounds;
-        if (!last && Round > 1) {
-            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorCount);
-            last = changes < MinVectorsNeedsReassigned;
-        }
-        if (!last) {
-            return false;
-        }
-
-        size_t w = 0;
-        for (size_t r = 0; r < ClusterSizes.size(); ++r) {
-            if (ClusterSizes[r] != 0) {
-                ClusterSizes[w] = ClusterSizes[r];
-                Clusters[w] = std::move(Clusters[r]);
-                ++w;
-            }
-        }
-        ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
-        Clusters.erase(Clusters.begin() + w, Clusters.end());
         return true;
     }
 
@@ -536,7 +420,7 @@ private:
     void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!this->IsExpectedSize(embedding)) {
+        if (!IsExpectedSize<typename TMetric::TCoord_>(embedding, Dimensions)) {
             return;
         }
 
@@ -547,23 +431,35 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
+            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowBuild2Build(*PostingBuf, Child + pos, key, row, PrefixColumns);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos < K) {
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
             AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
+        }
+    }
+
+    void FormLevelRows()
+    {
+        std::array<TCell, 2> pk;
+        std::array<TCell, 1> data;
+        for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
+            pk[0] = TCell::Make(Parent);
+            pk[1] = TCell::Make(Child + pos);
+            data[0] = TCell{row};
+            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            ++pos;
         }
     }
 };

@@ -20,6 +20,7 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NDataShard {
+using namespace NKMeans;
 
 class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
@@ -36,7 +37,7 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    NKMeans::TSampler Sampler;
+    TSampler Sampler;
 
     IDriver* Driver = nullptr;
 

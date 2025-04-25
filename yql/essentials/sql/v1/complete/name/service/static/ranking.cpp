@@ -2,7 +2,7 @@
 
 #include "frequency.h"
 
-#include <yql/essentials/sql/v1/complete/name/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 
 #include <yql/essentials/core/sql_types/normalize_name.h>
 
@@ -23,7 +23,7 @@ namespace NSQLComplete {
         {
         }
 
-        void CropToSortedPrefix(TVector<TGenericName>& names, size_t limit) override {
+        void CropToSortedPrefix(TVector<TGenericName>& names, size_t limit) const override {
             limit = std::min(limit, names.size());
 
             TVector<TRow> rows;
@@ -115,11 +115,11 @@ namespace NSQLComplete {
     };
 
     IRanking::TPtr MakeDefaultRanking() {
-        return IRanking::TPtr(new TRanking(LoadFrequencyData()));
+        return MakeIntrusive<TRanking>(LoadFrequencyData());
     }
 
     IRanking::TPtr MakeDefaultRanking(TFrequencyData frequency) {
-        return IRanking::TPtr(new TRanking(frequency));
+        return MakeIntrusive<TRanking>(frequency);
     }
 
 } // namespace NSQLComplete

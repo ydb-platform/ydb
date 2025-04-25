@@ -233,7 +233,7 @@ namespace NSQLComplete {
     };
 
     ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer) {
-        return TLocalSyntaxAnalysis::TPtr(new TLocalSyntaxAnalysis(lexer));
+        return MakeHolder<TLocalSyntaxAnalysis>(lexer);
     }
 
 } // namespace NSQLComplete

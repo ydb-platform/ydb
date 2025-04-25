@@ -87,7 +87,7 @@ namespace NSQLComplete {
         {
         }
 
-        TFuture<TNameResponse> Lookup(TNameRequest request) override {
+        TFuture<TNameResponse> Lookup(TNameRequest request) const override {
             TNameResponse response;
 
             Sort(request.Keywords, NoCaseCompare);
@@ -115,9 +115,11 @@ namespace NSQLComplete {
 
             if (request.Constraints.Hint) {
                 const auto stmt = request.Constraints.Hint->Statement;
-                AppendAs<THintName>(
-                    response.RankedNames,
-                    FilteredByPrefix(request.Prefix, Hints_[stmt]));
+                if (const auto* hints = Hints_.FindPtr(stmt)) {
+                    AppendAs<THintName>(
+                        response.RankedNames,
+                        FilteredByPrefix(request.Prefix, *hints));
+                }
             }
 
             Ranking_->CropToSortedPrefix(response.RankedNames, request.Limit);
@@ -142,7 +144,7 @@ namespace NSQLComplete {
     }
 
     INameService::TPtr MakeStaticNameService(NameSet names, IRanking::TPtr ranking) {
-        return INameService::TPtr(new TStaticNameService(std::move(names), std::move(ranking)));
+        return MakeIntrusive<TStaticNameService>(std::move(names), std::move(ranking));
     }
 
 } // namespace NSQLComplete

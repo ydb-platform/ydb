@@ -75,7 +75,7 @@ namespace NActors {
                 return Blob.size();
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) noexcept {
+            static TEvBlob* Load(const TEventSerializedData* bufs) noexcept {
                 return new TEvBlob(bufs->GetString());
             }
 
@@ -163,7 +163,7 @@ namespace NActors {
 
             TString ToStringHeader() const override;
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override;
-            static IEventBase* Load(TEventSerializedData* bufs);
+            static TEvUndelivered* Load(const TEventSerializedData* bufs);
             bool IsSerializable() const override;
 
             ui32 CalculateSerializedSize() const override { return 2 * sizeof(ui32); }

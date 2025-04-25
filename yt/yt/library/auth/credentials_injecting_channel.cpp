@@ -272,8 +272,8 @@ public:
     }
 
 private:
-    IChannelFactoryPtr UnderlyingFactory_;
-    IServiceTicketAuthPtr ServiceTicketAuth_;
+    const IChannelFactoryPtr UnderlyingFactory_;
+    const IServiceTicketAuthPtr ServiceTicketAuth_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

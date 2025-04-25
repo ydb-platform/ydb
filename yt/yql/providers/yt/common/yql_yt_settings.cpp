@@ -557,6 +557,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _AllowRemoteClusterInput);
     REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
     REGISTER_SETTING(*this, UseNativeDynamicTableRead);
+    REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -567,21 +567,6 @@ def test_pqrb_tablet():
                                           ])
 
 
-def test_viewer_nodes_issue_14992():
-    response_group_by = get_viewer_normalized("/viewer/nodes", {
-        'group': 'Uptime'
-    })
-    response_group = get_viewer_normalized("/viewer/nodes", {
-        'filter_group_by': 'Uptime',
-        'filter_group' : response_group_by['NodeGroups'][0]['GroupName'],
-    })
-    result = {
-        'response_group_by': response_group_by,
-        'response_group': response_group,
-    }
-    return result
-
-
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 

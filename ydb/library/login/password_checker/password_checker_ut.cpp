@@ -14,7 +14,6 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
             .MinUpperCaseCount = 2,
             .MinNumbersCount = 2,
             .MinSpecialCharsCount = 2,
-            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS,
             .CanContainUsername = false
         });
         TPasswordChecker passwordChecker(passwordComplexity);
@@ -167,6 +166,18 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, "Password is too short");
+    }
+
+    Y_UNIT_TEST(AcceptPasswordWithSpecialCharsIfSpecialCharsListIsEmpty) {
+        TPasswordComplexity passwordComplexity({
+            .SpecialChars = ""
+        });
+        TPasswordChecker passwordChecker(passwordComplexity);
+        TString username = "testuser";
+        TString password = "user_password";
+        TPasswordChecker::TResult result = passwordChecker.Check(username, password);
+        UNIT_ASSERT_C(result.Success, result.Error);
+        UNIT_ASSERT(result.Error.empty());
     }
 
     Y_UNIT_TEST(HashChecker) {

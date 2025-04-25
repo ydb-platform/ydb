@@ -1149,7 +1149,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
+        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64) 
+        // - this is not needed because constant folding eliminates this now
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
             R"(`resource_id` != `uid`)",
@@ -1515,6 +1516,193 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);
+    }
+
+    // Unit tests for datetime pushdowns in query service
+    Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,
+                dt      Date,
+                dt32    Date32,
+                dtm     DateTime,
+                dtm64   DateTime64,
+                ts      Timestamp,
+                ts64    Timestamp64,
+                --inter  Interval, -- NOT SUPPORTED?
+                inter64  Interval64,
+                primary key(id)	
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (1, '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1D');
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        
+        std::vector<TString> testData = {
+            // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
+            // TPCH Q1:
+            // R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
+            // R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
+
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))" - Not pushed down
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
+            // R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
+
+            // TPCH Q6:
+            // R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))" - Not pushed down
+
+            // Other tests:
+
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
+            // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
+
+            // R"(CAST(dt as Timestamp) <= dt - inter64)" - Not pushed down
+            // R"(CAST(dt as Timestamp64) <= dt - inter64)" - Not pushed down
+            // R"(CAST(dt as Timestamp64) <= dt32 - inter64)" - Not pushed down
+            // R"(dt <= dt - inter64)" - Not pushed down
+            // R"(dt32 <= dt - inter64)" - Not pushed down
+            // R"(CAST(dt32 as Date) <= dt - inter64)" - Not pushed down
+            // R"(dt <= dt - CAST(inter64 as Interval))" - Not pushed down
+            // R"(dt32 <= dt32 - inter64)" - CRASH!!!
+
+            R"(dt <= CAST('2001-01-01' as Date))",
+            // R"(dt <= Date('2001-01-01'))" - Not pushed down
+        };
+
+        auto queryPrefix = R"(
+                SELECT * FROM `/Root/foo`
+                WHERE
+            )";
+
+        for (const auto& predicate: testData) {
+
+            auto query = queryPrefix + predicate + ";";
+
+            auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString plan = *result.GetStats()->GetPlan();
+            auto ast = *result.GetStats()->GetAst();
+    
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                              TStringBuilder() << "Predicate not pushed down. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+    // Unit tests for datetime pushdowns in scan query
+    Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,
+                dt      Date,
+                dt32    Date32,
+                dtm     DateTime,
+                dtm64   DateTime64,
+                ts      Timestamp,
+                ts64    Timestamp64,
+                --inter  Interval, -- NOT SUPPORTED?
+                inter64  Interval64,
+                primary key(id)	
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (1, '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1D');
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        
+        std::vector<TString> testData = {
+            // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
+            // TPCH Q1:
+            // R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
+            // R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
+
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))" - ??
+            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
+            // R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
+
+            // TPCH Q6:
+            // R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))" - ??
+
+            // Other tests:
+
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
+            // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
+
+            // R"(CAST(dt as Timestamp) <= dt - inter64)" - ??
+            // R"(CAST(dt as Timestamp64) <= dt - inter64)" - ??
+            // R"(CAST(dt as Timestamp64) <= dt32 - inter64)" - ??
+            // R"(dt <= dt - inter64)" - ??
+            // R"(dt32 <= dt - inter64)" - ??
+            // R"(CAST(dt32 as Date) <= dt - inter64)" - ??
+            // R"(dt <= dt - CAST(inter64 as Interval))" - ??
+            // R"(dt32 <= dt32 - inter64)" - ??
+
+            R"(dt <= CAST('2001-01-01' as Date))",
+            // R"(dt <= Date('2001-01-01'))" - ??
+        };
+
+        auto queryPrefix = R"(
+                SELECT * FROM `/Root/foo`
+                WHERE
+            )";
+
+        for (const auto& predicate: testData) {
+
+            auto query = queryPrefix + predicate + ";";
+
+            auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+    
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                              TStringBuilder() << "Predicate not pushed down. Query: " << query);
+
+            it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(SelectLimit1ManyShards) {

@@ -104,6 +104,7 @@ private:
             , EnabledLLVM(ev->Get()->Record.GetSource().GetEnabledLLVM())
             , StartingMessageTimestampMs(ev->Get()->Record.GetStartingMessageTimestampMs())
             , Predicate(ev->Get()->Record.GetSource().GetPredicate())
+            , Columns(GetColumns(ev->Get()->Record.GetSource()))
             , ConsumerName(ev->Get()->Record.GetSource().GetConsumerName())
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
             , ReadActorId(ev->Sender)
@@ -121,14 +122,19 @@ private:
 
             const auto& source = ev->Get()->Record.GetSource();
             Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize(), "Columns size and types size should be equal, but got " << source.ColumnsSize() << " columns and " << source.ColumnTypesSize() << " types");
-            Columns.reserve(source.ColumnsSize());
-            for (ui64 i = 0; i < source.ColumnsSize(); ++i) {
-                Columns.emplace_back(TSchemaColumn{.Name = source.GetColumns().Get(i), .TypeYson = source.GetColumnTypes().Get(i)});
-            }
         }
 
         ~TClientsInfo() {
             Counters->RemoveSubgroup("query_id", QueryId);
+        }
+
+        static TVector<TSchemaColumn> GetColumns(const NYql::NPq::NProto::TDqPqTopicSource& source) {
+            TVector<TSchemaColumn> result;
+            result.reserve(source.ColumnsSize());
+            for (ui64 i = 0; i < source.ColumnsSize(); ++i) {
+                result.emplace_back(TSchemaColumn{.Name = source.GetColumns().Get(i), .TypeYson = source.GetColumnTypes().Get(i)});
+            }
+            return result;
         }
 
         TActorId GetClientId() const override {

@@ -1164,7 +1164,6 @@ private:
                     PrepareAutoDropping(Self, exportInfo, db);
                 }
             }
-
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
             Self->PersistExportItemState(db, exportInfo, itemIdx);
@@ -1362,7 +1361,6 @@ private:
                     itemHasIssues = true;
                 }
             }
-
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
                 if (!AppData()->FeatureFlags.GetEnableAutoDropping()) {
                     exportInfo->State = EState::Done;

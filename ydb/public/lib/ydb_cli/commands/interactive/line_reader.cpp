@@ -1,5 +1,6 @@
 #include "line_reader.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema_gateway.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 
@@ -41,7 +42,7 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle& fileHandle) {
 
 class TLineReader: public ILineReader {
 public:
-    TLineReader(std::string prompt, std::string historyFilePath);
+    TLineReader(std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config);
 
     std::optional<std::string> ReadLine() override;
 
@@ -56,7 +57,7 @@ private:
     replxx::Replxx Rx;
 };
 
-TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
+TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
@@ -162,8 +163,9 @@ void TLineReader::AddToHistory(const std::string& line) {
 
 } // namespace
 
-std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath) {
-    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath));
+std::unique_ptr<ILineReader> CreateLineReader(
+    std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config) {
+    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath), config);
 }
 
 } // namespace NYdb::NConsoleClient

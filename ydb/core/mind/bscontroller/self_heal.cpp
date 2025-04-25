@@ -444,9 +444,8 @@ namespace NKikimr::NBsController {
                 if (group.UpdateConfigTxSeqNo < group.ResponseConfigTxSeqNo) {
                     continue; // response from bsc was received before selfheal info update
                 }
-
-                group.ReassignStatus = EReassignStatus::Enqueued;
-                SelfHealReassignQueue.push_back(group.GroupId);
+            
+                EnqueueReassign(group, EGroupRepairOperation::SelfHeal);
             }
 
             if (GroupLayoutSanitizerEnabled) {
@@ -475,8 +474,7 @@ namespace NKikimr::NBsController {
                     } else {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
                                 "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
-                        group.ReassignStatus = EReassignStatus::Enqueued;
-                        GroupLayoutSanitizerReassignQueue.push_back(group.GroupId);
+                        EnqueueReassign(group, EGroupRepairOperation::GroupLayoutSanitizer);
                     }
                 }
             }
@@ -586,8 +584,9 @@ namespace NKikimr::NBsController {
         void Handle(TEvReassignerDone::TPtr& ev) {
             Y_ABORT_UNLESS(ActiveReassignerActorId);
             TActorId reassigner = *std::exchange(ActiveReassignerActorId, std::nullopt);
+            Y_ABORT_UNLESS(reassigner == ev->Sender);
 
-            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end() && reassigner == ev->Sender) {
+            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
                 auto& group = it->second;
                 group.ReassignStatus = EReassignStatus::NotNeeded;
 
@@ -610,7 +609,6 @@ namespace NKikimr::NBsController {
                 }
                 CheckGroups();
             }
-
             ProcessReassignQueues();
         }
 
@@ -644,7 +642,7 @@ namespace NKikimr::NBsController {
             while (!ActiveReassignerActorId && !SelfHealReassignQueue.empty()) {
                 TGroupId groupId = SelfHealReassignQueue.front();
                 SelfHealReassignQueue.pop_front();
-                CreateReassignerActorIfNeeded(groupId);
+                CreateReassignerActorIfNeededForSelfHeal(groupId);
             }
 
             while (!ActiveReassignerActorId && !GroupLayoutSanitizerReassignQueue.empty()) {
@@ -658,7 +656,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        bool CreateReassignerActorIfNeeded(TGroupId groupId) {
+        bool CreateReassignerActorIfNeededForSelfHeal(TGroupId groupId) {
             auto it = Groups.find(groupId);
             if (it == Groups.end()) {
                 // group is deleted
@@ -682,9 +680,11 @@ namespace NKikimr::NBsController {
                 CreateReassignerActor(group, vdiskId, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks);
                 return true;
             } else {
-                UnreassignableGroups.insert(groupId);
-                TMonotonic now = TActivationContext::Monotonic();
                 // unable to reassign VDisk
+                UnreassignableGroups.insert(groupId);
+                group.ReassignStatus = EReassignStatus::NotNeeded;
+
+                TMonotonic now = TActivationContext::Monotonic();
                 auto log = [&]() {
                     TStringStream ss;
                     ss << "[";
@@ -714,8 +714,23 @@ namespace NKikimr::NBsController {
         void CreateReassignerActor(TGroupRecord& group, std::optional<TVDiskID> vdiskId, bool isSelfHealReasonDecommit,
                 bool ignoreDegradedGroupsChecks) {
             group.ReassignStatus = EReassignStatus::Active;
+            Y_ABORT_UNLESS(!ActiveReassignerActorId);
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
                     vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode));
+        }
+
+        void EnqueueReassign(TGroupRecord& group, EGroupRepairOperation operation) {
+            group.ReassignStatus = EReassignStatus::Enqueued;
+            switch (operation) {
+            case EGroupRepairOperation::SelfHeal:
+                SelfHealReassignQueue.push_back(group.GroupId);
+                break;
+            case EGroupRepairOperation::GroupLayoutSanitizer:
+                GroupLayoutSanitizerReassignQueue.push_back(group.GroupId);
+                break;
+            default:
+                Y_ABORT("Unknown operation");
+            }
         }
 
         void RenderMonPage(IOutputStream& out, bool selfHealEnabled) {

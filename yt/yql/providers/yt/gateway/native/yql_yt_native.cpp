@@ -2852,6 +2852,7 @@ private:
                 }
 
                 FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
+                CheckSpecForSecrets(spec, execCtx);
 
                 if (combineChunks) {
                     mergeSpec.CombineChunks(true);
@@ -3258,6 +3259,7 @@ private:
         NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
         FillSpec(spec, *execCtx, entry, 0., Nothing(), EYtOpProp::WithMapper);
         spec["job_count"] = 1;
+        CheckSpecForSecrets(spec, execCtx);
 
         TOperationOptions opOpts;
         FillOperationOptions(opOpts, execCtx, entry);
@@ -3734,6 +3736,7 @@ private:
                 if (hasNonStrict) {
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
+                CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, sortOpSpec = std::move(sortOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Sort(sortOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3818,6 +3821,7 @@ private:
                 }
 
                 PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr, execCtx->Options_.Config());
+                CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -4009,6 +4013,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4220,6 +4225,7 @@ private:
             if (maxDataSizePerJob) {
                 spec["max_data_size_per_job"] = static_cast<i64>(*maxDataSizePerJob);
             }
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4516,6 +4522,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4666,6 +4673,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4998,6 +5006,7 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, extraUsage.Cpu, Nothing(),
                 EYtOpProp::TemporaryAutoMerge | EYtOpProp::WithMapper | EYtOpProp::WithUserJobs);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -5620,6 +5629,7 @@ private:
                 }
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
                 FillSpec(spec, *execCtx, entry, extraUsage.Cpu, Nothing(), EYtOpProp::WithMapper);
+                CheckSpecForSecrets(spec, execCtx);
 
                 PrepareTempDestination(tmpTable, execCtx, entry, entry->Tx);
 

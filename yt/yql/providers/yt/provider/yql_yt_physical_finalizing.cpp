@@ -3013,7 +3013,7 @@ private:
                                 if (!groups.empty()) {
                                     groupSpec = NYT::TNode::CreateMap();
                                     // If we keep all groups then use the group with max size as default
-                                    if (allGroups && maxGrpIt != groups.end()) {
+                                    if (allGroups && maxGrpIt != groups.end() && (groups.size() > 1 || usage.FullUsage[i])) {
                                         groupSpec["default"] = NYT::TNode::CreateEntity();
                                         groups.erase(maxGrpIt);
                                     }

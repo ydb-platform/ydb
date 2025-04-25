@@ -532,6 +532,33 @@ void FillSpec(NYT::TNode& spec,
     }
 }
 
+void CheckSpecForSecretsImpl(
+    const NYT::TNode& spec,
+    const ISecretMasker::TPtr& secretMasker,
+    const TYtSettings::TConstPtr& settings
+) {
+    if (!settings->_ForbidSensitiveDataInOperationSpec.Get().GetOrElse(DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC)) {
+        return;
+    }
+
+    YQL_ENSURE(secretMasker);
+
+    auto maskedSpecStr = NYT::NodeToYsonString(spec);
+    auto secrets = secretMasker->Mask(maskedSpecStr);
+    if (!secrets.empty()) {
+        auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);
+
+        TVector<TString> maskedSecrets;
+        for (auto& secret : secrets) {
+            maskedSecrets.push_back(TStringBuilder() << "\"" << maskedSpecStrBuf.substr(secret.From, secret.Len) << "\"");
+        }
+
+        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_OP_SPEC_CONTAINS_SECRETS)
+            << "YT operation spec contains sensitive data (masked): "
+            << JoinSeq(", ", maskedSecrets);
+    }
+}
+
 void FillSecureVault(NYT::TNode& spec, const IYtGateway::TSecureParams& secureParams) {
     if (secureParams.empty()) {
         return;

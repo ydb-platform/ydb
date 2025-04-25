@@ -154,6 +154,7 @@ public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TFileStoragePtr FileStorage_;
     TYtGatewayConfigPtr Config_;
+    ISecretMasker::TPtr SecretMasker;
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TSession::TPtr Session_;

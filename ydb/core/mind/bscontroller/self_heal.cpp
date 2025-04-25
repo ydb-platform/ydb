@@ -622,9 +622,10 @@ namespace NKikimr::NBsController {
         }
 
         void Handle(TEvReassignerDone::TPtr& ev) {
-            ActiveReassignerActorId = std::nullopt;
+            Y_ABORT_UNLESS(ActiveReassignerActorId);
+            TActorId reassigner = *std::exchange(ActiveReassignerActorId, std::nullopt);
 
-            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end()) {
+            if (const auto it = Groups.find(ev->Get()->GroupId); it != Groups.end() && reassigner == ev->Sender) {
                 auto& group = it->second;
                 group.ReassignStatus = EReassignStatus::NotNeeded;
                 ProcessReassignQueues();

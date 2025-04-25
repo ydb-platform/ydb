@@ -3,8 +3,7 @@ import boto3
 import tempfile
 import yatest
 import os
-
-import yatest
+import json
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path

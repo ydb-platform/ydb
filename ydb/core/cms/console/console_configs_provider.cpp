@@ -379,8 +379,7 @@ public:
                                                  << notification.Get()->Record.ShortDebugString());
 
         const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
-        const ui32 ms = 100 * mbytes;
-        Schedule(TDuration::MilliSeconds(ms), new TEvents::TEvWakeup());
+        Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
         Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 

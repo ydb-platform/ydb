@@ -31,6 +31,7 @@ enum class ERequestType {
     Assimilate,
     Block,
     GetBlock,
+    CheckIntegrity,
 };
 
 struct TRequestMonGroup {
@@ -175,7 +176,6 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> CheckIntegrityGetResponseTime;
 
     // event counters
     TIntrusivePtr<::NMonitoring::TDynamicCounters> EventGroup;
@@ -199,6 +199,7 @@ protected:
     TRequestMonGroup AssimilateGroup;
     TRequestMonGroup BlockGroup;
     TRequestMonGroup GetBlockGroup;
+    TRequestMonGroup CheckIntegrityGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -225,7 +226,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventAssimilate;
-    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrityGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrity;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
@@ -247,7 +248,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveAssimilate;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrityGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrity;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
@@ -259,6 +260,7 @@ public:
     std::optional<TResponseStatusGroup> RespStatStatus;
     std::optional<TResponseStatusGroup> RespStatPatch;
     std::optional<TResponseStatusGroup> RespStatAssimilate;
+    std::optional<TResponseStatusGroup> RespStatCheckIntegrity;
 
     // special patch counters
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
@@ -277,7 +279,7 @@ public:
             case ERequestType::Assimilate: return AssimilateGroup;
             case ERequestType::Block: return BlockGroup;
             case ERequestType::GetBlock: return GetBlockGroup;
-            
+            case ERequestType::CheckIntegrity: return CheckIntegrityGroup;
         }
         Y_ABORT();
     }
@@ -377,11 +379,6 @@ public:
     void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration) {
         PatchResponseTime.Increment(duration.MilliSeconds());
         NodeMon->CountPatchResponseTime(type, duration);
-    }
-
-    void CountCheckIntegrityGetResponseTime(TDuration duration) {
-        CheckIntegrityGetResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->CheckIntegrityGetResponseTime.Increment(duration.MilliSeconds());
     }
 
     void Update();

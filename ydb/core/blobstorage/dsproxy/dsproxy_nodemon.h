@@ -62,7 +62,6 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TPercentileTracker<16, 512, 15> DiscoverResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> RangeResponseTime;
-    NMonitoring::TPercentileTracker<16, 512, 15> CheckIntegrityGetResponseTime;
 
     std::array<bool, KnownDeviceTypesCount> IsCountersPresentedForIdx;
 
@@ -78,7 +77,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartAssimilate;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RestartCheckIntegrityGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartCheckIntegrity;
 
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto;
 

@@ -6,30 +6,28 @@
 
 namespace NKikimr {
 
-class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupRequestActor {
-    const ui32 QuerySize;
-    TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
+
+class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestActor {
+    const TLogoBlobID Id;
     const TInstant Deadline;
-    NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+    const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
     TGroupQuorumTracker QuorumTracker;
-    std::unique_ptr<TBlobStatusTracker> BlobStatusTracker;
+    std::unique_ptr<TBlobStatusTracker> BlobStatus; // treats NOT_YET as ERROR
+    std::unique_ptr<TBlobStatusTracker> BlobStatusOptimistic; // treats NOT_YET as currently replicating -> OK in the future
+
     ui32 VGetsInFlight = 0;
 
-    std::unique_ptr<TEvBlobStorage::TEvGetResult> PendingResult;
+    using TEvCheckIntegrityResult = TEvBlobStorage::TEvCheckIntegrityResult;
+    std::unique_ptr<TEvCheckIntegrityResult> PendingResult;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
-        Mon->CountCheckIntegrityGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
-
         if (status != NKikimrProto::OK) {
-            PendingResult.reset(new TEvBlobStorage::TEvGetResult(status, 1, Info->GroupID));
+            PendingResult.reset(new TEvCheckIntegrityResult(status));
             PendingResult->ErrorReason = ErrorReason;
-
-            auto& response = PendingResult->Responses[0];
-            response.Status = NKikimrProto::UNKNOWN;
-            response.Id = Queries[0].Id;
-            response.Shift = Queries[0].Shift;
-            response.RequestedSize = Queries[0].Size;
+            PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
+            PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN;
+            PendingResult->Id = Id;
         }
 
         SendResponseAndDie(std::move(PendingResult));
@@ -37,14 +35,14 @@ class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupReques
 
     TString DumpBlobStatus() const {
         TStringStream str;
-        BlobStatusTracker->Output(str, Info.Get());
+        BlobStatus->Output(str, Info.Get());
         return str.Str();
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
         ProcessReplyFromQueue(ev->Get());
 
-        const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
+        const NKikimrBlobStorage::TEvVGetResult& record = ev->Get()->Record;
 
         Y_ABORT_UNLESS(record.HasStatus());
         NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -57,7 +55,7 @@ class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupReques
 
         switch (NKikimrProto::EReplyStatus newStatus = QuorumTracker.ProcessReply(vDiskId, status)) {
             case NKikimrProto::ERROR:
-                ErrorReason = "Group is disintegrated";
+                ErrorReason = "Group is disintegrated or has network problems";
                 ReplyAndDie(NKikimrProto::ERROR);
                 return;
 
@@ -71,7 +69,15 @@ class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupReques
 
         for (size_t i = 0; i < record.ResultSize(); ++i) {
             const auto& result = record.GetResult(i);
-            BlobStatusTracker->UpdateFromResponseData(result, vDiskId, Info.Get());
+            BlobStatus->UpdateFromResponseData(result, vDiskId, Info.Get());
+
+            if (result.GetStatus() == NKikimrProto::NOT_YET) {
+                NKikimrBlobStorage::TQueryResult okResult = result;
+                okResult.SetStatus(NKikimrProto::OK);
+                BlobStatusOptimistic->UpdateFromResponseData(okResult, vDiskId, Info.Get());
+            } else {
+                BlobStatusOptimistic->UpdateFromResponseData(result, vDiskId, Info.Get());
+            }
         }
 
         if (!VGetsInFlight) {
@@ -80,32 +86,39 @@ class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupReques
     }
 
     void Analyze() {
-        PendingResult.reset(new TEvBlobStorage::TEvGetResult(NKikimrProto::OK, 1, Info->GroupID));
+        PendingResult.reset(new TEvBlobStorage::TEvCheckIntegrityResult(NKikimrProto::OK));
+        PendingResult->Id = Id;
+        PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN; // TODO
 
-        auto& response = PendingResult->Responses[0];
-        response.Id = Queries[0].Id;
-        response.Shift = Queries[0].Shift;
-        response.RequestedSize = Queries[0].Size;
+        TBlobStorageGroupInfo::EBlobState state = BlobStatus->GetBlobState(Info.Get(), nullptr);
 
-        TBlobStorageGroupInfo::EBlobState blobState = BlobStatusTracker->GetBlobState(Info.Get(), nullptr);
-
-        switch (blobState) {
+        switch (state) {
             case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
-                ErrorReason = "Group is disintegrated";
+                ErrorReason = "Group is disintegrated or has network problems";
                 ReplyAndDie(NKikimrProto::ERROR);
                 return;
 
             case TBlobStorageGroupInfo::EBS_FULL:
-                response.Status = NKikimrProto::OK;
+                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_OK;
                 break;
 
             case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
-            case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
-                response.Status = NKikimrProto::ERROR;
+                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_ERROR;
                 break;
 
+            case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY: {
+                TBlobStorageGroupInfo::EBlobState stateOptimistic =
+                    BlobStatusOptimistic->GetBlobState(Info.Get(), nullptr);
+
+                if (stateOptimistic == TBlobStorageGroupInfo::EBS_FULL) {
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_NOT_YET;
+                } else {
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_ERROR;
+                }
+                break;
+            }
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
-                response.Status = NKikimrProto::UNKNOWN;
+                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
                 break;
         }
 
@@ -113,68 +126,51 @@ class TBlobStorageGroupCheckIntegrityGetRequest : public TBlobStorageGroupReques
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
-        ++*Mon->NodeMon->RestartCheckIntegrityGet;
+        ++*Mon->NodeMon->RestartCheckIntegrity;
 
-        auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, 1, Deadline, GetHandleClass, false, false);
+        auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
+            Id, Deadline, GetHandleClass);
         ev->RestartCounter = counter;
-        ev->CheckIntegrity = true;
         return ev;
     }
 
 public:
     ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
-        return Mon->ActiveCheckIntegrityGet;
+        return Mon->ActiveCheckIntegrity;
     }
 
     ERequestType GetRequestType() const override {
-        return ERequestType::Get;
+        return ERequestType::CheckIntegrity;
     }
 
-    TBlobStorageGroupCheckIntegrityGetRequest(TBlobStorageGroupCheckIntegrityGetParameters& params)
+    TBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters& params)
         : TBlobStorageGroupRequestActor(params)
-        , QuerySize(params.Common.Event->QuerySize)
-        , Queries(params.Common.Event->Queries.Release())
+        , Id(params.Common.Event->Id)
         , Deadline(params.Common.Event->Deadline)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , QuorumTracker(Info.Get())
     {}
 
     void Bootstrap() override {
-        if (QuerySize != 1) {
-            ErrorReason = "CheckIntegrityGet can only be executed with one query";
-            ReplyAndDie(NKikimrProto::ERROR);
-            return;
-        }
-
-        const TLogoBlobID& id = Queries[0].Id;
-        if (id.FullID() != id) {
-            ErrorReason = "CheckIntegrityGet can only be executed with full blob id";
-            ReplyAndDie(NKikimrProto::ERROR);
-            return;
-        }
-
-        BlobStatusTracker.reset(new TBlobStatusTracker(id, Info.Get()));
+        BlobStatus.reset(new TBlobStatusTracker(Id, Info.Get()));
+        BlobStatusOptimistic.reset(new TBlobStatusTracker(Id, Info.Get()));
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vDiskId = Info->GetVDiskId(vdisk.OrderNumber);
 
-            if (!Info->BelongsToSubgroup(vDiskId, id.Hash())) {
+            if (!Info->BelongsToSubgroup(vDiskId, Id.Hash())) {
                 continue;
             }
 
             auto vGet = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
-                vDiskId,
-                Deadline,
-                NKikimrBlobStorage::EGetHandleClass::FastRead,
-                TEvBlobStorage::TEvVGet::EFlags::ShowInternals);
-
-            vGet->AddExtremeQuery(id, 0, 0);
+                vDiskId, Deadline, GetHandleClass, TEvBlobStorage::TEvVGet::EFlags::ShowInternals);
+            vGet->AddExtremeQuery(Id, 0, 0);
 
             SendToQueue(std::move(vGet), 0);
             ++VGetsInFlight;
         }
 
-        Become(&TBlobStorageGroupCheckIntegrityGetRequest::StateWait);
+        Become(&TBlobStorageGroupCheckIntegrityRequest::StateWait);
     }
 
     STATEFN(StateWait) {
@@ -187,8 +183,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupCheckIntegrityGetRequest(TBlobStorageGroupCheckIntegrityGetParameters params) {
-    return new TBlobStorageGroupCheckIntegrityGetRequest(params);
+IActor* CreateBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters params) {
+    return new TBlobStorageGroupCheckIntegrityRequest(params);
 }
 
 } //NKikimr

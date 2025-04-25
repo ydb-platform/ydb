@@ -76,6 +76,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus");
     ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch");
     ActiveAssimilate = ActiveRequestsGroup->GetCounter("ActiveAssimilate");
+    ActiveCheckIntegrity = ActiveRequestsGroup->GetCounter("ActiveCheckIntegrity");
 
     // special patch counters
     VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed");
@@ -94,11 +95,11 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
         StatusGroup.Init(group->GetSubgroup("request", "status"));
         AssimilateGroup.Init(group->GetSubgroup("request", "assimilate"));
         BlockGroup.Init(group->GetSubgroup("request", "block"));
+        CheckIntegrityGroup.Init(group->GetSubgroup("request", "checkIntegrity"));
     }
 
     ActiveMultiGet = ActiveRequestsGroup->GetCounter("ActiveMultiGet");
     ActiveIndexRestoreGet = ActiveRequestsGroup->GetCounter("ActiveIndexRestoreGet");
-    ActiveCheckIntegrityGet = ActiveRequestsGroup->GetCounter("ActiveCheckIntegrityGet");
     ActiveMultiCollect = ActiveRequestsGroup->GetCounter("ActiveMultiCollect");
 
     auto respStatGroup = NodeMon->Group->GetSubgroup("subsystem", "responseStatus");
@@ -112,6 +113,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatStatus.emplace(respStatGroup->GetSubgroup("request", "status"));
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
+    RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {
@@ -142,8 +144,6 @@ void TBlobStorageGroupProxyMon::BecomeFull() {
                 Percentiles1);
         RangeResponseTime.Initialize(ResponseGroup, "event", "range", "Response in millisec", Percentiles1);
         PatchResponseTime.Initialize(ResponseGroup, "event", "patch", "Response in millisec", Percentiles1);
-        CheckIntegrityGetResponseTime.Initialize(ResponseGroup, "event", "checkIntegrityGet", "Response in millisec",
-                Percentiles1);
     }
     IsLimitedMon = false;
 }
@@ -204,7 +204,6 @@ void TBlobStorageGroupProxyMon::Update() {
         IndexRestoreGetResponseTime.Update();
         RangeResponseTime.Update();
         PatchResponseTime.Update();
-        CheckIntegrityGetResponseTime.Update();
     }
 
     BlockResponseTime.Update();

@@ -68,7 +68,6 @@ public:
         Mon->IndexRestoreGetResponseTime.Update();
         Mon->RangeResponseTime.Update();
         Mon->PatchResponseTime.Update();
-        Mon->CheckIntegrityGetResponseTime.Update();
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {

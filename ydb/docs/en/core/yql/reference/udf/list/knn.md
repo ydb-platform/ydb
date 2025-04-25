@@ -36,7 +36,21 @@ Conversion functions are needed to serialize vectors into an internal binary rep
 All serialization functions wrap returned `String` data into [Tagged](../../types/special.md) types.
 
 {% if backend_name == "YDB" %}
-The binary representation of the vector can be stored in the {{ ydb-short-name }} table column. Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+The binary representation of the vector can be stored in the {{ ydb-short-name }} table column.
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+{% note info %}
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support building an index for vectors with bit quantization `BitVector`.
+
+{% endnote %}
+
 {% endif %}
 
 #### Function signatures {#functions-convert-signature}

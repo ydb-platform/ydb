@@ -1477,7 +1477,7 @@ private:
 
 private:
     void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
-        if (Ev->Get()->Method != HTTP_METHOD_POST) {
+        if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
             SendBadRequest("Action requires a POST method", ctx);
             return;
         }

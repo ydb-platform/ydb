@@ -2,7 +2,6 @@
 #include "../datashard_impl.h"
 #include "../range_ops.h"
 #include "../scan_common.h"
-#include "../upload_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -34,25 +33,13 @@ protected:
     const TSerializedTableRange RequestedRange;
     const ui64 K;
 
-    struct TProbability {
-        ui64 P = 0;
-        ui64 I = 0;
-
-        auto operator<=>(const TProbability&) const noexcept = default;
-    };
-
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    // We are using binary heap, because we don't want to do batch processing here,
-    // serialization is more expensive than compare
-    ui64 MaxProbability = 0;
-    TReallyFastRng32 Rng;
-    std::vector<TProbability> MaxRows;
-    std::vector<TString> DataRows;
+    NKMeans::TSampler Sampler;
 
     IDriver* Driver = nullptr;
 
@@ -74,8 +61,7 @@ public:
         , K(request.GetK())
         , TabletId(tabletId)
         , BuildId(request.GetId())
-        , MaxProbability(request.GetMaxProbability())
-        , Rng(request.GetSeed()) 
+        , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
     {
         LOG_I("Create " << Debug());
     }
@@ -117,28 +103,9 @@ public:
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        const auto probability = GetProbability();
-        if (probability > MaxProbability) {
-            return EScan::Feed;
-        }
+        Sampler.Add(*row);
 
-        if (DataRows.size() < K) {
-            MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(TSerializedCellVec::Serialize(*row));
-            if (DataRows.size() == K) {
-                std::make_heap(MaxRows.begin(), MaxRows.end());
-                MaxProbability = MaxRows.front().P;
-            }
-        } else {
-            // TODO(mbkkt) use tournament tree to make less compare and swaps
-            std::pop_heap(MaxRows.begin(), MaxRows.end());
-            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], *row);
-            MaxRows.back().P = probability;
-            std::push_heap(MaxRows.begin(), MaxRows.end());
-            MaxProbability = MaxRows.front().P;
-        }
-
-        if (MaxProbability == 0) {
+        if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
         }
         return EScan::Feed;
@@ -175,7 +142,7 @@ public:
 
     TString Debug() const {
         return TStringBuilder() << "TSampleKScan TabletId: " << TabletId << " Id: " << BuildId
-            << " K: " << K << " Clusters: " << MaxRows.size();
+            << " K: " << K << " Clusters: " << Sampler.MaxRows.size();
     }
 
 private:
@@ -188,23 +155,16 @@ private:
     }
 
     void FillResponse() {
-        std::sort(MaxRows.begin(), MaxRows.end());
+        auto& maxRows = Sampler.MaxRows;
+        auto& dataRows = Sampler.DataRows;
+
+        std::sort(maxRows.begin(), maxRows.end());
         auto& record = Response->Record;
-        for (auto& [p, i] : MaxRows) {
+        for (auto& [p, i] : maxRows) {
             record.AddProbabilities(p);
-            record.AddRows(std::move(DataRows[i]));
+            record.AddRows(std::move(dataRows[i]));
         }
         record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-    }
-
-    ui64 GetProbability() {
-        while (true) {
-            auto p = Rng.GenRand64();
-            // We exclude max ui64 from generated probabilities, so we can use this value as initial max
-            if (Y_LIKELY(p != std::numeric_limits<ui64>::max())) {
-                return p;
-            }
-        }
     }
 };
 

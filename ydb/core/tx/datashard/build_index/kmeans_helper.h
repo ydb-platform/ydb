@@ -262,4 +262,69 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
     }
 }
 
+class TSampler {
+    struct TProbability {
+        ui64 P = 0;
+        ui64 I = 0;
+
+        auto operator<=>(const TProbability&) const noexcept = default;
+    };
+
+    ui64 K = 0;
+    TReallyFastRng32 Rng;
+    ui64 MaxProbability = 0;
+
+    // We are using binary heap, because we don't want to do batch processing here,
+    // serialization is more expensive than compare
+
+public:
+    std::vector<TProbability> MaxRows;
+    std::vector<TString> DataRows;
+
+    TSampler(ui64 k, ui64 seed,  ui64 maxProbability)
+        : K(k)
+        , Rng(seed)
+        , MaxProbability(maxProbability)
+
+    {}
+
+    void Add(TConstArrayRef<TCell> row) {
+        const auto probability = GetProbability();
+        if (probability > MaxProbability) {
+            return;
+        }
+
+        if (DataRows.size() < K) {
+            MaxRows.push_back({probability, DataRows.size()});
+            DataRows.emplace_back(TSerializedCellVec::Serialize(row));
+            if (DataRows.size() == K) {
+                std::make_heap(MaxRows.begin(), MaxRows.end());
+                MaxProbability = MaxRows.front().P;
+            }
+        } else {
+            // TODO(mbkkt) use tournament tree to make less compare and swaps
+            std::pop_heap(MaxRows.begin(), MaxRows.end());
+            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], row);
+            MaxRows.back().P = probability;
+            std::push_heap(MaxRows.begin(), MaxRows.end());
+            MaxProbability = MaxRows.front().P;
+        }
+    }
+
+    ui64 GetMaxProbability() const {
+        return MaxProbability;
+    }
+
+private:
+    ui64 GetProbability() {
+        while (true) {
+            auto p = Rng.GenRand64();
+            // We exclude max ui64 from generated probabilities, so we can use this value as initial max
+            if (Y_LIKELY(p != std::numeric_limits<ui64>::max())) {
+                return p;
+            }
+        }
+    }
+};
+
 }

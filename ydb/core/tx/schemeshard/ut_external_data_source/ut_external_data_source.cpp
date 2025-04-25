@@ -8,7 +8,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
     Y_UNIT_TEST(CreateExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(CreateExternalDataSourceWithProperties) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(DropExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     void DropTwice(const TString& path, TRuntimeTxFn createFn, TRuntimeTxFn dropFn) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         createFn(runtime, ++txId);
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ParallelCreateExternalDataSource) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         using ESts = NKikimrScheme::EStatus;
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TString dataSourceConfig = R"(
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "SubDirA");
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(SchemeErrors) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(PreventDeletionOfDependentDataSources) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(RemovingReferencesFromDataSources) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(CreateExternalDataSourceShouldFailIfSuchEntityAlreadyExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
 
     Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(

@@ -166,6 +166,7 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             pgwire_port=None,
+            query_service_config=None
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -360,6 +361,9 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+
+        if query_service_config:
+            self.yaml_config["query_service_config"] = query_service_config
 
         self.__build()
 

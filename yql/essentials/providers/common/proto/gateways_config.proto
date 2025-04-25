@@ -678,11 +678,6 @@ message TIcebergCatalog {
     message THadoop {
     }
 
-    // todo: remove
-    message THive {
-        optional string uri = 1;
-    }
-
     // Hive Iceberg Catalog which is based on a Hive Metastore
     message THiveMetastore {
         // Location of a hive metastore
@@ -692,10 +687,10 @@ message TIcebergCatalog {
 
     oneof payload {
         THadoop hadoop = 1;
-        // todo: remove
-        THive hive = 2;
         THiveMetastore hive_metastore = 3;
     }
+
+    reserved 2;
 }
 
 // TIcebergWarehouse represents settings specific to iceberg warehouse

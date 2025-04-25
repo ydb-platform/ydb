@@ -440,8 +440,8 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
                 .Optional().StoreResult(&TimestampDateTo);
 
-            opts.MutuallyExclusive("timestamp_deviation", "date-from");
-            opts.MutuallyExclusive("timestamp_deviation", "date-to");
+            // opts.MutuallyExclusive("timestamp_deviation", "date-from");
+            // opts.MutuallyExclusive("timestamp_deviation", "date-to");
     
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);
@@ -480,7 +480,7 @@ void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& co
     auto date_to_passed = config.ParseResult->Has("date-to");
 
     if (timestamp_dev_passed && (date_from_passed || date_to_passed)) {
-        throw yexception() << "timestamp_deviation and date_from, date_to are mutually exclusive and shouldn't be passed at once";
+        throw yexception() << "The `timestamp_deviation` and `date_from`, `date_to` are mutually exclusive and shouldn't be passed at once";
     }
 
     if ((date_from_passed && !date_to_passed) || (!date_from_passed && date_to_passed)) {

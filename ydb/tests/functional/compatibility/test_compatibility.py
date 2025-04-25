@@ -315,8 +315,6 @@ class TestCompatibility(object):
             "tpch",
             "run",
             "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
             "--check-canonical",
             # "--retries", # not supported in stable yet
             # "5",  # in row tables we have to retry query by design
@@ -325,6 +323,9 @@ class TestCompatibility(object):
             "--output",
             query_output_path,
         ]
+        if store_type == "row":
+            run_command.append("--exclude=12,17")
+            
         clean_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

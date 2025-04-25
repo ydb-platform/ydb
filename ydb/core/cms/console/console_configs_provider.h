@@ -31,6 +31,7 @@ public:
             EvUpdateYamlConfig,
             EvUpdateSubscriptions,
             EvWorkerDisconnected,
+            EvWorkerCoolDown,
 
             EvEnd
         };
@@ -57,6 +58,15 @@ public:
 
         struct TEvWorkerDisconnected : public TEventLocal<TEvWorkerDisconnected, EvWorkerDisconnected> {
             explicit TEvWorkerDisconnected(TInMemorySubscription::TPtr subscription)
+                : Subscription(subscription)
+            {
+            }
+
+            TInMemorySubscription::TPtr Subscription;
+        };
+
+        struct TEvWorkerCoolDown: public TEventLocal<TEvWorkerCoolDown, EvWorkerCoolDown> {
+            explicit TEvWorkerCoolDown(TInMemorySubscription::TPtr subscription)
                 : Subscription(subscription)
             {
             }
@@ -178,11 +188,13 @@ private:
                             const TActorContext &ctx);
     void CheckSubscription(TSubscription::TPtr subscriptions,
                            const TActorContext &ctx);
-    void CheckSubscription(TInMemorySubscription::TPtr subscriptions,
+    bool CheckSubscription(TInMemorySubscription::TPtr subscriptions,
                            const TActorContext &ctx);
 
-    void UpdateConfig(TInMemorySubscription::TPtr subscription,
+    bool UpdateConfig(TInMemorySubscription::TPtr subscription,
                       const TActorContext &ctx);
+
+    void ProcessScheduledUpdates(const TActorContext &ctx);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
@@ -195,6 +207,7 @@ private:
     void Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvWorkerCoolDown::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSetConfig::TPtr &ev, const TActorContext &ctx);
@@ -225,6 +238,7 @@ private:
             HFuncTraced(TEvConsole::TEvGetNodeConfigRequest, Handle);
             HFuncTraced(TEvConsole::TEvListConfigSubscriptionsRequest, Handle);
             HFuncTraced(TEvPrivate::TEvWorkerDisconnected, Handle);
+            HFuncTraced(TEvPrivate::TEvWorkerCoolDown, Handle);
             HFuncTraced(TEvPrivate::TEvNotificationTimeout, Handle);
             HFuncTraced(TEvPrivate::TEvSenderDied, Handle);
             HFuncTraced(TEvPrivate::TEvSetConfig, Handle);
@@ -267,7 +281,16 @@ private:
     TConfigsConfig Config;
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;
+
+    enum class EUpdate {
+        All,
+        Yaml,
+    };
+
     TInMemorySubscriptionIndex InMemoryIndex;
+    THashMap<TActorId, EUpdate> ScheduledUpdates;
+    THashSet<TActorId> InflightUpdates;
+    static constexpr ui32 MAX_INFLIGHT_UPDATES = 50;
 
     TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;

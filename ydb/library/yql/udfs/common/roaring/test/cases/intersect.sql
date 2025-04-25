@@ -16,3 +16,12 @@ SELECT Roaring::Uint32List(Roaring::AndNotWithBinary(Roaring::Deserialize(right)
 
 SELECT Roaring::Uint32List(Roaring::NaiveBulkAnd(AsList(Roaring::Deserialize(right), Roaring::Deserialize(left)))) AS NaiveBulkAnd FROM Input;
 SELECT Roaring::Uint32List(Roaring::NaiveBulkAndWithBinary(AsList(right, left))) AS NaiveBulkAndWithBinary FROM Input;
+
+SELECT Roaring::Intersect(Roaring::Deserialize(right), Roaring::Deserialize(left)) AS Intersect FROM Input;
+SELECT Roaring::Intersect(NULL,  Roaring::Deserialize(left)) AS IntersectNull0 FROM Input;
+SELECT Roaring::Intersect(Roaring::Deserialize(right), NULL) AS IntersectNull1 FROM Input;
+SELECT Roaring::IntersectWithBinary(Roaring::Deserialize(right), left) AS IntersectWithBinary FROM Input;
+SELECT Roaring::IntersectWithBinary(Roaring::Deserialize(right), NULL) AS IntersectWithBinaryNull FROM Input;
+SELECT Roaring::Intersect(Roaring::Deserialize(right), Roaring::FromUint32List(AsList(100500))) AS IntersectFalse FROM Input;
+
+SELECT Roaring::IsEmpty(Roaring::And(Roaring::Deserialize(right), Roaring::FromUint32List(AsList(100500)))) AS IntersectionIsEmpty FROM Input;

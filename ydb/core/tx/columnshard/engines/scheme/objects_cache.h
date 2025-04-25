@@ -103,16 +103,13 @@ private:
     THashMap<TColumnOwnerId, std::shared_ptr<TSchemaObjectsCache>> CacheByTableOwner;
     TMutex Mutex;
 
-    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const std::optional<TColumnOwnerId>& owner) {
-        if (!owner) {
-            return std::make_shared<TSchemaObjectsCache>();
-        }
+    std::shared_ptr<TSchemaObjectsCache> GetCacheImpl(const TColumnOwnerId& owner) {
         TGuard lock(Mutex);
-        auto findCache = CacheByTableOwner.FindPtr(*owner);
+        auto findCache = CacheByTableOwner.FindPtr(owner);
         if (findCache) {
             return *findCache;
         }
-        return CacheByTableOwner.emplace(*owner, std::make_shared<TSchemaObjectsCache>()).first->second;
+        return CacheByTableOwner.emplace(owner, std::make_shared<TSchemaObjectsCache>()).first->second;
     }
 
     void DropCachesImpl() {
@@ -122,7 +119,12 @@ private:
 
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
-        return Singleton<TSchemaCachesManager>()->GetCacheImpl(ownerPathId ? std::make_optional<TColumnOwnerId>(tenantPathId, ownerPathId) : std::nullopt);
+        if (!!ownerPathId && !!tenantPathId) {
+            return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
+        }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "use_exclusive_schema_cache")("has_owner_path_id", !!ownerPathId)(
+            "has_tenant_path_id", !!tenantPathId);
+        return std::make_shared<TSchemaObjectsCache>();
     }
 
     static void DropCaches() {

@@ -111,7 +111,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
             ? Ydb::Export::ExportProgress::PROGRESS_DONE
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
-    
+
     case TExportInfo::EState::Dropping:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_DONE);
         break;

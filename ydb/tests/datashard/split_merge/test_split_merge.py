@@ -111,15 +111,15 @@ class TestSplitMerge(TestBase):
         assert is_merge is True, f"the table {table_name} is not merge into one partition"
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
-    def create_predicate(self, is_split, table_name):
+    def create_predicate(self, expected_split, table_name):
         def predicate():
             rows = self.query(f"""SELECT
                 count(*) as count
                 FROM `.sys/partition_stats`
                 WHERE Path = "{self.get_database()}/{table_name}"
                 """)
-            if is_split:
-                return rows[0].count != 1
+            if expected_split:
+                return rows[0].count > 1
             else:
                 return rows[0].count == 1
         return predicate

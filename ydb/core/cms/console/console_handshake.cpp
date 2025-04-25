@@ -30,6 +30,7 @@ public:
     void Bootstrap(const TActorId& consoleId) {
         auto request = std::make_unique<TEvConsole::TEvSetYamlConfigRequest>();
         request->Record.SetBypassAuth(true);
+        request->Record.SetSkipAuditLog(true);
         request->Record.MutableRequest()->set_config(MainYamlConfig);
         request->Record.MutableRequest()->set_allow_unknown_fields(true);
         Send(consoleId, request.release());

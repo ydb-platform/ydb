@@ -25,6 +25,8 @@ namespace NKikimr {
         {}
     };
 
-    extern IActor *CreateSyncBrokerActor();
+    class TControlWrapper;
+
+    extern IActor *CreateSyncBrokerActor(const TControlWrapper& maxInProgressSyncCount);
 
 } // NKikimr

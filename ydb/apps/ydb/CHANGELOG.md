@@ -10,6 +10,7 @@
 * Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
 * Added `--min-inflight` to `ydb debug latency` command.
 * Added support for multiple `-p` (percentile) params in `ydb debug latency` command.
+* `ydb debug latency` outputs additional measurements for GRPC ping.
 
 ## 2.20.0 ##
 

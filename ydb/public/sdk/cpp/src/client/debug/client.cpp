@@ -40,6 +40,26 @@ public:
         return pingPromise;
     }
 
+    auto PingPlainGrpc(const TPlainGrpcPingSettings& settings) {
+        auto pingPromise = NewPromise<TPlainGrpcPingResult>();
+        auto responseCb = [pingPromise] (Debug::PlainGrpcResponse* msg, TPlainStatus status) mutable {
+            TPlainGrpcPingResult val(TStatus(std::move(status)));
+            val.CallBackTs = msg->GetCallBackTs();
+            pingPromise.SetValue(std::move(val));
+        };
+
+        Debug::PlainGrpcRequest request;
+
+        Connections_->Run<Debug::V1::DebugService, Debug::PlainGrpcRequest, Debug::PlainGrpcResponse>(
+            std::move(request),
+            responseCb,
+            &Debug::V1::DebugService::Stub::AsyncPingPlainGrpc,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings));
+
+        return pingPromise;
+    }
+
     auto PingActorChain(const TActorChainPingSettings& settings) {
         auto pingPromise = NewPromise<TActorChainPingResult>();
         auto responseCb = [pingPromise] (Debug::ActorChainResponse*, TPlainStatus status) mutable {
@@ -71,8 +91,7 @@ TDebugClient::TDebugClient(const TDriver& driver, const TClientSettings& setting
 }
 
 TAsyncPlainGrpcPingResult TDebugClient::PingPlainGrpc(const TPlainGrpcPingSettings& settings) {
-    return Impl_->Ping<Debug::PlainGrpcRequest, Debug::PlainGrpcResponse, TPlainGrpcPingResult>(
-        settings, &Debug::V1::DebugService::Stub::AsyncPingPlainGrpc);
+    return Impl_->PingPlainGrpc(settings);
 }
 
 TAsyncGrpcProxyPingResult TDebugClient::PingGrpcProxy(const TGrpcProxyPingSettings& settings) {

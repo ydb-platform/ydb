@@ -139,7 +139,7 @@ private:
             return NextMessageOffset;
         }
 
-        TVector<TSchemaColumn> GetColumns() const override {
+        const TVector<TSchemaColumn> GetColumns() const override {
             return Columns;
         }
 
@@ -192,7 +192,7 @@ private:
         const bool EnabledLLVM;
         const ui64 StartingMessageTimestampMs;
         const TString Predicate;
-        TVector<TSchemaColumn> Columns;
+        const TVector<TSchemaColumn> Columns;
         const TString ConsumerName;
         const bool UseSsl;
         const TActorId ReadActorId;

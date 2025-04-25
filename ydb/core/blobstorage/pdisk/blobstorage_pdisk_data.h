@@ -652,7 +652,7 @@ struct TDiskFormat {
         str << " MagicDataChunk: " << MagicDataChunk << x;
         str << " MagicSysLogChunk: " << MagicSysLogChunk << x;
         str << " MagicFormatChunk: " << MagicFormatChunk << x;
-        str << " ChunkSize: " << ChunkSize << " bytes (" << (ChunkSize / 1000000ull) << " MB)" << x;
+        str << " ChunkSize: " << ChunkSize << " bytes (" << (ChunkSize / 1048576ull) << " MiB)" << x;
         str << " SectorSize: " << SectorSize << x;
         str << " SysLogSectorCount: " << SysLogSectorCount << x;
         str << " SystemChunkCount: " << SystemChunkCount << x;

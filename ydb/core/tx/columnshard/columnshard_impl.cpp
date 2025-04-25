@@ -362,6 +362,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
     if (proto.HasOwnerPathId()) {
         OwnerPathId = proto.GetOwnerPathId();
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
+        TablesManager.SetSchemaObjectsCache(NOlap::TSchemaCachesManager::GetCache(OwnerPathId, Info()->TenantPathId));
     }
 
     if (proto.HasOwnerPath()) {

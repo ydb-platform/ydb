@@ -7,6 +7,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
 #include <type_traits>
 
@@ -127,6 +128,21 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
         CheckColumnStatistics(runtime, pathId2, sender, expected);
     }
+
+    Y_UNIT_TEST(ServerlessSchemaCache) {
+        NOlap::TSchemaCachesManager::DropCaches();
+        TTestEnv env(1, 3);
+
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Serverless1", "/Root/Shared", 1);
+        CreateServerlessDatabase(env, "Serverless2", "/Root/Shared", 1);
+
+        CreateColumnStoreTable(env, "Serverless1", "Table1", 1);
+        CreateColumnStoreTable(env, "Serverless2", "Table2", 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(NOlap::TSchemaCachesManager::NumCaches(), 2u);
+    }
+
 }
 
 } // NSysView

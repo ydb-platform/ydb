@@ -647,6 +647,7 @@ message TReqSelectRows
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 25;
     optional bool use_lookup_cache = 26;
     optional int64 min_row_count_per_subquery = 27;
+    optional int32 expression_builder_version = 28 [default = 1];
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

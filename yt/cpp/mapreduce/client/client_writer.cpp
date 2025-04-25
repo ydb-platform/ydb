@@ -57,7 +57,6 @@ TClientWriter::TClientWriter(
                 std::move(transactionPinger),
                 context,
                 transactionId,
-                GetWriteTableCommand(context.Config->ApiVersion),
                 format,
                 path,
                 options));

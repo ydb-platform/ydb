@@ -43,7 +43,7 @@ public:
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
-    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);             // notification on any garbage collection results
+    TDuration OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);         // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified
@@ -52,7 +52,6 @@ public:
     void FollowersSyncComplete(bool isBoot);
     void SendCollectGarbage(const TActorContext& executor);
     bool HasGarbageBefore(TGCTime snapshotTime);
-    TDuration TryScheduleGcRequestRetries(ui32 channel, bool needRetryFailed);
     void RetryGcRequests(ui32 channel, const TActorContext& ctx);
 
     struct TIntrospection {
@@ -97,13 +96,14 @@ protected:
         ui32 TryCounter;
         TBackoffTimer BackoffTimer;
         bool RetryIsScheduled;
+        ui32 FailCount;
 
         inline TChannelInfo();
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();
         void OnCollectGarbageFailure();
-        TDuration TryScheduleGcRequestRetries(bool needRetryFailed);
+        TDuration TryScheduleGcRequestRetries();
         void RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx);
     };
 

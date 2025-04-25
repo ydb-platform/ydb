@@ -124,7 +124,7 @@ void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActor
         SendCollectGarbage(ctx);
 }
 
-void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
+TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
     TChannelInfo& channel = ChannelInfo[ev->Channel];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
@@ -132,6 +132,7 @@ void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageR
     } else {
         channel.OnCollectGarbageFailure();
     }
+    return channel.TryScheduleGcRequestRetries();
 }
 
 void TExecutorGCLogic::ApplyLogEntry(TGCLogEntry& entry) {
@@ -192,13 +193,6 @@ bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
     return false;
 }
 
-TDuration TExecutorGCLogic::TryScheduleGcRequestRetries(ui32 channel, bool needRetryFailed) {
-    if (auto* channelInfo = ChannelInfo.FindPtr(channel)) {
-        return channelInfo->TryScheduleGcRequestRetries(needRetryFailed);
-    }
-    return TDuration{};
-}
-
 void TExecutorGCLogic::RetryGcRequests(ui32 channel, const TActorContext& ctx) {
     if (auto* channelInfo = ChannelInfo.FindPtr(channel)) {
         channelInfo->RetryGcRequests(TabletStorageInfo.Get(), channel, Generation, ctx);
@@ -226,6 +220,7 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
     , TryCounter(0)
     , BackoffTimer(GCErrorInitialBackoffMs, GCErrorMaxBackoffMs)
     , RetryIsScheduled(false)
+    , FailCount(0)
 {
 }
 
@@ -385,6 +380,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         return;
 
     MinUncollectedTime = uncommittedTime;
+    RetryIsScheduled = false;
+    FailCount = 0;
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> notKeep;
@@ -485,31 +482,29 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
 
     CollectSent.Clear();
     CommitedGcBarrier = KnownGcBarrier;
+    TryCounter = 0;
+    BackoffTimer.Reset();
 }
 
 void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
     CollectSent.Clear();
     --GcWaitFor;
+    ++FailCount;
 }
 
-TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries(bool needRetryFailed) {
-    if (GcWaitFor == 0) {  // all channel's GC completed
-        if (CommitedGcBarrier == KnownGcBarrier && TryCounter > 0) {  // all GC requests succeeded and we must reset try counter
-            TryCounter = 0;
-            BackoffTimer.Reset();
-        } else if (needRetryFailed) {  // at least one GC request failed and we must retry
-            if (!RetryIsScheduled && ++TryCounter < GCMaxErrors) {
-                RetryIsScheduled = true;
-                return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
-            }
+TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
+    if (GcWaitFor == 0 && FailCount > 0) {
+        if (!RetryIsScheduled && TryCounter < GCMaxErrors) {
+            ++TryCounter;
+            RetryIsScheduled = true;
+            return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
         }
     }
     return TDuration{};
 }
 
 void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
-    RetryIsScheduled = false;
-    if (GcWaitFor == 0 && CommitedGcBarrier < KnownGcBarrier) {  // all channel's GC requests completed and at least one is failed
+    if (RetryIsScheduled) {
         SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
     }
 }

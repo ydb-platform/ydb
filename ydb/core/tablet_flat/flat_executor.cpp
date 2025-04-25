@@ -3170,14 +3170,10 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    GcLogic->OnCollectGarbageResult(ev);
-    DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
-
-    const bool needRetryFailed = DataCleanupLogic->NeedGC();
-    const auto channel = ev->Get()->Channel;
-    if (auto retryDelay = GcLogic->TryScheduleGcRequestRetries(channel, needRetryFailed)) {
-        Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(channel));
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev)) {
+        Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
+    DataCleanupLogic->OnCollectedGarbage(OwnerCtx());
 }
 
 void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {

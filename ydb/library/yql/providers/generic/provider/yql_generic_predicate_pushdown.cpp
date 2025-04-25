@@ -792,6 +792,22 @@ namespace NYql {
     TString FormatComparison(TPredicate_TComparison comparison) {
         TString operation;
 
+        auto left = FormatExpression(comparison.left_value());
+        auto right = FormatExpression(comparison.right_value());
+
+        // Distinct branch handling LIKE operator
+        switch (comparison.operation()) {
+            case TPredicate_TComparison::STARTS_WITH:
+                return TStringBuilder() << "StartsWith(" << left << ", " << right << ")";
+            case TPredicate_TComparison::ENDS_WITH:
+                return TStringBuilder() << "EndsWith(" << left << ", " << right << ")";
+            case TPredicate_TComparison::CONTAINS:
+                return TStringBuilder() << "String::Contains(" << left << ", " << right << ")";
+            default:
+                break;
+        }
+
+        // General comparisons
         switch (comparison.operation()) {
         case TPredicate_TComparison::L:
             operation = " < ";
@@ -820,9 +836,6 @@ namespace NYql {
         default:
             throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
         }
-
-        auto left = FormatExpression(comparison.left_value());
-        auto right = FormatExpression(comparison.right_value());
 
         return TStringBuilder() << "(" << left << operation << right << ")";
     }

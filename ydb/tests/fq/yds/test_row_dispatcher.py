@@ -387,6 +387,8 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        filter = 'event LIKE "event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (StartsWith(event, \\"event2\\"))')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):

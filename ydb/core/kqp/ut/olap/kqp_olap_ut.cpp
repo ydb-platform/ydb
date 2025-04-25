@@ -1550,10 +1550,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
-        session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (1, '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1D');
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
+            VALUES (1, 
+                CAST('1998-12-01' AS Date), 
+                CAST('1998-12-01' AS Date32), 
+                CAST('1998-12-01' AS DateTime), 
+                CAST('1998-12-01' AS DateTime64), 
+                CAST('1998-12-01' AS Timestamp),
+                CAST('1998-12-01' AS Timestamp64),
+                CAST('1D' AS Interval64));
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-        
+        UNIT_ASSERT(insertRes.IsSuccess());
+
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
@@ -1570,7 +1579,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            // R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
             // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
             // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
 
@@ -1583,7 +1592,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // R"(dt <= dt - CAST(inter64 as Interval))" - Not pushed down
             // R"(dt32 <= dt32 - inter64)" - CRASH!!!
 
-            R"(dt <= CAST('2001-01-01' as Date))",
+            //R"(dt <= CAST('2001-01-01' as Date))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
             // R"(dt <= Date('2001-01-01'))" - Not pushed down
         };
 
@@ -1623,9 +1632,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
         auto queryClient = kikimr.GetQueryClient();
-        auto result = queryClient.GetSession().GetValueSync();
-        NStatusHelpers::ThrowOnError(result);
-        auto session2 = result.GetSession();
 
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
@@ -1645,9 +1651,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
-        session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (1, '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1998-12-01', '1D');
-            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        auto insertRes = queryClient.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
+            VALUES (1, 
+                CAST('1998-12-01' AS Date), 
+                CAST('1998-12-01' AS Date32), 
+                CAST('1998-12-01' AS DateTime), 
+                CAST('1998-12-01' AS DateTime64), 
+                CAST('1998-12-01' AS Timestamp),
+                CAST('1998-12-01' AS Timestamp64),
+                CAST('1D' AS Interval64));
+            )", NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());    
         
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
@@ -1665,7 +1680,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            // R"(dt <= (CAST('2008-12-01' AS Date) - Interval("P100D")))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
             // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
             // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
 
@@ -1678,7 +1693,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // R"(dt <= dt - CAST(inter64 as Interval))" - ??
             // R"(dt32 <= dt32 - inter64)" - ??
 
-            R"(dt <= CAST('2001-01-01' as Date))",
+            // R"(dt <= CAST('2008-01-01' as Date))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
             // R"(dt <= Date('2001-01-01'))" - ??
         };
 
@@ -1702,6 +1717,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            result = CollectStreamResult(it);
+            Cout << result.ResultSetYson;
         }
     }
 

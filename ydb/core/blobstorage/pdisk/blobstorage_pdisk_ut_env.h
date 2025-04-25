@@ -266,7 +266,7 @@ struct TVDiskMock {
 
     void Init() {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
+                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;

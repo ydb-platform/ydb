@@ -108,7 +108,7 @@ public:
     }
 
     std::unique_ptr<NPDisk::TEvYardInit> GetYardInit(ui64 pDiskGuid) const {
-        return std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, pDiskGuid);
+        return std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, pDiskGuid);
     }
 
 

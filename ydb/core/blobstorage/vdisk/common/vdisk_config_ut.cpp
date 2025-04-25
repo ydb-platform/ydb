@@ -15,7 +15,7 @@ namespace NKikimr {
 
         TVDiskConfig::TBaseInfo GetDefaultBaseInfo(NKikimrBlobStorage::TVDiskKind::EVDiskKind kind) {
             return TVDiskConfig::TBaseInfo(TVDiskID(), TActorId(), 0x1234, 0x5678,
-                    NPDisk::DEVICE_TYPE_ROT, 0x01, kind, 1, {});
+                    NPDisk::DEVICE_TYPE_ROT, 0x01, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, kind, 1, {});
         }
 
         Y_UNIT_TEST(Basic) {

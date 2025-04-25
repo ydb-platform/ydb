@@ -212,7 +212,7 @@ public:
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
-            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, PDiskGuid));
+            SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
         } else {
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
         }
@@ -220,7 +220,7 @@ public:
 
     void Handle(TEvRegisterPDiskLoadActorResult::TPtr& ev, const TActorContext& ctx) {
         OwnerRound = ev->Get()->OwnerRound;
-        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, PDiskGuid));
+        SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
     }
 
     void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) {

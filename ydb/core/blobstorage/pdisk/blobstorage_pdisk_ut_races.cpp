@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                     break;
                 case EMockState::Empty: case EMockState::KillFinished:
                     {
-                        auto evInit = MakeHolder<NPDisk::TEvYardInit>(mocks[i].OwnerRound++, mocks[i].VDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, testCtx.TestCtx.PDiskGuid);
+                        auto evInit = MakeHolder<NPDisk::TEvYardInit>(mocks[i].OwnerRound++, mocks[i].VDiskID, testCtx.TestCtx.PDiskGuid);
                         testCtx.Send(evInit.Release());
                         mockState[i] = EMockState::InitStarted;
                     }

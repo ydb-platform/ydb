@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         testCtx.TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(1, vDiskID, NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED, testCtx.TestCtx.PDiskGuid),
+                new NPDisk::TEvYardInit(1, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::CORRUPTED);
         testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
                 new NPDisk::TEvCheckSpace(1, 1),

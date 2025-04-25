@@ -600,7 +600,8 @@ namespace NKikimr {
 
         void SendYardInit(const TActorContext &ctx, TDuration yardInitDelay) {
             auto ev = std::make_unique<NPDisk::TEvYardInit>(Config->BaseInfo.InitOwnerRound, SelfVDiskId,
-                Config->BaseInfo.SlotSizeUnits, Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId, Config->BaseInfo.VDiskSlotId);
+                Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId,
+                Config->BaseInfo.VDiskSlotId, Config->BaseInfo.SlotSizeUnits);
             STLOG(PRI_NOTICE, BS_PDISK, PD07, "TDatabaseLocalRecovery::SendYardInit", (TEvYardInit, ev->ToString()));
             auto handle = std::make_unique<IEventHandle>(Config->BaseInfo.PDiskActorID, SelfId(), ev.release(),
                 IEventHandle::FlagTrackDelivery);

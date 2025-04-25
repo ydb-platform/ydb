@@ -633,8 +633,8 @@ public:
                 request->Cookie = it->Cookie;
                 PDisk->InputRequest(request);
             } else {
-                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->SlotSizeUnits, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                    it->SlotId);
+                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
+                    it->SlotId, it->SlotSizeUnits);
                 P_LOG(PRI_NOTICE, PD06, "TPDiskActor::InitSuccess", (TEvYardInit, evInit.ToString()));
                 auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
                 PDisk->InputRequest(request);

@@ -131,8 +131,7 @@ public:
             }
         };
 
-        for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
-        {
+        auto fillKey = [&](ui32 rowIdx, TSmallVec<TRawTypeValue>& key) {
             key.clear();
             key.reserve(userTable.KeyColumnIds.size());
             for (ui16 keyColIdx = 0; keyColIdx < userTable.KeyColumnIds.size(); ++keyColIdx) {
@@ -145,6 +144,28 @@ public:
                     key.emplace_back(cell.Data(), cell.Size(), vtypeId);
                 }
             }
+        };
+
+        // Precharge
+
+        switch (operationType) {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+                for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
+                    fillKey(rowIdx, key);
+                    userDb.PrechargeRow(fullTableId, key);
+                } 
+                break;
+            }
+            default:
+                break;
+        }
+
+        // Main update cycle
+
+        for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
+        {
+            fillKey(rowIdx, key);
 
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
@@ -176,6 +197,8 @@ public:
                     Y_ENSURE(false, operationType << " operation is not supported now");
             }
         }
+
+        // Counters
 
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:

@@ -11,7 +11,7 @@ FROM SELECT +
 DISTINCT +
 UNIQUE DISTINCT does not work
 UNION +
-WITH -
+WITH +
 WITHOUT +
 WHERE DMLOperations+
 ORDER BY +
@@ -63,6 +63,7 @@ class TestDML(TestBase):
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
+        self.select_with(table_name, all_types, pk_types, index, ttl, dml)
         self.order_by(table_name, all_types, pk_types, index, ttl, dml)
         self.limit(table_name, all_types, pk_types, index, ttl, dml)
         self.from_select(table_name, all_types, pk_types, index, ttl, dml)
@@ -193,6 +194,22 @@ class TestDML(TestBase):
             for line in range(len(rows)):
                 dml.assert_type(ttl_types, ttl, line+1,
                                 rows[line][f"ttl_{cleanup_type_name(ttl)}"])
+
+    def select_with(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, dml: DMLOperations):
+        select_with_parameters = ["INFER_SCHEMA", "FORCE_INFER_SCHEMA",
+                                  "DIRECT_READ", "INLINE", "UNORDERED", "XLOCK", "IGNORETYPEV3"]
+        statements = self.create_types_for_all_select(
+            all_types, pk_types, index, ttl)
+        for select_with_parameter in select_with_parameters:
+            select_with_sql_request = f"""
+                select {", ".join(statements)}
+                from {table_name}
+                with {select_with_parameter}
+            """
+            rows = dml.query(select_with_sql_request)
+            for i in range(len(rows)):
+                self.assert_type_after_select(
+                    i+1, i, rows, all_types, pk_types, index, ttl, dml)
 
     def without(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements_without = []
@@ -364,21 +381,25 @@ class TestDML(TestBase):
             partition.append(f"col_index_{cleanup_type_name(type_name)}")
         numb = 1
         for type_name in all_types.keys():
-            self.update(table_name, type_name, "col_", all_types[type_name], "Int64", pk_types["Int64"])
+            self.update(table_name, type_name, "col_",
+                        all_types[type_name], "Int64", pk_types["Int64"])
             partition.remove(f"col_{cleanup_type_name(type_name)}")
-            self.create_match_recognize(table_name, partition[numb], partition[numb+1], f"col_{cleanup_type_name(type_name)}")
+            self.create_match_recognize(table_name, partition[numb], partition[(
+                numb+1) % len(partition)], f"col_{cleanup_type_name(type_name)}", all_types, type_name)
             partition.append(f"col_{cleanup_type_name(type_name)}")
-            self.update_back(table_name, type_name, "col_", all_types[type_name], "Int64", pk_types["Int64"])
-            numb = (numb + 1) %len(all_types)
-        numb = 1
+            self.update_back(table_name, type_name, "col_",
+                             all_types[type_name], "Int64", pk_types["Int64"])
+            numb = (numb + 1) % len(partition)
         for type_name in index.keys():
-            self.update(table_name, type_name, "col_index_", index[type_name], "Int64", pk_types["Int64"])
+            self.update(table_name, type_name, "col_index_",
+                        index[type_name], "Int64", pk_types["Int64"])
             partition.remove(f"col_index_{cleanup_type_name(type_name)}")
-            self.create_match_recognize(table_name, partition[numb], partition[numb+1], f"col_index_{cleanup_type_name(type_name)}")
+            self.create_match_recognize(table_name, partition[numb], partition[(
+                numb+1) % len(partition)], f"col_index_{cleanup_type_name(type_name)}", index, type_name)
             partition.append(f"col_index_{cleanup_type_name(type_name)}")
-            self.update_back(table_name, type_name, "col_index_", index[type_name], "Int64", pk_types["Int64"])
-            numb = (numb + 1) %len(all_types)
-            
+            self.update_back(table_name, type_name, "col_index_",
+                             index[type_name], "Int64", pk_types["Int64"])
+            numb = (numb + 1) % len(partition)
 
     def update(self, table_name: str, type_name, prefix, key, type_name_pk, key_pk):
         n = 3
@@ -397,53 +418,53 @@ class TestDML(TestBase):
         for _ in range(2):
             for _ in range(2):
                 self.create_update(table_name, a, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
             for _ in range(2):
                 self.create_update(table_name, c, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
             self.create_update(table_name, e, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                               prefix, key, pk_value, type_name_pk, key_pk)
             pk_value += 1
             for _ in range(n):
                 self.create_update(table_name, f, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
             for _ in range((n+m)//2):
                 self.create_update(table_name, g, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
             for _ in range(n+2):
                 self.create_update(table_name, h, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
             self.create_update(table_name, i, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                               prefix, key, pk_value, type_name_pk, key_pk)
             pk_value += 1
             self.create_update(table_name, j, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                               prefix, key, pk_value, type_name_pk, key_pk)
             pk_value += 1
             for _ in range((n-1)//2):
                 self.create_update(table_name, k, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
                 self.create_update(table_name, l, type_name,
-                                prefix, key, pk_value, type_name_pk, key_pk)
+                                   prefix, key, pk_value, type_name_pk, key_pk)
                 pk_value += 1
-    
+
     def update_back(self, table_name: str, type_name, prefix, key, type_name_pk, key_pk):
-        for i in range(1,3):
-            self.create_update(table_name, i, type_name, prefix, key, i, type_name_pk, key_pk)
+        for i in range(1, 3):
+            self.create_update(table_name, i, type_name,
+                               prefix, key, i, type_name_pk, key_pk)
 
     def create_update(self, table_name, value, type_name, prefix, key, value_pk, type_name_pk, key_pk):
         update_sql = f"""
             UPDATE `{table_name}` SET {prefix}{cleanup_type_name(type_name)} = {format_sql_value(key(value), type_name)}
             where pk_{cleanup_type_name(type_name_pk)} = {format_sql_value(key_pk(value_pk), type_name_pk)}
         """
-        print(update_sql)
         self.query(update_sql)
-        
+
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         number_of_columns = 22
         for count in range(1, number_of_columns + 1):
@@ -468,34 +489,32 @@ class TestDML(TestBase):
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
-        print(insert_sql)
         self.query(insert_sql)
 
-    def create_match_recognize(self, table_name, partition, order, col):
+    def create_match_recognize(self, table_name, partition, order, col, key, type_name):
         match_recognize_sql = f"""
             PRAGMA FeatureR010="prototype";
             select * from {table_name} MATCH_RECOGNIZE(
                 PARTITION BY {partition}
-                ORDER BY {order}
+                ORDER BY pk_Timestamp
                 MEASURES
-                    LAST(A.{col}) AS a,
-                    LAST(L.{col}) AS l
+                    LAST(A.{col}) AS a
                 ONE ROW PER MATCH          
                 AFTER MATCH SKIP TO NEXT ROW 
-                PATTERN (A+ B* C* D? E? F{{5}} G{{5, 10}} H{{5,}} (I|J) (I|J) (I|J){{,10}})  
+                PATTERN (A+ B* C* D? E? F{{3}} G{{3, 5}} H{{3,}} (I|J) (I|J) (K|L){{,5}})  
                 DEFINE
-                A as A.{col}=1,
-                B as B.{col}=2,
-                C as C.{col}=3,
-                D as D.{col}=4,
-                E as E.{col}=5,
-                F as F.{col}=6,
-                G as G.{col}=7,
-                H as H.{col}=8,
-                I as I.{col}=9,
-                J as J.{col}=10,
-                K as K.{col}=11,
-                L as L.{col}=12
+                A as A.{col}={format_sql_value(key[type_name](1), type_name)},
+                B as B.{col}={format_sql_value(key[type_name](2), type_name)},
+                C as C.{col}={format_sql_value(key[type_name](3), type_name)},
+                D as D.{col}={format_sql_value(key[type_name](4), type_name)},
+                E as E.{col}={format_sql_value(key[type_name](5), type_name)},
+                F as F.{col}={format_sql_value(key[type_name](6), type_name)},
+                G as G.{col}={format_sql_value(key[type_name](7), type_name)},
+                H as H.{col}={format_sql_value(key[type_name](8), type_name)},
+                I as I.{col}={format_sql_value(key[type_name](9), type_name)},
+                J as J.{col}={format_sql_value(key[type_name](10), type_name)},
+                K as K.{col}={format_sql_value(key[type_name](11), type_name)},
+                L as L.{col}={format_sql_value(key[type_name](12), type_name)}
             );
         """
         print(match_recognize_sql)

@@ -339,8 +339,6 @@ public:
         }
 
         auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
-        ui64 totalMetricsCount;
-        YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
 
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
@@ -360,7 +358,10 @@ public:
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(1000);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
-        if (!source.HasProgram()) {
+        if (!selectors.empty()) {
+            ui64 totalMetricsCount;
+            YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
+
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
             

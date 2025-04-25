@@ -101,7 +101,7 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
 
     // const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000, 30'000'000};
     // const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
-    const std::vector<size_t> numKeys = {1'000'000u};
+    const std::vector<size_t> numKeys = {30'000'000u};
     const std::vector<size_t> blockSizes = {128u, 8192u};
 
     auto doSimple = [&printout, numKeys](const TRunParams& params) {

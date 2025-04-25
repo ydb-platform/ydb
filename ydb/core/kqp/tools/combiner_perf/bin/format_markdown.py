@@ -38,18 +38,14 @@ def gen_chart(ref_time, graph_time, llvm_time = None):
     out = ''
     out += draw_line(ref_time, None, 'C++', None)
 
-    if ref_time == 0:
-        hue = None
-    else:
-        hue = 120 - int(120.0 * ((graph_time / ref_time) - 0.5) / 1.5) # Map [0.5, 2] -> [120, 0]
-        hue = max(0, min(hue, 120)) # clamp to the [0, 120] range; hue 0 = red, hue 120 = green
-
     def add_colored_bar(ref_value, result_value, title):
+        hue = None
+        comment = None
         if result_value:
             shame_ratio = result_value / ref_value
             comment = 'x %.1f' % shame_ratio
-        else:
-            comment = None
+            hue = 120 - int(120.0 * (shame_ratio - 0.5) / 1.5) # Map [0.5, 2] -> [120, 0]
+            hue = max(0, min(hue, 120)) # clamp to the [0, 120] range; hue 0 = red, hue 120 = green
         return draw_line(result_value, hue, title, comment)
 
     out += add_colored_bar(ref_time, graph_time, 'Graph')
@@ -87,6 +83,8 @@ def format_time(ms):
     return '%.2f' % (ms / 1000.0)
 
 def format_mem(bytez):
+    if bytez is None:
+        return ' '
     return '%.1f' % (bytez / (1024.0 * 1024.0))
 
 def do_merge_llvm(samples):
@@ -173,7 +171,7 @@ def do_format(merge_llvm):
             ]
         headers += [
             'MaxRSS delta, MB',
-            'Bytes per key',
+            'Reference MaxRSS delta, MB',
         ]
         print(''.join(['<th>%s</th>' % item for item in headers]) + '\n')
 
@@ -201,9 +199,8 @@ def do_format(merge_llvm):
             if has_llvm_column:
                 cols.append(format_time(llvm_time_or_zero))
             cols.append(format_mem(sample['maxRssDelta']))
-            bytes_per_key = sample['maxRssDelta'] // sample['numKeys']
+            cols.append(format_mem(sample.get('referenceMaxRssDelta', None)))
 
-            cols.append(str(bytes_per_key) if 0 < bytes_per_key < 10000 else ' ')
             print('<tr>' + ''.join(['<td>%s</td>' % col for col in cols]) + '</tr>\n')
 
         print('</table>\n:::\n')

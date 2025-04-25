@@ -23,9 +23,6 @@ namespace NKikimr::NDataShard {
 
 class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
 protected:
-    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
-    const TActorId ResponseActorId;
-
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
 
@@ -43,6 +40,11 @@ protected:
 
     IDriver* Driver = nullptr;
 
+    TLead Lead;
+
+    const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
+    const TActorId ResponseActorId;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
@@ -52,8 +54,6 @@ public:
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
                  const TSerializedTableRange& range)
         : TActor(&TThis::StateWork)
-        , Response(std::move(response))
-        , ResponseActorId(responseActorId)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)
@@ -62,11 +62,24 @@ public:
         , TabletId(tabletId)
         , BuildId(request.GetId())
         , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
+        , Response(std::move(response))
+        , ResponseActorId(responseActorId)
     {
         LOG_I("Create " << Debug());
-    }
 
-    ~TSampleKScan() final = default;
+        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
+
+        if (scanRange.From) {
+            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            Lead.To(ScanTags, scanRange.From, seek);
+        } else {
+            Lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        }
+
+        if (scanRange.To) {
+            Lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
+    }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -79,27 +92,16 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        Y_ENSURE(seq == 0);
-        LOG_D("Seek " << Debug());
+        LOG_D("Seek " << seq << " " << Debug());
 
-        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
-
-        if (scanRange.From) {
-            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
-            lead.To(ScanTags, scanRange.From, seek);
-        } else {
-            lead.To(ScanTags, {}, NTable::ESeek::Lower);
-        }
-
-        if (scanRange.To) {
-            lead.Until(scanRange.To, scanRange.InclusiveTo);
-        }
+        lead = Lead;
 
         return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+        LOG_T("Feed " << Debug());
+
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
@@ -110,17 +112,27 @@ public:
         if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
         }
+
         return EScan::Feed;
     }
 
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        return EScan::Final;
+    }
+
     TAutoPtr<IDestructable> Finish(EAbort abort) final {
-        Y_ENSURE(Response);
-        Response->Record.SetReadRows(ReadRows);
-        Response->Record.SetReadBytes(ReadBytes);
-        if (abort == EAbort::None) {
-            FillResponse();
+        auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+
+        if (abort != NTable::EAbort::None) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
-            Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+            FillResponse();
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -129,6 +141,7 @@ public:
             LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
+
         Driver = nullptr;
         PassAway();
         return nullptr;
@@ -136,10 +149,6 @@ public:
 
     void Describe(IOutputStream& out) const final {
         out << Debug();
-    }
-
-    EScan Exhausted() final {
-        return EScan::Final;
     }
 
     TString Debug() const {

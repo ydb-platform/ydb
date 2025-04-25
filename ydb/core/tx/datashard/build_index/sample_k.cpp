@@ -39,7 +39,7 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
-    NKMeans::TSampler Sampler;
+    NKMeans::TSampler<TString> Sampler;
 
     IDriver* Driver = nullptr;
 
@@ -103,7 +103,9 @@ public:
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        Sampler.Add(*row);
+        Sampler.Add([&row](){
+            return TSerializedCellVec::Serialize(*row);
+        });
 
         if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;

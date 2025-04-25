@@ -262,6 +262,7 @@ void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
     }
 }
 
+template<typename T>
 class TSampler {
     struct TProbability {
         ui64 P = 0;
@@ -279,16 +280,16 @@ class TSampler {
 
 public:
     std::vector<TProbability> MaxRows;
-    std::vector<TString> DataRows;
+    std::vector<T> DataRows;
 
-    TSampler(ui64 k, ui64 seed,  ui64 maxProbability)
+    TSampler(ui64 k, ui64 seed,  ui64 maxProbability = Max<ui64>())
         : K(k)
         , Rng(seed)
         , MaxProbability(maxProbability)
 
     {}
 
-    void Add(TConstArrayRef<TCell> row) {
+    void Add(const auto& getValue) {
         const auto probability = GetProbability();
         if (probability > MaxProbability) {
             return;
@@ -296,7 +297,7 @@ public:
 
         if (DataRows.size() < K) {
             MaxRows.push_back({probability, DataRows.size()});
-            DataRows.emplace_back(TSerializedCellVec::Serialize(row));
+            DataRows.emplace_back(getValue());
             if (DataRows.size() == K) {
                 std::make_heap(MaxRows.begin(), MaxRows.end());
                 MaxProbability = MaxRows.front().P;
@@ -304,7 +305,7 @@ public:
         } else {
             // TODO(mbkkt) use tournament tree to make less compare and swaps
             std::pop_heap(MaxRows.begin(), MaxRows.end());
-            TSerializedCellVec::Serialize(DataRows[MaxRows.back().I], row);
+            DataRows[MaxRows.back().I] = getValue();
             MaxRows.back().P = probability;
             std::push_heap(MaxRows.begin(), MaxRows.end());
             MaxProbability = MaxRows.front().P;

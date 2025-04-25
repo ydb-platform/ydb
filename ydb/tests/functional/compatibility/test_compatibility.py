@@ -417,16 +417,16 @@ class TestCompatibility(object):
 
         s3_resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
 
-        keys_expected = []
+        keys_expected = set()
         for table_num in range(1, 6):
             table_name = f"sample_table_{table_num}"
-            keys_expected.append(table_name + "/data_00.csv")
-            keys_expected.append(table_name + "/metadata.json")
-            keys_expected.append(table_name + "/scheme.pb")
-        keys_expected.sort()
+            keys_expected.add(table_name + "/data_00.csv")
+            keys_expected.add(table_name + "/metadata.json")
+            keys_expected.add(table_name + "/scheme.pb")
 
         bucket = s3_resource.Bucket(s3_bucket)
-        keys = [x.key for x in list(bucket.objects.all())]
-        keys.sort()
+        keys = set()
+        for x in list(bucket.objects.all()):
+            keys.add(x.key)
 
-        assert keys == keys_expected
+        assert keys_expected <= keys

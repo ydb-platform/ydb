@@ -120,11 +120,6 @@ private:
         CacheByTableOwner.clear();
     }
 
-    ui64 NumCachesImpl() const {
-        TGuard lock(Mutex);
-        return CacheByTableOwner.size();
-    }
-
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(ownerPathId ? std::make_optional<TColumnOwnerId>(tenantPathId, ownerPathId) : std::nullopt);
@@ -132,10 +127,6 @@ public:
 
     static void DropCaches() {
         Singleton<TSchemaCachesManager>()->DropCachesImpl();
-    }
-
-    static ui64 NumCaches() {
-        return Singleton<TSchemaCachesManager>()->NumCachesImpl();
     }
 };
 

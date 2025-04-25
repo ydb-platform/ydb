@@ -959,16 +959,22 @@ SELECT
 
 Arguments:
 
-1. An unsigned number that's subject to the operation. TestBit is also implemented for strings.
+1. An unsigned number that's subject to the operation. `TestBit` is also implemented for strings (see the description below).
 2. Number of the bit.
 
-TestBit returns `true/false`. The other functions return a copy of their first argument with the corresponding conversion.
+`TestBit` returns `true/false`. The other functions return a copy of their first argument with the corresponding conversion.
+
+`TestBit` works the following way for the string argument:
+
+1. For the second argument (the number of the bit) the corresponding byte **from the beginning of the string** is chosen.
+2. Next, for the given byte the corresponding LSB is chosen.
 
 #### Examples
 
 ```yql
 SELECT
     TestBit(1u, 0), -- true
+    TestBit('ax', 12) -- true (second byte, fourth bit)
     SetBit(8u, 0); -- 9
 ```
 

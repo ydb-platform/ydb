@@ -21,10 +21,14 @@ namespace NSQLComplete {
                 }
             }
 
-            NThreading::TFuture<TListResponse> List(const TListRequest& request) override {
+            NThreading::TFuture<TListResponse> List(const TListRequest& request) const override {
                 auto [path, prefix] = ParsePath(request.Path);
 
-                TVector<TFolderEntry> entries = Data_[path];
+                TVector<TFolderEntry> entries;
+                if (const auto* data = Data_.FindPtr(path)) {
+                    entries = *data;
+                }
+
                 EraseIf(entries, [prefix = ToLowerUTF8(prefix)](const TFolderEntry& entry) {
                     return !entry.Name.StartsWith(prefix);
                 });
@@ -62,7 +66,7 @@ namespace NSQLComplete {
     } // namespace
 
     ISchemaGateway::TPtr MakeStaticSchemaGateway(THashMap<TString, TVector<TFolderEntry>> fs) {
-        return MakeHolder<TSchemaGateway>(std::move(fs));
+        return MakeIntrusive<TSchemaGateway>(std::move(fs));
     }
 
 } // namespace NSQLComplete

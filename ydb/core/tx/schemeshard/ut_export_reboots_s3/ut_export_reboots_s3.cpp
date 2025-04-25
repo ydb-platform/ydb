@@ -620,4 +620,41 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         });
     }
+
+    Y_UNIT_TEST(ShouldEnabledAutoDropping) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestWithReboots t;
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            runtime.GetAppData().FeatureFlags.SetEnableAutoDropping(false);
+            {
+                TInactiveZone inactive(activeZone);
+                CreateSchemeObjects(t, runtime, {
+                    TTestData::Table()
+                });
+
+                TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(TTestData::Request().data(), port));
+            }
+    
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+    
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetExport(runtime, exportId, "/MyRoot");
+                TestRmDir(runtime, ++t.TxId, "/MyRoot", "DirA");
+                auto desc = DescribePath(runtime, "/MyRoot");
+                UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 2);
+                const auto namesVector = {desc.GetPathDescription().GetChildren(0).GetName(),
+                                          desc.GetPathDescription().GetChildren(1).GetName()};
+                UNIT_ASSERT(IsIn(namesVector, "Table"));
+                UNIT_ASSERT(IsIn(namesVector, "export-1003"));
+            }
+        });
+    }
 }

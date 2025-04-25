@@ -378,8 +378,9 @@ public:
                     "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionNotificationRequest: "
                                                  << notification.Get()->Record.ShortDebugString());
 
-        const auto mbytes = Min<size_t>(1, notification.Get()->GetCachedByteSize() / 1000 / 1000);
-        Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
+        const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
+        const ui32 ms = 100 * mbytes;
+        Schedule(TDuration::MilliSeconds(ms), new TEvents::TEvWakeup());
         Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
@@ -556,6 +557,9 @@ void TConfigsProvider::ProcessScheduledUpdates(const TActorContext &ctx)
         }
         ScheduledUpdates.erase(it);
     }
+
+    *Counters.ScheduledConfigUpdates = ScheduledUpdates.size();
+    *Counters.InflightConfigUpdates = InflightUpdates.size();
 }
 
 void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,

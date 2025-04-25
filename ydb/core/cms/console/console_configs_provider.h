@@ -8,8 +8,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NConsole {
 
@@ -256,9 +257,22 @@ private:
         }
     }
 
+    struct TCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+        TCounterPtr ScheduledConfigUpdates;
+        TCounterPtr InflightConfigUpdates;
+
+        explicit TCounters(::NMonitoring::TDynamicCounterPtr counters)
+            : ScheduledConfigUpdates(counters->GetCounter("ScheduledConfigUpdates", false))
+            , InflightConfigUpdates(counters->GetCounter("InflightConfigUpdates", false))
+        {
+        }
+    };
+
 public:
-    TConfigsProvider(TActorId ownerId)
+    TConfigsProvider(TActorId ownerId, ::NMonitoring::TDynamicCounterPtr counters)
         : ConfigsManager(ownerId)
+        , Counters(counters)
     {
     }
 
@@ -278,6 +292,7 @@ public:
 
 private:
     TActorId ConfigsManager;
+    TCounters Counters;
     TConfigsConfig Config;
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;

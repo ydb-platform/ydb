@@ -65,8 +65,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
                 .SetUseRealThreads(false)
                 .AddStoragePool("ssd")
                 .AddStoragePool("hdd")
-                .AddStoragePool("ext")
-                .SetEnableUuidAsPrimaryKey(true);
+                .AddStoragePool("ext");
 
             Server = new TServer(ServerSettings);
             
@@ -253,8 +252,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
             .SetUseRealThreads(false)
             .AddStoragePool("ssd")
             .AddStoragePool("hdd")
-            .AddStoragePool("ext")
-            .SetEnableUuidAsPrimaryKey(true);
+            .AddStoragePool("ext");
 
         TServer::TPtr server = new TServer(serverSettings);
         

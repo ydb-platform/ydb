@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldCompact) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root", 10)
+        serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -39,90 +39,16 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
-        ui32 oldGroupId = 2181038085;
-        ui32 newGroupId = 2181038081;
-
-        TActorId oldGroupActorId;
-        TActorId newGroupActorId;
-
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-            switch (ev->GetTypeRewrite()) {
-                case TEvBlobStorage::TEvPutResult::EventType: {
-                    auto* msg = ev->Get<TEvBlobStorage::TEvPutResult>();
-                    if (!oldGroupActorId && msg->GroupId == oldGroupId) {
-                        oldGroupActorId = ev->Sender;
-                    } else if (!newGroupActorId && msg->GroupId == newGroupId) {
-                        newGroupActorId = ev->Sender;
-                    }
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(captureEvents);
-
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-        ui64 shardId = shards.at(0);
-
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);");
-
-        IActor* oldGroupActor = runtime.FindActor(oldGroupActorId, 0U);
-        TIntrusivePtr<NFake::TProxyDS> oldModel = Model(oldGroupActor);
-        UNIT_ASSERT(oldModel);
-
-        {
-            auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(2);
-            runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            auto &msg = *ev->Get();
-            UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
-            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 2);
-        }
-
-        // {
-        //     auto shards = GetTableShards(server, sender, "/Root/table-1");
-    
-        //     auto [tables, ownerId] = GetTables(server, shards.at(0));
-        //     auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
-        //     UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
-        // }
-
-        // ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 200);");
-
-        {
-            {
-                TActorId s = runtime.AllocateEdgeActor(0);
-                ui64 hiveId = 72057594037968897;
-                runtime.SendToPipe(hiveId, s, new TEvHive::TEvReassignTabletSpace(shardId, {}), 0, GetPipeConfigWithRetries());
-            }
-
-            runtime.SimulateSleep(TDuration::Minutes(1));
-            
-            InvalidateTabletResolverCache(runtime, shardId, 0);
-
-            RebootTablet(runtime, shardId, sender);
-            
-            {
-                auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(4);
-                runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-                auto &msg = *ev->Get();
-                UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
-                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
-                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 4);
-            }
-        
-            RebootTablet(runtime, shardId, sender);
-        }
-
-        IActor* newGroupActor = runtime.FindActor(newGroupActorId, 0U);
-        TIntrusivePtr<NFake::TProxyDS> newModel = Model(newGroupActor);
-        UNIT_ASSERT(newModel);
+        auto [tables, ownerId] = GetTables(server, shards.at(0));
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+        UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
     Y_UNIT_TEST(ShouldNotCompactWhenBorrowed) {

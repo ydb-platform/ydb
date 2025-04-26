@@ -1,4 +1,6 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/testlib/storage_helpers.h>
 
 namespace NKikimr {
@@ -352,6 +354,321 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         CheckTableData(server, proxyDSs, "/Root/table-1");
         CheckTableData(server, proxyDSs, "/Root/table-2");
+    }
+
+    TVector<ui32> GetGroupsByPool(TTestActorRuntime& runtime, const TString& name) {
+        TActorId edge = runtime.AllocateEdgeActor();
+        auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* request = selectGroups->Record.MutableRequest();
+        request->AddCommand()->MutableQueryBaseConfig();
+        auto* readStoragePool = request->AddCommand()->MutableReadStoragePool();
+        readStoragePool->SetBoxId(TServerSettings::BOX_ID);
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        runtime.SendToPipe(MakeBSControllerID(), edge, selectGroups.release(), 0, pipeConfig);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+        const auto &response = reply->Get()->Record.GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetSuccess(), true);
+        const auto &baseConfigStatus = response.GetStatus(0);
+        const auto &cfg = baseConfigStatus.GetBaseConfig();
+
+        const auto &readStoragePoolStatus = response.GetStatus(1);
+        TVector<ui32> groups;
+
+        ui64 storagePoolId;
+        ui64 boxId;
+
+        bool found = false;
+        
+        for (const auto &pool : readStoragePoolStatus.GetStoragePool()) {
+            if (pool.GetName() == name) {
+                storagePoolId = pool.GetStoragePoolId();
+                boxId = pool.GetBoxId();
+                found = true;
+                break;
+            }
+        }
+
+        UNIT_ASSERT(found);
+
+        for (const auto& group : cfg.GetGroup()) {
+            if (group.GetBoxId() != boxId) {
+                continue;
+            }
+            if (group.GetStoragePoolId() != storagePoolId) {
+                continue;
+            }
+            groups.push_back(group.GetGroupId());
+        }
+
+        return groups;
+    }
+
+    Y_UNIT_TEST(ShouldCleanupAllUnusedGroups) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root", 6)
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+
+        auto &runtime = *server->GetRuntime();
+        
+        auto sender = runtime.AllocateEdgeActor();
+        
+        std::unordered_set<ui32> oldGroupsIds;
+        std::unordered_set<TActorId> oldGroupsActorIds;
+
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::TEvPutResult::EventType: {
+                    auto* msg = ev->Get<TEvBlobStorage::TEvPutResult>();
+                    if (msg->GroupId == 0) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                    auto [_, inserted] = oldGroupsIds.emplace(msg->GroupId);
+                    if (inserted) {
+                        oldGroupsActorIds.emplace(ev->Sender);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto oldObserverFn = runtime.SetObserverFunc(captureEvents);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        ui64 shardId = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);");
+
+        {
+            auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(2);
+            runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto &msg = *ev->Get();
+            UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
+            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 2);
+        }
+
+        runtime.SetObserverFunc(oldObserverFn);
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(oldGroupsIds.size(), 2);
+
+            TVector<ui32> groups = GetGroupsByPool(runtime, "/Root:test");
+            TVector<ui32> newGroupsIds;
+
+            for (const auto &groupId : groups) {
+                if (!oldGroupsIds.contains(groupId)) {
+                    newGroupsIds.push_back(groupId);
+                }
+                if (newGroupsIds.size() == 2) {
+                    break;
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(newGroupsIds.size(), 2);
+
+            {
+                TActorId s = runtime.AllocateEdgeActor(0);
+                ui64 hiveId = 72057594037968897;
+                runtime.SendToPipe(hiveId, s, new TEvHive::TEvReassignTabletSpace(shardId, {0, 1}, newGroupsIds), 0, GetPipeConfigWithRetries());
+            }
+
+            runtime.SimulateSleep(TDuration::Minutes(1));
+            
+            InvalidateTabletResolverCache(runtime, shardId, 0);
+
+            RebootTablet(runtime, shardId, sender);
+            
+            {
+                auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(4);
+                runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+                auto &msg = *ev->Get();
+                UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 4);
+            }
+        
+            RebootTablet(runtime, shardId, sender);
+        }
+
+        for (auto& oldGroupActorId : oldGroupsActorIds) {
+            IActor* oldGroupActor = runtime.FindActor(oldGroupActorId, 0U);
+            TIntrusivePtr<NFake::TProxyDS> oldModel = Model(oldGroupActor);
+            UNIT_ASSERT(oldModel);
+            
+            UNIT_ASSERT(oldModel->AllMyBlobs().empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldCleanupAllUnusedGroupsWithoutExternalBlobs) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root", 3)
+            .SetUseRealThreads(false)
+            .AddStoragePool("ssd", "ssdpool", 4)
+            .AddStoragePool("ext", "extpool", 2);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        std::unordered_set<ui32> oldGroupsIds;
+        std::unordered_set<TActorId> oldGroupsActorIds;
+
+        auto captureEvents1 = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::TEvPutResult::EventType: {
+                    auto* msg = ev->Get<TEvBlobStorage::TEvPutResult>();
+                    if (msg->GroupId == 0) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                    auto [_, inserted] = oldGroupsIds.emplace(msg->GroupId);
+                    if (inserted) {
+                        oldGroupsActorIds.emplace(ev->Sender);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto oldObserverFn = runtime.SetObserverFunc(captureEvents1);
+
+        InitRoot(server, sender);
+        
+        TVector<TShardedTableOptions::TColumn> columns = {
+            {"blob_id", "Int32", true, false},
+            {"data", "String", false, false}
+        };
+
+        auto opts = TShardedTableOptions()
+            .Columns(columns)
+            .Shards(1)
+            .Families({
+                {
+                    .Name = "default",
+                    .LogPoolKind = "ssd",
+                    .SysLogPoolKind = "ssd",
+                    .DataPoolKind = "ssd",
+                    .ExternalPoolKind = "ext",
+                    .DataThreshold = 100u,
+                    .ExternalThreshold = 1_KB
+                }, {
+                    .Name = "non_default",
+                    .DataPoolKind = "ssd",
+                },
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        
+        ui64 dataSize = 2_KB;
+        ui64 blobRealSize = dataSize + 8_B;
+        TString largeValue(dataSize, 'L');
+
+        for (int i = 0; i < 10; i++) {
+            TString chunkNum = ToString(i);
+            TString query = "UPSERT INTO `/Root/table-1` (blob_id, data) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        ui64 shardId = shards.at(0);
+
+        {
+            auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(2);
+            runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto &msg = *ev->Get();
+            UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
+            UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 2);
+        }
+
+        runtime.SetObserverFunc(oldObserverFn);
+
+        {
+            TVector<ui32> ssdGroups = GetGroupsByPool(runtime, "ssdpool");
+            TVector<ui32> hddGroups = GetGroupsByPool(runtime, "extpool");
+
+            TVector<ui32> newGroupsIds;
+
+            for (const auto &groupId : ssdGroups) {
+                if (!oldGroupsIds.contains(groupId)) {
+                    newGroupsIds.push_back(groupId);
+                }
+            }
+
+            for (const auto &groupId : hddGroups) {
+                if (!oldGroupsIds.contains(groupId)) {
+                    newGroupsIds.push_back(groupId);
+                }
+            }
+
+            {
+                TActorId s = runtime.AllocateEdgeActor(0);
+                ui64 hiveId = 72057594037968897;
+
+                runtime.SendToPipe(hiveId, s, new TEvHive::TEvReassignTabletSpace(shardId, {0, 1, 2}, newGroupsIds), 0, GetPipeConfigWithRetries());
+            }
+
+            runtime.SimulateSleep(TDuration::Minutes(1));
+            
+            InvalidateTabletResolverCache(runtime, shardId, 0);
+
+            RebootTablet(runtime, shardId, sender);
+            
+            {
+                auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(4);
+                runtime.SendToPipe(shardId, sender, request1.Release(), 0, GetPipeConfigWithRetries());
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+                auto &msg = *ev->Get();
+                UNIT_ASSERT_EQUAL(msg.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetTabletId(), shardId);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Record.GetDataCleanupGeneration(), 4);
+            }
+        
+            RebootTablet(runtime, shardId, sender);
+        }
+
+        for (int i = 0; i < 10; i++) {
+            TString chunkNum = ToString(100 + i);
+            TString query = "UPSERT INTO `/Root/table-1` (blob_id, data) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(oldGroupsActorIds.size(), 3);
+
+        for (auto& oldGroupActorId : oldGroupsActorIds) {
+            IActor* oldGroupActor = runtime.FindActor(oldGroupActorId, 0U);
+            TIntrusivePtr<NFake::TProxyDS> oldModel = Model(oldGroupActor);
+            UNIT_ASSERT(oldModel);
+
+            const auto &blobMap = oldModel->AllMyBlobs();
+
+            if (!blobMap.empty()) {
+                // Can only be NOT empty if there are external blobs
+                // New external blobs should be in new groups, not in this one
+                UNIT_ASSERT_VALUES_EQUAL(blobMap.size(), 10);
+                for (const auto& [id, _] : blobMap) {
+                    UNIT_ASSERT_VALUES_EQUAL(id.BlobSize(), blobRealSize);
+                    UNIT_ASSERT_VALUES_EQUAL(id.Channel(), 2);
+                }
+            }
+        }
     }
 }
 

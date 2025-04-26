@@ -16,74 +16,44 @@
 #include <boost/graph/properties.hpp>
 #include <boost/graph/planar_detail/bucket_sort.hpp>
 
+#include <boost/geometry/algorithms/crosses.hpp>
+#include <boost/geometry/geometries/linestring.hpp>
+#include <boost/geometry/core/coordinate_type.hpp>
+
+#include <boost/numeric/conversion/cast.hpp>
+
 #include <algorithm>
 #include <vector>
-#include <set>
 #include <map>
 
 namespace boost
 {
-
-// Return true exactly when the line segments s1 = ((x1,y1), (x2,y2)) and
-// s2 = ((a1,b1), (a2,b2)) intersect in a point other than the endpoints of
-// the line segments. The one exception to this rule is when s1 = s2, in
-// which case false is returned - this is to accomodate multiple edges
-// between the same pair of vertices, which shouldn't invalidate the straight
-// line embedding. A tolerance variable epsilon can also be used, which
-// defines how far away from the endpoints of s1 and s2 we want to consider
-// an intersection.
-
-inline bool intersects(double x1, double y1, double x2, double y2, double a1,
-    double b1, double a2, double b2, double epsilon = 0.000001)
+// Overload of make from Boost.Geometry.
+template<typename Geometry, typename Graph, typename GridPositionMap>
+Geometry make(typename graph_traits<Graph>::edge_descriptor e,
+              Graph const &g,
+              GridPositionMap const &drawing)
 {
+    auto e_source(source(e, g));
+    auto e_target(target(e, g));
+    using Float = typename geometry::coordinate_type<Geometry>::type;
+    return {{numeric_cast<Float>(drawing[e_source].x), numeric_cast<Float>(drawing[e_source].y)},
+            {numeric_cast<Float>(drawing[e_target].x), numeric_cast<Float>(drawing[e_target].y)}};
+}
 
-    if (x1 - x2 == 0)
-    {
-        std::swap(x1, a1);
-        std::swap(y1, b1);
-        std::swap(x2, a2);
-        std::swap(y2, b2);
-    }
-
-    if (x1 - x2 == 0)
-    {
-        BOOST_USING_STD_MAX();
-        BOOST_USING_STD_MIN();
-
-        // two vertical line segments
-        double min_y = min BOOST_PREVENT_MACRO_SUBSTITUTION(y1, y2);
-        double max_y = max BOOST_PREVENT_MACRO_SUBSTITUTION(y1, y2);
-        double min_b = min BOOST_PREVENT_MACRO_SUBSTITUTION(b1, b2);
-        double max_b = max BOOST_PREVENT_MACRO_SUBSTITUTION(b1, b2);
-        if ((max_y > max_b && max_b > min_y)
-            || (max_b > max_y && max_y > min_b))
-            return true;
-        else
-            return false;
-    }
-
-    double x_diff = x1 - x2;
-    double y_diff = y1 - y2;
-    double a_diff = a2 - a1;
-    double b_diff = b2 - b1;
-
-    double beta_denominator = b_diff - (y_diff / ((double)x_diff)) * a_diff;
-
-    if (beta_denominator == 0)
-    {
-        // parallel lines
-        return false;
-    }
-
-    double beta = (b2 - y2 - (y_diff / ((double)x_diff)) * (a2 - x2))
-        / beta_denominator;
-    double alpha = (a2 - x2 - beta * (a_diff)) / x_diff;
-
-    double upper_bound = 1 - epsilon;
-    double lower_bound = 0 + epsilon;
-
-    return (beta < upper_bound && beta > lower_bound && alpha < upper_bound
-        && alpha > lower_bound);
+// Overload of crosses from Boost.Geometry.
+template<typename Graph, typename GridPositionMap>
+bool crosses(typename graph_traits<Graph>::edge_descriptor e,
+             typename graph_traits<Graph>::edge_descriptor f,
+             Graph const &g,
+             GridPositionMap const &drawing)
+{
+    using geometry::crosses;
+    using geometry::model::linestring;
+    using geometry::model::d2::point_xy;
+    using linestring2d = geometry::model::linestring<geometry::model::d2::point_xy<double>>;
+    return crosses(make<linestring2d>(e, g, drawing),
+                   make<linestring2d>(f, g, drawing));
 }
 
 template < typename Graph, typename GridPositionMap, typename VertexIndexMap >
@@ -161,33 +131,15 @@ bool is_straight_line_drawing(
 
             if (before != active_edges.end())
             {
-
                 edge_t f = before->second;
-                vertex_t e_source(source(e, g));
-                vertex_t e_target(target(e, g));
-                vertex_t f_source(source(f, g));
-                vertex_t f_target(target(f, g));
-
-                if (intersects(drawing[e_source].x, drawing[e_source].y,
-                        drawing[e_target].x, drawing[e_target].y,
-                        drawing[f_source].x, drawing[f_source].y,
-                        drawing[f_target].x, drawing[f_target].y))
+                if (crosses(e, f, g, drawing))
                     return false;
             }
 
             if (after != active_edges.end())
             {
-
                 edge_t f = after->second;
-                vertex_t e_source(source(e, g));
-                vertex_t e_target(target(e, g));
-                vertex_t f_source(source(f, g));
-                vertex_t f_target(target(f, g));
-
-                if (intersects(drawing[e_source].x, drawing[e_source].y,
-                        drawing[e_target].x, drawing[e_target].y,
-                        drawing[f_source].x, drawing[f_source].y,
-                        drawing[f_target].x, drawing[f_target].y))
+                if (crosses(e, f, g, drawing))
                     return false;
             }
 

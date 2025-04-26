@@ -725,11 +725,26 @@ public:
         }));
     }
 
-    bool TryAcquire(i64 /*amount*/) override
+    bool TryAcquire(i64 amount) override
     {
-        YT_ABORT();
+        size_t i = 0;
+        for (; i < Throttlers_.size(); ++i) {
+            if (!Throttlers_[i]->TryAcquire(amount)) {
+                break;
+            }
+        }
+
+        if (i != Throttlers_.size()) {
+            for (size_t j = 0; j < i; ++j) {
+                Throttlers_[j]->Release(amount);
+            }
+            return false;
+        }
+
+        return true;
     }
 
+    // TODO: implement TryAcquireAvailable the same way as TryAcquire.
     i64 TryAcquireAvailable(i64 /*amount*/) override
     {
         YT_ABORT();

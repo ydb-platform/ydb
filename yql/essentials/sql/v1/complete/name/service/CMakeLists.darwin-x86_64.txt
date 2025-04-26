@@ -12,26 +12,14 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-lib-hash)
+add_subdirectory(static)
+
+add_library(complete-name-service INTERFACE)
 
 
-target_compile_options(yt-lib-hash PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-lib-hash PUBLIC
+target_link_libraries(complete-name-service INTERFACE
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-openssl
-  yql-essentials-ast
-  yql-essentials-utils
-  essentials-utils-log
-  yql-essentials-core
-  essentials-core-expr_nodes
-)
-
-target_sources(yt-lib-hash PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/lib/hash/yql_hash_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/lib/hash/yql_op_hash.cpp
+  v1-complete-core
 )
 

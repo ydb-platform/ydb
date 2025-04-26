@@ -27,8 +27,8 @@ target_link_libraries(sql-v1-complete PUBLIC
   yutil
   sql-v1-lexer
   v1-complete-antlr4
-  v1-complete-name
-  complete-name-static
+  complete-name-service
+  name-service-static
   v1-complete-syntax
   v1-complete-text
 )

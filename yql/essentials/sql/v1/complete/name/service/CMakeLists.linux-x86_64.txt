@@ -14,10 +14,10 @@
 
 add_subdirectory(static)
 
-add_library(v1-complete-name INTERFACE)
+add_library(complete-name-service INTERFACE)
 
 
-target_link_libraries(v1-complete-name INTERFACE
+target_link_libraries(complete-name-service INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil

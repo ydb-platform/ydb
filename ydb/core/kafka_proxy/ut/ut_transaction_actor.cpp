@@ -374,7 +374,7 @@ namespace {
             }
     };
 
-    Y_UNIT_TEST_SUITE_F(KafkaTransactionActor, TTransactionActorFixture) {
+    Y_UNIT_TEST_SUITE_F(TransactionActor, TTransactionActorFixture) {
         Y_UNIT_TEST(OnAddPartitionsAndEndTxn_shouldSendTxnToKqpWithSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
             bool seenEvent = false;

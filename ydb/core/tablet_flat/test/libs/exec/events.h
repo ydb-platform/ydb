@@ -137,13 +137,5 @@ namespace NFake {
         const TVector<TBlobInfo> Contains;
     };
 
-    struct TEvBlobStorageDeferGc : public TEventLocal<TEvBlobStorageDeferGc, EvBlobStorageDeferGC> {
-        TEvBlobStorageDeferGc(bool defer)
-            : Defer(defer)
-        { }
-
-        bool Defer;
-    };
-
 }
 }

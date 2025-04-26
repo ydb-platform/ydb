@@ -134,4 +134,7 @@ constexpr bool DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT = false;
 constexpr bool DEFAULT_USE_COLUMN_GROUPS_FROM_INPUT_TABLE = false;
 
 constexpr bool DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ = false;
+
+constexpr bool DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC = false;
+
 } // NYql

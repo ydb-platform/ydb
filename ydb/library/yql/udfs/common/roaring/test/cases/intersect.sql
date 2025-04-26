@@ -23,3 +23,5 @@ SELECT Roaring::Intersect(Roaring::Deserialize(right), NULL) AS IntersectNull1 F
 SELECT Roaring::IntersectWithBinary(Roaring::Deserialize(right), left) AS IntersectWithBinary FROM Input;
 SELECT Roaring::IntersectWithBinary(Roaring::Deserialize(right), NULL) AS IntersectWithBinaryNull FROM Input;
 SELECT Roaring::Intersect(Roaring::Deserialize(right), Roaring::FromUint32List(AsList(100500))) AS IntersectFalse FROM Input;
+
+SELECT Roaring::IsEmpty(Roaring::And(Roaring::Deserialize(right), Roaring::FromUint32List(AsList(100500)))) AS IntersectionIsEmpty FROM Input;

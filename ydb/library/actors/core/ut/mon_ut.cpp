@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(ActorSystemMon) {
         const bool success = ev->SerializeToArcadiaStream(&ser);
         Y_ABORT_UNLESS(success);
         auto buffer = ser.Release(ev->CreateSerializationInfo());
-        std::unique_ptr<TEvRemoteHttpInfo> restored(dynamic_cast<TEvRemoteHttpInfo*>(TEvRemoteHttpInfo::Load(buffer.Get())));
+        std::unique_ptr<TEvRemoteHttpInfo> restored(TEvRemoteHttpInfo::Load(buffer.Get()));
         UNIT_ASSERT(restored->Query == ev->Query);
         UNIT_ASSERT(restored->Query.size());
         UNIT_ASSERT(restored->Query[0] == '\0');

@@ -123,6 +123,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
     NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
+    NCommon::TConfSetting<bool, false> _ForbidSensitiveDataInOperationSpec;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

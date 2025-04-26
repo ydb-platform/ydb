@@ -2173,7 +2173,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
         static const char splitFlag[] = "ExtractMembersSplitOnOptional";
         YQL_ENSURE(optCtx.Types);
-        const bool split = IsOptimizerEnabled<splitFlag>(*optCtx.Types) && !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        const bool split = !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
         if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }
@@ -2995,7 +2995,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         static const char optName[] = "UnorderedOverSortImproved";
         YQL_ENSURE(optCtx.Types);
-        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
 
         if (!optEnabled && node->Head().IsCallable({"Sort", "AssumeSorted"})) {
             // if optEnabled this action is performed in yql_co_simple1.cpp (without multiusage check)

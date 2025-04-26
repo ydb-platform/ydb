@@ -1,7 +1,7 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/static/frequency.h>
-#include <yql/essentials/sql/v1/complete/name/static/ranking.h>
-#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/frequency.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -98,7 +98,7 @@ int Run(int argc, char* argv[]) {
         input.CursorPosition = queryString.size();
     }
 
-    auto output = engine->Complete(input);
+    auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {
         Cout << "[" << c.Kind << "] " << c.Content << "\n";
     }

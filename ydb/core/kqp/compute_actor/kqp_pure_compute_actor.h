@@ -8,15 +8,15 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_actor.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 
 namespace NKikimr::NKqp {
 
-class TKqpComputeActor : public NScheduler::TSchedulableActorBase<TKqpComputeActor> {
-    using TBase = NScheduler::TSchedulableActorBase<TKqpComputeActor>;
+class TKqpComputeActor : public NScheduler::TSchedulableComputeActorBase<TKqpComputeActor> {
+    using TBase = NScheduler::TSchedulableComputeActorBase<TKqpComputeActor>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

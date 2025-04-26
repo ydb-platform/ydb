@@ -4,6 +4,8 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
+// class TSchedulableTask
+
 TSchedulableTask::TSchedulableTask(const NHdrf::TQueryPtr& query)
     : Query(query)
 {
@@ -29,6 +31,8 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
         parent->BurstUsage += burstUsage.MicroSeconds();
     }
 }
+
+// class TSchedulableActorHelper
 
 TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     : SchedulableTask(std::move(options.SchedulableTask))

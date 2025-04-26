@@ -1,5 +1,26 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 25.1 {#25-1}
+
+### Version 25.1.1. {#25-1-1-}
+
+Release date: , 2025
+
+#### Functionality
+
+* [Support](https://github.com/ydb-platform/ydb/issues/11454) for consistent asynchronous replication has been implemented, ensuring data integrity and consistency on the replica. This feature addresses recovery issues following system failures, particularly beneficial for databases containing mission-critical information where rapid recovery is essential.
+* Support for auto-partitioning of topics in CDC has been added. You can create an auto-partitioned change stream for a string table. As the change stream rate increases, the number of partitions in the auto-partitioned change stream will increase automatically. Auto-partitioning parameters for the change stream are set by its properties as a topic. The feature flag is disabled by default.
+* Support for auto-partitioning of topics for asynchronous replication has been added. Change streams for string tables in newly created asynchronous replications are created as auto-partitioned if the `EnableTopicAutopartitioningForCDC` flag is enabled on the source cluster and the `EnableTopicAutopartitioningForReplication` flag is enabled on the receiver cluster.
+* [Added](https://github.com/ydb-platform/ydb/issues/6512) support for granular timecast protocol, which allows time to advance faster by excluding slow shards. Now each shard can only slow down its own time progression without affecting other database components.
+* [Added](https://github.com/ydb-platform/ydb/issues/11561) datashard in-memory state migration on graceful restarts, which allows preserving locks and increases the chances of successful transaction execution, improving overall execution time for long read/write transactions.
+* [Added](https://github.com/ydb-platform/ydb/issues/9748) support changing feature flags at runtime. Most feature flags starting from version 25.1 will be applied without requiring process restarts.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/12510) throttling of incoming write load on VDisk to prevent emergency situations when it reaches 100% capacity.
+
+
+#### Performance
+
+#### Bug Fixes
+
 ## Version 24.4 {#24-4}
 
 ### Version 24.4.4.2 {#24-4-4-2}

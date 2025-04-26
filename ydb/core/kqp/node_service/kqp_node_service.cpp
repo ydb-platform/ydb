@@ -1,4 +1,5 @@
 #include "kqp_node_service.h"
+
 #include "kqp_node_state.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -149,6 +151,21 @@ private:
 
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
+
+        const auto& databaseId = msg.GetDatabaseId();
+        const auto& poolId = msg.GetPoolId();
+
+        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
+        addDatabaseEvent->Id = databaseId;
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
+
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
+
+        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+        addQueryEvent->DatabaseId = msg.GetDatabase();
+        addQueryEvent->PoolId = msg.GetPoolId();
+        addQueryEvent->QueryId = txId;
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
 
         auto now = TAppData::TimeProvider->Now();
         NKqpNode::TTasksRequest request(txId, ev->Sender, now);

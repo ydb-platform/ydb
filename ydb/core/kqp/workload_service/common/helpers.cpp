@@ -27,6 +27,19 @@ TString DatabaseIdToDatabase(TStringBuf databaseId) {
         : CanonizePath(TString(databaseId));  // Dedicated
 }
 
+TString CreatePoolKey(const TString& databaseId, const TString& poolId) {
+    return TStringBuilder() << databaseId << "/" << poolId;
+}
+
+std::pair<TString, TString> ParsePoolKey(const TString& poolKey, TString& error) {
+    const auto pos = poolKey.rfind('/');
+    if (pos == TString::npos || pos == poolKey.size()) {
+        error = "Invalid pool key";
+        return {};
+    }
+    return {poolKey.substr(0, pos), poolKey.substr(pos + 1)};
+}
+
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     NYql::TIssue rootIssue(message);
     for (const NYql::TIssue& issue : issues) {

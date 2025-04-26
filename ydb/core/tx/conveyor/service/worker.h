@@ -44,6 +44,7 @@ struct TEvInternal {
     enum EEv {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
+        EvRefreshResourcePool,
         EvEnd
     };
 
@@ -80,6 +81,15 @@ struct TEvInternal {
             , ProcessIds(std::move(processIds)) {
             AFL_VERIFY(ProcessIds.size());
             AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
+        }
+    };
+
+    class TEvRefreshResourcePool: public NActors::TEventLocal<TEvRefreshResourcePool, EvRefreshResourcePool> {
+    private:
+        YDB_READONLY_DEF(TString, ResourcePoolKey);
+    public:
+        TEvRefreshResourcePool(const TString& resourcePoolKey)
+            : ResourcePoolKey(resourcePoolKey) {
         }
     };
 };

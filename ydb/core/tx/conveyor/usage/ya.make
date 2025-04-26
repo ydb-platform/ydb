@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/runtime
     ydb/library/actors/core
     ydb/services/metadata/request
 )

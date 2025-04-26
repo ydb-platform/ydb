@@ -3,14 +3,16 @@
 
 namespace NKikimr::NConveyor {
 
-TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task)
-    : Task(task) {
+TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const std::optional<TString>& resourcePoolKey)
+    : Task(task)
+    , ResourcePoolKey(resourcePoolKey) {
     AFL_VERIFY(Task);
 }
 
-TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const ui64 processId)
+TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const ui64 processId, const std::optional<TString>& resourcePoolKey)
     : Task(task)
     , ProcessId(processId)
+    , ResourcePoolKey(resourcePoolKey)
 {
     AFL_VERIFY(Task);
 }

@@ -7,6 +7,7 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/workload_service/common/actors.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 

@@ -1760,6 +1760,7 @@ message TEvKqpScan {
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
     optional NKikimrDataEvents.ELockMode LockMode = 28;
+    optional string ResourcePoolKey = 29;
 }
 
 message TEvCompactTable {

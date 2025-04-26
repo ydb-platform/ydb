@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler_handle.h>
 
 namespace NKikimr::NConveyor {
 
@@ -12,6 +13,8 @@ struct TEvExecution {
         EvNewTask = EventSpaceBegin(TKikimrEvents::ES_CONVEYOR),
         EvRegisterProcess,
         EvUnregisterProcess,
+        EvGetResourcePoolHandle,
+        EvGetResourcePoolHandleResponse,
         EvEnd
     };
 
@@ -21,12 +24,13 @@ struct TEvExecution {
     private:
         YDB_READONLY_DEF(ITask::TPtr, Task);
         YDB_READONLY(ui64, ProcessId, 0);
+        YDB_READONLY(std::optional<TString>, ResourcePoolKey, std::nullopt);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task);
-        explicit TEvNewTask(ITask::TPtr task, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, const std::optional<TString>& resourcePoolKey);
+        explicit TEvNewTask(ITask::TPtr task, const ui64 processId, const std::optional<TString>& resourcePoolKey);
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {
@@ -47,6 +51,35 @@ struct TEvExecution {
             : ProcessId(processId) {
         }
 
+    };
+
+    class TEvGetResourcePoolHandle: public NActors::TEventLocal<TEvGetResourcePoolHandle, EvGetResourcePoolHandle> {
+    private:
+        YDB_READONLY(TString, ResourcePoolKey, "");
+    public:
+        explicit TEvGetResourcePoolHandle(const TString& resourcePoolKey)
+            : ResourcePoolKey(resourcePoolKey) {
+        }
+    };
+
+    class TEvGetResourcePoolHandleResponse: public NActors::TEventLocal<TEvGetResourcePoolHandleResponse, EvGetResourcePoolHandleResponse> {
+    private:
+        YDB_READONLY(TString, ResourcePoolKey, "");
+        YDB_READONLY(std::optional<TString>, Error, std::nullopt);
+        std::unique_ptr<NKqp::TSchedulerEntityHandle> Handle;
+    public:
+        TEvGetResourcePoolHandleResponse(const TString& resourcePoolKey, std::unique_ptr<NKqp::TSchedulerEntityHandle> handle)
+            : ResourcePoolKey(resourcePoolKey)
+            , Handle(std::move(handle)) {
+        }
+
+        explicit TEvGetResourcePoolHandleResponse(const TString& error)
+            : Error(error) {
+        }
+
+        std::unique_ptr<NKqp::TSchedulerEntityHandle> ExtractHandle() {
+            return std::move(Handle);
+        }
     };
 };
 

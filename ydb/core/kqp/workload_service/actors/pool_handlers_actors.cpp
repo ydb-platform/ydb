@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/workload_service/common/actors.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>

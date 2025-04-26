@@ -1,5 +1,6 @@
 #include "service.h"
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 namespace NKikimr::NConveyor {
@@ -8,12 +9,110 @@ TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, T
     : Config(config)
     , ConveyorName(conveyorName)
     , Counters(ConveyorName, conveyorSignals) {
+}
 
+void TDistributor::HandleMain(TEvExecution::TEvGetResourcePoolHandleResponse::TPtr& ev) {
+    Cerr << "------------------------------ TDistributor::StateMain, TEvGetPoolHandleResponse" << Endl;
+    if (const auto& error = ev->Get()->GetError()) {
+        Cerr << "------------------------------ TDistributor::StateMain, TEvGetPoolHandleResponse FAIL: " << *error << Endl;
+    } else if (auto handle = ev->Get()->ExtractHandle()) {
+        Cerr << "------------------------------ TDistributor::StateMain, TEvGetPoolHandleResponse SUCCESS" << Endl;
+        ShedulerPools[ev->Get()->GetResourcePoolKey()].Handle = std::move(handle);
+    } else {
+        Cerr << "------------------------------ TDistributor::StateMain, TEvGetPoolHandleResponse DISABLED" << Endl;
+    }
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvRefreshResourcePool::TPtr& ev) {
+    const auto& pool = ev->Get()->GetResourcePoolKey();
+    auto& scheduler = ShedulerPools[pool];
+    scheduler.Throttled = false;
+    scheduler.Handle->MarkResumed();
+    if (IsThrottled(pool)) {
+        return;
+    }
+
+    for (auto it = scheduler.ProcessIds.begin(); it != scheduler.ProcessIds.end(); ++it) {
+        const auto processIt = Processes.find(*it);
+        AFL_VERIFY(processIt != Processes.end());
+        if (processIt->second.GetTasks().size() > 0) {
+            AFL_VERIFY(ProcessesOrdered.emplace(processIt->second.GetAddress()).second);
+        }
+    }
+
+    const TMonotonic now = TMonotonic::Now();
+    while (ProcessesOrdered.size() && Workers.size()) {
+        std::vector<TWorkerTask> tasks;
+        while (ProcessesOrdered.size() && tasks.size() < 1) {
+            auto task = PopTask();
+            Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MicroSeconds());
+            task.OnBeforeStart();
+            tasks.emplace_back(std::move(task));
+        }
+        Counters.PackHistogram->Collect(tasks.size());
+        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_execute")("id", Workers.back())("queue", WaitingTasksCount.Val())("count", tasks.size());
+        Send(Workers.back(), new TEvInternal::TEvNewTask(std::move(tasks)));
+        Workers.pop_back();
+    }
+}
+
+bool TDistributor::IsThrottled(const std::optional<TString>& pool) {
+    if (!pool) {
+        return false;
+    }
+
+    auto& scheduler = ShedulerPools[*pool];
+    if (!scheduler.Handle) {
+        if (!scheduler.WaitPoolHandle) {
+            Send(NKqp::MakeKqpNodeServiceID(SelfId().NodeId()), new TEvExecution::TEvGetResourcePoolHandle(*pool));
+            scheduler.WaitPoolHandle = true;
+        }
+        return false;
+    }
+
+    if (scheduler.Throttled) {
+        return true;
+    }
+
+    const auto delay = scheduler.Handle->Delay(TlsActivationContext->Monotonic());
+    if (!delay) {
+        return false;
+    }
+
+    scheduler.Throttled = true;
+    scheduler.Handle->MarkThrottled();
+    Schedule(*delay, new TEvInternal::TEvRefreshResourcePool(*pool));
+
+    for (auto it = scheduler.ProcessIds.begin(); it != scheduler.ProcessIds.end(); ++it) {
+        const auto processIt = Processes.find(*it);
+        AFL_VERIFY(processIt != Processes.end());
+        if (processIt->second.GetTasks().size() > 0) {
+            (ProcessesOrdered.erase(processIt->second.GetAddress()));
+        }
+    }
+    return scheduler.Throttled;
+}
+
+void TDistributor::TrackTime(const std::optional<TString>& pool, TDuration d) {
+    if (!pool) {
+        return;
+    }
+
+    auto& scheduler = ShedulerPools[*pool];
+    if (!scheduler.Handle) {
+        AFL_VERIFY(scheduler.WaitPoolHandle);
+        return;
+    }
+
+    scheduler.Handle->TrackTime(d, TlsActivationContext->Monotonic());
 }
 
 void TDistributor::Bootstrap() {
     AddProcess(0);
     WorkersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
+
+    Cerr << "------------------------------ TDistributor::Bootstrap, started for conveyor " << ConveyorName << ", WorkersCount: " << WorkersCount << Endl;
+
     AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersCount);
     for (ui32 i = 0; i < WorkersCount; ++i) {
         const double usage = Config.GetWorkerCPUUsage(i);
@@ -70,7 +169,6 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
         AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_execute")("id", evExt->Sender)("queue", WaitingTasksCount.Val())("count", tasks.size());
         Send(evExt->Sender, new TEvInternal::TEvNewTask(std::move(tasks)));
     } else {
-        AFL_VERIFY(!WaitingTasksCount.Val());
         AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "return_worker")("id", evExt->Sender);
         Workers.emplace_back(evExt->Sender);
     }
@@ -92,7 +190,10 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto it = Processes.find(ev->Get()->GetProcessId());
     AFL_VERIFY(it != Processes.end());
     if (it->second.DecRegistration()) {
-        if (it->second.GetTasks().size()) {
+        if (const auto& pool = it->second.GetResourcePoolKey()) {
+            AFL_VERIFY(ShedulerPools[*pool].ProcessIds.erase(ev->Get()->GetProcessId()));
+        }
+        if (it->second.GetTasks().size() && !IsThrottled(it->second.GetResourcePoolKey())) {
             AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
         }
         Processes.erase(it);
@@ -114,7 +215,8 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("proc", processId)("workers", Workers.size())("queue", WaitingTasksCount.Val());
 
-    if (Workers.size()) {
+    const auto& pool = ev->Get()->GetResourcePoolKey();
+    if (Workers.size() && !IsThrottled(pool)) {
         Counters.WaitingHistogram->Collect(0);
 
         wTask.OnBeforeStart();
@@ -127,7 +229,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         }
         Counters.UseWorkerRate->Inc();
     } else if (WaitingTasksCount.Val() < Config.GetQueueSizeLimit()) {
-        PushTask(wTask);
+        PushTask(wTask, pool);
         Counters.WaitWorkerRate->Inc();
     } else {
         Counters.OverlimitRate->Inc();
@@ -144,7 +246,7 @@ void TDistributor::AddProcess(const ui64 processId) {
     LastAddProcessInstant = TMonotonic::Now();
     for (auto&& i : Processes) {
         i.second.CleanCPUMetric();
-        if (i.second.GetTasks().size()) {
+        if (i.second.GetTasks().size() && !IsThrottled(i.second.GetResourcePoolKey())) {
             ProcessesOrdered.emplace(i.second.GetAddress());
         }
     }
@@ -155,11 +257,14 @@ void TDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
     if (it == Processes.end()) {
         return;
     }
-    if (it->second.GetTasks().size()) {
+
+    TrackTime(it->second.GetResourcePoolKey(), d);
+    const bool throttled = IsThrottled(it->second.GetResourcePoolKey());
+    if (it->second.GetTasks().size() && !throttled) {
         AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress()));
     }
     it->second.AddCPUTime(d);
-    if (it->second.GetTasks().size()) {
+    if (it->second.GetTasks().size() && !throttled) {
         AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
     }
 }
@@ -176,10 +281,18 @@ TWorkerTask TDistributor::PopTask() {
     return it->second.MutableTasks().pop();
 }
 
-void TDistributor::PushTask(const TWorkerTask& task) {
+void TDistributor::PushTask(const TWorkerTask& task, const std::optional<TString>& pool) {
     auto it = Processes.find(task.GetProcessId());
     AFL_VERIFY(it != Processes.end());
-    if (it->second.GetTasks().size() == 0) {
+    if (pool) {
+        if (const auto& processPool = it->second.GetResourcePoolKey()) {
+            AFL_VERIFY(*pool == *processPool);
+        } else {
+            it->second.SetResourcePoolKey(*pool);
+        }
+        ShedulerPools[*pool].ProcessIds.emplace(task.GetProcessId());
+    }
+    if (it->second.GetTasks().size() == 0 && !IsThrottled(pool)) {
         AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress()).second);
     }
     it->second.MutableTasks().push(task);

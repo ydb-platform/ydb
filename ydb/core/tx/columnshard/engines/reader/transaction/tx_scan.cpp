@@ -54,11 +54,15 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
+    std::optional<TString> resourcePoolKey;
+    if (AppDataVerified().FeatureFlags.GetEnableColumnShardCpuLimiting() && request.GetResourcePoolKey()) {
+        resourcePoolKey = request.GetResourcePoolKey();
+    }
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
-        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
+        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("resource_pool_key", resourcePoolKey ? *resourcePoolKey : "DISABLED");
 
     TReadMetadataPtr readMetadataRange;
     {
@@ -160,7 +164,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
-        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(),
+        resourcePoolKey));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

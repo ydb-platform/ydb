@@ -594,9 +594,9 @@ protected:
         const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
         if (isInsert) {
-            NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+            NConveyor::TInsertServiceOperator::SendTaskToExecute(task, std::nullopt);
         } else {
-            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+            NConveyor::TCompServiceOperator::SendTaskToExecute(task, std::nullopt);
         }
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {

@@ -17,6 +17,8 @@
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/workload_service/common/helpers.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -124,6 +126,7 @@ private:
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleWork);
             hFunc(TEvKqpNode::TEvFinishKqpTask, HandleWork); // used only for unit tests
             hFunc(TEvKqpNode::TEvCancelKqpTasksRequest, HandleWork);
+            hFunc(NConveyor::TEvExecution::TEvGetResourcePoolHandle, HandleWork);
             hFunc(TEvents::TEvWakeup, HandleWork);
             // misc
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
@@ -203,6 +206,7 @@ private:
         auto schedulerNow = TlsActivationContext->Monotonic();
 
         TString schedulerGroup = msg.GetSchedulerGroup();
+        const TString poolKey = NWorkload::CreatePoolKey(msg.GetDatabase(), schedulerGroup);
 
         if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
             auto share = msg.GetPoolMaxCpuShare();
@@ -318,7 +322,7 @@ private:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), poolKey));
             }
         }
 
@@ -361,6 +365,22 @@ private:
         TerminateTx(txId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
+    }
+
+    void HandleWork(NConveyor::TEvExecution::TEvGetResourcePoolHandle::TPtr& ev) {
+        TString error;
+        const auto& [databaseId, schedulerGroup] = NWorkload::ParsePoolKey(ev->Get()->GetResourcePoolKey(), error);
+        if (error) {
+            Send(ev->Sender, new NConveyor::TEvExecution::TEvGetResourcePoolHandleResponse(error));
+            return;
+        }
+
+        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
+            Send(ev->Sender, new NConveyor::TEvExecution::TEvGetResourcePoolHandleResponse(ev->Get()->GetResourcePoolKey(), nullptr));
+            return;
+        }
+
+        Send(ev->Sender, new NConveyor::TEvExecution::TEvGetResourcePoolHandleResponse(ev->Get()->GetResourcePoolKey(), std::make_unique<TSchedulerEntityHandle>(SchedulerOptions.Scheduler->Enroll(schedulerGroup, 1, TlsActivationContext->Monotonic()))));
     }
 
     void TerminateTx(ui64 txId, const TString& reason, NYql::NDqProto::StatusIds_StatusCode status = NYql::NDqProto::StatusIds::UNSPECIFIED) {

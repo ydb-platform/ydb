@@ -40,11 +40,11 @@ public:
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
     }
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 processId = 0) {
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const std::optional<TString>& resourcePoolKey, const ui64 processId = 0) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task, processId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task, processId, resourcePoolKey));
             return true;
         } else {
             task->Execute(nullptr, task);

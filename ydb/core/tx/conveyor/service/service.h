@@ -98,10 +98,12 @@ public:
 class TProcessOrdered {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_ACCESSOR_DEF(std::optional<TString>, ResourcePoolKey);
     YDB_READONLY(ui64, CPUTime, 0);
 public:
-    TProcessOrdered(const ui64 processId, const ui64 cpuTime)
+    TProcessOrdered(const ui64 processId, const std::optional<TString>& resourcePoolKey, const ui64 cpuTime)
         : ProcessId(processId)
+        , ResourcePoolKey(resourcePoolKey)
         , CPUTime(cpuTime) {
 
     }
@@ -121,6 +123,7 @@ class TProcess {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, CPUTime, 0);
+    YDB_ACCESSOR_DEF(std::optional<TString>, ResourcePoolKey);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     ui32 LinksCount = 0;
 public:
@@ -148,8 +151,15 @@ public:
     }
 
     TProcessOrdered GetAddress() const {
-        return TProcessOrdered(ProcessId, CPUTime);
+        return TProcessOrdered(ProcessId, ResourcePoolKey, CPUTime);
     }
+};
+
+struct TSchedulerPool {
+    std::unique_ptr<NKqp::TSchedulerEntityHandle> Handle;
+    std::unordered_set<ui64> ProcessIds;
+    bool WaitPoolHandle = false;
+    bool Throttled = false;
 };
 
 class TDistributor: public TActorBootstrapped<TDistributor> {
@@ -158,6 +168,7 @@ private:
     const TConfig Config;
     const TString ConveyorName = "common";
     TPositiveControlInteger WaitingTasksCount;
+    THashMap<TString, TSchedulerPool> ShedulerPools;
     THashMap<ui64, TProcess> Processes;
     std::set<TProcessOrdered> ProcessesOrdered;
     std::deque<TActorId> Workers;
@@ -165,6 +176,12 @@ private:
     TCounters Counters;
     THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
     TMonotonic LastAddProcessInstant = TMonotonic::Now();
+
+    // CPU limiting
+    void HandleMain(TEvExecution::TEvGetResourcePoolHandleResponse::TPtr& ev);
+    void HandleMain(TEvInternal::TEvRefreshResourcePool::TPtr& ev);
+    bool IsThrottled(const std::optional<TString>& pool);
+    void TrackTime(const std::optional<TString>& pool, TDuration d);
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
@@ -177,7 +194,7 @@ private:
 
     TWorkerTask PopTask();
 
-    void PushTask(const TWorkerTask& task);
+    void PushTask(const TWorkerTask& task, const std::optional<TString>& pool);
 
 public:
 
@@ -189,6 +206,8 @@ public:
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
+            hFunc(TEvExecution::TEvGetResourcePoolHandleResponse, HandleMain);
+            hFunc(TEvInternal::TEvRefreshResourcePool, HandleMain);
             default:
                 AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;

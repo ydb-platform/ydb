@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/workload_service/common/actors.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 

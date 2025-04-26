@@ -26,7 +26,8 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
+    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
+    const TString& resourcePoolKey)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
@@ -34,6 +35,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
     , LockMode(lockMode)
+    , ResourcePoolKey(resourcePoolKey)
     , ComputeActorIds(std::move(computeActors))
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
@@ -429,6 +431,7 @@ bool TKqpScanFetcherActor::SendScanFinished() {
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen,
     const TSmallVec<TSerializedTableRange>& ranges, const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
+    ev->Record.SetResourcePoolKey(ResourcePoolKey);
     ev->Record.SetLocalPathId(ScanDataMeta.TableId.PathId.LocalPathId);
     for (auto& column : ScanDataMeta.GetColumns()) {
         ev->Record.AddColumnTags(column.Tag);

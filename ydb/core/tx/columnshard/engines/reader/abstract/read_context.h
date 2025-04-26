@@ -59,6 +59,7 @@ private:
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
     const NConveyor::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
+    const std::optional<TString> ResourcePoolKey;
 
 public:
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
@@ -144,11 +145,15 @@ public:
         return ResourcesTaskContext;
     }
 
+    const std::optional<TString>& GetResourcePoolKey() const {
+        return ResourcePoolKey;
+    }
+
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId);
+        const ui64 scanId, const std::optional<TString>& resourcePoolKey);
 };
 
 class IDataReader {

@@ -10,6 +10,7 @@
 
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
+#include <ydb/core/kqp/workload_service/common/logs.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
 #include <ydb/core/protos/console_config.pb.h>

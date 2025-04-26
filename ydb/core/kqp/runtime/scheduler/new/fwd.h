@@ -3,7 +3,6 @@
 #include <util/generic/ptr.h>
 
 #include <memory>
-#include <optional>
 
 namespace NKikimr::NKqp::NScheduler {
 

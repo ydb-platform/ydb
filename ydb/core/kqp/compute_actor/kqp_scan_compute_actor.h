@@ -3,15 +3,15 @@
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public NScheduler::TSchedulableActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public NScheduler::TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
-    using TBase = NScheduler::TSchedulableActorBase<TKqpScanComputeActor>;
+    using TBase = NScheduler::TSchedulableComputeActorBase<TKqpScanComputeActor>;
 
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;

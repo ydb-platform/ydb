@@ -18,6 +18,10 @@ using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
 
+namespace {
+    const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
+}
+
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     switch (parser.GetKind()) {
@@ -426,6 +430,20 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         try {
             for (int i = 0; i < tableDesc.GetSequences().size(); i++) {
                 Format(fullPath, tableDesc.GetSequences(i), sequences);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+        }
+    }
+
+    if (!tableDesc.GetTableIndexes().empty()) {
+        try {
+            for (const auto& indexDesc: tableDesc.GetTableIndexes()) {
+                if (indexDesc.GetIndexImplTableDescriptions().size() == 1) {
+                    FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
+                }
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -1046,6 +1064,68 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     Stream << ";";
+}
+
+void TCreateTableFormatter::FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc) {
+    if (!indexImplDesc.HasPartitionConfig() || !indexImplDesc.GetPartitionConfig().HasPartitioningPolicy()) {
+        return;
+    }
+
+    const auto& policy = indexImplDesc.GetPartitionConfig().GetPartitioningPolicy();
+
+    ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(indexImplDesc);
+
+    bool printed = false;
+    if ((policy.HasSizeToSplit() && (policy.GetSizeToSplit() != defaultSizeToSplit)) || policy.HasSplitByLoadSettings()
+            || (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount() && policy.GetMinPartitionsCount() != shardsToCreate)
+            || (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount())) {
+        printed = true;
+    }
+    if (!printed) {
+        return;
+    }
+
+    Stream << "ALTER TABLE ";
+    EscapeName(tablePath, Stream);
+    Stream << " ALTER INDEX ";
+    EscapeName(indexName, Stream);
+
+    Stream << " SET (\n";
+
+    TString del = "";
+    if (policy.HasSizeToSplit()) {
+        if (policy.GetSizeToSplit()) {
+            if (policy.GetSizeToSplit() != defaultSizeToSplit) {
+                Stream << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
+                auto partitionBySize = policy.GetSizeToSplit() / (1 << 20);
+                Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
+                del = ",\n";
+            }
+        } else {
+            Stream << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
+            del = ",\n";
+        }
+    }
+
+    if (policy.HasSplitByLoadSettings()) {
+        if (policy.GetSplitByLoadSettings().GetEnabled()) {
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
+        } else {
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
+        }
+        del = ",\n";
+    }
+
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount() && policy.GetMinPartitionsCount() != shardsToCreate) {
+        Stream << del << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << policy.GetMinPartitionsCount();
+        del = ",\n";
+    }
+
+    if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
+        Stream << del << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << policy.GetMaxPartitionsCount();
+    }
+
+    Stream << "\n);";
 }
 
 

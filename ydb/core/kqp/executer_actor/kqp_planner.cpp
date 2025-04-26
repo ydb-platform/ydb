@@ -255,6 +255,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     // TODO: is it the same value?
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
+    request.SetPoolId(UserRequestContext->PoolId);
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);

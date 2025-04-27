@@ -1,6 +1,9 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+#include <ydb/public/lib/ydb_cli/common/command.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
@@ -14,10 +17,10 @@ namespace NYdb::NConsoleClient {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
-        virtual TCompletions Apply(const std::string& prefix, int& contextLen) = 0;
+        virtual TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
         virtual ~IYQLCompleter() = default;
     };
 
-    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color);
+    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color, TDriver driver, TString database);
 
 } // namespace NYdb::NConsoleClient

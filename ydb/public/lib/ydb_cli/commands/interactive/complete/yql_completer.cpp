@@ -1,9 +1,13 @@
 #include "yql_completer.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema_gateway.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
+
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
@@ -21,18 +25,24 @@ namespace NYdb::NConsoleClient {
         {
         }
 
-        TCompletions Apply(const std::string& prefix, int& contextLen) override {
+        TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen) override {
             auto completion = Engine->Complete({
-                .Text = prefix,
+                .Text = text,
                 .CursorPosition = prefix.length(),
             });
+
+            contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
             replxx::Replxx::completions_t entries;
             for (auto& candidate : completion.Candidates) {
                 const auto back = candidate.Content.back();
-                if (!IsLeftPunct(back) && back != '<' || IsQuotation(back)) {
+                if (
+                    !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName 
+                    || candidate.Kind == NSQLComplete::ECandidateKind::TableName)
+                    && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))
+                ) {
                     candidate.Content += ' ';
                 }
 
@@ -52,6 +62,9 @@ namespace NYdb::NConsoleClient {
                     return Color.identifier.type;
                 case NSQLComplete::ECandidateKind::FunctionName:
                     return Color.identifier.function;
+                case NSQLComplete::ECandidateKind::FolderName:
+                case NSQLComplete::ECandidateKind::TableName:
+                    return Color.identifier.quoted;
                 default:
                     return replxx::Replxx::Color::DEFAULT;
             }
@@ -72,15 +85,17 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color) {
+    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color, TDriver driver, TString database) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         NSQLComplete::NameSet names = NSQLComplete::MakeDefaultNameSet();
 
         NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
 
-        NSQLComplete::INameService::TPtr service =
-            MakeStaticNameService(std::move(names), std::move(ranking));
+        NSQLComplete::INameService::TPtr service = NSQLComplete::MakeUnionNameService({
+            NSQLComplete::MakeSchemaNameService(MakeYDBSchemaGateway(std::move(driver), std::move(database))),
+            MakeStaticNameService(std::move(names), std::move(ranking)),
+        });
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
             NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service)),

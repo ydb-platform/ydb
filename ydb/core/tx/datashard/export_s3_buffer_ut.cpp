@@ -54,9 +54,9 @@ public:
             UNIT_ASSERT(CollectKeyValue(i, "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"));
             NExportScan::IBuffer::TStats stats;
             if (Buffer().IsFilled()) {
-                NActors::IEventBase* event = Buffer().PrepareEvent(false, stats);
+                THolder<NActors::IEventBase> event(Buffer().PrepareEvent(false, stats));
                 UNIT_ASSERT(event);
-                auto* evBuffer = dynamic_cast<NKikimr::NDataShard::TEvExportScan::TEvBuffer<TBuffer>*>(event);
+                auto* evBuffer = dynamic_cast<NKikimr::NDataShard::TEvExportScan::TEvBuffer<TBuffer>*>(event.get());
                 UNIT_ASSERT(evBuffer);
                 UNIT_ASSERT_GE_C(evBuffer->Buffer.Size(), minBufferSize, "Got buffer size " << evBuffer->Buffer.Size() << ". Iteration: " << i);
             }

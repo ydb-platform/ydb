@@ -4,8 +4,10 @@
 
 #include <yql/essentials/sql/v1/complete/name/object/schema_gateway.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
 namespace NYdb::NConsoleClient {
 
-    NSQLComplete::ISchemaGateway::TPtr MakeYDBSchemaGateway(TClientCommand::TConfig& config);
+    NSQLComplete::ISchemaGateway::TPtr MakeYDBSchemaGateway(TDriver driver, TString database);
 
 } // namespace NYdb::NConsoleClient

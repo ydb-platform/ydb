@@ -4,12 +4,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <fmt/format.h>
-
 #include <vector>
 
 using namespace NYdb;
-using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE_F(EncryptedBackupTest, TBackupTestFixture)
 {
@@ -150,17 +147,14 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupTest, TBackupTestFixture)
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            std::vector<TString> keys = NTestUtils::GetObjectKeys(bucketName, S3Client(), "EncryptedExport");
-            std::sort(keys.begin(), keys.end());
-            std::vector<TString> expectedKeys = {
+            ValidateS3FileList({
                 "EncryptedExport/001/data_00.csv.enc",
                 "EncryptedExport/001/metadata.json.enc",
                 "EncryptedExport/001/scheme.pb.enc",
                 "EncryptedExport/SchemaMapping/mapping.json.enc",
                 "EncryptedExport/SchemaMapping/metadata.json.enc",
                 "EncryptedExport/metadata.json",
-            };
-            UNIT_ASSERT_VALUES_EQUAL(keys, expectedKeys);
+            }, bucketName, S3Client(), "EncryptedExport");
         }
 
         {

@@ -11,6 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/join.h>
 #include <util/system/defaults.h>
 #include <util/system/env.h>
 
@@ -110,6 +111,26 @@ public:
 
     void CreateBucket(const TString& bucketName) {
         NTestUtils::CreateBucket(bucketName, S3Client());
+    }
+
+    static void ValidateS3FileList(
+        const TSet<TString>& paths,
+        const TString& bucket, Aws::S3::S3Client& s3Client, const TString& prefix = {})
+    {
+        std::vector<TString> keysList = NTestUtils::GetObjectKeys(bucket, s3Client, prefix);
+        TSet<TString> keys(keysList.begin(), keysList.end());
+        UNIT_ASSERT_VALUES_EQUAL(keys, paths);
+    }
+
+    static void ValidateHasS3Files(
+        const TSet<TString>& paths,
+        const TString& bucket, Aws::S3::S3Client& s3Client, const TString& prefix = {})
+    {
+        std::vector<TString> keysList = NTestUtils::GetObjectKeys(bucket, s3Client, prefix);
+        TSet<TString> keys(keysList.begin(), keysList.end());
+        for (const auto& path : paths) {
+            UNIT_ASSERT_C(keys.contains(path), "Path " << path << " is not found in S3. Existing paths: " << JoinSeq(", ", keysList));
+        }
     }
 
 protected:

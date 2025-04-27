@@ -747,6 +747,18 @@ BELONGS ya.make
     Files with this license:
         include/boost/core/ref.hpp [16:18]
 
+KEEP     COPYRIGHT_SERVICE_LABEL f7e44300e4f56bdab9817c087cb9875c
+BELONGS ya.make
+    License text:
+        Copyright 2025 Glen Joseph Fernandes
+        (glenjofe@gmail.com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/assert.hpp [2:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
 BELONGS ya.make
     License text:

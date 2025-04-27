@@ -65,8 +65,8 @@ DEFINE_REFCOUNTED_TYPE(IConnectionWriter)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IConnection
-    : public virtual IConnectionReader
-    , public virtual IConnectionWriter
+    : public IConnectionReader
+    , public IConnectionWriter
 {
     virtual TConnectionId GetId() const = 0;
 
@@ -104,21 +104,21 @@ IConnectionPtr CreateConnectionFromFD(
 
 IConnectionReaderPtr CreateInputConnectionFromFD(
     TFileDescriptor fd,
-    const std::string& pipePath,
+    TString pipePath,
     NConcurrency::IPollerPtr poller,
     const TRefCountedPtr& pipeHolder);
 
 IConnectionReaderPtr CreateInputConnectionFromPath(
-    std::string pipePath,
+    TString pipePath,
     NConcurrency::IPollerPtr poller,
-    TRefCountedPtr pipeHolder);
+    const TRefCountedPtr& pipeHolder);
 
 IConnectionWriterPtr CreateOutputConnectionFromPath(
-    std::string pipePath,
+    TString pipePath,
     NConcurrency::IPollerPtr poller,
-    TRefCountedPtr pipeHolder,
+    const TRefCountedPtr& pipeHolder,
     std::optional<int> capacity = {},
-    EDeliveryFencedMode deliveryFencedMode = EDeliveryFencedMode::None);
+    bool useDeliveryFence = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

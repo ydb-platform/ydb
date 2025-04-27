@@ -2,11 +2,13 @@
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% note warning %}
 
 It makes no sense to create an empty table with a vector index, because for now we don't allow mutations in tables with vector indexes.
 
-You should use `ALTER TABLE ... ADD INDEX` to add a vector index to an existing table.
+You should use `ALTER TABLE ... ADD INDEX` [command](../alter_table/indexes.md)) to add a vector index to an existing table.
 
 {% endnote %}
 

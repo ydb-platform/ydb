@@ -12,7 +12,7 @@ namespace NYdb::NConsoleClient {
         {
         }
 
-        NThreading::TFuture<NSQLComplete::TListResponse> List(const NSQLComplete::TListRequest& request) override {
+        NThreading::TFuture<NSQLComplete::TListResponse> List(const NSQLComplete::TListRequest& request) const override {
             auto [head, tail] = ParsePath(request.Path);
             return List(head)
                 .Apply([nameHint = ToLowerUTF8(tail), request](auto f) {
@@ -37,7 +37,7 @@ namespace NYdb::NConsoleClient {
         }
 
     private:
-        NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TStringBuf head) {
+        NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TStringBuf head) const {
             std::string path = Database_ + "/" + std::string(head);
             return NScheme::TSchemeClient(Driver_)
                 .ListDirectory(path)
@@ -45,9 +45,10 @@ namespace NYdb::NConsoleClient {
                     NScheme::TListDirectoryResult result = f.ExtractValue();
 
                     if (!result.IsSuccess()) {
-                        ythrow yexception()
-                            << "ListDirectory('" << path << "') failed: "
-                            << result.GetIssues().ToOneLineString();
+                        return TVector<NSQLComplete::TFolderEntry>{};
+                        // ythrow yexception()
+                        //     << "ListDirectory('" << path << "') failed: "
+                        //     << result.GetIssues().ToOneLineString();
                     }
 
                     const std::vector<NScheme::TSchemeEntry>& children = result.GetChildren();
@@ -126,9 +127,9 @@ namespace NYdb::NConsoleClient {
         TString Database_;
     };
 
-    NSQLComplete::ISchemaGateway::TPtr MakeYDBSchemaGateway(TClientCommand::TConfig& config) {
+    NSQLComplete::ISchemaGateway::TPtr MakeYDBSchemaGateway(TDriver driver, TString database) {
         return NSQLComplete::ISchemaGateway::TPtr(
-            new TYDBSchemaGateway(TYdbCommand::CreateDriver(config), config.Database));
+            new TYDBSchemaGateway(std::move(driver), std::move(database)));
     }
 
 } // namespace NYdb::NConsoleClient

@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema_gateway.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/string_util.h>
@@ -61,7 +62,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco()))
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), TYdbCommand::CreateDriver(config), config.Database))
     , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();
@@ -69,16 +70,15 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     Rx.set_complete_on_empty(true);
     Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
-        return YQLCompleter->Apply(prefix, contextLen);
+        return YQLCompleter->Apply(Rx.get_state().text(), prefix, contextLen);
     });
-    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
-        replxx::Replxx::hints_t hints;
-        for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
-            hints.emplace_back(std::move(candidate.text()));
-        }
-        return hints;
-    });
-
+    // Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+    //     replxx::Replxx::hints_t hints;
+    //     for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
+    //         hints.emplace_back(std::move(candidate.text()));
+    //     }
+    //     return hints;
+    // });
     Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
         YQLHighlighter->Apply(text, colors);
     });

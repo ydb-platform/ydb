@@ -108,6 +108,34 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.Send(new NActors::TEvents::TEvPoisonPill());
     }
 
+    Y_UNIT_TEST(TestPDiskActorPDiskStopBroken) {
+        TActorTestContext testCtx{{}};
+
+        const TVDiskID vDiskID(0, 1, 0, 0, 0);
+        testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
+                NKikimrProto::OK);
+        testCtx.Send(new NPDisk::TEvDeviceError("test"));
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+
+        testCtx.Send(new NActors::TEvents::TEvPoisonPill());
+    }
+
+    Y_UNIT_TEST(TestPDiskActorPDiskStopUninitialized) {
+        TActorTestContext testCtx{{}};
+
+        const TVDiskID vDiskID(0, 1, 0, 0, 0);
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+
+        testCtx.Send(new NActors::TEvents::TEvPoisonPill());
+    }
+
     Y_UNIT_TEST(TestChunkWriteRelease) {
         for (ui32 i = 0; i < 16; ++i) {
             TestChunkWriteReleaseRun();

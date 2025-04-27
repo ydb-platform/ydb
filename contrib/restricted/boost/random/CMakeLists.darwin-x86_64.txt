@@ -25,14 +25,12 @@ target_include_directories(restricted-boost-random PUBLIC
 
 target_link_libraries(restricted-boost-random PUBLIC
   contrib-libs-cxxsupp
-  restricted-boost-array
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-core
   restricted-boost-dynamic_bitset
   restricted-boost-integer
   restricted-boost-io
-  restricted-boost-range
   restricted-boost-static_assert
   restricted-boost-system
   restricted-boost-throw_exception

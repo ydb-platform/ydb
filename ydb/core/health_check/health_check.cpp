@@ -1634,11 +1634,13 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        auto& nodeSystemState(NodeSystemState[nodeId]);
-        nodeSystemState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
-            state.set_nodeid(nodeId);
-            MergedNodeSystemState[nodeId] = &state;
+        if (!NodeSystemState.count(nodeId)) {
+            auto& nodeSystemState(NodeSystemState[nodeId]);
+            nodeSystemState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
+                state.set_nodeid(nodeId);
+                MergedNodeSystemState[nodeId] = &state;
+            }
         }
         RequestDone("TEvSystemStateResponse");
     }
@@ -2306,45 +2308,51 @@ public:
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        auto& nodeVDiskState(NodeVDiskState[nodeId]);
-        nodeVDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetVDiskId(state.vdiskid());
-            MergedVDiskState[id] = &state;
+        if (!NodeVDiskState.count(nodeId)) {
+            auto& nodeVDiskState(NodeVDiskState[nodeId]);
+            nodeVDiskState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
+                state.set_nodeid(nodeId);
+                auto id = GetVDiskId(state.vdiskid());
+                MergedVDiskState[id] = &state;
+            }
         }
         RequestDone("TEvVDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        auto& nodePDiskState(NodePDiskState[nodeId]);
-        nodePDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetPDiskId(state);
-            MergedPDiskState[id] = &state;
+        if (!NodePDiskState.count(nodeId)) {
+            auto& nodePDiskState(NodePDiskState[nodeId]);
+            nodePDiskState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
+                state.set_nodeid(nodeId);
+                auto id = GetPDiskId(state);
+                MergedPDiskState[id] = &state;
+            }
         }
         RequestDone("TEvPDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
-        nodeBSGroupState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
-            state.set_nodeid(nodeId);
-            TString storagePoolName = state.storagepoolname();
-            TGroupID groupId(state.groupid());
-            const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
-            if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
-                current = &state;
+        if (!NodeBSGroupState.count(nodeId)) {
+            auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
+            nodeBSGroupState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
+                state.set_nodeid(nodeId);
+                TString storagePoolName = state.storagepoolname();
+                TGroupID groupId(state.groupid());
+                const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
+                if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
+                    current = &state;
+                }
+                if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
+                    continue;
+                }
+                StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
+                StoragePoolStateByName[storagePoolName].Name = storagePoolName;
             }
-            if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
-                continue;
-            }
-            StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
-            StoragePoolStateByName[storagePoolName].Name = storagePoolName;
         }
         RequestDone("TEvBSGroupStateResponse");
     }

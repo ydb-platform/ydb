@@ -23,6 +23,11 @@ class TReplaceKeyTemplate {
 public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
+    ui32 GetRecordsCount() const {
+        AFL_VERIFY(Columns.size());
+        return Columns.front()->length();
+    }
+
     void ShrinkToFit() {
         if (Columns->front()->length() == 1) {
             Y_ABORT_UNLESS(Position == 0);

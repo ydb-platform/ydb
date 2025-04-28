@@ -40,7 +40,16 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
 
-    portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges.SerializePayloadToString());
+    arrow::FieldVector fields;
+    ui32 idx = 0;
+    for (auto&& i : IndexKeyEnd.GetColumns()) {
+        fields.emplace_back(std::make_shared<arrow::Field>(std::to_string(idx), i->type()));
+        ++idx;
+    }
+
+    TFirstLastSpecialKeys pk(arrow::RecordBatch::Make(std::move(fields), IndexKeyEnd.GetRecordsCount(), *IndexKeyEnd.GetColumns()));
+
+    portionMeta.SetPrimaryKeyBorders(pk.SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());

@@ -5,7 +5,8 @@ allowCustomResources: true
 included: true
 resources:
   style:
-    - _assets/tags.css   
+    - _assets/tags.css
+    - _assets/badge.css
 
 docs-viewer:
   project-name: ydb

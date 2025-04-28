@@ -323,6 +323,55 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         tester.SetIsOlap(true);
         tester.Execute();
     }
+
+    class TBrokenReadLocks : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/KV` (Key, Value) VALUES (1U, "One");
+                SELECT * FROM `/Root/KV` WHERE Key == 1U;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            result = session2.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/KV` (Key, Value) VALUES (1U, "Other");
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV` WHERE Key == 1U;
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("/Root/KV");
+                }), result.GetIssues().ToString());
+
+            auto commitResult = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(BrokenReadLocks) {
+        TBrokenReadLocks tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(BrokenReadLocksOlap) {
+        TBrokenReadLocks tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

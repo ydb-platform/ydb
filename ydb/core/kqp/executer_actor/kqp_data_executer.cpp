@@ -271,7 +271,9 @@ public:
 
         if (TxManager) {
             if (TxManager->BrokenLocks()) {
-                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+                NYql::TIssues issues;
+                issues.AddIssue(*TxManager->GetLockIssue());
+                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issues);
             }
 
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());

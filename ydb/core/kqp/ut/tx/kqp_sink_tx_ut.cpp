@@ -144,11 +144,20 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             result = session.ExecuteQuery(Q_(R"(
                 UPDATE `/Root/KV` SET Value = "third" WHERE Key = 4;
             )"), TTxControl::Tx(*tx)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            if (GetIsOlap()) {
+                // Olap is executed without delay
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
 
             auto commitResult = tx->Commit().ExtractValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+            if (GetIsOlap()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+            }
         }
     };
 
@@ -179,7 +188,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 INSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
             )"), TTxControl::Tx(tx)).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            if (GetIsOlap()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            }
 
             result = session.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");

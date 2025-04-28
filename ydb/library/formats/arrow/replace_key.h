@@ -1,6 +1,7 @@
 #pragma once
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "size_calcer.h"
 
 #include "switch/compare.h"
 
@@ -230,6 +231,14 @@ public:
 
     const TArrayVecPtr& GetColumns() const {
         return Columns;
+    }
+
+    ui32 GetMemorySize() const {
+        ui32 result = 0;
+        for (auto&& i : *Columns) {
+            result += NArrow::GetArrayDataSize(i);
+        }
+        return sizeof(Position) + result;
     }
 
 private:

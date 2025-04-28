@@ -108,7 +108,7 @@ public:
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
-        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize() + TBase::GetMetadataMemorySize();
+        return sizeof(TPortionMeta) + IndexKeyStart.GetMemorySize() + TBase::GetMetadataMemorySize();
     }
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;

@@ -403,7 +403,6 @@ public:
         RecordsCount = columns.front()->length();
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
         Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
-        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 

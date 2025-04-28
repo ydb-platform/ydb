@@ -51,7 +51,7 @@ int TClientCommandServer::Run(TConfig& config) {
 void TClientCommandServer::Config(TConfig& config) {
     TClientCommand::Config(config);
     for (auto plugin: RunConfig.Plugins) {
-        plugin->SetupOpts(config.Opts->GetOpts());
+        plugin->SetupOpts(*config.Opts);
     }
     NConfig::AddProtoConfigOptions(DepsRecorder->GetDeps().ProtoConfigFileProvider);
     InitCfg.RegisterCliOptions(*config.Opts);

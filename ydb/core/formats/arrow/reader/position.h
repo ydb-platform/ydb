@@ -122,6 +122,16 @@ public:
         BuildPosition(position);
     }
 
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+        const std::vector<std::shared_ptr<arrow::Field>>& fields)
+        : RecordsCount(recordsCount)
+        , Fields(fields) {
+        for (auto&& c : columns) {
+            Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
+        }
+        BuildPosition(position);
+    }
+
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx];
@@ -388,6 +398,18 @@ public:
         RecordsCount = batch->num_rows();
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
         Sorting = std::make_shared<TSortableScanData>(Position, batch);
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
+    TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Array>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields,
+        const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(columns.size());
+        RecordsCount = columns.front()->length();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }

@@ -30,18 +30,18 @@ public:
         return StartPosition;
     }
 
-    TOrderedPortion(const TPortionInfo::TConstPtr& portion)
+    TOrderedPortion(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<arrow::Schema>& schema)
         : Portion(portion)
         , Start(portion->IndexKeyStart())
         , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
+        , StartPosition(*Start.GetColumns(), schema->fields(), Start.GetPosition(), false) {
     }
 
-    TOrderedPortion(const TPortionInfo::TPtr& portion)
+    TOrderedPortion(const TPortionInfo::TPtr& portion, const std::shared_ptr<arrow::Schema>& schema)
         : Portion(portion)
         , Start(portion->IndexKeyStart())
         , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
+        , StartPosition(*Start.GetColumns(), schema->fields(), Start.GetPosition(), false) {
     }
 
     TOrderedPortion(const NArrow::TReplaceKey& start)

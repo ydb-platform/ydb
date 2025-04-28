@@ -65,7 +65,6 @@ public:
 class TPortionMeta: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;
-    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -78,8 +77,7 @@ private:
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-        : ReplaceKeyEdges(pk)
-        , RecordSnapshotMin(min)
+        : RecordSnapshotMin(min)
         , RecordSnapshotMax(max)
         , IndexKeyStart(pk.GetFirst())
         , IndexKeyEnd(pk.GetLast()) {
@@ -96,10 +94,6 @@ private:
     }
 
 public:
-    const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
-        return ReplaceKeyEdges;
-    }
-
     void ResetCompactionLevel(const ui32 level) {
         CompactionLevel = level;
     }

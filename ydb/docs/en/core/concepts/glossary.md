@@ -355,11 +355,11 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 
 #### Local user {#local-user}
 
-A **local user** is an individual, whose {{ ydb-short-name }} account is created directly in {{ ydb-short-name }} using the `CREATE USER` command or during the [initial security configuration](../security/builtin-security.md).
+A **local user** is an individual whose {{ ydb-short-name }} account is created directly in {{ ydb-short-name }} using the `CREATE USER` command or during the [initial security configuration](../security/builtin-security.md).
 
 #### External user {#external-user}
 
-An **external user** is an individual, whose {{ ydb-short-name }} account is created in a third-party directory service, for example in LDAP or IAM.
+An **external user** is an individual whose {{ ydb-short-name }} account is created in a third-party directory service, for example, in LDAP or IAM.
 
 ### Group {#access-group}
 

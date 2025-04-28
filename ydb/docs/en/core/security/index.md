@@ -30,7 +30,7 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
     - **Operator** grants additional privileges to monitor and modify the cluster state.
     - **Administrator** grants privileges to administer the {{ ydb-short-name }} cluster and its databases.
 
-    Like access rights, one or several access levels can be granted to a user or a group. An access subject that does not have any access levels can view only publicly available information about the cluster. Each of the access levels adds privileges to the access subject. For the maximum level of privileges, an access subject must have all three access levels.
+    Similarly to access rights, one or more access levels can be granted to a user or a group. An access subject that does not have any access levels can view only publicly available information about the cluster. Each access level adds privileges to the access subject. For the maximum level of privileges, an access subject must have all three access levels.
 
     For more information about access levels, see [{#T}](../reference/configuration/security_config.md#security-access-levels).
 

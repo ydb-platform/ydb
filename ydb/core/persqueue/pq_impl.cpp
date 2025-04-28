@@ -3352,6 +3352,11 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 {
     PQ_LOG_D("Handle TEvTxProcessing::TEvReadSet " << ev->Get()->Record.ShortDebugString());
 
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
 
@@ -4870,8 +4875,9 @@ void TPersQueue::DeleteSupportivePartitions(const TActorContext& ctx)
 void TPersQueue::OnInitComplete(const TActorContext& ctx)
 {
     SignalTabletActive(ctx);
-    TryStartTransaction(ctx);
     InitCompleted = true;
+    ProcessPendingEvents();
+    TryStartTransaction(ctx);
 }
 
 ui64 TPersQueue::GetAllowedStep() const
@@ -5115,6 +5121,21 @@ ui64 TPersQueue::GetGeneration() {
         TabletGeneration = Executor()->Generation();
     }
     return *TabletGeneration;
+}
+
+void TPersQueue::AddPendingEvent(IEventHandle* ev)
+{
+    PendingEvents.emplace_back(ev);
+}
+
+void TPersQueue::ProcessPendingEvents()
+{
+    auto events = std::move(PendingEvents);
+    PendingEvents.clear();
+
+    for (auto& ev : events) {
+        HandleHook(ev);
+    }
 }
 
 bool TPersQueue::HandleHook(STFUNC_SIG)

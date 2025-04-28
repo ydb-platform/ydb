@@ -218,6 +218,7 @@ namespace {
                     KqpActorId,
                     Ctx->Edge
                 ));
+                DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
@@ -608,18 +609,18 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
-        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnPRODUCER_FENCED) {
+        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnBROKER_NOT_AVAILABLE) {
             ui64 correlationId = 987;
             DummyKqpActor->SetCommitResponse(false);
 
             auto response = SendEndTxnRequest(true, correlationId);
 
             UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::BROKER_NOT_AVAILABLE);
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
             const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
-            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::BROKER_NOT_AVAILABLE);
         }
 
         Y_UNIT_TEST(OnEndTxnWithCommitAndNoConsumerStateFound_shouldReturnINVALID_TXN_STATE) {

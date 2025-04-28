@@ -123,14 +123,7 @@ public:
     }
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const std::vector<std::shared_ptr<arrow::Field>>& fields)
-        : RecordsCount(recordsCount)
-        , Fields(fields) {
-        for (auto&& c : columns) {
-            Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
-        }
-        BuildPosition(position);
-    }
+        const std::vector<std::shared_ptr<arrow::Field>>& fields);
 
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());

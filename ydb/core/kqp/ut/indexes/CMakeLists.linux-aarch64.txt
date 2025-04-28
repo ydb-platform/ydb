@@ -55,6 +55,8 @@ target_link_options(ydb-core-kqp-ut-indexes PRIVATE
 target_sources(ydb-core-kqp-ut-indexes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_multishard_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_prefixed_vector_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/indexes/kqp_indexes_vector_ut.cpp
 )
 
 

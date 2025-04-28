@@ -1566,34 +1566,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
-            // R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
-            // R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
+            //R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
 
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))" - Not pushed down
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
-            // R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
 
             // TPCH Q6:
-            // R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))" - Not pushed down
+            //R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))", // - Not pushed down
 
             // Other tests:
 
-            // R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
-            // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - Not pushed down
-            // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - Not pushed down
+            //R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
-            // R"(CAST(dt as Timestamp) <= dt - inter64)" - Not pushed down
-            // R"(CAST(dt as Timestamp64) <= dt - inter64)" - Not pushed down
-            // R"(CAST(dt as Timestamp64) <= dt32 - inter64)" - Not pushed down
-            // R"(dt <= dt - inter64)" - Not pushed down
-            // R"(dt32 <= dt - inter64)" - Not pushed down
-            // R"(CAST(dt32 as Date) <= dt - inter64)" - Not pushed down
-            // R"(dt <= dt - CAST(inter64 as Interval))" - Not pushed down
-            // R"(dt32 <= dt32 - inter64)" - CRASH!!!
+            //R"(CAST(dt as Timestamp) <= dt - inter64)", // - Not pushed down
+            //R"(CAST(dt as Timestamp64) <= dt - inter64)",// - Not pushed down
+            //R"(CAST(dt as Timestamp64) <= dt32 - inter64)",// - Not pushed down
+            //R"(dt <= dt - inter64)", // - Not pushed down
+            //R"(dt32 <= dt - inter64)", // - Not pushed down
+            //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
+            //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
+            R"(dt32 <= dt32 - inter64)",
 
-            //R"(dt <= CAST('2001-01-01' as Date))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
-            // R"(dt <= Date('2001-01-01'))" - Not pushed down
+            R"(dt <= CAST('2001-01-01' as Date))",
+            R"(dt <= Date('2001-01-01'))"
         };
 
         auto queryPrefix = R"(
@@ -1667,34 +1667,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
-            // R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
-            // R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
+            //R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
 
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))" - ??
-            // R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
-            // R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
+            //R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
 
             // TPCH Q6:
-            // R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))" - ??
+            //R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))", // - Not pushed down
 
             // Other tests:
 
-            // R"(dt <= (CAST('2008-12-01' AS Date) - Interval("P100D")))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
-            // R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))" - ??
-            // R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))" - ??
+            //R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
-            // R"(CAST(dt as Timestamp) <= dt - inter64)" - ??
-            // R"(CAST(dt as Timestamp64) <= dt - inter64)" - ??
-            // R"(CAST(dt as Timestamp64) <= dt32 - inter64)" - ??
-            // R"(dt <= dt - inter64)" - ??
-            // R"(dt32 <= dt - inter64)" - ??
-            // R"(CAST(dt32 as Date) <= dt - inter64)" - ??
-            // R"(dt <= dt - CAST(inter64 as Interval))" - ??
-            // R"(dt32 <= dt32 - inter64)" - ??
+            //R"(CAST(dt as Timestamp) <= dt - inter64)", // - Not pushed down
+            //R"(CAST(dt as Timestamp64) <= dt - inter64)",// - Not pushed down
+            //R"(CAST(dt as Timestamp64) <= dt32 - inter64)",// - Not pushed down
+            //R"(dt <= dt - inter64)", // - Not pushed down
+            //R"(dt32 <= dt - inter64)", // - Not pushed down
+            //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
+            //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
+            R"(dt32 <= dt32 - inter64)",
 
-            // R"(dt <= CAST('2008-01-01' as Date))" - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
-            // R"(dt <= Date('2001-01-01'))" - ??
+            R"(dt <= CAST('2001-01-01' as Date))",
+            R"(dt <= Date('2001-01-01'))"
         };
 
         auto queryPrefix = R"(

@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -28,16 +29,20 @@ bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
         node.Maybe<TCoUint32>() ||
         node.Maybe<TCoUint64>() ||
         node.Maybe<TCoUtf8>() ||
-        node.Maybe<TCoString>()) {
-        return true;
-    }
-
-    if (node.Maybe<TCoTimestamp>()) {
+        node.Maybe<TCoString>()
+    ) {
         return true;
     }
 
     if (allowOlapApply) {
-        if (node.Maybe<TCoDate32>() ||  node.Maybe<TCoDatetime64>() || node.Maybe<TCoTimestamp64>() || node.Maybe<TCoInterval64>()) {
+        if (node.Maybe<TCoDate>() || 
+          node.Maybe<TCoDate32>() ||
+          node.Maybe<TCoDatetime>() ||
+          node.Maybe<TCoDatetime64>() || 
+          node.Maybe<TCoTimestamp>() || 
+          node.Maybe<TCoTimestamp64>() || 
+          node.Maybe<TCoInterval>() || 
+          node.Maybe<TCoInterval64>()) {
             return true;
         }
     }
@@ -96,12 +101,14 @@ bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allow
     const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
     return (NUdf::EDataTypeFeatures::CanCompare  & fatures)
         && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fatures) ||
-            (allowOlapApply && (NUdf::EDataTypeFeatures::ExtDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
+            (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+                                NUdf::EDataTypeFeatures::DateType |
+                                NUdf::EDataTypeFeatures::TimeIntervalType) & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
 }
 
 [[maybe_unused]]
 bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* ) {
-    if (!expr.Ref().IsCallable({"Apply", "NamedApply", "IfPresent", "Visit"})) {
+    if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
     }
 
@@ -208,8 +215,9 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
             }
             return true;
         }
-        case ETypeAnnotationKind::Data:
+        case ETypeAnnotationKind::Data: {
             return IsGoodTypeForComparsionPushdown(typeOne, allowOlapApply) && IsGoodTypeForComparsionPushdown(typeTwo, allowOlapApply);
+        }
         default:
             break;
     }
@@ -315,6 +323,18 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
+    if (!allowOlapApply) {
+        return false;
+    }
+
+    // FIXME: Cannot push IfPresent right now because there is no kernel
+    // return AbstractTreeCanBePushed(ifPresent, lambdaArg);
+    Y_UNUSED(ifPresent);
+    Y_UNUSED(lambdaArg);
+    return false;
+}
+
 bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, bool allowOlapApply) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
@@ -327,6 +347,8 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
         return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg, allowOlapApply);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         return JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
+    } else if (const auto maybeIfPresent = predicate.Maybe<TCoIfPresent>()) {
+        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, allowOlapApply);
     }
 
     return false;

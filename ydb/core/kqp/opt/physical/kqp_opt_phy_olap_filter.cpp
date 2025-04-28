@@ -795,10 +795,14 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), true);
+
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushableWithApply, remaining] = SplitForPartialPushdown(predicateTree);
             for (const auto& p: pushableWithApply) {
-               pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
+                //auto pred = PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos());
+                auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lambdaArg, ctx);
+                TFilterOpsLevels pred(expr);
+                pushedPredicates.emplace_back(pred);
             }
             remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
         }

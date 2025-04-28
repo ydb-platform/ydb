@@ -120,7 +120,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                     is_listening = False
                 return is_listening
         except Exception as e:
-            logger.error("Error checking port {}: {}".format(port,e))
+            logger.error("Error checking port {}: {}".format(port, e))
             return False
 
     def check_ports(self):
@@ -141,7 +141,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
 
         return ports_status
-
 
     @property
     def cwd(self):
@@ -582,8 +581,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             logger.info("Successfully started node {}.".format(node_id))
         except Exception as e:
             raise RuntimeError("Failed to start node {}: {}".format(node_id, e))
-
-
 
     def update_nodes_configurator(self, configurator):
         for node in self.nodes.values():

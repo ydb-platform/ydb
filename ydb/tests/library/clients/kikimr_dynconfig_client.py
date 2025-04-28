@@ -61,6 +61,10 @@ class DynConfigClient(object):
         request = dynamic_config_api.FetchStartupConfigRequest()
         return self.invoke(request, 'FetchStartupConfig')
 
+    def get_configuration_version(self):
+        request = dynamic_config_api.GetConfigurationVersionRequest()
+        return self.invoke(request, 'GetConfigurationVersion')
+
     def close(self):
         self._channel.close()
 

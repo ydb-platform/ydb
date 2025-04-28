@@ -143,4 +143,13 @@ private:
     bool AllowEmptyDatabase = false;
 };
 
+class TCommandVersionDynamicConfig : public TYdbReadOnlyCommand {
+public:
+    TCommandVersionDynamicConfig(bool allowEmptyDatabase);
+    void Config(TConfig&) override;
+    int Run(TConfig&) override;
+private:
+    bool AllowEmptyDatabase = false;
+};
+
 } // namespace NYdb::NConsoleClient::NDynamicConfig

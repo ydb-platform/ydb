@@ -1,15 +1,54 @@
 // Функция для обновления всех графиков
 function updateAllCharts() {
-    if (!currentData) return;
-    
-    if ($("#charts-tab").hasClass('active')) {
-        renderMetricsChart(); // Вызов из charts.js
-        renderPoolChart();    // Вызов из charts.js
+    if (!currentData) {
+        console.log("updateAllCharts: нет данных для обновления графиков");
+        return;
     }
     
-    if ($("#cpu-tab").hasClass('active')) {
-        renderCpuCharts();    // Вызов из charts.js
+    console.log("updateAllCharts: начало обновления графиков");
+    
+    // Проверяем наличие DOM элементов для графиков
+    const metricsChartExists = document.getElementById("metricsChart") !== null;
+    const poolChartExists = document.getElementById("poolChart") !== null;
+    const cpuPoolsChartExists = document.getElementById("cpuPoolsChart") !== null;
+    const threadsChartExists = document.getElementById("threadsChart") !== null;
+    const budgetChartExists = document.getElementById("budgetChart") !== null;
+    
+    console.log("updateAllCharts: проверка наличия DOM элементов:", {
+        metricsChartExists,
+        poolChartExists,
+        cpuPoolsChartExists,
+        threadsChartExists,
+        budgetChartExists
+    });
+
+    // Получаем активную вкладку
+    const activeTab = document.querySelector('#mainTabs .nav-link.active');
+    const activeTabId = activeTab ? activeTab.getAttribute('data-bs-target') : null;
+    
+    console.log("updateAllCharts: активная вкладка:", activeTabId);
+    
+    // Обновляем графики в зависимости от активной вкладки
+    if (activeTabId === '#chartsTab') {
+        if (metricsChartExists) renderMetricsChart(); // Вызов из charts.js
+        if (poolChartExists) renderPoolChart();       // Вызов из charts.js
+    } else if (activeTabId === '#cpuTab') {
+        if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
+            renderCpuCharts();    // Вызов из charts.js
+        } else {
+            console.error("updateAllCharts: Не найдены элементы для CPU графиков");
+        }
+    } else {
+        // Если нет активной вкладки или активна вкладка данных,
+        // пробуем обновить все графики, которые существуют в DOM
+        if (metricsChartExists) renderMetricsChart(); // Вызов из charts.js
+        if (poolChartExists) renderPoolChart();       // Вызов из charts.js
+        if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
+            renderCpuCharts();    // Вызов из charts.js
+        }
     }
+    
+    console.log("updateAllCharts: графики обновлены");
 }
 
 function renderData(data) {

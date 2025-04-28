@@ -33,6 +33,12 @@ function prepareCpuData() {
     // Отсортированные по времени данные
     const sortedData = [...currentData.history].sort((a, b) => a.timestamp - b.timestamp);
     
+    // Отладка
+    console.log("prepareCpuData - sortedData:", sortedData.length ? "найдено" : "нет данных");
+    if (sortedData.length > 0) {
+        console.log("Sample item:", JSON.stringify(sortedData[0], null, 2));
+    }
+    
     // Обновляем visiblePools на основе showAllPools
     visiblePools.clear();
     if (showAllPoolsCheckbox.prop('checked')) {
@@ -40,6 +46,10 @@ function prepareCpuData() {
     } else {
         selectedPools.forEach(pool => visiblePools.add(pool));
     }
+    
+    // Проверяем наличие данных о пулах
+    console.log("Selected pools:", Array.from(selectedPools));
+    console.log("Visible pools:", Array.from(visiblePools));
     
     // Извлекаем данные
     sortedData.forEach(item => {
@@ -130,7 +140,81 @@ function prepareCpuData() {
         }
     });
     
+    // Отладка
+    console.log("CPU data prepared:", {
+        iterations: result.iterations.length,
+        totalElapsedCpu: result.totalElapsedCpu.length,
+        totalUsedCpu: result.totalUsedCpu.length,
+        pools: Object.keys(result.pools).length
+    });
+    
     return result;
+}
+
+function getApiUrl() {
+    // Всегда используем максимальный уровень детализации 'thread' для получения всех данных
+    const level = 'thread'; // Было: levelSelect.val();
+    const isTimeMode = timeMode.is(':checked');
+    
+    console.log("getApiUrl: запрашиваем данные с уровнем:", level, "timeMode:", isTimeMode);
+    
+    // Получаем базовый URL с учетом возможного префикса node/XXXX
+    const baseUrl = getBaseUrl();
+    console.log("getApiUrl: базовый URL:", baseUrl);
+    
+    if (isTimeMode) {
+        const from = timeFrom.val();
+        const to = timeTo.val();
+        
+        // Если from отрицательное, это означает "текущее время минус значение"
+        if (from < 0) {
+            return `${baseUrl}?level=${level}&last_window_ts=${Math.abs(from)}`;
+        }
+        
+        // Если to не указано, используем текущее время
+        if (!to) {
+            return `${baseUrl}?level=${level}&window_ts_start=${from}`;
+        }
+        
+        // Полный диапазон времени
+        return `${baseUrl}?level=${level}&window_ts_start=${from}&window_ts_count=${to - from}`;
+    } else {
+        const from = iterationFrom.val();
+        const to = iterationTo.val();
+        
+        // Если from отрицательное, это означает "текущая итерация минус значение"
+        if (from < 0) {
+            return `${baseUrl}?level=${level}&last_iteration=${Math.abs(from)}`;
+        }
+        
+        // Если to не указано, используем "last"
+        if (!to) {
+            return `${baseUrl}?level=${level}&window_iteration_start=${from}`;
+        }
+        
+        // Полный диапазон итераций
+        return `${baseUrl}?level=${level}&window_iteration_start=${from}&window_iteration_count=${to - from}`;
+    }
+}
+
+// Функция для получения базового URL с учетом возможного префикса node/XXXX
+function getBaseUrl() {
+    // Получаем текущий URL страницы
+    const currentUrl = window.location.href;
+    console.log("Текущий URL:", currentUrl);
+    
+    // Проверяем, есть ли в URL паттерн node/XXXX
+    const nodeMatch = currentUrl.match(/\/node\/(\d+)/);
+    
+    if (nodeMatch) {
+        // Если есть префикс node/XXXX, добавляем его к пути запроса
+        const nodePrefix = nodeMatch[0]; // Например, "/node/50001"
+        console.log("Найден префикс ноды:", nodePrefix);
+        return `${nodePrefix}/actors/actor_system`;
+    } else {
+        // Стандартный путь без префикса
+        return "/actors/actor_system";
+    }
 }
 
 function fetchData() {
@@ -146,11 +230,58 @@ function fetchData() {
         dataType: 'json',
         success: function(data) {
             console.log("Данные успешно загружены, количество итераций:", data?.history?.length || 0);
+            
+            // Подробная отладка полученных данных
+            if (data && data.history && data.history.length > 0) {
+                // Проверяем первую итерацию
+                const firstItem = data.history[0];
+                console.log("Первая итерация:", {
+                    iteration: firstItem.iteration,
+                    timestamp: firstItem.timestamp,
+                    budget: firstItem.budget,
+                    lostCpu: firstItem.lostCpu,
+                    freeSharedCpu: firstItem.freeSharedCpu,
+                    poolsCount: firstItem.pools?.length || 0
+                });
+                
+                // Если есть пулы, проверяем первый пул
+                if (firstItem.pools && firstItem.pools.length > 0) {
+                    const firstPool = firstItem.pools[0];
+                    console.log("Первый пул:", {
+                        name: firstPool.name,
+                        threadCount: firstPool.currentThreadCount,
+                        hasThreads: !!firstPool.threads,
+                        threadsCount: firstPool.threads?.length || 0
+                    });
+                    
+                    // Если есть потоки, проверяем первый поток
+                    if (firstPool.threads && firstPool.threads.length > 0) {
+                        const firstThread = firstPool.threads[0];
+                        console.log("Первый поток:", {
+                            usedCpu: firstThread.usedCpu,
+                            elapsedCpu: firstThread.elapsedCpu,
+                            parkedCpu: firstThread.parkedCpu
+                        });
+                    }
+                }
+            }
+            
             loadingIndicator.hide();
+            
+            // Обновляем данные и рендерим контент
+            currentData = data;
             renderData(data); // Вызываем renderData из ui.js
             
-            // Обновляем графики на активной вкладке
-            updateAllCharts(); // Вызываем updateAllCharts из ui.js
+            // Делаем паузу и затем обновляем графики
+            console.log("Ожидаем перед обновлением графиков...");
+            setTimeout(function() {
+                // Сначала проверяем размеры контейнеров графиков
+                recalculateChartSizes();
+                
+                // Затем обновляем графики
+                console.log("Обновляем графики после загрузки данных");
+                updateAllCharts(); // Вызываем updateAllCharts из ui.js
+            }, 250);
         },
         error: function(jqXHR, textStatus, errorThrown) {
             console.error("Ошибка AJAX запроса:", {

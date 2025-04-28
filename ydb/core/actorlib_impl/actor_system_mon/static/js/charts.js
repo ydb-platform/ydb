@@ -1,15 +1,55 @@
 // Функция для отрисовки графика метрик
 function renderMetricsChart() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
+        console.log("renderMetricsChart: нет данных для отображения");
         return;
     }
+    
+    const svgElement = document.getElementById("metricsChart");
+    if (!svgElement) {
+        console.error("renderMetricsChart: не найден DOM элемент #metricsChart");
+        return;
+    }
+
+    console.log("renderMetricsChart: начинаем отрисовку, история:", currentData.history.length);
+    const selectedMetric = chartMetricSelect.val();
+    console.log("renderMetricsChart: выбранная метрика:", selectedMetric);
 
     const svg = d3.select("#metricsChart");
     svg.selectAll("*").remove(); // Очищаем предыдущий график
     
     const margin = {top: 20, right: 80, bottom: 40, left: 60};
-    const width = svg.node().getBoundingClientRect().width - margin.left - margin.right;
-    const height = svg.node().getBoundingClientRect().height - margin.top - margin.bottom;
+    
+    // Получаем размеры SVG контейнера
+    const containerWidth = svg.node().getBoundingClientRect().width;
+    const containerHeight = svg.node().getBoundingClientRect().height;
+    
+    // Проверяем, что размеры положительные и достаточно большие
+    if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
+        console.error("renderMetricsChart: слишком маленькие размеры контейнера", {
+            containerWidth,
+            containerHeight,
+            margin
+        });
+        
+        // Добавляем сообщение об ошибке в SVG
+        svg.append("text")
+            .attr("x", 10)
+            .attr("y", 30)
+            .attr("fill", "red")
+            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+        return;
+    }
+    
+    const width = containerWidth - margin.left - margin.right;
+    const height = containerHeight - margin.top - margin.bottom;
+    
+    console.log("renderMetricsChart: размеры графика:", {
+        containerWidth,
+        containerHeight,
+        width,
+        height
+    });
     
     const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -23,7 +63,6 @@ function renderMetricsChart() {
         .range([0, width]);
     
     // Находим минимальное и максимальное значение метрики
-    const selectedMetric = chartMetricSelect.val();
     const metricValues = metricData.map(d => d[selectedMetric]).filter(d => d !== undefined && d !== null);
     
     // Если нет данных, выходим
@@ -114,13 +153,23 @@ function renderMetricsChart() {
 // Функция для отрисовки графика пула
 function renderPoolChart() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
+        console.log("renderPoolChart: нет данных для отображения");
+        return;
+    }
+    
+    const svgElement = document.getElementById("poolChart");
+    if (!svgElement) {
+        console.error("renderPoolChart: не найден DOM элемент #poolChart");
         return;
     }
 
     const selectedPool = poolSelect.val();
     const selectedMetric = poolMetricSelect.val();
     
+    console.log("renderPoolChart: начинаем отрисовку, пул:", selectedPool, "метрика:", selectedMetric);
+    
     if (!selectedPool || !selectedMetric) {
+        console.log("renderPoolChart: не выбран пул или метрика");
         return;
     }
     
@@ -128,8 +177,37 @@ function renderPoolChart() {
     svg.selectAll("*").remove(); // Очищаем предыдущий график
     
     const margin = {top: 20, right: 80, bottom: 40, left: 60};
-    const width = svg.node().getBoundingClientRect().width - margin.left - margin.right;
-    const height = svg.node().getBoundingClientRect().height - margin.top - margin.bottom;
+    
+    // Получаем размеры SVG контейнера
+    const containerWidth = svg.node().getBoundingClientRect().width;
+    const containerHeight = svg.node().getBoundingClientRect().height;
+    
+    // Проверяем, что размеры положительные и достаточно большие
+    if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
+        console.error("renderPoolChart: слишком маленькие размеры контейнера", {
+            containerWidth,
+            containerHeight,
+            margin
+        });
+        
+        // Добавляем сообщение об ошибке в SVG
+        svg.append("text")
+            .attr("x", 10)
+            .attr("y", 30)
+            .attr("fill", "red")
+            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+        return;
+    }
+    
+    const width = containerWidth - margin.left - margin.right;
+    const height = containerHeight - margin.top - margin.bottom;
+    
+    console.log("renderPoolChart: размеры графика:", {
+        containerWidth,
+        containerHeight,
+        width,
+        height
+    });
     
     const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -243,11 +321,24 @@ function renderPoolChart() {
 // Функция для отрисовки всех CPU графиков
 function renderCpuCharts() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
+        console.log("renderCpuCharts: нет данных для отображения");
         return;
     }
     
+    // Проверяем наличие DOM элементов перед рендерингом
+    if (!document.getElementById("cpuPoolsChart") || 
+        !document.getElementById("threadsChart") || 
+        !document.getElementById("budgetChart")) {
+        console.error("renderCpuCharts: не найдены DOM элементы для графиков");
+        return;
+    }
+    
+    console.log("renderCpuCharts: начинаем отрисовку, история:", currentData.history.length);
+    
     // Подготавливаем данные для всех графиков
     const cpuData = prepareCpuData(); // Вызываем prepareCpuData из data.js
+    
+    console.log("renderCpuCharts: данные подготовлены, итераций:", cpuData.iterations.length);
     
     // Рисуем график CPU Pools
     renderCpuPoolsChart(cpuData);
@@ -261,18 +352,56 @@ function renderCpuCharts() {
 
 // Функция для отрисовки графика потребления CPU по пулам
 function renderCpuPoolsChart(cpuData) {
+    console.log("renderCpuPoolsChart: начинаем отрисовку");
+    
+    // Проверяем наличие DOM элемента
+    if (!document.getElementById("cpuPoolsChart")) {
+        console.error("renderCpuPoolsChart: не найден DOM элемент #cpuPoolsChart");
+        return;
+    }
+    
     const svg = d3.select("#cpuPoolsChart");
     svg.selectAll("*").remove(); // Очищаем предыдущий график
     
     const margin = {top: 30, right: 80, bottom: 40, left: 60};
-    const width = svg.node().getBoundingClientRect().width - margin.left - margin.right;
-    const height = svg.node().getBoundingClientRect().height - margin.top - margin.bottom;
+    
+    // Получаем размеры SVG контейнера
+    const containerWidth = svg.node().getBoundingClientRect().width;
+    const containerHeight = svg.node().getBoundingClientRect().height;
+    
+    // Проверяем, что размеры положительные и достаточно большие
+    if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
+        console.error("renderCpuPoolsChart: слишком маленькие размеры контейнера", {
+            containerWidth,
+            containerHeight,
+            margin
+        });
+        
+        // Добавляем сообщение об ошибке в SVG
+        svg.append("text")
+            .attr("x", 10)
+            .attr("y", 30)
+            .attr("fill", "red")
+            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+        return;
+    }
+    
+    const width = containerWidth - margin.left - margin.right;
+    const height = containerHeight - margin.top - margin.bottom;
+    
+    console.log("renderCpuPoolsChart: размеры графика:", {
+        containerWidth,
+        containerHeight,
+        width,
+        height
+    });
     
     const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
     
     // Если нет данных, выходим
     if (cpuData.iterations.length === 0) {
+        console.log("renderCpuPoolsChart: нет итераций в данных");
         g.append("text")
             .attr("x", width / 2)
             .attr("y", height / 2)
@@ -471,12 +600,40 @@ function renderCpuPoolsChart(cpuData) {
 
 // Функция для отрисовки графика количества потоков
 function renderThreadsChart(cpuData) {
+    // Проверяем наличие DOM элемента
+    if (!document.getElementById("threadsChart")) {
+        console.error("renderThreadsChart: не найден DOM элемент #threadsChart");
+        return;
+    }
+    
     const svg = d3.select("#threadsChart");
     svg.selectAll("*").remove(); // Очищаем предыдущий график
     
     const margin = {top: 30, right: 80, bottom: 40, left: 60};
-    const width = svg.node().getBoundingClientRect().width - margin.left - margin.right;
-    const height = svg.node().getBoundingClientRect().height - margin.top - margin.bottom;
+    
+    // Получаем размеры SVG контейнера
+    const containerWidth = svg.node().getBoundingClientRect().width;
+    const containerHeight = svg.node().getBoundingClientRect().height;
+    
+    // Проверяем, что размеры положительные и достаточно большие
+    if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
+        console.error("renderThreadsChart: слишком маленькие размеры контейнера", {
+            containerWidth,
+            containerHeight,
+            margin
+        });
+        
+        // Добавляем сообщение об ошибке в SVG
+        svg.append("text")
+            .attr("x", 10)
+            .attr("y", 30)
+            .attr("fill", "red")
+            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+        return;
+    }
+    
+    const width = containerWidth - margin.left - margin.right;
+    const height = containerHeight - margin.top - margin.bottom;
     
     const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -698,12 +855,40 @@ function renderThreadsChart(cpuData) {
 
 // Функция для отрисовки графика Budget и CPU
 function renderBudgetChart(cpuData) {
+    // Проверяем наличие DOM элемента
+    if (!document.getElementById("budgetChart")) {
+        console.error("renderBudgetChart: не найден DOM элемент #budgetChart");
+        return;
+    }
+    
     const svg = d3.select("#budgetChart");
     svg.selectAll("*").remove(); // Очищаем предыдущий график
     
     const margin = {top: 30, right: 80, bottom: 40, left: 60};
-    const width = svg.node().getBoundingClientRect().width - margin.left - margin.right;
-    const height = svg.node().getBoundingClientRect().height - margin.top - margin.bottom;
+    
+    // Получаем размеры SVG контейнера
+    const containerWidth = svg.node().getBoundingClientRect().width;
+    const containerHeight = svg.node().getBoundingClientRect().height;
+    
+    // Проверяем, что размеры положительные и достаточно большие
+    if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
+        console.error("renderBudgetChart: слишком маленькие размеры контейнера", {
+            containerWidth,
+            containerHeight,
+            margin
+        });
+        
+        // Добавляем сообщение об ошибке в SVG
+        svg.append("text")
+            .attr("x", 10)
+            .attr("y", 30)
+            .attr("fill", "red")
+            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+        return;
+    }
+    
+    const width = containerWidth - margin.left - margin.right;
+    const height = containerHeight - margin.top - margin.bottom;
     
     const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);

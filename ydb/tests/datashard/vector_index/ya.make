@@ -2,7 +2,7 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(23)
+SPLIT_FACTOR(40)
 
 SIZE(MEDIUM)
 
@@ -13,7 +13,6 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/datashard/lib
-    ydb/tests/sql/lib
 )
 
 DEPENDS(

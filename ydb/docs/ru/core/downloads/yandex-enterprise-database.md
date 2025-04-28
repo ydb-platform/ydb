@@ -31,15 +31,15 @@
 :--- | :--- | :--- | :--- | :---
 **v24.3**
 v.24.3.13.11 | 06.03.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.11/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.3.13.11/checksums.debug.txt) | -
-v.24.3.13.10 | 24.12.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.10/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.3.13.10/checksums.debug.txt) | [См. список](../../../changelog-server.md#24-3)
+v.24.3.13.10 | 24.12.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.10/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.3.13.10/checksums.debug.txt) | [См. список](../changelog-server.md#24-3)
 **v24.2**
-v.24.2.7.1 | 20.08.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.2.7.1/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.2.7.1/checksums.debug.txt) |  [См. список](../../../changelog-server.md#24-2)
+v.24.2.7.1 | 20.08.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.2.7.1/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.2.7.1/checksums.debug.txt) |  [См. список](../changelog-server.md#24-2)
 **v24.1**
-v.24.1.18.1 | 28.06.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64.tar.xz), [Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.1.18.1/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.1.18.1/checksums.debug.txt) |  [См. список](../../../changelog-server.md#24-1)
+v.24.1.18.1 | 28.06.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64.tar.xz)<br>[Отладочные&nbsp;символы](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64-debug.tar.xz) | [К&nbsp;дистрибутиву](https://binaries.ясубд.рф/release/24.1.18.1/checksums.txt), [К&nbsp;отладочным&nbsp;символам](https://binaries.ясубд.рф/release/24.1.18.1/checksums.debug.txt) |  [См. список](../changelog-server.md#24-1)
 **v23.4**
-v.23.4.11.1 | 15.05.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [См. список](../../../changelog-server.md#23-4)
+v.23.4.11.1 | 15.05.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [См. список](../changelog-server.md#23-4)
 **v23.3**
-v.23.3.25.2 | 17.03.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.3.25.2/yasubd-23.3.25.2-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.3.25.2/checksums.txt) | [См. список](../../../changelog-server.md#23-3)
+v.23.3.25.2 | 17.03.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.3.25.2/yasubd-23.3.25.2-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.3.25.2/checksums.txt) | [См. список](../changelog-server.md#23-3)
 
 
 ### Docker
@@ -47,11 +47,11 @@ v.23.3.25.2 | 17.03.2024 | [Дистрибутив](https://binaries.ясубд.
 Версия |  Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
 **v24.3**
-v.24.3.13  | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [См. список](../../../changelog-server.md#24-3)
+v.24.3.13  | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [См. список](../changelog-server.md#24-3)
 **v24.2**
-v.24.2.7  | 20.08.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7` | [См. список](../../../changelog-server.md#24-2)
+v.24.2.7  | 20.08.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7` | [См. список](../changelog-server.md#24-2)
 **v24.1**
-v.24.1.18 | 31.07.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [См. список](../../../changelog-server.md#24-1)
+v.24.1.18 | 31.07.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [См. список](../changelog-server.md#24-1)
 **v23.4**
 v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [См. список](../../../changelog-server.md#23-4)
 **v23.3**

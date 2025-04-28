@@ -88,13 +88,17 @@ def format_mem(bytez):
     return '%.1f' % (bytez / (1024.0 * 1024.0))
 
 def do_merge_llvm(samples):
-    sorted_samples = sorted(samples, key=lambda sample: sample.get('llvm', False))
     output_samples = []
+    for sample in samples:
+        if not sample.get('llvm', False):
+            output_samples.append(sample)
+
+    sorted_samples = sorted(samples, key=lambda sample: sample.get('llvm', False))
     index = {}
 
     for sample in sorted_samples:
         is_llvm = sample.get('llvm', False)
-        key = (sample['testName'], sample['numKeys'], sample_rows(sample), sample.get('spilling', False), sample.get('blockSize', 0), sample.get('combinerMemLimit', 0))
+        key = (sample['testName'], sample['numKeys'], sample_rows(sample), sample.get('spilling', False), sample.get('blockSize', 0), sample.get('combinerMemLimit', 0), sample['hashType'])
         if key in index and not is_llvm:
             raise Exception('Attempted to merge two non-LLVM result samples, key = %s' % repr(key))
         if key not in index and is_llvm:
@@ -107,9 +111,47 @@ def do_merge_llvm(samples):
             index[key]['llvmCleanTime'] = result_time_or_zero
         else:
             index[key] = sample
-            output_samples.append(sample)
 
     return output_samples
+
+def samples_sorted_by_section(samples):
+    sort_orders = {
+        'testName': {},
+        'totalRows': {},
+        'spilling': {},
+        'blockSize': {},
+        'combinerMemLimit': {},
+        'hashType': {},
+        'numKeys': {},
+    }
+
+    for sample in samples:
+        for key in sort_orders.keys():
+            if key in sample:
+                so = sort_orders[key]
+                value = sample[key]
+                if value not in so:
+                    so[value] = len(so)
+
+    def sort_order(sample):
+        result = []
+        for key in sort_orders.keys():
+            if key not in sample:
+                result.append(-1)
+                continue
+            result.append(sort_orders[key][sample[key]])
+        return result
+
+    return sorted(samples, key=sort_order)
+
+
+def friendly_hash_name(hash_type):
+    types = {
+        'std': 'std::unordered_map',
+        'absl': 'absl::flat_hash_map',
+    }
+    return types[hash_type]
+
 
 def do_format(merge_llvm):
     per_section = collections.defaultdict(list)
@@ -120,13 +162,17 @@ def do_format(merge_llvm):
         if not line:
             continue
         sample = json.loads(line)
+        sample['totalRows'] = sample_rows(sample)
+        sample['hashType'] = sample.get('hashType', 'std')
         all_samples.append(sample)
+
+    all_samples = samples_sorted_by_section(all_samples)
 
     if merge_llvm:
         all_samples = do_merge_llvm(all_samples)
 
     for sample in all_samples:
-        section_name = (sample['testName'], sample_rows(sample), sample.get('llvm', False), sample.get('spilling', False), sample.get('blockSize', 0), sample.get('combinerMemLimit', 0))
+        section_name = (sample['testName'], sample_rows(sample), sample.get('llvm', False), sample.get('spilling', False), sample.get('blockSize', 0), sample.get('combinerMemLimit', 0), sample['hashType'])
         per_section[section_name].append(sample)
 
     for _, samples in per_section.items():
@@ -148,6 +194,8 @@ def do_format(merge_llvm):
             memlimit_formatted = format_mem(memlimit)
             traits.append(f'{memlimit_formatted} MB RAM limit')
         traits.append(f'{num_rows_formatted} input rows')
+        hash_name = friendly_hash_name(samples[0]['hashType'])
+        traits.append(f'{hash_name}')
         traits_str = ', '.join(traits)
 
         own_times = []

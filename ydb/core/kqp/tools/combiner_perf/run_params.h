@@ -21,6 +21,7 @@ enum class ESamplerType {
 enum class EHashMapImpl {
     UnorderedMap,
     Absl,
+    YqlRobinHood,
 };
 
 struct TRunParams {
@@ -36,6 +37,8 @@ struct TRunParams {
     size_t WideCombinerMemLimit = 0;
     bool LongStringKeys = false;
     bool MeasureReferenceMemory = false;
+    bool AlwaysSubprocess = false;
+    bool EnableVerification = true;
 };
 
 }

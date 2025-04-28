@@ -7,6 +7,7 @@
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
@@ -82,18 +83,135 @@ template<typename K, typename V>
 struct TUnorderedMapImpl
 {
     using TMapType = std::unordered_map<K, V>;
+    constexpr static bool CustomOps = false;
 };
 
 template<typename K, typename V>
 struct TAbslMapImpl
 {
     using TMapType = absl::flat_hash_map<K, V>;
+    constexpr static bool CustomOps = false;
 };
 
-template<typename K, typename V, typename TMapImpl>
-TMapImpl::TMapType ComputeStreamSumResult(const NUdf::TUnboxedValue& wideStream)
+template<typename K, typename V, typename TEqualTo = std::equal_to<K>, typename THash = std::hash<K>>
+struct TRobinHoodMapImplBase
 {
-    typename TMapImpl::TMapType expects;
+    // Warning: this implementation leaks memory because it can't call destructors.
+    // Also it moves keys and values by simply copying bytes so take care.
+
+    using TMapType = TRobinHoodHashFixedMap<K, V, TEqualTo, THash>;
+    constexpr static bool CustomOps = true;
+
+    static void AggregateByKey(TMapType& map, const K& key, const V& delta)
+    {
+        bool isNew = false;
+        auto ptr = map.Insert(key, isNew);
+        if (isNew) {
+            *(V*)map.GetMutablePayload(ptr) = delta;
+            map.CheckGrow();
+        } else {
+            *(V*)map.GetMutablePayload(ptr) += delta;
+        }
+    }
+
+    template<typename Callback>
+    static void IteratePairs(const TMapType& map, Callback&& callback)
+    {
+        // TODO: GetPayload and IsValid should be const
+        for (const char* iter = map.Begin(); iter != map.End(); map.Advance(iter)) {
+            if (!const_cast<TMapType&>(map).IsValid(iter)) {
+                continue;
+            }
+            const auto& key = map.GetKey(iter);
+            const auto& value = *(V*)(const_cast<TMapType&>(map)).GetPayload(iter);
+            callback(key, value);
+        }
+    }
+
+    static size_t Size(const TMapType& map)
+    {
+        return map.GetSize();
+    }
+
+    /*
+    static void Cleanup(TMapType& map)
+    {
+        // Deallocate std::strings from keys and values; this will obviously break the map, so maybe don't call any other methods afterwards
+        char* iter = map.Begin();
+        while (iter < map.End()) {
+            map.GetKey(iter) = K();
+            *(V*)map.GetMutablePayload(iter) = V();
+            map.Advance(iter);
+        }
+    }
+    */
+};
+
+template<typename K, typename V>
+struct TRobinHoodMapImpl: public TRobinHoodMapImplBase<K, V>
+{
+};
+
+template<typename V>
+struct TRobinHoodMapImpl<std::string, V>
+{
+    struct TEqualTo
+    {
+        bool operator()(const NYql::NUdf::TUnboxedValuePod& lhs, const NYql::NUdf::TUnboxedValuePod& rhs) {
+            return lhs.AsStringRef() == rhs.AsStringRef();
+        }
+    };
+
+    struct THash
+    {
+        absl::Hash<std::string_view> AbslHash;
+        size_t operator()(const NYql::NUdf::TUnboxedValuePod& val) {
+            auto result = AbslHash(val.AsStringRef());
+            return result;
+        }
+    };
+
+    using TBase = TRobinHoodMapImplBase<std::string, V>;
+    using TRealBase = TRobinHoodMapImplBase<NYql::NUdf::TUnboxedValuePod, V, TEqualTo, THash>;
+    using TMapType = TRealBase::TMapType;
+    constexpr static bool CustomOps = true;
+
+    static void AggregateByKey(TMapType& map, const std::string& key, const V& delta)
+    {
+        NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
+        TRealBase::AggregateByKey(map, ub, delta);
+    }
+
+    template<typename Callback>
+    static void IteratePairs(const TMapType& map, Callback&& callback)
+    {
+        TRealBase::IteratePairs(map, [callback](const NYql::NUdf::TUnboxedValuePod& k, const V& v) {
+            callback(std::string(k.AsStringRef()), v);
+        });
+    }
+
+    static size_t Size(const TMapType& map)
+    {
+        return TRealBase::Size(map);
+    }
+};
+
+
+
+template<typename TMapImpl>
+bool MapEmpty(const typename TMapImpl::TMapType& map)
+{
+    if constexpr (TMapImpl::CustomOps) {
+        return TMapImpl::Size(map) == 0;
+    } else {
+        return map.empty();
+    }
+}
+
+template<typename K, typename V>
+std::unordered_map<K, V> ComputeStreamSumResult(const NUdf::TUnboxedValue& wideStream)
+{
+    std::unordered_map<K, V> expects;
     NUdf::TUnboxedValue resultValues[2];
 
     Y_ENSURE(wideStream.IsBoxed());
@@ -115,44 +233,53 @@ TMapImpl::TMapType ComputeStreamSumResult(const NUdf::TUnboxedValue& wideStream)
     return expects;
 }
 
-// Direct version without the BoxedValueAccessor
+// Direct version without the BoxedValueAccessor for use in reference timing measurements
 template<typename K, typename V, typename TMapImpl>
-TMapImpl::TMapType ComputeStreamSumResult(IWideStream& referenceStream)
+void ComputeReferenceStreamSumResult(IWideStream& referenceStream, typename TMapImpl::TMapType& refResult)
 {
-    typename TMapImpl::TMapType expects;
-    {
-        NUdf::TUnboxedValue inputs[2];
+    NUdf::TUnboxedValue inputs[2];
 
-        while (referenceStream.WideFetch(inputs, 2) == NUdf::EFetchStatus::Ok) {
-            expects[UnboxedToNative<K>(inputs[0])] += inputs[1].Get<V>();
+    while (referenceStream.WideFetch(inputs, 2) == NUdf::EFetchStatus::Ok) {
+        if constexpr (!TMapImpl::CustomOps) {
+            refResult[UnboxedToNative<K>(inputs[0])] += inputs[1].Get<V>();
+        } else {
+            TMapImpl::AggregateByKey(refResult, UnboxedToNative<K>(inputs[0]), inputs[1].Get<V>());
         }
     }
-    return expects;
 }
 
-template<typename TMapType>
-void VerifyMapsAreEqual(const TMapType computedMap, const TMapType& refMap)
+template<typename K, typename V, typename TMapImpl>
+void VerifyMapsAreEqual(const std::unordered_map<K, V> computedMap, const typename TMapImpl::TMapType& refMap)
 {
-    UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), refMap.size());
-
-    for (const auto referencePair : refMap) {
-        const auto ii = computedMap.find(referencePair.first);
-        UNIT_ASSERT(ii != computedMap.end());
-        UNIT_ASSERT_VALUES_EQUAL(referencePair.second, ii->second);
+    if constexpr (!TMapImpl::CustomOps) {
+        UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), refMap.size());
+        for (const auto referencePair : refMap) {
+            const auto ii = computedMap.find(referencePair.first);
+            UNIT_ASSERT(ii != computedMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(referencePair.second, ii->second);
+        }
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), TMapImpl::Size(refMap));
+        TMapImpl::IteratePairs(refMap, [computedMap](const K& k, const V& v){
+            const auto ii = computedMap.find(k);
+            UNIT_ASSERT(ii != computedMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(v, ii->second);
+        });
     }
 }
 
 template<typename TMapImpl, typename K, typename V>
 void VerifyStreamVsMap(const NUdf::TUnboxedValue& wideStream, const typename TMapImpl::TMapType& refMap)
 {
-    auto resultMap = ComputeStreamSumResult<K, V, TMapImpl>(wideStream);
-    VerifyMapsAreEqual(resultMap, refMap);
+    auto resultMap = ComputeStreamSumResult<K, V>(wideStream);
+    VerifyMapsAreEqual<K, V, TMapImpl>(resultMap, refMap);
 }
 
 template<typename TMapImpl, typename K, typename V>
 void VerifyListVsMap(const NUdf::TUnboxedValue& pairList, const typename TMapImpl::TMapType& refMap)
 {
-    typename TMapImpl::TMapType resultMap;
+    std::unordered_map<K, V> resultMap;
+
     const auto ptr = pairList.GetElements();
     for (size_t i = 0; i < pairList.GetListLength(); ++i) {
         const auto elements = ptr[i].GetElements();
@@ -161,7 +288,7 @@ void VerifyListVsMap(const NUdf::TUnboxedValue& pairList, const typename TMapImp
         resultMap[key] += value;
     }
 
-    VerifyMapsAreEqual(resultMap, refMap);
+    VerifyMapsAreEqual<K, V, TMapImpl>(resultMap, refMap);
 }
 
 template<size_t Width>
@@ -223,9 +350,9 @@ public:
 
     void ComputeReferenceResult(IWideStream& referenceStream) override
     {
-        Y_ENSURE(Expects.empty());
+        Y_ENSURE(MapEmpty<TMapImpl>(Expects));
 
-        Expects = ComputeStreamSumResult<ui64, ui64, TMapImpl>(referenceStream);
+        ComputeReferenceStreamSumResult<ui64, ui64, TMapImpl>(referenceStream, Expects);
     }
 
     void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override
@@ -277,9 +404,9 @@ public:
 
     void ComputeReferenceResult(IWideStream& referenceStream) override
     {
-        Y_ENSURE(Expects.empty());
+        Y_ENSURE(MapEmpty<TMapImpl>(Expects));
 
-        Expects = ComputeStreamSumResult<std::string, ui64, TMapImpl>(referenceStream);
+        ComputeReferenceStreamSumResult<std::string, ui64, TMapImpl>(referenceStream, Expects);
     }
 
     void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override

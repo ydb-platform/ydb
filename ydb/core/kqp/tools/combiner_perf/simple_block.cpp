@@ -153,7 +153,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", block size: " << params.BlockSize << ", llvm: " << LLVM << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
         finalResult = RunTestOverGraph<LLVM, Spilling>(params, false);
     } else {
         for (int i = 1; i <= params.NumAttempts; ++i) {

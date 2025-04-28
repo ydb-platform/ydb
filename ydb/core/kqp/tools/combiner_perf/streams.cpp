@@ -64,10 +64,12 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
 template<typename K, typename V, typename R, typename Next>
 THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
 {
-    if (implType == EHashMapImpl::UnorderedMap) {
-        return next(TUnorderedMapImpl<K, V>());
-    } else {
+    if (implType == EHashMapImpl::Absl) {
         return next(TAbslMapImpl<K, V>());
+    } else if (implType == EHashMapImpl::YqlRobinHood) {
+        return next(TRobinHoodMapImpl<K, V>());
+    } else {
+        return next(TUnorderedMapImpl<K, V>());
     }
 }
 
@@ -91,16 +93,16 @@ THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
     }
 }
 
-template<typename TMapType, typename K>
+template<typename TMapImpl, typename K>
 struct TUpdateMapFromBlocks
 {
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result);
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result);
 };
 
-template<typename TMapType>
-struct TUpdateMapFromBlocks<TMapType, ui64>
+template<typename TMapImpl>
+struct TUpdateMapFromBlocks<TMapImpl, ui64>
 {
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result)
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result)
     {
 
         auto datumKey = TArrowBlock::From(key).GetDatum();
@@ -116,15 +118,19 @@ struct TUpdateMapFromBlocks<TMapType, ui64>
 
         const size_t length = ui64keys->length();
         for (size_t i = 0; i < length; ++i) {
-            result[ui64keys->Value(i)] += ui64values->Value(i);
+            if constexpr (!TMapImpl::CustomOps) {
+                result[ui64keys->Value(i)] += ui64values->Value(i);
+            } else {
+                TMapImpl::AggregateByKey(result, ui64keys->Value(i), ui64values->Value(i));
+            }
         }
     }
 };
 
-template<typename TMapType>
-struct TUpdateMapFromBlocks<TMapType, std::string>
+template<typename TMapImpl>
+struct TUpdateMapFromBlocks<TMapImpl, std::string>
 {
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, TMapType& result)
+    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result)
     {
         auto datumKey = TArrowBlock::From(key).GetDatum();
         auto datumValue = TArrowBlock::From(value).GetDatum();
@@ -142,7 +148,11 @@ struct TUpdateMapFromBlocks<TMapType, std::string>
             for (int64_t i = 0; i < barray->length(); ++i) {
                 auto key = barray->GetString(i);
                 auto val = ui64values->Value(valueOffset);
-                result[key] += val;
+                if constexpr (!TMapImpl::CustomOps) {
+                    result[key] += val;
+                } else {
+                    TMapImpl::AggregateByKey(result, key, val);
+                }
                 ++valueOffset;
             }
         }
@@ -209,7 +219,7 @@ public:
 
     void ComputeReferenceResult(TComputationContext& ctx) override
     {
-        Y_ENSURE(RefResult.empty());
+        Y_ENSURE(MapEmpty<TMapImpl>(RefResult));
 
         const THolder<IWideStream> refStreamPtr = MakeStream(ctx);
         IWideStream& refStream = *refStreamPtr;
@@ -217,32 +227,40 @@ public:
         NUdf::TUnboxedValue columns[3];
 
         while (refStream.WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
-            TUpdateMapFromBlocks<typename TMapImpl::TMapType, K>::Update(columns[0], columns[1], RefResult);
+            TUpdateMapFromBlocks<TMapImpl, K>::Update(columns[0], columns[1], RefResult);
         }
     }
 
     void VerifyReferenceResultAgainstRaw() override
     {
-        Y_ENSURE(!RefResult.empty());
         Y_ENSURE(!RawResult.empty());
 
         // TODO: Replace UNIT_ASSERTS with something else, or actually set up the unit test thread context
-        UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), RawResult.size());
-        for (const auto& tuple : RawResult) {
-            auto otherIt = RefResult.find(tuple.first);
-            UNIT_ASSERT(otherIt != RefResult.end());
-            UNIT_ASSERT_VALUES_EQUAL(tuple.second, otherIt->second);
+        if constexpr (!TMapImpl::CustomOps) {
+            UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), RawResult.size());
+            for (const auto& tuple : RawResult) {
+                auto otherIt = RefResult.find(tuple.first);
+                UNIT_ASSERT(otherIt != RefResult.end());
+                UNIT_ASSERT_VALUES_EQUAL(tuple.second, otherIt->second);
+            }
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(RawResult.size(), TMapImpl::Size(RefResult));
+            TMapImpl::IteratePairs(RefResult, [&](const K& k, const V& v) {
+                auto otherIt = RawResult.find(k);
+                UNIT_ASSERT(otherIt != RawResult.end());
+                UNIT_ASSERT_VALUES_EQUAL(v, otherIt->second);
+            });
         }
     }
 
     void VerifyGraphResultAgainstReference(const NUdf::TUnboxedValue& blockList) override
     {
-        Y_ENSURE(!RefResult.empty());
+        Y_ENSURE(!MapEmpty<TMapImpl>(RefResult));
 
         size_t numResultItems = blockList.GetListLength();
         Cerr << "Result block count: " << numResultItems << Endl;
 
-        typename TMapImpl::TMapType graphResult;
+        std::unordered_map<K, V> graphResult;
 
         const auto ptr = blockList.GetElements();
         for (size_t i = 0ULL; i < numResultItems; ++i) {
@@ -251,15 +269,10 @@ public:
 
             const auto elements = ptr[i].GetElements();
 
-            TUpdateMapFromBlocks<typename TMapImpl::TMapType, K>::Update(elements[0], elements[1], graphResult);
+            TUpdateMapFromBlocks<TUnorderedMapImpl<K, V>, K>::Update(elements[0], elements[1], graphResult);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), graphResult.size());
-        for (const auto& tuple : RefResult) {
-            auto graphIt = graphResult.find(tuple.first);
-            UNIT_ASSERT(graphIt != graphResult.end());
-            UNIT_ASSERT_VALUES_EQUAL(tuple.second, graphIt->second);
-        }
+        VerifyMapsAreEqual<K, V, TMapImpl>(graphResult, RefResult);
     }
 
 private:
@@ -267,7 +280,7 @@ private:
     size_t NumIters;
     size_t BlockSize;
 
-    TMapImpl::TMapType RawResult;
+    std::unordered_map<K, V> RawResult;
     TMapImpl::TMapType RefResult;
 };
 

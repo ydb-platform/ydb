@@ -177,14 +177,14 @@ void RunTestCombineLastSimple(const TRunParams& params, TTestResultCollector& pr
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", spilling: " << Spilling << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
-        finalResult = RunTestOverGraph<LLVM, Spilling>(params, true, false);
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
+        finalResult = RunTestOverGraph<LLVM, Spilling>(params, params.EnableVerification, false);
     }
     else {
         for (int i = 1; i <= params.NumAttempts; ++i) {
             Cerr << "------ Run " << i << " of " << params.NumAttempts << Endl;
 
-            const bool needsVerification = (i == 1);
+            const bool needsVerification = (i == 1) && params.EnableVerification;
             TRunResult runResult = RunForked([&]() {
                 return RunTestOverGraph<LLVM, Spilling>(params, needsVerification, false);
             });

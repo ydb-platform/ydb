@@ -142,7 +142,7 @@ void RunTestSimple(const TRunParams& params, TTestResultCollector& printout)
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
         finalResult = RunTestOverGraph<LLVM>(params, true, false);
     }
     else {

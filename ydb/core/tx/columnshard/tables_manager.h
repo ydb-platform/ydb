@@ -330,7 +330,7 @@ public:
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const TInternalPathId pathId,
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 
-    void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
+    void ReplaceSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
         SchemaObjectsCache = cache;
     }
 };

@@ -41,9 +41,11 @@
 {%-             if library.excludes.consumer|length -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
-{%-                     set classpath_parts = split(classpath, ':') %}
+{%-                     set classpath_parts = split(classpath, ':') -%}
+{%-                     if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%-                endfor %}
+{%-                     endif -%}
+{%-                 endfor %}
     }
 {%-             endif -%}
 {%-         endif -%}

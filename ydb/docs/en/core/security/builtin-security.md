@@ -1,4 +1,4 @@
-# Initial security configuration
+# Initial cluster security configuration
 
 Initial security is configured automatically when the {{ ydb-short-name }} cluster starts for the first time.
 

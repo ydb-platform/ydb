@@ -196,7 +196,7 @@ void InitViewerTopicInfoJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTopicDataJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/topic_data", new TJsonHandler<TTopicData>(TTopicData::GetSwagger()));
+    handlers.AddHandler("/viewer/topic_data", new TJsonHandler<TTopicData>(TTopicData::GetSwagger()), 2);
 }
 
 void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {

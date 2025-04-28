@@ -369,7 +369,7 @@ public:
 
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    std::min(maxTasksPerStage, totalMetricsCount),
+                    std::min<ui64>(maxTasksPerStage, totalMetricsCount),
                     readParams,
                     credentialsProvider
                 ),

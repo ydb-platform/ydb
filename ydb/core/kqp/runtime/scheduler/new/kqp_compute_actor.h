@@ -26,6 +26,7 @@ namespace NKikimr::NKqp::NScheduler {
 
         // Magic state function name to overload
         STATEFN(BaseStateFuncBody) {
+            // TODO: account mailbox usage?
             // we assume that exception handling is done in parents/descendants
             switch (ev->GetTypeRewrite()) {
                 hFunc(NActors::TEvents::TEvWakeup, TSchedulableComputeActorBase<TDerived>::Handle);

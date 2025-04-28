@@ -34,8 +34,13 @@ private:
     NHdrf::TRootPtr Root;                                        // protected by Mutex
     THashMap<NHdrf::TQueryId, NHdrf::TQueryPtr> Queries;         // protected by Mutex
     THashMap<NHdrf::TQueryId, NHdrf::TQueryPtr> DetachedQueries; // protected by Mutex
+    NHdrf::TPoolPtr DetachedPool;                                // protected by Mutex
 
-    TIntrusivePtr<TKqpCounters> Counters;
+    TIntrusivePtr<TKqpCounters> KqpCounters;
+
+    struct {
+        NMonitoring::TDynamicCounters::TCounterPtr UpdateFairShare;
+    } Counters;
 };
 
 using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;

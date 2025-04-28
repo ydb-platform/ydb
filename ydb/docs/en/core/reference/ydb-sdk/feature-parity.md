@@ -1,6 +1,6 @@
 # Comparison of SDK features
 
-| Feature | ydb-cpp-sdk | ydb-python-sdk | ydb-go-sdk | ydb-java-sdk | ydb-js-sdk | ydb-dotnet-sdk | ydb-rs-sdk | ydb-php-sdk |
+| Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | SSL/TLS support (system certificates) | + | + | + | + | + | + | + | + |
 | SSL/TLS support (custom certificates) | + | + | + | + | + | [![issue 312 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/312)](https://github\.com/ydb-platform/ydb-dotnet-sdk/issues/312) | [![issue 270 status](https://github.ydb.tech/issues/ydb-rs-sdk/270)](https://github\.com/ydb-platform/ydb-rs-sdk/issues/270) | + |

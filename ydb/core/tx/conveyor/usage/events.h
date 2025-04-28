@@ -1,10 +1,12 @@
 #pragma once
+
 #include "abstract.h"
 #include "config.h"
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 
 namespace NKikimr::NConveyor {
 
@@ -23,11 +25,10 @@ struct TEvExecution {
         YDB_READONLY_DEF(ITask::TPtr, Task);
         YDB_READONLY(ui64, ProcessId, 0);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
     public:
-        TEvNewTask() = default;
-
-        explicit TEvNewTask(ITask::TPtr task);
-        explicit TEvNewTask(ITask::TPtr task, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask = {});
+        explicit TEvNewTask(ITask::TPtr task, const ui64 processId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {

@@ -1,6 +1,8 @@
 #pragma once
+
 #include "read_metadata.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
@@ -60,6 +62,7 @@ private:
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
     const NConveyor::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
+    NKqp::NScheduler::TSchedulableTaskPtr SchedulableTask;
 
 public:
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
@@ -145,11 +148,15 @@ public:
         return ResourcesTaskContext;
     }
 
+    const NKqp::NScheduler::TSchedulableTaskPtr& GetSchedulableTask() const {
+        return SchedulableTask;
+    }
+
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyor::TCPULimitsConfig& cpuLimits);
+        const ui64 scanId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask, const NConveyor::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {

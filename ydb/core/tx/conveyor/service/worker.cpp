@@ -15,8 +15,16 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
     instants.reserve(workerTasks.size() + 1);
     instants.emplace_back(TMonotonic::Now());
     for (auto&& t : workerTasks) {
+        auto schedulableTask = t.GetSchedulableTask();
+        if (schedulableTask) {
+            schedulableTask->IncreaseUsage({}); // TODO: it's bad to increase usage without increasing demand.
+        }
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
-        instants.emplace_back(TMonotonic::Now());
+        const auto now = TMonotonic::Now();
+        if (schedulableTask) {
+            schedulableTask->DecreaseUsage(now - instants.front());
+        }
+        instants.emplace_back(now);
         processes.emplace_back(t.GetProcessId());
     }
     if (CPUSoftLimit < 1) {

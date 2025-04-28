@@ -24,6 +24,7 @@ private:
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    NKqp::NScheduler::TSchedulableTaskPtr SchedulableTask;
     std::optional<TMonotonic> StartInstant;
     std::optional<TMonotonic> FinishInstant;
 
@@ -33,6 +34,7 @@ public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const NKqp::NScheduler::TSchedulableTaskPtr& schedulableTask,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyor::TCPULimitsConfig& cpuLimits);

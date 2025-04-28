@@ -85,7 +85,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(),
+        Self->DataAccessorsManager.GetObjectPtrVerified(), nullptr,
         TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
         NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
 

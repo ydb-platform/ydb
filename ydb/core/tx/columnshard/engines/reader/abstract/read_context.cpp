@@ -13,7 +13,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
     const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-    const ui64 scanId, const NConveyor::TCPULimitsConfig& cpuLimits)
+    const ui64 scanId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask, const NConveyor::TCPULimitsConfig& cpuLimits)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , Counters(counters)
@@ -24,7 +24,9 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ResourceSubscribeActorId(resourceSubscribeActorId)
     , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
-    , ConveyorProcessGuard(NConveyor::TScanServiceOperator::StartProcess(ScanId, cpuLimits)) {
+    , ConveyorProcessGuard(NConveyor::TScanServiceOperator::StartProcess(ScanId, cpuLimits))
+    , SchedulableTask(schedulableTask)
+{
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {
         Resolver = std::make_shared<NCommon::TIndexColumnResolver>(ReadMetadata->GetResultSchema()->GetIndexInfo());

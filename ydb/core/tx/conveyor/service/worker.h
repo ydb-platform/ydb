@@ -1,13 +1,15 @@
 #pragma once
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/accessor/accessor.h>
+
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/conclusion/result.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NConveyor {
 
@@ -18,6 +20,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
 public:
     void OnBeforeStart() {
         StartInstant = TMonotonic::Now();
@@ -28,10 +31,12 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
+    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask = {})
         : Task(task)
         , TaskSignals(taskSignals)
-        , ProcessId(processId) {
+        , ProcessId(processId)
+        , SchedulableTask(schedulableTask)
+    {
         Y_ABORT_UNLESS(task);
     }
 

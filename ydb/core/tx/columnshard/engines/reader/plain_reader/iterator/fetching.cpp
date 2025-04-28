@@ -90,7 +90,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     TFetchingScriptCursor cursor(plan, 0);
     const auto& commonContext = *source->GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetSchedulableTask(), commonContext.GetConveyorProcessId());
     return false;
 }
 

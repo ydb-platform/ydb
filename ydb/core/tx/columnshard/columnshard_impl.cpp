@@ -596,9 +596,9 @@ protected:
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
         if (isInsert) {
-            NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+            NConveyor::TInsertServiceOperator::SendTaskToExecute(task, {});
         } else {
-            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+            NConveyor::TCompServiceOperator::SendTaskToExecute(task, {});
         }
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {

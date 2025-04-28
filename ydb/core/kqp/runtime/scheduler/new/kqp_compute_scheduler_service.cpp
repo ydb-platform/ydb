@@ -199,7 +199,7 @@ TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
 
 TSchedulableTaskFactory TComputeScheduler::CreateSchedulableTaskFactory() {
     return [ptr = this->shared_from_this()](const NHdrf::TQueryId& queryId) {
-        return MakeHolder<TSchedulableTask>(ptr->GetQuery(queryId));
+        return std::make_shared<TSchedulableTask>(ptr->GetQuery(queryId));
     };
 }
 

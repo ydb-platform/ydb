@@ -48,14 +48,14 @@ public:
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
     }
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskProcesses processType) {
-        return SendTaskToExecute(task, (ui64)processType);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask, const ESpecialTaskProcesses processType) {
+        return SendTaskToExecute(task, std::move(schedulableTask), (ui64)processType);
     }
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 processId = 0) {
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask, const ui64 processId = 0) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task, processId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task, processId, std::move(schedulableTask)));
             return true;
         } else {
             task->Execute(nullptr, task);

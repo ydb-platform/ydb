@@ -8,6 +8,7 @@ singlePage: true
 resources:
   style:
     - _assets/tags.css
+    - _assets/badge.css
   csp:
     - "img-src":
         - "https://github.ydb.tech"

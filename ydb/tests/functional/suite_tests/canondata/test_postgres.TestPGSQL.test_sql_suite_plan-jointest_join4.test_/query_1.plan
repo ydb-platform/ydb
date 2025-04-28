@@ -47,7 +47,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "ExtractMembers.nt2.b1 AND Exist(ExtractMembers.id)"
+                                                "Predicate": "If"
                                             },
                                             {
                                                 "Condition": "nt3.nt2_id = ss2.nt2.id",

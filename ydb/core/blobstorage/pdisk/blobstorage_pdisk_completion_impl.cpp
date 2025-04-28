@@ -150,15 +150,8 @@ TBuffer *TCompletionChunkReadPart::GetBuffer() {
     return Buffer.Get();
 }
 
-void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
-    auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkReadPart.Exec");
-    Y_VERIFY(actorSystem);
-    Y_VERIFY(CumulativeCompletion);
-    if (TCompletionAction::Result != EIoResult::Ok) {
-        Release(actorSystem);
-        return;
-    }
 
+void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
     const TDiskFormat &format = PDisk->Format;
 
     ui64 firstSector;
@@ -168,7 +161,6 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset,
             PDisk->PCtx->PDiskLogPrefix);
     Y_VERIFY(isOk);
-
 
     ui8* source = Buffer->Data();
 
@@ -276,6 +268,20 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         beginBadUserOffset = 0xffffffff;
         endBadUserOffset = 0xffffffff;
     }
+}
+
+void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
+    auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkReadPart.Exec");
+    Y_VERIFY(actorSystem);
+    Y_VERIFY(CumulativeCompletion);
+    if (TCompletionAction::Result != EIoResult::Ok) {
+        Release(actorSystem);
+        return;
+    }
+
+    if (Read->ChunkEncrypted) {
+        UnencryptData(actorSystem);
+    }
 
     double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
     LWTRACK(PDiskChunkReadPieceComplete, Orbit, PDisk->PCtx->PDiskId, RawReadSize, CommonBufferOffset, deviceTimeMs);
@@ -301,6 +307,38 @@ void TCompletionChunkReadPart::Release(TActorSystem *actorSystem) {
     delete this;
 }
 
+TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
+            ui64 chunkNonce, NWilson::TSpan&& span)
+    : TCompletionAction()
+    , PDisk(pDisk)
+    , Read(read)
+    // 1 in PartsPending stands for the last part, so if any non-last part completes it will not lead to call of Exec()
+    , PartsPending(1)
+    , Deletes(0)
+    , OnDestroy(std::move(onDestroy))
+    , ChunkNonce(chunkNonce)
+    , Span(std::move(span))
+    , DoubleFreeCanary(ReferenceCanary)
+{
+    // in case of plain chunks we can have unaligned offset and unaligned size of the read
+    // so we have to calculate headroom and tailroom as follow
+    // ^ requested data
+    // * not interesting data
+    // | sector border (sector size equals to 4 in the example)
+    //
+    // | * * ^ ^ | ^ ^ ^ ^ | ^ ^ ^ * |
+    // headroom = 2, size = 9, tailroom = 1, new size should be equal
+    // - increase size by offset unalignment (2 in this case), newSize is 11 now
+    // - align the size up to sector border, we get 12
+    // - calculate tailroom as follow: 12 - 11 = 1
+    size_t sectorSize = PDisk->Format.SectorSize;
+    auto newSize = read->ChunkEncrypted
+        ? read->Size
+        : read->Size + read->Offset % sectorSize;
+    size_t tailroom = AlignUp<size_t>(newSize, sectorSize) - newSize;
+    CommonBuffer = TBufferWithGaps(read->Offset, newSize, tailroom);
+}
+
 TCompletionChunkRead::~TCompletionChunkRead() {
     OnDestroy();
     Y_VERIFY(CommonBuffer.Empty());
@@ -313,6 +351,12 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkRead.Exec");
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
+
+    if (!Read->ChunkEncrypted) {
+        size_t headroom = Read->Offset % PDisk->Format.SectorSize;
+        auto newBuf = CommonBuffer.SubstrRaw(headroom, CommonBuffer.Size() - headroom);
+        CommonBuffer.SetData(std::move(newBuf));
+    }
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
     //Y_VERIFY(result->Data.IsDetached());

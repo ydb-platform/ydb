@@ -40,7 +40,8 @@ namespace NSQLComplete {
             CompletionCore.preferredRules = std::move(config.PreferredRules);
         }
 
-        TC3Candidates Complete(TStringBuf prefix) override {
+        TC3Candidates Complete(TCompletionInput input) override {
+            auto prefix = input.Text.Head(input.CursorPosition);
             Assign(prefix);
             const auto caretTokenIndex = CaretTokenIndex(prefix);
             auto candidates = CompletionCore.collectCandidates(caretTokenIndex);

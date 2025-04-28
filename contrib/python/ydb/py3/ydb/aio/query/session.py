@@ -117,15 +117,22 @@ class QuerySession(BaseQuerySession):
         exec_mode: base.QueryExecMode = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        *,
+        stats_mode: Optional[base.QueryStatsMode] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
         :param query: (YQL or SQL text) to be executed.
-        :param syntax: Syntax of the query, which is a one from the following choises:
+        :param syntax: Syntax of the query, which is a one from the following choices:
          1) QuerySyntax.YQL_V1, which is default;
          2) QuerySyntax.PG.
         :param parameters: dict with parameters and YDB types;
         :param concurrent_result_sets: A flag to allow YDB mix parts of different result sets. Default is False;
+        :param stats_mode: Mode of query statistics to gather, which is a one from the following choices:
+         1) QueryStatsMode:NONE, which is default;
+         2) QueryStatsMode.BASIC;
+         3) QueryStatsMode.FULL;
+         4) QueryStatsMode.PROFILE;
 
         :return: Iterator with result sets
         """
@@ -133,10 +140,11 @@ class QuerySession(BaseQuerySession):
 
         stream_it = await self._execute_call(
             query=query,
+            parameters=parameters,
             commit_tx=True,
             syntax=syntax,
             exec_mode=exec_mode,
-            parameters=parameters,
+            stats_mode=stats_mode,
             concurrent_result_sets=concurrent_result_sets,
             settings=settings,
         )
@@ -147,6 +155,7 @@ class QuerySession(BaseQuerySession):
                 rpc_state=None,
                 response_pb=resp,
                 session_state=self._state,
+                session=self,
                 settings=self._settings,
             ),
         )

@@ -323,6 +323,7 @@ public:
             HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
+            HFuncTraced(TEvents::TEvWakeup, Handle);
             HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
@@ -351,6 +352,13 @@ public:
         Die(ctx);
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr &/*ev*/, const TActorContext &ctx)
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received wake up");
+        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerCoolDown(Subscription));
+    }
+
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -370,6 +378,8 @@ public:
                     "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionNotificationRequest: "
                                                  << notification.Get()->Record.ShortDebugString());
 
+        const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
+        Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
         Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
@@ -522,7 +532,33 @@ void TConfigsProvider::CheckSubscriptions(const TInMemorySubscriptionSet &subscr
                                           const TActorContext &ctx)
 {
     for (auto &subscription : subscriptions)
-        CheckSubscription(subscription, ctx);
+        ScheduledUpdates[subscription->Subscriber] = EUpdate::All;
+    ProcessScheduledUpdates(ctx);
+}
+
+void TConfigsProvider::ProcessScheduledUpdates(const TActorContext &ctx)
+{
+    while (!ScheduledUpdates.empty() && InflightUpdates.size() < MAX_INFLIGHT_UPDATES) {
+        auto it = ScheduledUpdates.begin();
+        if (auto subscription = InMemoryIndex.GetSubscription(it->first)) {
+            switch (it->second) {
+            case EUpdate::All:
+                if (CheckSubscription(subscription, ctx)) {
+                    InflightUpdates.insert(subscription->Subscriber);
+                }
+                break;
+            case EUpdate::Yaml:
+                if (UpdateConfig(subscription, ctx)) {
+                    InflightUpdates.insert(subscription->Subscriber);
+                }
+                break;
+            }
+        }
+        ScheduledUpdates.erase(it);
+    }
+
+    *Counters.ScheduledConfigUpdates = ScheduledUpdates.size();
+    *Counters.InflightConfigUpdates = InflightUpdates.size();
 }
 
 void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
@@ -583,7 +619,7 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
     subscription->Worker = ctx.RegisterWithSameMailbox(worker);
 }
 
-void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
+bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -665,7 +701,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "TConfigsProvider: no changes found for subscription"
                         << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
-        return;
+        return false;
     }
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -693,13 +729,6 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
         auto *volatileConfig = request->Record.AddVolatileConfigs();
         volatileConfig->SetId(id);
-        auto hashes = subscription->VolatileYamlConfigHashes.size();
-        Y_UNUSED(hashes);
-        auto itt = subscription->VolatileYamlConfigHashes.find(id);
-        if (itt != subscription->VolatileYamlConfigHashes.end()) {
-            auto tmp = itt->second;
-            Y_UNUSED(tmp);
-        }
         if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
             volatileConfig->SetNotChanged(true);
         } else {
@@ -720,8 +749,9 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     }
 
     ctx.Send(subscription->Worker, request.Release());
-
     subscription->FirstUpdateSent = true;
+
+    return true;
 }
 
 void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
@@ -837,7 +867,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
 
     subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
 
-    CheckSubscription(subscription, ctx);
+    ScheduledUpdates[subscription->Subscriber] = EUpdate::All;
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
@@ -865,11 +896,27 @@ void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const
     auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
     if (existing == subscription) {
         InMemoryIndex.RemoveSubscription(subscription->Subscriber);
+        ScheduledUpdates.erase(subscription->Subscriber);
+        InflightUpdates.erase(subscription->Subscriber);
+
         Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider removed subscription "
                     << subscription->Subscriber<< ":" << subscription->Generation << " (subscription worker died)");
     }
+
+    ProcessScheduledUpdates(ctx);
+}
+
+void TConfigsProvider::Handle(TEvPrivate::TEvWorkerCoolDown::TPtr &ev, const TActorContext &ctx)
+{
+    auto subscription = ev->Get()->Subscription;
+    auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
+    if (existing == subscription) {
+        InflightUpdates.erase(subscription->Subscriber);
+    }
+
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx)
@@ -1259,19 +1306,21 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const T
         }
 
         for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
-            UpdateConfig(subscription, ctx);
+            ScheduledUpdates.emplace(subscription->Subscriber, EUpdate::Yaml);
         }
     } else {
         const auto* subs = InMemoryIndex.GetSubscriptions(ev->Get()->ChangedDatabase);
         if (subs) {
             for (auto &subscription : *subs) {
-                UpdateConfig(subscription, ctx);
+                ScheduledUpdates.emplace(subscription->Subscriber, EUpdate::Yaml);
             }
         }
     }
+
+    ProcessScheduledUpdates(ctx);
 }
 
-void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
+bool TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
                                     const TActorContext &ctx)
 {
     if (subscription->ServeYaml) {
@@ -1309,7 +1358,10 @@ void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
         }
 
         ctx.Send(subscription->Worker, request.Release());
+        return true;
     }
+
+    return false;
 }
 
 } // namespace NKikimr::NConsole

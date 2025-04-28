@@ -656,5 +656,36 @@
                 ]
             }
         ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "IntersectionIsEmpty";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Bool"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            %true
+                        ]
+                    ]
+                ]
+            }
+        ]
     }
 ]

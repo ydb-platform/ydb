@@ -1660,6 +1660,12 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
+    if (itemType->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, itemType);
+        auto baseType = taggedType->GetBaseType();
+        return ConvertArrowTypeImpl(baseType, type, onFail, output);
+    }
+
     if (IsSingularType(unpacked)) {
         type = arrow::null();
         return true;
@@ -2560,6 +2566,11 @@ size_t CalcMaxBlockItemSize(const TType* type) {
 
     if (IsSingularType(type)) {
         return 0;
+    }
+
+    if (type->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, type);
+        return CalcMaxBlockItemSize(taggedType->GetBaseType());
     }
 
     if (type->IsData()) {

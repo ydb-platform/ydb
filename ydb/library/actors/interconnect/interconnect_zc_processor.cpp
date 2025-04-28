@@ -383,8 +383,10 @@ public:
     }
 
     void Terminate(std::unique_ptr<NActors::TEventHolderPool>&& pool, TIntrusivePtr<NInterconnect::TStreamSocket> socket, const NActors::TActorContext &ctx) override {
-        // must be registered on the same mailbox!
-        ctx.RegisterWithSameMailbox(new TGuardActor(Uncompleted, Confirmed, std::move(Delayed), socket, std::move(pool)));
+        if (!Delayed.empty()) {
+            // must be registered on the same mailbox!
+            ctx.RegisterWithSameMailbox(new TGuardActor(Uncompleted, Confirmed, std::move(Delayed), socket, std::move(pool)));
+        }
     }
 private:
     const ui64 Uncompleted;

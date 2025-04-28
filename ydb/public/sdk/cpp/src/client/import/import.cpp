@@ -142,11 +142,8 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
 
     for (const auto& item : settings.Item_) {
         if (!item.Src.empty() && !item.SrcPath.empty()) {
-            return MakeFuture<TImportFromS3Response>(
-                TImportFromS3Response(TStatus(
-                    NYdb::EStatus::BAD_REQUEST,
-                    NIssue::TIssues({NIssue::TIssue(
-                        TStringBuilder() << "Invalid item: both source prefix and source path are set: \"" << item.Src << "\" and \"" << item.SrcPath << "\"")}))));
+            throw TContractViolation(
+                TStringBuilder() << "Invalid item: both source prefix and source path are set: \"" << item.Src << "\" and \"" << item.SrcPath << "\"");
         }
 
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

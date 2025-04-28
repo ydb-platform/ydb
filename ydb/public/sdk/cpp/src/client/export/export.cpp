@@ -209,10 +209,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
 
     if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
-        return MakeFuture<TExportToS3Response>(
-            TExportToS3Response(TStatus(
-                NYdb::EStatus::BAD_REQUEST,
-                NIssue::TIssues({NIssue::TIssue("Encryption algorithm and symmetric key must be set together")}))));
+        throw TContractViolation("Encryption algorithm and symmetric key must be set together");
     }
 
     if (!settings.EncryptionAlgorithm_.empty() && !settings.SymmetricKey_.empty()) {

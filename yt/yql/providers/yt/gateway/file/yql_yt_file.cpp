@@ -1293,14 +1293,14 @@ private:
         }
 
         if (writeRef && !options.FillSettings().Discard) {
-            auto cluster = GetClusterName(pull.Input());
             writer.OnKeyedItem("Ref");
             writer.OnBeginList();
             for (auto& tableInfo: GetInputTableInfos(pull.Input())) {
+                TString cluster = tableInfo->Cluster;
                 writer.OnListItem();
                 if (tableInfo->IsTemp) {
                     auto outPath = Services_->GetTmpTablePath(tableInfo->Name);
-                    session.CancelDeleteAtFinalize(TString{cluster}, outPath);
+                    session.CancelDeleteAtFinalize(cluster, outPath);
                 }
                 NYql::WriteTableReference(writer, YtProviderName, cluster, tableInfo->Name, tableInfo->IsTemp, columns);
             }

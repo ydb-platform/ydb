@@ -16,7 +16,6 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TAG(
         ya:fat
         sb:ttl=2
-        ya:large_tests_on_multi_slots
     )
 ELSE()
     TIMEOUT(600)

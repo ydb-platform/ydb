@@ -112,7 +112,12 @@ void TNodeBase::RemoveSelf(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo("Recursive: %v, Force: %v", request->recursive(), request->force());
+    bool recursive = request->recursive();
+    bool force = request->force();
+
+    context->SetRequestInfo("Recursive: %v, Force: %v",
+        recursive,
+        force);
 
     ValidatePermission(
         EPermissionCheckScope::Subtree,
@@ -122,13 +127,13 @@ void TNodeBase::RemoveSelf(
         EPermission::Write | EPermission::ModifyChildren);
 
     bool isComposite = (GetType() == ENodeType::Map || GetType() == ENodeType::List);
-    if (!request->recursive() && isComposite && AsComposite()->GetChildCount() > 0) {
+    if (!recursive && isComposite && AsComposite()->GetChildCount() > 0) {
         THROW_ERROR_EXCEPTION(
             NYTree::EErrorCode::CannotRemoveNonemptyCompositeNode,
             "Cannot remove non-empty composite node");
     }
 
-    DoRemoveSelf(request->recursive(), request->force());
+    DoRemoveSelf(recursive, force);
 
     context->Reply();
 }
@@ -310,8 +315,6 @@ void TMapNodeMixin::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
-
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
@@ -326,6 +329,8 @@ void TMapNodeMixin::ListSelf(
         THROW_ERROR_EXCEPTION("Limit is negative")
             << TErrorAttribute("limit", limit);
     }
+
+    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
     TAsyncYsonWriter writer;
 
@@ -568,6 +573,7 @@ void TSupportsSetSelfMixin::SetSelf(
     const TCtxSetPtr& context)
 {
     bool force = request->force();
+
     context->SetRequestInfo("Force: %v", force);
 
     ValidateSetSelf(force);

@@ -440,7 +440,6 @@ TRawTableWriterPtr TClientBase::CreateRawWriter(
         GetTransactionPinger(),
         Context_,
         TransactionId_,
-        GetWriteTableCommand(Context_.Config->ApiVersion),
         format,
         CanonizeYPath(path),
         options).Get();

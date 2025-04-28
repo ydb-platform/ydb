@@ -37,7 +37,7 @@ class LoadSuiteBase:
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
-    __nodes_state: Optional[dict[tuple[str, int], YdbCluster.Node]] = None
+    __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
     def suite(cls) -> str:
@@ -152,7 +152,7 @@ class LoadSuiteBase:
 
     @classmethod
     def save_nodes_state(cls) -> None:
-        cls.__nodes_state = {(n.host, n.ic_port): n for n in YdbCluster.get_cluster_nodes(db_only=True)}
+        cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
 
     @classmethod
     def __get_core_hashes_by_pod(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
@@ -172,9 +172,9 @@ class LoadSuiteBase:
             exec.wait(check_exit_code=False)
             if exec.returncode == 0:
                 for core in json.loads(f'[{exec.stdout.decode("utf-8").strip(",")}]'):
-                    pod_name = core.get('pod', '')
-                    core_hashes.setdefault(pod_name, [])
-                    core_hashes[pod_name].append((core.get('core_uuid', ''), core.get('core_hash', '')))
+                    slot = f"{core.get('slot', '')}@{h}"
+                    core_hashes.setdefault(slot, [])
+                    core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
             else:
                 logging.error(f'Error while search coredumps on host {h}: {exec.stderr.decode("utf-8")}')
         return core_hashes
@@ -203,13 +203,12 @@ class LoadSuiteBase:
         node_errors = []
         fail_hosts = set()
         for node in YdbCluster.get_cluster_nodes(db_only=True):
-            node_id = (node.host, node.ic_port)
-            saved_node = cls.__nodes_state.get(node_id)
+            saved_node = cls.__nodes_state.get(node.slot)
             if saved_node is not None:
                 if node.start_time > saved_node.start_time:
                     node_errors.append(NodeErrors(node, 'was restarted'))
                     fail_hosts.add(node.host)
-                del cls.__nodes_state[node_id]
+                del cls.__nodes_state[node.slot]
         for _, node in cls.__nodes_state.items():
             node_errors.append(NodeErrors(node, 'is down'))
             fail_hosts.add(node.host)
@@ -220,11 +219,11 @@ class LoadSuiteBase:
         core_hashes = cls.__get_core_hashes_by_pod(fail_hosts, result.start_time, end_time)
         ooms = cls.__get_hosts_with_omms(fail_hosts, result.start_time, end_time)
         for node in node_errors:
-            node.core_hashes = core_hashes.get(f'{node.node.ic_port}@{node.node.host}', [])
+            node.core_hashes = core_hashes.get(f'{node.node.slot}', [])
             node.was_oom = node.node.host in ooms
 
         for err in node_errors:
-            result.add_error(f'Node {err.node.ic_port}@{err.node.host} {err.message}')
+            result.add_error(f'Node {err.node.slot} {err.message}')
         return node_errors
 
     @classmethod

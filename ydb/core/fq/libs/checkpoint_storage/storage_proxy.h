@@ -16,6 +16,7 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources);
+    const TYqSharedResources::TPtr& yqSharedResources,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

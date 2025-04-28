@@ -1074,9 +1074,9 @@
     ],
     "test.test[pg-join_brackets2-default.txt-Debug]": [
         {
-            "checksum": "762758513e739959f8275294a2dd1130",
-            "size": 11674,
-            "uri": "https://{canondata_backend}/1942100/9612d32b93424452bb3f40592b19e89f4235ecdc/resource.tar.gz#test.test_pg-join_brackets2-default.txt-Debug_/opt.yql"
+            "checksum": "1709dd973da95e580dd2744f8b2eace7",
+            "size": 11516,
+            "uri": "https://{canondata_backend}/1814674/0145682e1eceb2f221036f5a70c8223fb5e71378/resource.tar.gz#test.test_pg-join_brackets2-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-join_brackets2-default.txt-Results]": [

@@ -6,6 +6,7 @@ SRCS(
     grammar.cpp
     local.cpp
     parser_call_stack.cpp
+    token.cpp
 )
 
 ADDINCL(

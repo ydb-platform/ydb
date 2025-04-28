@@ -191,7 +191,7 @@ private:
 class TDeletedColumn
 {
 public:
-    TDeletedColumn();
+    TDeletedColumn() = default;
     explicit TDeletedColumn(TColumnStableName stableName);
 
     DEFINE_BYREF_RO_PROPERTY(TColumnStableName, StableName);

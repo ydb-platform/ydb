@@ -26,7 +26,7 @@ namespace NSQLComplete {
 
         TKeywords Keywords;
         std::optional<TPragma> Pragma;
-        bool IsTypeName;
+        bool IsTypeName = false;
         std::optional<TFunction> Function;
         std::optional<THint> Hint;
     };

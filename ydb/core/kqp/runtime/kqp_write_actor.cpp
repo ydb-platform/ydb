@@ -816,6 +816,7 @@ public:
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     YQL_ENSURE(TxManager->BrokenLocks());
+                    TxManager->SetError(ev->Get()->Record.GetOrigin());
                     NYql::TIssues issues;
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(

@@ -209,7 +209,9 @@ public:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            TxManager->SetError(lock.GetDataShard());
+                        }
                     }
                 }
 
@@ -243,7 +245,10 @@ public:
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), flags);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            TxManager->SetError(lock.GetDataShard());
+
+                        }
                     }
                 }
             }
@@ -265,6 +270,10 @@ public:
         }
 
         if (TxManager) {
+            if (TxManager->BrokenLocks()) {
+                return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
+            }
+
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
 
             for (const ui64& shardId : TxManager->GetShards()) {

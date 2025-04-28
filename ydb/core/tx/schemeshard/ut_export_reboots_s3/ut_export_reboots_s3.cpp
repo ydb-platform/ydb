@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldEnabledAutoDropping) {
+    Y_UNIT_TEST(ShouldDisableAutoDropping) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 

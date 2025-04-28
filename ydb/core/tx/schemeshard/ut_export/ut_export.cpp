@@ -150,7 +150,7 @@ namespace {
         const ui64 exportId = txId;
         TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
 
-        if (!runtime.GetAppData().FeatureFlags.GetEnableAutoDropping() && checkAutoDropping) {
+        if (!runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping() && checkAutoDropping) {
           auto desc = DescribePath(runtime, "/MyRoot");
           Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
           UNIT_ASSERT(desc.GetPathDescription().ChildrenSize() > 1);
@@ -2830,7 +2830,7 @@ attributes {
         )", S3Port());
         
         Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableAutoDropping(false);
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
 
         Run(Runtime(), Env(), TVector<TString>{
             R"(

@@ -119,6 +119,13 @@ TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
     return replicas;
 }
 
+ui32 TStateStorageInfo::RingGroupsSelectionSize() const {
+    ui32 res = 0;
+    for(auto &ringGroup : RingGroups)
+        res += ringGroup.NToSelect;
+    return res;
+}
+
 ui32 TStateStorageInfo::TRing::ContentHash() const {
     ui64 hash = 17;
     for (TActorId replica : Replicas) {

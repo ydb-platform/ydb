@@ -611,22 +611,39 @@ public:
 
 class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
-    THashMap<ui32, TActorId> RingGroupActors;
+    THashMap<TActorId, ui32> RingGroupActors;
 
     TActorId Source;
     ui32 Replies;
+    ui32 SignatureReplies;
     bool WaitAllReplies;
+
+    TAutoPtr<TEvStateStorage::TEvInfo> Response;
+
+    ui64 TabletID;
+    ui64 Cookie;
+    TActorId CurrentLeader;
+    TActorId CurrentLeaderTablet;
+    ui32 CurrentGeneration;
+    ui32 CurrentStep;
+    bool Locked;
+    ui64 LockedFor;
+    TMap<TActorId, TActorId> Followers;
+
+    ui32 SignatureSz;
+    TArrayHolder<ui64> Signature;
+
 
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
-        WaitAllReplies = false;
+        WaitAllReplies = msg->ProxyOptions.RingGroupsSigWaitMode == msg->ProxyOptions.SigSync;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
-        for(ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
-            if(Info->RingGroups[ringGroupIndex].writeOnly)
+        for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
+            if (!WaitAllReplies && Info->RingGroups[ringGroupIndex].writeOnly)
                 continue;
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
-            RingGroupActors[ringGroupIndex] = actorId;
+            RingGroupActors[actorId] = ringGroupIndex;
             Send(actorId, new TEvStateStorage::TEvLookup(*msg));
         }
     }
@@ -636,9 +653,9 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
         Source = ev->Sender;
         WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
-        for(ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
+        for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
-            RingGroupActors[ringGroupIndex] = actorId;
+            RingGroupActors[actorId] = ringGroupIndex;
             Send(actorId, new TEvStateStorage::TEvUpdate(*msg));
         }
     }
@@ -648,24 +665,71 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
         Source = ev->Sender;
         WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
-        for(ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
+        for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
-            RingGroupActors[ringGroupIndex] = actorId;
+            RingGroupActors[actorId] = ringGroupIndex;
             Send(actorId, new TEvStateStorage::TEvLock(*msg));
         }
+    }
+
+    void UpdateSignature(ui32 ringGroupIdx, const ui64 *sig, ui32 sz) {
+        ui32 offset = 0;
+        for (ui32 i = 0; i < ringGroupIdx; i++)
+            offset += Info->RingGroups[i].NToSelect;
+        Y_ABORT_UNLESS(offset + sz <= SignatureSz);
+
+        for (ui32 i = 0; i < sz; i++, offset++) {
+            if (sig != 0 && sig[i] != Max<ui64>())
+                Signature[offset] = sig[i];
+        }
+    }
+    void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
+        if (Replies <= 1 && !Info->RingGroups[ringGroupIdx].writeOnly) {
+            TabletID = msg->TabletID;
+            Cookie = msg->Cookie;
+            CurrentLeader = msg->CurrentLeader;
+            CurrentLeaderTablet = msg->CurrentLeaderTablet;
+            CurrentGeneration = msg->CurrentGeneration;
+            CurrentStep = msg->CurrentStep;
+            Locked = msg->Locked;
+            LockedFor = msg->LockedFor;
+            for (auto& [k,v] : msg->Followers) {
+                Followers[k] = v;
+            }
+        } else {
+            //TODO: if ringGroups return different results?
+        }
+        UpdateSignature(ringGroupIdx, msg->Signature.Get(), msg->SignatureSz);
+    }
+    void Reply(NKikimrProto::EReplyStatus status) {
+        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature.Get(), SignatureSz, Followers);
+        BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
+        Send(Source, msg);
     }
 
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
         Replies++;
-        bool reply = Replies == RingGroupActors.size()
+        bool reply = Replies == Info->RingGroups.size()
             || (WaitAllReplies && msg->Status != NKikimrProto::EReplyStatus::OK)
             || (!WaitAllReplies && msg->Status == NKikimrProto::EReplyStatus::OK);
-        
+        ProcessEvInfo(RingGroupActors[ev->Sender], msg);
+        BLOG_D("RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
         if (reply) {
-            Send(Source, ev->Release().Release());
-            PassAway();
+            Reply(msg->Status);
         }
+    }
+
+    void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
+        TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
+        SignatureReplies++;
+        UpdateSignature(RingGroupActors[ev->Sender], msg->Signature.Get(), msg->Sz);
+        auto *reply = new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature.Get(), SignatureSz);
+        Send(Source, reply);
+    }
+
+    void Timeout() {
+        PassAway();
     }
 
 public:
@@ -676,7 +740,14 @@ public:
     TStateStorageRingGroupProxyRequest(TIntrusivePtr<TStateStorageInfo> info)
         : TActor<TStateStorageRingGroupProxyRequest>(&TThis::StateInit)
         , Info(info)
-    {}
+        , Replies(0)
+        , SignatureReplies(0)
+        , SignatureSz(info->RingGroupsSelectionSize())
+        , Signature(new ui64[SignatureSz])
+    {
+        Fill(Signature.Get(), Signature.Get() + SignatureSz, 0);
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+    }
 
     STRICT_STFUNC(StateInit,
         hFunc(TEvStateStorage::TEvLookup, HandleInit);
@@ -684,6 +755,8 @@ public:
         hFunc(TEvStateStorage::TEvLock, HandleInit);
 
         hFunc(TEvStateStorage::TEvInfo, HandleResult);
+        hFunc(TEvStateStorage::TEvUpdateSignature, HandleResult);
+        cFunc(TEvents::TSystem::Wakeup, Timeout);
     )
 
 };
@@ -846,7 +919,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {
         const auto *msg = ev->Get();
-        for(size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
+        for (size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             Info->SelectReplicas(msg->TabletID, selection.Get(), ringGroupIdx);
             SpreadCleanupRequest(*selection, msg->TabletID, msg->ProposedLeader);
@@ -942,7 +1015,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
-        for(size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
+        for (size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             info->SelectReplicas(tabletId, selection.Get(), ringGroupIdx);
             reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);

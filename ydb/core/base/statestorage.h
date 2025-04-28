@@ -75,9 +75,11 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
+        ESigWaitMode RingGroupsSigWaitMode;
 
-        TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
+        TProxyOptions(ESigWaitMode sigWaitMode = SigNone, ESigWaitMode ringGroupsSigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
+            , RingGroupsSigWaitMode(ringGroupsSigWaitMode)
         {}
 
         TString ToString() const {
@@ -544,6 +546,7 @@ struct TStateStorageInfo : public TThrRefBase {
     void SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const;
     TList<TActorId> SelectAllReplicas() const;
     ui32 ContentHash() const;
+    ui32 RingGroupsSelectionSize() const;
 
     TStateStorageInfo()
         : Hash(Max<ui64>())

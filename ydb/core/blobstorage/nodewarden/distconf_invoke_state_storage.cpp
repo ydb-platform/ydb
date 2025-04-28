@@ -10,15 +10,28 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
+        const auto &newSSConfig = cmd.GetNewStateStorageConfig();
+
+        if (newSSConfig.HasRing()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration Ring option is not allowed use RingGroups");
+            return;
+        }
+        if (newSSConfig.RingGroupsSize() < 1) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration RingGroups is not filled in");
+            return;
+        }
+        if(newSSConfig.GetRingGroups(0).GetWriteOnly()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration first RingGroup is writeOnly");
+            return;
+        }
         if (!config.HasStateStorageConfig()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage configuration is not filled in");
             return;
         }
-        //TODO: Validate new config
+        //TODO: Validate new config at least 1 ringGroup in ReadWrite state should be not changed 
 
-        const auto &proposalNewStateStorageConfig = cmd.GetNewStateStorageConfig();
-        config.MutableStateStorageConfig()->CopyFrom(proposalNewStateStorageConfig);
+        config.MutableStateStorageConfig()->CopyFrom(newSSConfig);
         config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }
@@ -27,7 +40,6 @@ namespace NKikimr::NStorage {
         if (!RunCommonChecks()) {
             return;
         }
-
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         auto process = [&](const char *name, auto hasFunc, auto mutableFunc) {

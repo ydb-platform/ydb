@@ -1,5 +1,7 @@
 # Comparison of SDK features
 
+This section allows you to compare the capabilities of the {{ ydb-short-name }} SDK, which are implemented for different programming languages.
+
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | SSL/TLS support (system certificates) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} |

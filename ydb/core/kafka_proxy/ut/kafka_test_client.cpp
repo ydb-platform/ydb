@@ -84,7 +84,7 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64, TPartitionDataOffsetMeta>>> topicsToPartions) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToPartions) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -98,35 +98,9 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
 
         for (auto partitionAndOffset : topicToPartitions.second) {
             NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
-            partition.PartitionIndex = partitionAndOffset.first;
-
-            auto partitionDataObject = partitionAndOffset.second;
-            partition.CommittedOffset = partitionDataObject.Offset;
-            partition.CommittedMetadata = partitionDataObject.Metadata;
-            topic.Partitions.push_back(partition);
-        }
-        request.Topics.push_back(topic);
-    }
-
-    return WriteAndRead<TOffsetCommitResponseData>(header, request);
-}
-
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> topicsToPartions) {
-    Cerr << ">>>>> TOffsetCommitRequestData\n";
-
-    TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
-
-    TOffsetCommitRequestData request;
-    request.GroupId = groupId;
-
-    for (const auto& topicToPartitions : topicsToPartions) {
-        NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic topic;
-        topic.Name = topicToPartitions.first;
-
-        for (auto partitionAndOffset : topicToPartitions.second) {
-            NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
-            partition.PartitionIndex = partitionAndOffset.first;
-            partition.CommittedOffset = partitionAndOffset.second;
+            partition.PartitionIndex = partitionAndOffset.PartitionIndex;
+            partition.CommittedOffset = partitionAndOffset.Offset;
+            partition.CommittedMetadata = partitionAndOffset.Metadata;
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);

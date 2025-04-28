@@ -156,12 +156,6 @@ enum StatsMode {
     STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
-enum ResultSetType {
-    RESULT_SET_TYPE_UNSPECIFIED = 0;
-    RESULT_SET_TYPE_MESSAGE = 1;
-    RESULT_SET_TYPE_ARROW = 2;
-}
-
 message ExecuteQueryRequest {
     // Session identifier (required)
     string session_id = 1 [(Ydb.length).le = 1024];
@@ -192,7 +186,7 @@ message ExecuteQueryRequest {
 
     // Type of query result set parts.
     // It's for get default ResultSet or some result_data with a different type in response stream.
-    ResultSetType result_set_type = 12;
+    Ydb.ResultSetType result_set_type = 12;
 }
 
 message ResultSetMeta {
@@ -206,13 +200,7 @@ message ExecuteQueryResponsePart {
     // Index of current result set
     int64 result_set_index = 3 [(Ydb.value) = ">= 0"];
 
-    oneof ResultPart {
-        // Result set default part
-        Ydb.ResultSet result_set = 4;
-
-        // Result set part for other byte formats or/and compressions (for example, arrow)
-        bytes result_data = 7;
-    }
+    Ydb.ResultSet result_set = 4;
 
     // Execution statistics (last part only)
     Ydb.TableStats.QueryStats exec_stats = 5;
@@ -220,9 +208,6 @@ message ExecuteQueryResponsePart {
     TransactionMeta tx_meta = 6;
 
     VirtualTimestamp snapshot_timestamp = 7;
-    
-    // Settings for the arrow result set type with the result part in result_data
-    optional Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 8;
 }
 
 message ExecuteScriptRequest {

@@ -40,7 +40,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     }
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, GetContext()->GetCommonContext()->GetSchedulableTask());
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -50,7 +50,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) 
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, GetContext()->GetCommonContext()->GetSchedulableTask());
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
     }
@@ -387,7 +387,7 @@ private:
         Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetSchedulableTask());
     }
 
 public:

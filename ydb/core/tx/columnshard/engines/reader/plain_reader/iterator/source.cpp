@@ -37,7 +37,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         }
         TFetchingScriptCursor cursor(FetchingPlan, 0);
         auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, GetContext()->GetCommonContext()->GetSchedulableTask());
     }
 }
 
@@ -171,7 +171,7 @@ private:
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetSchedulableTask());
     }
 
 public:

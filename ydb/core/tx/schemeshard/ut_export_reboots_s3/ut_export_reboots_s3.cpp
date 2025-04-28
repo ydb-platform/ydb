@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            runtime.GetAppData().FeatureFlags.SetEnableAutoDropping(false);
+            runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
             {
                 TInactiveZone inactive(activeZone);
                 CreateSchemeObjects(t, runtime, {

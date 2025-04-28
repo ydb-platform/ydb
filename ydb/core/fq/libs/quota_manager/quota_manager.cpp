@@ -724,7 +724,7 @@ private:
         auto it = subjectMap.find(subjectId);
         if (it == subjectMap.end()) {
             ReadQuota(subjectType, subjectId,
-                [this, limits=std::make_shared<TLimits>(std::move(ev->Get()->Limits)), sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
+                [this, limits=std::move(std::make_shared<TLimits>(std::move(ev->Get()->Limits))), sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];

@@ -5,7 +5,7 @@
 #include "service_initializer.h"
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
-#include <ydb/core/actorlib_impl/actor_system_mon.h>
+#include <ydb/core/actorlib_impl/actor_system_mon/actor_system_mon.h>
 
 #include "ydb/core/audit/audit_log_service.h"
 
@@ -869,10 +869,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }
 
     setup->LocalServices.emplace_back(
-        MakeActorSystemMonId(),
-        TActorSetupCmd(CreateActorSystemMon(), TMailboxType::ReadAsFilled, appData->SystemPoolId));
-
-
+        NActorSystemMon::MakeActorSystemMonId(),
+        TActorSetupCmd(NActorSystemMon::CreateActorSystemMon(), TMailboxType::ReadAsFilled, appData->SystemPoolId));
 }
 
 // TImmediateControlBoardInitializer

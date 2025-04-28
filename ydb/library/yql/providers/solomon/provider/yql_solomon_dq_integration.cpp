@@ -81,7 +81,7 @@ public:
                 ui64 totalMetricsCount;
                 YQL_ENSURE(TryFromString(soSourceSettings.TotalMetricsCount().StringValue(), totalMetricsCount));
 
-                for (size_t i = 0; i < std::min(settings.MaxPartitions, totalMetricsCount); ++i) {
+                for (size_t i = 0; i < std::min<ui64>(settings.MaxPartitions, totalMetricsCount); ++i) {
                     partitions.push_back(TStringBuilder() << "partition" << i);
                 }
 

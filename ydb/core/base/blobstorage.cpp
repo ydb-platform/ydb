@@ -67,6 +67,13 @@ std::unique_ptr<TEvBlobStorage::TEvGetResult> TEvBlobStorage::TEvGet::MakeErrorR
     return res;
 }
 
+std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> TEvBlobStorage::TEvCheckIntegrity::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId /*groupId*/) {
+    auto res = std::make_unique<TEvCheckIntegrityResult>(status);
+    res->ErrorReason = errorReason;
+    return res;
+}
+
 std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse(
         NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId /*groupId*/) {
     auto res = std::make_unique<TEvBlockResult>(status);

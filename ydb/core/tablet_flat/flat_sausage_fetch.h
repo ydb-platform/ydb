@@ -2,6 +2,7 @@
 
 #include "flat_sausage_gut.h"
 
+#include <util/generic/xrange.h>
 #include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
@@ -22,6 +23,21 @@ namespace NPageCollection {
             out
                 << "Fetch{" << Pages.size() << " pages"
                 << " " << PageCollection->Label() << "}";
+        }
+
+        TString DebugString() const
+        {
+            TStringBuilder str;
+
+            str << "PageCollection: " << PageCollection->Label();
+            
+            str << "Pages: [";
+            for (const auto& pageId : Pages) {
+                str << " " << pageId;
+            }
+            str << " ]";
+
+            return str;
         }
 
         const ui64 Cookie = Max<ui64>();

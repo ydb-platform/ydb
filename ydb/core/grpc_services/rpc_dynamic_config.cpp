@@ -46,6 +46,9 @@ using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<DynamicConfig::Reso
 using TEvFetchStartupConfigRequest = TGrpcRequestOperationCall<DynamicConfig::FetchStartupConfigRequest,
     DynamicConfig::FetchStartupConfigResponse>;
 
+using TEvGetConfigurationVersionRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigurationVersionRequest,
+    DynamicConfig::GetConfigurationVersionResponse>;
+
 template <typename TRequest, typename TConsoleRequest, typename TConsoleResponse>
 class TDynamicConfigRPC : public TRpcOperationRequestActor<TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
     using TThis = TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>;
@@ -125,6 +128,10 @@ private:
     }
 
     void Handle(TEvConsole::TEvFetchStartupConfigResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvGetConfigurationVersionResponse::TPtr& ev) {
         return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
@@ -296,4 +303,12 @@ void DoFetchStartupConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacili
                     TEvConsole::TEvFetchStartupConfigRequest,
                     TEvConsole::TEvFetchStartupConfigResponse>(p.release()));
 }
+
+void DoGetConfigurationVersionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionResponse>(p.release()));
+}
+
 } // namespace NKikimr::NGRpcService

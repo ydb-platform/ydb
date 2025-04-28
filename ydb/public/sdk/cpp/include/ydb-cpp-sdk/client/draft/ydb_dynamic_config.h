@@ -176,6 +176,34 @@ private:
 
 using TAsyncFetchStartupConfigResult = NThreading::TFuture<TFetchStartupConfigResult>;
 
+struct TGetConfigurationVersionResult : public TStatus {
+    TGetConfigurationVersionResult(TStatus&& status, uint32_t v1Nodes, uint32_t v2Nodes, uint32_t unknownNodes)
+        : TStatus(std::move(status))
+        , V1Nodes_(v1Nodes)
+        , V2Nodes_(v2Nodes)
+        , UnknownNodes_(unknownNodes)
+    {}
+
+    uint32_t GetV1Nodes() const {
+        return V1Nodes_;
+    }
+
+    uint32_t GetV2Nodes() const {
+        return V2Nodes_;
+    }
+
+    uint32_t GetUnknownNodes() const {
+        return UnknownNodes_;
+    }
+
+private:
+    uint32_t V1Nodes_;
+    uint32_t V2Nodes_;
+    uint32_t UnknownNodes_;
+};
+
+using TAsyncGetConfigurationVersionResult = NThreading::TFuture<TGetConfigurationVersionResult>;
+
 struct TDynamicConfigClientSettings : public TCommonClientSettingsBase<TDynamicConfigClientSettings> {
     using TSelf = TDynamicConfigClientSettings;
 };
@@ -257,6 +285,9 @@ public:
 
     // Fetch startup config
     TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {});
+
+    // Get configuration version on nodes
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(const TClusterConfigSettings& settings = {});
 
 private:
     std::shared_ptr<TImpl> Impl_;

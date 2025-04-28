@@ -15,6 +15,11 @@ Release date: , 2025
 * [Added](https://github.com/ydb-platform/ydb/issues/11561) datashard in-memory state migration on graceful restarts, which allows preserving locks and increases the chances of successful transaction execution, improving overall execution time for long read/write transactions.
 * [Added](https://github.com/ydb-platform/ydb/issues/9748) support changing feature flags at runtime. Most feature flags starting from version 25.1 will be applied without requiring process restarts.
 * [Implemented](https://github.com/ydb-platform/ydb/issues/12510) throttling of incoming write load on VDisk to prevent emergency situations when it reaches 100% capacity.
+* [Added](https://github.com/ydb-platform/ydb/issues/15586) system views containing information about [access control entities](https://ydb.tech/docs/ru/dev/system-views#auth).
+* Added system views containing [follower statistics](https://ydb.tech/docs/en/dev/system-views#partitions) for row-oriented tables.
+* [Added](https://github.com/ydb-platform/ydb/pull/11764) the ability to enable the ANTLRv4 query parser instead of the ANTLRv3 parser using the enable_antlr4_parser flag.
+* [Added](https://github.com/ydb-platform/ydb/issues/7054) support for backup/restore of changefeed from/to S3-compatible storage.
+* ?[Added]((https://github.com/ydb-platform/ydb/pull/12909)) automatic integrity verification of backups during import, which prevents restoration from corrupted backups and protects against data loss.
 
 
 #### Performance

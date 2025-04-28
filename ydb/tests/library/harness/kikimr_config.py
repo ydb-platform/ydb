@@ -164,11 +164,7 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            grouped_memory_limiter_config=None,
-            query_service_config=None,
             domain_login_only=None,
-            use_self_management=False,
-            simple_config=False,
             breakpad_minidumps_path: str = None,
             breakpad_minidumps_script: str = None,
     ):

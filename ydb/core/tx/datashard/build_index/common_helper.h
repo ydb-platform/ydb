@@ -30,7 +30,7 @@ public:
         : ScanSettings(scanSettings)
     {}
 
-    TBufferData* AddDestination(const TString& table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
+    TBufferData* AddDestination(TString table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
         auto& dst = Destinations[table];
         dst.Table = std::move(table);
         dst.Types = std::move(types);
@@ -57,7 +57,7 @@ public:
         RetryCount = 0;
 
         for (auto& [_, dst] : Destinations) {
-            if (TryUpload(dst, true)) {
+            if (TryUpload(dst, true /* by limit */)) {
                 break;
             }
         }
@@ -80,7 +80,7 @@ public:
             return true;
         }
         for (auto& [_, dst] : Destinations) {
-            if (TryUpload(dst, true)) {
+            if (TryUpload(dst, true /* by limit */)) {
                 break;
             }
         }
@@ -118,7 +118,7 @@ public:
         }
 
         for (auto& [_, dst] : Destinations) {
-            if (TryUpload(dst, false)) {
+            if (TryUpload(dst, false /* not by limit */)) {
                 return false;
             }
         }

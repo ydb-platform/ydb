@@ -433,9 +433,6 @@ public:
 
     void AggregateToCluster(ui32 pos, const char* embedding)
     {
-        if (pos >= K) {
-            return;
-        }
         auto& aggregate = AggregatedClusters[pos];
         auto* coords = aggregate.Cluster.data();
         for (auto coord : this->GetCoords(embedding)) {

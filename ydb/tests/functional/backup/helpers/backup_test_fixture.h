@@ -133,6 +133,14 @@ public:
         }
     }
 
+    void ValidateHasYdbTables(const std::vector<TString>& paths) {
+        for (const TString& path : paths) {
+            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << path << "\" failed: " << res.GetIssues().ToString());
+            UNIT_ASSERT_C(res.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Table, "Path " << path << " is not a table. Path type: " << static_cast<int>(res.GetEntry().Type));
+        }
+    }
+
 protected:
     TMaybe<NYdb::TDriverConfig> DriverConfig;
     TMaybe<NYdb::TDriver> Driver;

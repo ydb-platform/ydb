@@ -164,7 +164,13 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
+            grouped_memory_limiter_config=None,
+            query_service_config=None,
             domain_login_only=None,
+            use_self_management=False,
+            simple_config=False,
+            breakpad_minidumps_path: str = None,
+            breakpad_minidumps_script: str = None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -322,6 +328,8 @@ class KikimrConfigGenerator(object):
         rack_it = itertools.count(start=1)
         body_it = itertools.count(start=1)
         self.yaml_config["nameservice_config"] = {"node": []}
+        self.breakpad_minidumps_path = breakpad_minidumps_path
+        self.breakpad_minidumps_script = breakpad_minidumps_script
         for node_id in self.__node_ids:
             dc, rack, body = next(dc_it), next(rack_it), next(body_it)
             ic_port = self.port_allocator.get_node_port_allocator(node_id).ic_port

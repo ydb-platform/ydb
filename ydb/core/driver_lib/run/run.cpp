@@ -1757,6 +1757,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 }
 
 void TKikimrRunner::KikimrStart() {
+    for (auto plugin: Plugins) {
+        plugin->Start();
+    }
 
     if (!!PollerThreads) {
         PollerThreads->Start();
@@ -1918,6 +1921,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }
+    for (auto plugin: Plugins) {
+        plugin->Stop();
+    }
 }
 
 void TKikimrRunner::BusyLoop() {
@@ -1984,6 +1990,14 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     NKikHouse::RegisterFormat(*FormatFactory);
 }
 
+void TKikimrRunner::InitializePlugins(const TKikimrRunConfig& runConfig) {
+    for (const auto& initializer: runConfig.Plugins) {
+        if (auto plugin = initializer->CreatePlugin()) {
+            Plugins.push_back(plugin);
+        }
+    }
+}
+
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
@@ -2000,6 +2014,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);
     runner->InitializeGRpc(runConfig);
+    runner->InitializePlugins(runConfig);
     return runner;
 }
 

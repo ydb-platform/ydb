@@ -152,11 +152,11 @@ namespace {
                 return rsProto;
             }
 
-            TString TransactionalIdToReturn;
-            ui64 ProducerIdToReturn;
-            ui16 ProducerEpochToReturn;
-            std::unordered_map<TString, i32> ConsumerGenerationsToReturn;
-            bool ReturnSuccessOnCommit;
+            TString TransactionalIdToReturn = "";
+            ui64 ProducerIdToReturn = 0;
+            ui16 ProducerEpochToReturn = 0;
+            std::unordered_map<TString, i32> ConsumerGenerationsToReturn = {};
+            bool ReturnSuccessOnCommit = true;
         };
 
     class TTransactionActorFixture : public NUnitTest::TBaseFixture {

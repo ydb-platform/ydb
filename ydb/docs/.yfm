@@ -3,6 +3,8 @@ langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
 included: true
+singlePage: true
+
 resources:
   style:
     - _assets/tags.css
@@ -21,6 +23,7 @@ docs-viewer:
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   unrestrict-revision-access: true
   need_pdf: true
+  pdf: true
   
   logo-options:
     url:

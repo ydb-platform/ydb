@@ -141,6 +141,7 @@ TString ToString(const THashMap<TString, TQuotaCachedUsage>& usageMap) {
 }
 
 class TQuotaManagementService : public NActors::TActorBootstrapped<TQuotaManagementService> {
+    using TLimits = decltype(TEvQuotaService::TQuotaSetRequest::Limits);
 public:
     TQuotaManagementService(
         const NConfig::TQuotasManagerConfig& config,
@@ -308,7 +309,7 @@ private:
         }
     }
 
-    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const THashMap<TString, ui64>& limits, const TActorId& sender, ui64 cookie) {
+    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TLimits& limits, const TActorId& sender, ui64 cookie) {
 
         auto pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
@@ -723,7 +724,7 @@ private:
         auto it = subjectMap.find(subjectId);
         if (it == subjectMap.end()) {
             ReadQuota(subjectType, subjectId,
-                [this, limits=std::make_shared<THashMap<TString, ui64>>(std::move(ev->Get()->Limits)), sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
+                [this, limits=std::make_shared<TLimits>(std::move(ev->Get()->Limits)), sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];

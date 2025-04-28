@@ -242,3 +242,21 @@ message FetchStartupConfigResult {
     // YAML document with generated dynamic config
     string config = 1;
 }
+
+message GetConfigurationVersionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetConfigurationVersionResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetConfigurationVersionResult {
+    // Count of nodes with V1 configuration version
+    uint32 V1_nodes = 1;
+    // Count of nodes with V2 configuration version
+    uint32 V2_nodes = 2;
+    // Count of nodes with unknown configuration version
+    uint32 unknown_nodes = 3;
+}

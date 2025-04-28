@@ -20,6 +20,8 @@ SRCS(
     console_configs_provider.h
     console_configs_subscriber.cpp
     console_configs_subscriber.h
+    console_configuration_info_collector.cpp
+    console_configuration_info_collector.h
     console_impl.h
     console_tenants_manager.cpp
     console_tenants_manager.h

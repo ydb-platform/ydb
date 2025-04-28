@@ -49,6 +49,7 @@ TCommandConfig::TCommandConfig(
     AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandVersionDynamicConfig>(allowEmptyDatabase));
 }
 
 TCommandConfig::TCommandConfig(
@@ -848,5 +849,32 @@ int TCommandGenerateDynamicConfig::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("version", {}, "Show dynamic config version")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandVersionDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandVersionDynamicConfig::Run(TConfig& config) {
+    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+    auto result = client.GetConfigurationVersion().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "V1 nodes: " << result.GetV1Nodes() << Endl;
+    Cout << "V2 nodes: " << result.GetV2Nodes() << Endl;
+    Cout << "Unknown nodes: " << result.GetUnknownNodes() << Endl;
+
+    return EXIT_SUCCESS;
+}
+
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

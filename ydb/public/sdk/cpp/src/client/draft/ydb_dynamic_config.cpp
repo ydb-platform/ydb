@@ -365,6 +365,37 @@ public:
 
         return promise.GetFuture();
     }
+
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(const TClusterConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetConfigurationVersionRequest>(settings);
+
+        auto promise = NThreading::NewPromise<TGetConfigurationVersionResult>();
+
+        auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
+            uint32_t v1Nodes = 0;
+            uint32_t v2Nodes = 0;
+            uint32_t unknownNodes = 0;
+
+            if (Ydb::DynamicConfig::GetConfigurationVersionResult result; any && any->UnpackTo(&result)) {
+                v1Nodes = result.v1_nodes();
+                v2Nodes = result.v2_nodes();
+                unknownNodes = result.unknown_nodes();
+            }
+
+            TGetConfigurationVersionResult val(TStatus(std::move(status)), v1Nodes, v2Nodes, unknownNodes);
+            promise.SetValue(std::move(val));
+        };
+
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetConfigurationVersionRequest, Ydb::DynamicConfig::GetConfigurationVersionResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetConfigurationVersion,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
 };
 
 TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
@@ -462,6 +493,10 @@ TAsyncVerboseResolveConfigResult TDynamicConfigClient::VerboseResolveConfig(
 
 TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TClusterConfigSettings& settings) {
     return Impl_->FetchStartupConfig(settings);
+}
+
+TAsyncGetConfigurationVersionResult TDynamicConfigClient::GetConfigurationVersion(const TClusterConfigSettings& settings) {
+    return Impl_->GetConfigurationVersion(settings);
 }
 
 } // namespace NYdb::NDynamicConfig

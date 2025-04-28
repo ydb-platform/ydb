@@ -5,7 +5,10 @@ allowCustomResources: true
 included: true
 resources:
   style:
-    - _assets/tags.css   
+    - _assets/tags.css
+  csp:
+    - "img-src":
+        - "https://github.ydb.tech"
 
 docs-viewer:
   project-name: ydb

@@ -193,8 +193,12 @@ namespace NScheduler {
 
 TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
     : Root(std::make_shared<NHdrf::TRoot>(counters))
-    , Counters(counters)
+    , KqpCounters(counters)
 {
+    DetachedPool = std::make_shared<NHdrf::TPool>("(detached)", counters);
+
+    auto group = counters->GetKqpCounters();
+    Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);
 }
 
 TSchedulableTaskFactory TComputeScheduler::CreateSchedulableTaskFactory() {
@@ -231,7 +235,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
     } else {
-        database->AddPool(std::make_shared<NHdrf::TPool>(poolId, Counters, attrs));
+        database->AddPool(std::make_shared<NHdrf::TPool>(poolId, KqpCounters, attrs));
     }
 }
 
@@ -249,6 +253,8 @@ void TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TStrin
         query = queryIt->second;
         query->Update(attrs);
         DetachedQueries.erase(queryIt);
+        DetachedPool->RemoveQuery(queryId);
+        pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
     } else if (query = pool->GetQuery(queryId)) {
         query->Update(attrs);
@@ -271,6 +277,8 @@ void TComputeScheduler::RemoveQuery(const TString& databaseId, const TString& po
 }
 
 void TComputeScheduler::UpdateFairShare() {
+    auto startTime = TMonotonic::Now();
+
     NHdrf::TRootPtr snapshot;
     {
         TReadGuard lock(Mutex);
@@ -284,6 +292,8 @@ void TComputeScheduler::UpdateFairShare() {
         TWriteGuard lock(Mutex);
         Root->SetSnapshot(snapshot);
     }
+
+    Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());
 }
 
 NHdrf::TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
@@ -301,6 +311,7 @@ NHdrf::TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
     {
         TWriteGuard lock(Mutex);
         DetachedQueries.emplace(queryId, query);
+        DetachedPool->AddQuery(query);
     }
     return query;
 }

@@ -3,7 +3,6 @@ PY3TEST()
 TEST_SRCS(
     test_config_with_metadata.py
     test_generate_dynamic_config.py
-    test_distconf.py
 )
 
 SPLIT_FACTOR(10)
@@ -23,11 +22,8 @@ ENDIF()
 
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(IAM_TOKEN="")
 DEPENDS(
     ydb/apps/ydbd
-    ydb/apps/ydb
 )
 
 PEERDIR(

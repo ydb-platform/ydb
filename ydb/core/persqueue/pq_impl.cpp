@@ -3361,7 +3361,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
     }
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx && tx->PredicatesReceived.contains(event.GetTabletProducer())) {
-        if (tx->State >= NKikimrPQ::TTransaction::EXECUTED) {
+        if ((tx->State > NKikimrPQ::TTransaction::EXECUTED) ||
+            ((tx->State == NKikimrPQ::TTransaction::EXECUTED) && !tx->WriteInProgress)) {
             if (ack) {
                 PQ_LOG_D("send TEvReadSetAck to " << event.GetTabletProducer());
                 ctx.Send(ev->Sender, ack.release());

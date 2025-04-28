@@ -31,6 +31,7 @@ enum class ERequestType {
     Assimilate,
     Block,
     GetBlock,
+    CheckIntegrity,
 };
 
 struct TRequestMonGroup {
@@ -198,6 +199,7 @@ protected:
     TRequestMonGroup AssimilateGroup;
     TRequestMonGroup BlockGroup;
     TRequestMonGroup GetBlockGroup;
+    TRequestMonGroup CheckIntegrityGroup;
 
 public:
     TBlobStorageGroupProxyTimeStats TimeStats;
@@ -224,6 +226,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr EventAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCheckIntegrity;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
     ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
@@ -245,6 +248,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr ActiveAssimilate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCheckIntegrity;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
@@ -256,6 +260,7 @@ public:
     std::optional<TResponseStatusGroup> RespStatStatus;
     std::optional<TResponseStatusGroup> RespStatPatch;
     std::optional<TResponseStatusGroup> RespStatAssimilate;
+    std::optional<TResponseStatusGroup> RespStatCheckIntegrity;
 
     // special patch counters
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
@@ -274,7 +279,7 @@ public:
             case ERequestType::Assimilate: return AssimilateGroup;
             case ERequestType::Block: return BlockGroup;
             case ERequestType::GetBlock: return GetBlockGroup;
-            
+            case ERequestType::CheckIntegrity: return CheckIntegrityGroup;
         }
         Y_ABORT();
     }
@@ -381,4 +386,3 @@ public:
 };
 
 } // NKikimr
-

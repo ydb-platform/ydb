@@ -141,5 +141,7 @@ class TestVectorIndex(VectoreBase):
         
     def select(self, table_name, col_name):
         for vector in self.vectors:
-            rows = self.query(f"select count(*) as count from {table_name} view idx_vector_{col_name} where {col_name} = {format_sql_value(vector, "String")}")
+            rows = self.query(f"""select pk_Int64
+                              from {table_name} view idx_vector_{col_name}
+                              """)
             print(rows)

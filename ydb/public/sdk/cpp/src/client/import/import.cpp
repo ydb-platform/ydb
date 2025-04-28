@@ -141,9 +141,19 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
     for (const auto& item : settings.Item_) {
+        if (!item.Src.empty() && !item.SrcPath.empty()) {
+            throw TContractViolation(
+                TStringBuilder() << "Invalid item: both source prefix and source path are set: \"" << item.Src << "\" and \"" << item.SrcPath << "\"");
+        }
+
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
-        protoItem.set_source_prefix(TStringType{item.Src});
-        protoItem.set_destination_path(TStringType{item.Dst});
+        if (!item.Src.empty()) {
+            protoItem.set_source_prefix(item.Src);
+        }
+        if (!item.SrcPath.empty()) {
+            protoItem.set_source_path(item.SrcPath);
+        }
+        protoItem.set_destination_path(item.Dst);
     }
 
     if (settings.Description_) {
@@ -156,6 +166,18 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
 
     if (settings.NoACL_) {
         request.mutable_settings()->set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SourcePrefix_) {
+        request.mutable_settings()->set_source_prefix(settings.SourcePrefix_.value());
+    }
+
+    if (settings.DestinationPath_) {
+        request.mutable_settings()->set_destination_path(settings.DestinationPath_.value());
+    }
+
+    if (settings.SymmetricKey_) {
+        request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(*settings.SymmetricKey_);
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);

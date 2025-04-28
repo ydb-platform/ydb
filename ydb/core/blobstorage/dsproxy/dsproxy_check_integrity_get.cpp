@@ -44,10 +44,18 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
         const NKikimrBlobStorage::TEvVGetResult& record = ev->Get()->Record;
 
-        Y_ABORT_UNLESS(record.HasStatus());
+        if (!record.HasStatus()) {
+            ErrorReason = "erron in TEvVGetResult - no status";
+            ReplyAndDie(NKikimrProto::ERROR);
+            return;
+        }
         NKikimrProto::EReplyStatus status = record.GetStatus();
 
-        Y_ABORT_UNLESS(record.HasVDiskID());
+        if (!record.HasVDiskID()) {
+            ErrorReason = "erron in TEvVGetResult - no VDisk id";
+            ReplyAndDie(NKikimrProto::ERROR);
+            return;
+        }
         const TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
 
         Y_ABORT_UNLESS(VGetsInFlight > 0);

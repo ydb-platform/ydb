@@ -296,13 +296,14 @@ auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
 
 auto CreateReadReplicasSettingsChecker(const NYdb::NTable::TReadReplicasSettings::EMode expectedMode, const ui64 expectedCount, const TString& debugHint = "") {
     return [=](const TTableDescription& tableDescription) {
-        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings().Defined(), debugHint);
+        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings(), debugHint);
         UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings()->GetMode() == expectedMode, debugHint);
         UNIT_ASSERT_VALUES_EQUAL_C(
             tableDescription.GetReadReplicasSettings()->GetReadReplicasCount(),
             expectedCount,
             debugHint
         );
+        return true;
     };
 }
 
@@ -486,20 +487,20 @@ void TestIndexTableReadReplicasSettingsArePreserved(
     ));
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             ALTER TABLE `%s` ALTER INDEX %s SET (
-                READ_REPLICAS_SETTINGS = "%s:%)" PRIu64 R"(
+                READ_REPLICAS_SETTINGS = "%s:%)" PRIu64 R"("
             );
         )", table, index, readReplicasModeAsString.c_str(), readReplicasCount
     ));
     CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
 
-    backup(table);
+    backup();
 
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             DROP TABLE `%s`;
         )", table
     ));
 
-    restore(table);
+    restore();
     CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
 }
 
@@ -1537,7 +1538,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             readReplicasMode,
             readReplicasCount,
             session,
-            CreateBackupLambda(driver, pathToBackup, true),
+            CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
     }
@@ -2458,9 +2459,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             index,
             readReplicasMode,
             readReplicasCount,
-            testEnv.GetSession(),
+            testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 

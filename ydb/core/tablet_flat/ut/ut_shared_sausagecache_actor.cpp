@@ -84,14 +84,19 @@ struct TSharedPageCacheMock {
         Cerr << "Checking " << RequestId << " fetches" << Endl;
         Cerr << "Expected:" << Endl;
         for (auto f : expected) {
-            Cerr << "  " << f.DebugString() << Endl;
+            Cerr << "  " << f.DebugString(true) << Endl;
         }
         Cerr << "Actual:" << Endl;
         for (auto f : actual) {
-            Cerr << "  " << f.DebugString() << Endl;
+            Cerr << "  " << f.DebugString(true) << Endl;
         }
 
-        
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+        for (auto i : xrange(expected.size())) {
+            UNIT_ASSERT_VALUES_EQUAL(actual[i].PageCollection->Label(), expected[i].PageCollection->Label());
+            UNIT_ASSERT_VALUES_EQUAL(actual[i].Pages, expected[i].Pages);
+            UNIT_ASSERT_VALUES_EQUAL(actual[i].Cookie, expected[i].Cookie); // fetch cookie -> requested size
+        }
 
         return *this;
     } 
@@ -102,7 +107,7 @@ struct TSharedPageCacheMock {
 
     TTestActorRuntime Runtime;
     TActorId ActorId;
-    ui64 RequestId = 2;
+    ui64 RequestId = 1;
 
     THolder<TBlockEvents<NBlockIO::TEvFetch>> fetches;
 
@@ -120,7 +125,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3});
         sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1));
         sharedCache.CheckFetches({
-            NPageCollection::TFetch{1, sharedCache.Collection1, {1, 2, 3}}
+            NPageCollection::TFetch{30, sharedCache.Collection1, {1, 2, 3}}
         });
     }
 

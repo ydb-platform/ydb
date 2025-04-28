@@ -486,7 +486,7 @@ namespace NOps {
 
                 while (auto req = Cache->GrabFetches()) {
                     if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
+                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
 
                     Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
                 }

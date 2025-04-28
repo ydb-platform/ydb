@@ -308,7 +308,7 @@ private:
         }
     }
 
-    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const THashMap<TString, ui64> limits, const TActorId& sender, ui64 cookie) {
+    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const THashMap<TString, ui64>& limits, const TActorId& sender, ui64 cookie) {
 
         auto pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];

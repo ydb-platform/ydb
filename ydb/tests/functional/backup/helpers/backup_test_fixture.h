@@ -141,6 +141,14 @@ public:
         }
     }
 
+    void ValidateDoesNotHaveYdbTables(const std::vector<TString>& paths) {
+        for (const TString& path : paths) {
+            auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
+            UNIT_ASSERT_C(!res.IsSuccess(), "Describe path \"" << path << "\" succeeded, but test expects that there is no such path");
+            UNIT_ASSERT_C(res.GetStatus() == NYdb::EStatus::SCHEME_ERROR, "Wrong status for describe path \"" << path << "\": " << res.GetStatus());
+        }
+    }
+
 protected:
     TMaybe<NYdb::TDriverConfig> DriverConfig;
     TMaybe<NYdb::TDriver> Driver;

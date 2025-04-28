@@ -331,6 +331,7 @@ public:
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 
     void ReplaceSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {
+        AFL_VERIFY(cache);
         SchemaObjectsCache = cache;
     }
 };

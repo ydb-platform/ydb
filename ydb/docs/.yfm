@@ -7,7 +7,7 @@ resources:
   style:
     - _assets/tags.css
   csp:
-    - "frame-src":
+    - "img-src":
         - "https://github.ydb.tech"
 
 docs-viewer:

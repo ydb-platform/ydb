@@ -1591,6 +1591,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
             //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
             R"(dt32 <= dt32 - inter64)",
+            R"(dt32 <= ts64 - inter64)",
 
             R"(dt <= CAST('2001-01-01' as Date))",
             R"(dt <= Date('2001-01-01'))"
@@ -1692,6 +1693,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
             //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
             R"(dt32 <= dt32 - inter64)",
+            R"(dt32 <= ts64 - inter64)",
 
             R"(dt <= CAST('2001-01-01' as Date))",
             R"(dt <= Date('2001-01-01'))"

@@ -26,8 +26,8 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     }
 }
 
-TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs) {
-    FirstAndLastPK = meta.ReplaceKeyEdges;
+TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const TIndexInfo& indexInfo, const bool withBlobs) {
+    FirstAndLastPK = meta.GetReplaceKeyEdges(&indexInfo);
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
     CompactionLevel = meta.GetCompactionLevel();

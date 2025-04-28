@@ -112,9 +112,9 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         auto schema = portion.GetSchema(VersionedIndex);
         if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            auto col = portion.GetMeta().IndexKeyEnd.Column(0);
-            AFL_VERIFY(col->length());
-            const auto max = NArrow::TStatusValidator::GetValid(col->GetScalar(col->length() - 1));
+            auto& col = portion.GetMeta().IndexKeyEnd.Column(0);
+            AFL_VERIFY(col.length());
+            const auto max = NArrow::TStatusValidator::GetValid(col.GetScalar(col.length() - 1));
             AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
             AddPortionImpl(portion, addContext.GetNow());
         } else {

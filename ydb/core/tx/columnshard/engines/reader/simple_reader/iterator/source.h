@@ -407,12 +407,11 @@ public:
 
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            AFL_VERIFY(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows());
-            return arrow::RecordBatch::Make(GetSourceSchema()->GetIndexInfo().GetReplaceKey(),
-                Portion->GetMeta().IndexKeyEnd().GetColumns()->front()->length(), *Portion->GetMeta().IndexKeyEnd().GetColumns());
+            return arrow::RecordBatch::Make(GetSourceSchema()->GetIndexInfo().GetReplaceKey(), Portion->GetMeta().IndexKeyEnd.GetRecordsCount(),
+                *Portion->GetMeta().IndexKeyEnd.GetColumns());
         } else {
-            return arrow::RecordBatch::Make(GetSourceSchema()->GetIndexInfo().GetReplaceKey(),
-                Portion->GetMeta().IndexKeyStart().GetColumns()->front()->length(), *Portion->GetMeta().IndexKeyStart().GetColumns());
+            return arrow::RecordBatch::Make(GetSourceSchema()->GetIndexInfo().GetReplaceKey(), Portion->GetMeta().IndexKeyStart.GetRecordsCount(),
+                *Portion->GetMeta().IndexKeyStart.GetColumns());
         }
     }
 

@@ -1,13 +1,13 @@
 #pragma once
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/stream/output.h>
 
@@ -18,6 +18,7 @@ struct TIndexInfo;
 class TPortionMetaBase {
 protected:
     std::vector<TUnifiedBlobId> BlobIds;
+
 public:
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
@@ -94,6 +95,8 @@ private:
     }
 
 public:
+    NArrow::TFirstLastSpecialKeys GetReplaceKeyEdges(const TIndexInfo* indexInfo) const;
+
     void ResetCompactionLevel(const ui32 level) {
         CompactionLevel = level;
     }

@@ -40,16 +40,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
             break;
     }
 
-    arrow::FieldVector fields;
-    ui32 idx = 0;
-    for (auto&& i : IndexKeyEnd.GetColumns()) {
-        fields.emplace_back(std::make_shared<arrow::Field>(std::to_string(idx), i->type()));
-        ++idx;
-    }
-
-    TFirstLastSpecialKeys pk(arrow::RecordBatch::Make(std::move(fields), IndexKeyEnd.GetRecordsCount(), *IndexKeyEnd.GetColumns()));
-
-    portionMeta.SetPrimaryKeyBorders(pk.SerializePayloadToString());
+    portionMeta.SetPrimaryKeyBorders(GetReplaceKeyEdges(nullptr).SerializePayloadToString());
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
@@ -74,6 +65,23 @@ std::optional<TString> TPortionMeta::GetTierNameOptional() const {
         return TierName;
     } else {
         return std::nullopt;
+    }
+}
+
+NArrow::TFirstLastSpecialKeys TPortionMeta::GetReplaceKeyEdges(const TIndexInfo* indexInfo) const {
+    if (!indexInfo) {
+        arrow::FieldVector fields;
+        ui32 idx = 0;
+        for (auto&& i : *IndexKeyEnd.GetColumns()) {
+            fields.emplace_back(std::make_shared<arrow::Field>(std::to_string(idx), i->type()));
+            ++idx;
+        }
+
+        return NArrow::TFirstLastSpecialKeys(arrow::RecordBatch::Make(
+            std::make_shared<arrow::Schema>(std::move(fields)), IndexKeyEnd.GetRecordsCount(), *IndexKeyEnd.GetColumns()));
+    } else {
+        return NArrow::TFirstLastSpecialKeys(
+            arrow::RecordBatch::Make(indexInfo->GetReplaceKey(), IndexKeyEnd.GetRecordsCount(), *IndexKeyEnd.GetColumns()));
     }
 }
 

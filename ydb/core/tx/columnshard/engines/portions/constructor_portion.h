@@ -32,14 +32,14 @@ private:
     TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
     TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
 
-    TPortionInfoConstructor(TPortionInfo&& portion)
+    TPortionInfoConstructor(TPortionInfo&& portion, const TIndexInfo& indexInfo)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
-        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta), true);
+        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta), indexInfo, true);
     }
     friend class TPortionAccessorConstructor;
 
@@ -47,7 +47,7 @@ public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
 
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
+    TPortionInfoConstructor(const TPortionInfo& portion, const TIndexInfo& indexInfo, const bool withMetadata, const bool withMetadataBlobs)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
@@ -57,7 +57,7 @@ public:
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
         , InsertWriteId(portion.GetInsertWriteIdOptional()) {
         if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
+            MetaConstructor = TPortionMetaConstructor(portion.Meta, indexInfo, withMetadataBlobs);
         } else {
             AFL_VERIFY(!withMetadataBlobs);
         }

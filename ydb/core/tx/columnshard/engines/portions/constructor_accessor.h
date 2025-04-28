@@ -37,15 +37,15 @@ private:
     TPortionAccessorConstructor(const TPortionAccessorConstructor&) = default;
     TPortionAccessorConstructor& operator=(const TPortionAccessorConstructor&) = default;
 
-    TPortionAccessorConstructor(TPortionDataAccessor&& accessor)
-        : PortionInfo(accessor.GetPortionInfo(), true, true) {
+    TPortionAccessorConstructor(TPortionDataAccessor&& accessor, const TIndexInfo& indexInfo)
+        : PortionInfo(accessor.GetPortionInfo(), indexInfo, true, true) {
         Indexes = accessor.ExtractIndexes();
         Records = accessor.ExtractRecords();
     }
 
-    TPortionAccessorConstructor(
-        const TPortionDataAccessor& accessor, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
-        : PortionInfo(accessor.GetPortionInfo(), withMetadata, withMetadataBlobs) {
+    TPortionAccessorConstructor(const TPortionDataAccessor& accessor, const TIndexInfo& indexInfo, const bool withBlobs, const bool withMetadata,
+        const bool withMetadataBlobs)
+        : PortionInfo(accessor.GetPortionInfo(), indexInfo, withMetadata, withMetadataBlobs) {
         if (withBlobs) {
             AFL_VERIFY(withMetadataBlobs && withMetadata);
             Indexes = accessor.GetIndexesVerified();
@@ -157,8 +157,8 @@ public:
         return TPortionAccessorConstructor(*this);
     }
 
-    static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {
-        return TPortionAccessorConstructor(TPortionInfoConstructor(portion, true, false));
+    static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion, const TIndexInfo& indexInfo) {
+        return TPortionAccessorConstructor(TPortionInfoConstructor(portion, indexInfo, true, false));
     }
 
     static TPortionDataAccessor BuildForLoading(

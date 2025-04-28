@@ -24,8 +24,8 @@ public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
     ui32 GetRecordsCount() const {
-        AFL_VERIFY(Columns.size());
-        return Columns.front()->length();
+        AFL_VERIFY(Columns->size());
+        return Columns->front()->length();
     }
 
     void ShrinkToFit() {

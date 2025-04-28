@@ -35,7 +35,7 @@ private:
 
 public:
     TPortionMetaConstructor() = default;
-    TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
+    TPortionMetaConstructor(const TPortionMeta& meta, const TIndexInfo& indexInfo, const bool withBlobs);
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));

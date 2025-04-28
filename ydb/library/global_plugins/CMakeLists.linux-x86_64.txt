@@ -12,25 +12,17 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(version)
+add_library(ydb-library-global_plugins)
 
 
-target_link_libraries(version PUBLIC
+target_link_libraries(ydb-library-global_plugins PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-protobuf
-  library-actors-interconnect
-  monlib-service-pages
-  library-cpp-svnversion
-  ydb-library-global_plugins
-  ydb-core-protos
-  core-viewer-json
+  library-cpp-getopt
 )
 
-target_sources(version PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/version/version.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/version/version.h
+target_sources(ydb-library-global_plugins PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/global_plugins/abstract.cpp
 )
 

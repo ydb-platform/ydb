@@ -24,7 +24,7 @@ target_link_libraries(version PUBLIC
   library-actors-interconnect
   monlib-service-pages
   library-cpp-svnversion
-  library-cpp-resource
+  ydb-library-global_plugins
   ydb-core-protos
   core-viewer-json
 )

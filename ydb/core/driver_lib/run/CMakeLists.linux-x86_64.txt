@@ -138,6 +138,7 @@ target_link_libraries(run PUBLIC
   library-actors-util
   ydb-library-folder_service
   library-folder_service-proto
+  ydb-library-global_plugins
   library-grpc-server
   grpc-server-actors
   ydb-library-pdisk_io

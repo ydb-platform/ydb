@@ -107,4 +107,3 @@ IActor* CreateDsProxyNodeMon(TIntrusivePtr<TDsProxyNodeMon> mon) {
 }
 
 } // NKikimr
-

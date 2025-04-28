@@ -113,14 +113,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             port_lines = [line for line in output.split('\n') if str(port) in line]
             if port_lines:
                 for line in port_lines:
-                    logger.info(f"Port {port} status: {line.strip()}")
-                is_listening = True
-            else:
-                logger.info(f"Port {port} is not found in netstat output")
-                is_listening = False
-            return is_listening
+                    logger.info("Port {} status: {}".format(port, line.strip()))
+                    is_listening = True
+                else:
+                    logger.info("Port {} is not found in netstat output".format(port))
+                    is_listening = False
+                return is_listening
         except Exception as e:
-            logger.error(f"Error checking port {port}: {e}")
+            logger.error("Error checking port {}: {}".format(port,e))
             return False
 
     def check_ports(self):
@@ -142,43 +142,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         return ports_status
 
-    def is_port_listening(self, port):
-        """Check if the port is listening after node startup"""
-        try:
-            cmd = ["netstat", "-tuln"]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            output = result.stdout.decode()
-            port_lines = [line for line in output.split('\n') if str(port) in line]
-            if port_lines:
-                for line in port_lines:
-                    logger.info(f"Port {port} status: {line.strip()}")
-                is_listening = True
-            else:
-                logger.info(f"Port {port} is not found in netstat output")
-                is_listening = False
-            return is_listening
-        except Exception as e:
-            logger.error(f"Error checking port {port}: {e}")
-            return False
-
-    def check_ports(self):
-        """Check if all allocated ports are listening"""
-        ports_status = {
-            "grpc_port": self.is_port_listening(self.grpc_port),
-            "mon_port": self.is_port_listening(self.mon_port),
-            "ic_port": self.is_port_listening(self.ic_port)
-        }
-
-        if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
-            ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
-
-        if hasattr(self, 'pgwire_port') and self.pgwire_port:
-            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
-
-        if hasattr(self, 'sqs_port') and self.sqs_port:
-            ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
-
-        return ports_status
 
     @property
     def cwd(self):
@@ -602,23 +565,24 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         try:
             new_node_object = self.__register_node(configurator)
             self.__write_node_config(new_node_object.node_id, configurator)
-            logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
+            logger.info("Successfully registered new node object with ID: {}".format(new_node_object.node_id))
             return new_node_object
         except Exception as e:
-            logger.error(f"Failed to register new node: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to register new node: {e}")
+            logger.error("Failed to register new node: {}".format(e), exc_info=True)
+            raise RuntimeError("Failed to register new node: {}".format(e))
 
     def start_node(self, node_id):
         if node_id not in self._nodes:
-            logger.error(f"Cannot start node: Node ID {node_id} not found in registered nodes.")
-            raise KeyError(f"Node ID {node_id} not found.")
+            logger.error("Cannot start node: Node ID {} not found in registered nodes.".format(node_id))
+            raise KeyError("Node ID {} not found.".format(node_id))
 
-        logger.info(f"Starting registered node {node_id}.")
+        logger.info("Starting registered node {}.".format(node_id))
         try:
             self._KiKiMR__run_node(node_id)
-            logger.info(f"Successfully started node {node_id}.")
+            logger.info("Successfully started node {}.".format(node_id))
         except Exception as e:
-            raise RuntimeError(f"Failed to start node {node_id}: {e}")
+            raise RuntimeError("Failed to start node {}: {}".format(node_id, e))
+
 
 
     def update_nodes_configurator(self, configurator):

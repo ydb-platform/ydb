@@ -480,12 +480,20 @@ void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& co
     auto date_from_passed = config.ParseResult->Has("date-from");
     auto date_to_passed = config.ParseResult->Has("date-to");
 
+    Cerr << "timestamp_dev_passed: " << timestamp_dev_passed << Endl;
+    Cerr << "date_from_passed: " << date_from_passed << Endl;
+    Cerr << "date_to_passed: " << date_to_passed << Endl;
+
+    if (!timestamp_dev_passed && (!date_from_passed && !date_to_passed)) {
+        throw yexception() << "One of parameter should be provided";
+    }
+
     if (timestamp_dev_passed && (date_from_passed || date_to_passed)) {
-        throw yexception() << "The `timestamp_deviation` and `date_from`, `date_to` are mutually exclusive and shouldn't be passed at once";
+        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
     }
 
     if ((date_from_passed && !date_to_passed) || (!date_from_passed && date_to_passed)) {
-        throw yexception() << "The `date_from` and `date_to` parameters must be provided together to specify the interval for uniform PK generation";
+        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
     }
 
     if (date_from_passed && date_to_passed) {

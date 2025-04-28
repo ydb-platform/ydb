@@ -335,7 +335,6 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId) {
-    AFL_VERIFY(SchemaObjectsCache);
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

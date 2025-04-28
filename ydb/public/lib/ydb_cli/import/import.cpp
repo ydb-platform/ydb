@@ -57,10 +57,13 @@ namespace {
 
 constexpr ui64 rowsToAnalyze = 100000;
 
-std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input) {
+std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input, bool verbose) {
     char bom[3];
     size_t read = input->Read(bom, 3);
     if (read == 3 && bom[0] == '\xEF' && bom[1] == '\xBB' && bom[2] == '\xBF') {
+        if (verbose) {
+            Cerr << "BOM detected and skipped" << Endl;
+        }
         return nullptr; // BOM found and skipped, return nullptr to use original stream
     }
     TString bomData(bom, read);
@@ -71,6 +74,15 @@ std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input) {
         new TMultiInput(bomStream.get(), input),
         [bomStream, bomData](IInputStream* ptr) { delete ptr; }
     );
+}
+
+inline void RemoveBomIfPresent(TString& str, bool verbose) {
+    if (str.size() >= 3 && str[0] == '\xEF' && str[1] == '\xBB' && str[2] == '\xBF') {
+        if (verbose) {
+            Cerr << "BOM detected and skipped" << Endl;
+        }
+        str = TString(str.data() + 3, str.size() - 3);
+    }
 }
 
 inline
@@ -212,18 +224,30 @@ public:
     TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow, ui64 maxThreads) {
         TFile file;
         if (filePath) {
+            if (settings.Verbose_) {
+                Cerr << "Opening file " << filePath << Endl;
+            }
             file = TFile(filePath, RdOnly);
         } else {
+            if (settings.Verbose_) {
+                Cerr << "Reading from stdin " << Endl;
+            }
             file = TFile(GetStdinFileno());
         }
         auto input = MakeHolder<TFileInput>(file);
         TCountingInput countInput(input.Get());
 
+        bool checkedForBom = false;
         if (settings.Header_) {
             headerRow = NCsvFormat::TLinesSplitter(countInput).ConsumeLine();
+            RemoveBomIfPresent(headerRow, settings.Verbose_);
+            checkedForBom = true;
         }
         for (ui32 i = 0; i < settings.SkipRows_; ++i) {
             NCsvFormat::TLinesSplitter(countInput).ConsumeLine();
+        }
+        if (settings.SkipRows_ > 0) {
+            checkedForBom = true;
         }
         i64 skipSize = countInput.Counter();
 
@@ -248,13 +272,24 @@ public:
         file = TFile(filePath, RdOnly);
         file.Seek(seekPos, sSet);
         THolder<TFileInput> stream = MakeHolder<TFileInput>(file);
+        if (!checkedForBom) {
+            char bom[3];
+            size_t read = input->Read(bom, 3);
+            if (read != 3 || bom[0] != '\xEF' || bom[1] != '\xBB' || bom[2] != '\xBF') {
+                if (settings.Verbose_) {
+                    Cerr << "BOM detected and skipped" << Endl;
+                }
+                file.Seek(seekPos, sSet);
+                stream = MakeHolder<TFileInput>(file);
+            }
+        }
         for (size_t i = 0; i < SplitCount; ++i) {
             seekPos += chunkSize;
             i64 nextPos = seekPos;
             auto nextFile = TFile(filePath, RdOnly);
             auto nextStream = MakeHolder<TFileInput>(nextFile);
             nextFile.Seek(seekPos, sSet);
-            if (seekPos > 0) {
+            if (seekPos > skipSize) {
                 nextFile.Seek(-1, sCur);
                 nextPos += nextStream->ReadLine(temp);
             }
@@ -691,15 +726,24 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
             // Original input stream
             std::shared_ptr<IInputStream> inputStream;
-            if (fileInput) {
-                inputStream = std::shared_ptr<IInputStream>(std::move(fileInput));
-            } else {
-                inputStream = std::make_shared<TFileInput>(TFile(GetStdinFileno()));
+            std::shared_ptr<IInputStream> noBomStream;
+            // No need to initialize input stream for csv by blocks mode
+            if (!Settings.NewlineDelimited_) {
+                if (fileInput) {
+                    if (Settings.Verbose_) {
+                        Cerr << "Opening file " << filePath << Endl;
+                    }
+                    inputStream = std::shared_ptr<IInputStream>(std::move(fileInput));
+                } else {
+                    if (Settings.Verbose_) {
+                        Cerr << "Reading from stdin " << Endl;
+                    }
+                    inputStream = std::shared_ptr<IInputStream>(&Cin, [](IInputStream*) {});
+                }
+                // If a stream had BOM, returns null. It means we can use original stream -- it has no BOM anymore
+                // If a stream had no BOM, returns combined stream with 3 bytes already read from it and the original stream
+                noBomStream = SkipBOMIfPresent(inputStream.get(), Settings.Verbose_);
             }
-
-            // If a stream had BOM, returns null. It means we can use original stream -- it has no BOM anymore
-            // If a stream had no BOM, returns combined stream with 3 bytes already read from it and the original stream
-            std::shared_ptr<IInputStream> noBomStream = SkipBOMIfPresent(inputStream.get());
             IInputStream& input = noBomStream ? *noBomStream : *inputStream;
 
             ProgressCallbackFunc progressCallback;

@@ -117,14 +117,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             port_lines = [line for line in output.split('\n') if str(port) in line]
             if port_lines:
                 for line in port_lines:
-                    logger.info(f"Port {port} status: {line.strip()}")
+                    logger.info("Port %s status: %s" % (str(port), line.strip()))
                 is_listening = True
             else:
-                logger.info(f"Port {port} is not found in netstat output")
+                logger.info("Port %s is not found in netstat output" % str(port))
                 is_listening = False
             return is_listening
         except Exception as e:
-            logger.error(f"Error checking port {port}: {e}")
+            logger.error("Error checking port %s: %s" % (str(port), str(e)))
             return False
 
     def check_ports(self):
@@ -568,33 +568,23 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         try:
             new_node_object = self.__register_node(configurator)
             self.__write_node_config(new_node_object.node_id, configurator)
-            logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
+            logger.info("Successfully registered new node object with ID: %s" % str(new_node_object.node_id))
             return new_node_object
         except Exception as e:
-            logger.error(f"Failed to register new node: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to register new node: {e}")
+            logger.error("Failed to register new node: %s" % str(e), exc_info=True)
+            raise RuntimeError("Failed to register new node: %s" % str(e))
 
     def start_node(self, node_id):
         if node_id not in self._nodes:
-            logger.error(f"Cannot start node: Node ID {node_id} not found in registered nodes.")
-            raise KeyError(f"Node ID {node_id} not found.")
+            logger.error("Cannot start node: Node ID %s not found in registered nodes." % str(node_id))
+            raise KeyError("Node ID %s not found." % str(node_id))
 
-        logger.info(f"Starting registered node {node_id}.")
+        logger.info("Starting registered node %s." % str(node_id))
         try:
             self._KiKiMR__run_node(node_id)
-            logger.info(f"Successfully started node {node_id}.")
+            logger.info("Successfully started node %s." % str(node_id))
         except Exception as e:
-            raise RuntimeError(f"Failed to start node {node_id}: {e}")
-
-    def update_nodes_configurator(self, configurator):
-        for node in self.nodes.values():
-            node.stop()
-        self.__configurator = configurator
-        self.__initialy_prepared = False
-        self._node_index_allocator = itertools.count(1)
-        self.prepare()
-        for node in self.nodes.values():
-            node.start()
+            raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
 
     @property
     def config_path(self):
@@ -607,8 +597,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info(f"Writing node config to {node_config_path}")
-        logger.info(f"Config: {configurator.yaml_config}")
+        logger.info("Writing node config to %s" % node_config_path)
+        logger.info("Config: %s" % configurator.yaml_config)
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):

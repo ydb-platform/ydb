@@ -460,6 +460,9 @@ message TPredicate {
             G = 6;  // "$column > value"
             IND = 7;// "$column IS NOT DISTINCT value"
             ID = 8; // "$column IS DISTINCT value"
+            STARTS_WITH = 9; 
+            ENDS_WITH = 10; 
+            CONTAINS = 11;
         }
 
         EOperation operation = 1;

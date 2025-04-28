@@ -73,8 +73,13 @@ struct TTransferStrategy : public IStrategy {
         }
 
         const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
-        if (!TPath::Resolve(target.GetDstPath(), context.SS).IsResolved()) {
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
             result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t column-oriented table");
             return true;
         }
 

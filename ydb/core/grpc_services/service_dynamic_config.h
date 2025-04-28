@@ -30,5 +30,7 @@ void DoResolveAllConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
 
 void DoFetchStartupConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
+void DoGetConfigurationVersionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+
 }
 }

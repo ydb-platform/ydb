@@ -1,0 +1,184 @@
+body {
+    padding-top: 1rem;
+}
+
+#dataContainer h2 {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 0.5rem;
+}
+
+.pool-card, .iteration-card {
+    margin-bottom: 1.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: .25rem;
+}
+
+.pool-card-header, .iteration-card-header {
+    background-color: rgba(0,0,0,.03);
+    padding: .75rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.pool-card-body, .iteration-card-body {
+    padding: 1.25rem;
+}
+
+.thread-table th, .thread-table td {
+    vertical-align: middle;
+}
+
+.table {
+    margin-bottom: 0; /* Убираем лишний отступ у таблиц внутри карточек */
+}
+
+pre {
+    white-space: pre-wrap;       /* css-3 */
+    white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+    white-space: -pre-wrap;      /* Opera 4-6 */
+    white-space: -o-pre-wrap;    /* Opera 7 */
+    word-wrap: break-word;       /* Internet Explorer 5.5+ */
+}
+
+/* Стили для графиков */
+.chart-container {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+.line {
+    fill: none;
+    stroke-width: 2px;
+}
+
+.line-budget {
+    stroke: #007bff;
+}
+
+.line-lostCpu {
+    stroke: #dc3545;
+}
+
+.line-freeSharedCpu {
+    stroke: #28a745;
+}
+
+.axis-label {
+    font-size: 12px;
+    text-anchor: middle;
+}
+
+.tooltip {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 8px;
+    pointer-events: none;
+    font-size: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+
+.chart-controls {
+    margin-bottom: 15px;
+}
+
+.grid line {
+    stroke: #e0e0e0;
+    stroke-opacity: 0.7;
+    shape-rendering: crispEdges;
+}
+
+.grid path {
+    stroke-width: 0;
+}
+
+/* Стили для чекбоксов пулов */
+#poolCheckboxes {
+    gap: 8px;
+}
+
+.pool-checkbox-wrapper {
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pool-checkbox {
+    margin-right: 4px;
+}
+
+.pool-color-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+
+/* Легенда графика */
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 5px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.legend-color {
+    width: 16px;
+    height: 10px;
+    margin-right: 5px;
+    border-radius: 2px;
+}
+
+.legend-text {
+    user-select: none;
+}
+
+.legend-item-disabled .legend-text {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.legend-item-disabled .legend-color {
+    opacity: 0.3;
+}
+
+/* Стили для графиков */
+.bar {
+    transition: opacity 0.2s;
+}
+
+.bar:hover {
+    opacity: 0.8;
+}
+
+.area {
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.area:hover {
+    opacity: 0.7;
+}
+
+/* Стиль для оверлейных линий */
+.overlay-line {
+    stroke-dasharray: 4,4;
+    stroke-width: 1.5px;
+    stroke: #777;
+} 

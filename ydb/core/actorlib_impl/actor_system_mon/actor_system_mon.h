@@ -8,10 +8,12 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-namespace NKikimr {
+namespace NKikimr::NActorSystemMon {
+
+void RegisterPages(NMonitoring::TIndexMonPage* index, NActors::TActorSystem* actorSystem);
 
 NActors::TActorId MakeActorSystemMonId();
 
 NActors::IActor* CreateActorSystemMon();
 
-} // NKikimr
+} // NKikimr::NActorSystemMon

@@ -111,7 +111,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestPDiskActorPDiskStopBroken) {
         TActorTestContext testCtx{{}};
 
-        auto *pdisk = testCtx.GetPDisk();
+        testCtx.GetRuntime()->WaitFor("Block device start", [&] {
+            return testCtx.SafeRunOnPDisk([&] (auto* pdisk) {
+                // Check that the PDisk is up
+                return pdisk->BlockDevice->IsGood();
+            });
+        });
 
         testCtx.Send(new NPDisk::TEvDeviceError("test"));
 
@@ -121,7 +126,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::CORRUPTED);
 
         testCtx.GetRuntime()->WaitFor("Block device stop", [&] {
-            return !pdisk->BlockDevice->IsGood();
+            return testCtx.SafeRunOnPDisk([&] (auto* pdisk) {
+                // Check that the PDisk is stopped
+                return !pdisk->BlockDevice->IsGood();
+            });
         });
 
         testCtx.Send(new NActors::TEvents::TEvPoisonPill());

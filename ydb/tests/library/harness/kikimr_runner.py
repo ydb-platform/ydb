@@ -585,7 +585,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             logger.info("Successfully started node %s." % str(node_id))
         except Exception as e:
             raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
-    
+
     def update_nodes_configurator(self, configurator):
         for node in self.nodes.values():
             node.stop()

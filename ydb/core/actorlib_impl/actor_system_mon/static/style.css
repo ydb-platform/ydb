@@ -41,18 +41,47 @@ pre {
     word-wrap: break-word;       /* Internet Explorer 5.5+ */
 }
 
-/* Стили для графиков */
+/* Общие стили для приложения */
 .chart-container {
     background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 10px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    min-height: 400px; /* Минимальная высота для контейнера с графиком */
+}
+
+svg[id$="Chart"] {
+    display: block;
+    width: 100%;
+    min-height: 300px; /* Минимальная высота для SVG графика */
+    background-color: #fff;
+    border: 1px solid #e1e1e1;
+}
+
+.axis-label {
+    font-weight: bold;
+    fill: #333;
+}
+
+.grid line {
+    stroke: #e0e0e0;
+    stroke-opacity: 0.7;
+    shape-rendering: crispEdges;
+}
+
+.grid path {
+    stroke-width: 0;
 }
 
 .line {
     fill: none;
-    stroke-width: 2px;
+    stroke-width: 2;
+}
+
+.dot {
+    stroke: #fff;
+    stroke-width: 1;
 }
 
 .line-budget {
@@ -67,34 +96,107 @@ pre {
     stroke: #28a745;
 }
 
-.axis-label {
-    font-size: 12px;
-    text-anchor: middle;
+.area {
+    opacity: 0.7;
+}
+
+.overlay-line {
+    stroke: #777;
+    stroke-width: 1;
+    stroke-dasharray: 3,3;
 }
 
 .tooltip {
     position: absolute;
-    background-color: rgba(255, 255, 255, 0.9);
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 8px;
-    pointer-events: none;
+    padding: 10px;
     font-size: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    border-radius: 5px;
+    pointer-events: none;
+    z-index: 1000;
 }
 
-.chart-controls {
+.chart-legend {
+    font-size: 12px;
+}
+
+.legend-color {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.legend-text {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.legend-item {
+    cursor: pointer;
+}
+
+.legend-item-disabled rect, .legend-item-disabled line {
+    opacity: 0.3;
+}
+
+.legend-item-disabled text {
+    opacity: 0.5;
+}
+
+/* Стили для карточек итераций и пулов */
+.iteration-card, .pool-card {
     margin-bottom: 15px;
 }
 
-.grid line {
-    stroke: #e0e0e0;
-    stroke-opacity: 0.7;
-    shape-rendering: crispEdges;
+.iteration-card-header {
+    background-color: #f8f9fa;
+    font-weight: bold;
 }
 
-.grid path {
-    stroke-width: 0;
+.pool-card-header {
+    background-color: #e9ecef;
+}
+
+.pool-card-body {
+    padding: 10px;
+}
+
+/* Стили для элементов формы */
+.range-selector label {
+    margin-right: 5px;
+}
+
+.range-selector .form-control {
+    margin-right: 10px;
+}
+
+/* Стили для селектора пулов */
+.pool-checkbox-wrapper {
+    margin: 5px;
+    padding: 5px;
+    border-radius: 3px;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.pool-color-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-left: 5px;
+    margin-right: 5px;
+    border-radius: 50%;
+}
+
+/* Активная вкладка - делаем её видимой без анимации */
+.tab-pane.active {
+    opacity: 1 !important;
+    display: block !important;
+}
+
+/* Исправление для bootstrap */
+.tab-content > .active {
+    display: block !important;
 }
 
 /* Стили для чекбоксов пулов */
@@ -181,4 +283,23 @@ pre {
     stroke-dasharray: 4,4;
     stroke-width: 1.5px;
     stroke: #777;
+}
+
+/* Стили для блока выбора диапазона */
+.range-selector {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+.range-selector .form-label {
+    margin-bottom: 0;
+    line-height: 2;
+}
+
+.range-selector .form-check {
+    margin-bottom: 0;
 } 

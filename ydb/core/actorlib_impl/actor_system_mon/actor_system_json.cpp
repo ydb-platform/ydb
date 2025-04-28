@@ -55,7 +55,11 @@ void GenerateJson(const TIterableDoubleRange<THarmonizerIterationState>& history
     std::visit([&](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, TLastWindowIteration>) {
-            begin = history.size() - arg.LastIterationCount;
+            if (arg.LastIterationCount > history.size()) {
+                begin = 0;
+            } else {
+                begin = history.size() - arg.LastIterationCount;
+            }
         } else if constexpr (std::is_same_v<T, TLastWindowTime>) {
             ui64 currentTs = GetCycleCountFast();
             auto it = std::upper_bound(history.begin(), history.end(), currentTs - arg.LastWindowTs, [](ui64 ts, const THarmonizerIterationState& state) {

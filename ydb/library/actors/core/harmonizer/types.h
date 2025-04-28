@@ -63,7 +63,14 @@ private:
     T* SecondEnd = nullptr;
 
 public:
-    struct iterator {
+    struct iterator : public std::iterator<
+            std::random_access_iterator_tag, // iterator_category
+            T,                    // value_type
+            size_t,               // difference_type
+            const T*,             // pointer
+            T                     // reference
+        >
+    {
         TSelf* Range = nullptr;
         size_t Index = 0;
 
@@ -103,14 +110,35 @@ public:
             return iterator(Range, Index + offset);
         }
 
+        iterator& operator+=(size_t offset) {
+            Index += offset;
+            return *this;
+        }
+
         iterator operator-(size_t offset) const {
             return iterator(Range, Index - offset);
+        }
+
+        iterator& operator-=(size_t offset) {
+            Index -= offset;
+            return *this;
+        }
+
+        size_t operator-(const iterator& other) const {
+            return Index - other.Index;
         }
 
         auto operator<=>(const iterator&) const = default;
     };
 
-    struct const_iterator {
+    struct const_iterator : public std::iterator<
+            std::random_access_iterator_tag, // iterator_category
+            T,                    // value_type
+            size_t,               // difference_type
+            const T*,             // pointer
+            T                     // reference
+        >
+    {
         const TSelf* Range = nullptr;
         size_t Index = 0;
 
@@ -150,8 +178,22 @@ public:
             return const_iterator(Range, Index + offset);
         }
 
+        const_iterator& operator+=(size_t offset) {
+            Index += offset;
+            return *this;
+        }
+
         const_iterator operator-(size_t offset) const {
             return const_iterator(Range, Index - offset);
+        }
+
+        const_iterator& operator-=(size_t offset) {
+            Index -= offset;
+            return *this;
+        }
+
+        size_t operator-(const const_iterator& other) const {
+            return Index - other.Index;
         }
 
         auto operator<=>(const const_iterator&) const = default;

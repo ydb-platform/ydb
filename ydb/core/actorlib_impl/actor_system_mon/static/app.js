@@ -37,9 +37,46 @@ let selectedPools = new Set();
 let visiblePools = new Set();
 
 // Глобальные ссылки на элементы DOM для удобства доступа из разных файлов
-let dataContainer, loadingIndicator, errorContainer, refreshButton, levelSelect, lastIterations, sortNewestFirstCheckbox;
+let dataContainer, loadingIndicator, errorContainer, refreshButton, levelSelect, iterationFrom, iterationTo, timeMode, timeFrom, timeTo, sortNewestFirstCheckbox;
 let chartMetricSelect, poolSelect, poolMetricSelect, refreshChartButton;
 let cpuMetricSelect, cpuValueSelect, refreshCpuButton, showAllPoolsCheckbox, poolCheckboxesContainer, poolSelectorContainer;
+
+// Функция для форсированного пересчета размеров графиков
+function recalculateChartSizes() {
+    console.log("Форсированный пересчет размеров графиков...");
+    
+    // Получаем все SVG элементы для графиков
+    const chartElements = document.querySelectorAll('svg[id$="Chart"]');
+    
+    chartElements.forEach(element => {
+        // Устанавливаем явно стили, чтобы гарантировать видимость
+        element.style.display = 'block';
+        element.style.visibility = 'visible';
+        
+        // Вызовем getBoundingClientRect(), чтобы форсировать пересчет размеров
+        const rect = element.getBoundingClientRect();
+        console.log(`Размеры элемента ${element.id}:`, {
+            width: rect.width,
+            height: rect.height
+        });
+    });
+    
+    // После пересчета размеров вызываем перерисовку графиков, если данные уже загружены
+    if (currentData) {
+        // Определяем активную вкладку
+        const activeTabId = document.querySelector('#mainTabs .nav-link.active').getAttribute('data-bs-target');
+        
+        // Перерисовываем графики в зависимости от активной вкладки
+        if (activeTabId === '#chartsTab') {
+            console.log('Перерисовка графиков на вкладке Метрики после изменения размера');
+            renderMetricsChart();
+            renderPoolChart();
+        } else if (activeTabId === '#cpuTab') {
+            console.log('Перерисовка графиков на вкладке CPU после изменения размера');
+            renderCpuCharts();
+        }
+    }
+}
 
 $(document).ready(function() {
     console.log("Инициализация приложения...");
@@ -51,14 +88,14 @@ $(document).ready(function() {
     } else {
         console.log('Bootstrap доступен');
         
-        // Вручную инициализируем вкладки, если они не работают автоматически
+        // Инициализация вкладок
         const tabElements = document.querySelectorAll('#mainTabs button[data-bs-toggle="tab"]');
         if (tabElements.length > 0) {
             tabElements.forEach(tabEl => {
                 tabEl.addEventListener('click', function(event) {
                     event.preventDefault();
                     const tabId = this.getAttribute('data-bs-target');
-                    console.log('Ручное переключение на вкладку:', tabId);
+                    console.log('Переключение на вкладку:', tabId);
                     
                     // Удаляем активный класс со всех вкладок
                     document.querySelectorAll('#mainTabs .nav-link').forEach(t => {
@@ -69,6 +106,7 @@ $(document).ready(function() {
                     // Удаляем активный класс со всех панелей содержимого
                     document.querySelectorAll('#mainTabsContent .tab-pane').forEach(p => {
                         p.classList.remove('show', 'active');
+                        p.classList.remove('fade'); // Удаляем класс fade
                     });
                     
                     // Добавляем активный класс выбранной вкладке
@@ -78,21 +116,32 @@ $(document).ready(function() {
                     // Активируем соответствующую панель содержимого
                     const targetPane = document.querySelector(tabId);
                     if (targetPane) {
+                        // Делаем активной с отключенной анимацией
                         targetPane.classList.add('show', 'active');
-                        targetPane.classList.remove('fade');
                         
-                        // Запускаем нужные обработчики в зависимости от вкладки
-                        if (tabId === '#chartsTab' && currentData) {
-                            renderMetricsChart(); // Вызов из charts.js
-                            renderPoolChart();    // Вызов из charts.js
-                        } else if (tabId === '#cpuTab' && currentData) {
-                            renderCpuCharts();    // Вызов из charts.js
+                        // Форсируем пересчет размеров после переключения
+                        setTimeout(recalculateChartSizes, 50);
+                        
+                        // Обновляем графики для активной вкладки
+                        if (currentData) {
+                            if (tabId === '#chartsTab') {
+                                console.log('Обновляем графики на вкладке Метрики');
+                                setTimeout(() => {
+                                    renderMetricsChart(); // Вызов из charts.js
+                                    renderPoolChart();    // Вызов из charts.js
+                                }, 100); // Небольшая задержка для перерисовки DOM
+                            } else if (tabId === '#cpuTab') {
+                                console.log('Обновляем графики на вкладке CPU');
+                                setTimeout(() => {
+                                    renderCpuCharts();    // Вызов из charts.js
+                                }, 100); // Небольшая задержка для перерисовки DOM
+                            }
                         }
                     }
                 });
             });
             
-            console.log('Вкладки инициализированы вручную');
+            console.log('Вкладки инициализированы');
         }
     }
     
@@ -102,7 +151,11 @@ $(document).ready(function() {
     errorContainer = $('#error');
     refreshButton = $('#refreshButton');
     levelSelect = $('#levelSelect');
-    lastIterations = $('#lastIterations');
+    iterationFrom = $('#iterationFrom');
+    iterationTo = $('#iterationTo');
+    timeMode = $('#timeMode');
+    timeFrom = $('#timeFrom');
+    timeTo = $('#timeTo');
     sortNewestFirstCheckbox = $('#sortNewestFirst');
     chartMetricSelect = $('#chartMetricSelect');
     poolSelect = $('#poolSelect');
@@ -119,7 +172,8 @@ $(document).ready(function() {
     console.log("Проверка элементов формы:", {
         refreshButton: refreshButton.length > 0,
         levelSelect: levelSelect.length > 0,
-        lastIterations: lastIterations.length > 0,
+        iterationFrom: iterationFrom.length > 0,
+        iterationTo: iterationTo.length > 0,
         chartMetricSelect: chartMetricSelect.length > 0,
         cpuMetricSelect: cpuMetricSelect.length > 0
     });
@@ -132,6 +186,33 @@ $(document).ready(function() {
     
     levelSelect.on('change', function() {
         console.log("Изменен уровень детализации:", levelSelect.val());
+        fetchData(); // Вызов из data.js
+    });
+    
+    iterationFrom.on('change', function() {
+        console.log("Изменено значение 'От итерации':", iterationFrom.val());
+        fetchData(); // Вызов из data.js
+    });
+    
+    iterationTo.on('change', function() {
+        console.log("Изменено значение 'До итерации':", iterationTo.val());
+        fetchData(); // Вызов из data.js
+    });
+    
+    timeMode.on('change', function() {
+        const isTimeMode = $(this).is(':checked');
+        $('#iterationMode').toggle(!isTimeMode);
+        $('#timeMode').toggle(isTimeMode);
+        fetchData(); // Вызов из data.js
+    });
+    
+    timeFrom.on('change', function() {
+        console.log("Изменено значение 'От времени':", timeFrom.val());
+        fetchData(); // Вызов из data.js
+    });
+    
+    timeTo.on('change', function() {
+        console.log("Изменено значение 'До времени':", timeTo.val());
         fetchData(); // Вызов из data.js
     });
     
@@ -205,23 +286,18 @@ $(document).ready(function() {
         renderCpuCharts(); // Вызов из charts.js
     });
     
-    // При переключении на вкладки с графиками, рисуем их
-    $('#charts-tab').on('shown.bs.tab', function (e) {
-        console.log("Активирована вкладка 'Метрики'");
-        if (currentData) {
-            renderMetricsChart(); // Вызов из charts.js
-            renderPoolChart();    // Вызов из charts.js
-        }
+    // Обработчик изменения размера окна
+    let resizeTimeout;
+    $(window).on('resize', function() {
+        // Используем задержку, чтобы не вызывать функцию слишком часто
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+            console.log("Изменен размер окна, пересчитываем графики");
+            recalculateChartSizes();
+        }, 250);
     });
     
-    $('#cpu-tab').on('shown.bs.tab', function (e) {
-        console.log("Активирована вкладка 'Использование CPU'");
-        if (currentData) {
-            renderCpuCharts(); // Вызов из charts.js
-        }
-    });
-    
-    // Загружаем данные при первоначальной загрузке страницы
-    console.log("Инициализация завершена, запуск первоначальной загрузки данных");
+    // Загружаем данные при запуске
+    console.log("Загружаем начальные данные...");
     fetchData(); // Вызов из data.js
 }); 

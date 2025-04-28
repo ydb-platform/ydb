@@ -14,6 +14,35 @@
 <body>
     <div class="container mt-4">
         <h1>Actor System Harmonizer History</h1>
+        <div class="range-selector mb-3">
+            <label for="levelSelect" class="form-label">Уровень детализации:</label>
+            <select id="levelSelect" class="form-select" style="width: auto; display: inline-block;">
+                <option value="iteration" selected>Итерация</option>
+                <option value="pool">Пул</option>
+                <option value="thread">Поток</option>
+            </select>
+            <div class="form-check form-switch d-inline-block ms-3">
+                <input class="form-check-input" type="checkbox" id="timeMode">
+                <label class="form-check-label" for="timeMode">Режим времени</label>
+            </div>
+            <div id="iterationMode">
+                <label for="iterationFrom" class="form-label ms-3">От итерации:</label>
+                <input type="number" id="iterationFrom" class="form-control" value="-30" style="width: 80px; display: inline-block;">
+                <label for="iterationTo" class="form-label ms-3">До итерации:</label>
+                <input type="number" id="iterationTo" class="form-control" placeholder="последняя" style="width: 80px; display: inline-block;">
+            </div>
+            <div id="timeMode" style="display: none;">
+                <label for="timeFrom" class="form-label ms-3">От времени (мс):</label>
+                <input type="number" id="timeFrom" class="form-control" value="-10000000" style="width: 120px; display: inline-block;">
+                <label for="timeTo" class="form-label ms-3">До времени (мс):</label>
+                <input type="number" id="timeTo" class="form-control" placeholder="текущее" style="width: 120px; display: inline-block;">
+            </div>
+            <button id="refreshButton" class="btn btn-primary ms-2">Обновить</button>
+            <div class="form-check form-switch d-inline-block ms-3">
+                <input class="form-check-input" type="checkbox" id="sortNewestFirst">
+                <label class="form-check-label" for="sortNewestFirst">Новые сверху</label>
+            </div>
+        </div>
         <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="data-tab" data-bs-toggle="tab" data-bs-target="#dataTab" type="button" role="tab" aria-controls="dataTab" aria-selected="true">История</button>
@@ -28,23 +57,6 @@
         
         <div class="tab-content" id="mainTabsContent">
             <div class="tab-pane fade show active" id="dataTab" role="tabpanel" aria-labelledby="data-tab">
-                <div class="mb-3">
-                    <label for="levelSelect" class="form-label">Уровень детализации:</label>
-                    <select id="levelSelect" class="form-select" style="width: auto; display: inline-block;">
-                        <option value="iteration" selected>Итерация</option>
-                        <option value="pool">Пул</option>
-                        <option value="thread">Поток</option>
-                    </select>
-                    <label for="iterationFrom" class="form-label ms-3">От итерации:</label>
-                    <input type="number" id="iterationFrom" class="form-control" value="-30" style="width: 80px; display: inline-block;">
-                    <label for="iterationTo" class="form-label ms-3">До итерации:</label>
-                    <input type="number" id="iterationTo" class="form-control" placeholder="последняя" style="width: 80px; display: inline-block;">
-                    <button id="refreshButton" class="btn btn-primary ms-2">Обновить</button>
-                    <div class="form-check form-switch d-inline-block ms-3">
-                        <input class="form-check-input" type="checkbox" id="sortNewestFirst">
-                        <label class="form-check-label" for="sortNewestFirst">Новые сверху</label>
-                    </div>
-                </div>
                 <div id="loading" class="alert alert-info" style="display: none;">Загрузка данных...</div>
                 <div id="error" class="alert alert-danger" style="display: none;"></div>
                 <div id="dataContainer">

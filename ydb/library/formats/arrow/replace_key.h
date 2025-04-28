@@ -131,13 +131,13 @@ public:
     template <typename T>
     std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
+        return TComparator::TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
     }
 
     template <typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
+        return TComparator::TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
     }
 
     ui64 Size() const {
@@ -171,7 +171,6 @@ public:
     }
 
     template <typename T = TArrayVecPtr>
-        requires IsOwning
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         AFL_VERIFY(Size() && Size() == (ui32)schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         const auto& columns = *Columns;
@@ -179,7 +178,6 @@ public:
     }
 
     template <typename T = TArrayVecPtr>
-        requires IsOwning
     std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         auto batch = RestoreBatch(schema);
         Y_ABORT_UNLESS(Position < (ui64)batch->num_rows());
@@ -237,13 +235,39 @@ private:
     ui64 Position = 0;
 };
 
-using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
-class TReplaceKeyView: public TReplaceKeyTemplate<TArrayVec*>, public TNonCopyable {
+class TReplaceKeyView;
+
+class TReplaceKey: public TReplaceKeyTemplate<std::shared_ptr<TArrayVec>> {
 private:
-    using TBase = TReplaceKeyTemplate<TArrayVec*>;
+    using TBase = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
 
 public:
     using TBase::TBase;
+    TReplaceKey(TBase&& val)
+        : TBase(std::move(val)) {
+    }
+
+    TReplaceKey(const TBase& val)
+        : TBase(val) {
+    }
+
+    TReplaceKeyView GetView() const;
+};
+
+class TReplaceKeyView: public TReplaceKeyTemplate<const TArrayVec*> {
+private:
+    using TBase = TReplaceKeyTemplate<const TArrayVec*>;
+
+public:
+    using TBase::TBase;
+
+    TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position)
+        : TBase(&columns, position) {
+    }
+
+    TReplaceKey GetToStore() const {
+        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition());
+    }
 };
 
 class TComparablePosition {
@@ -270,6 +294,11 @@ public:
     }
 
     TComparablePosition(const TReplaceKey& key)
+        : Arrays(*key.GetColumns())
+        , Positions(Arrays.size(), key.GetPosition()) {
+    }
+
+    TComparablePosition(const TReplaceKeyView& key)
         : Arrays(*key.GetColumns())
         , Positions(Arrays.size(), key.GetPosition()) {
     }

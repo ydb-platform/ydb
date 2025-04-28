@@ -11,8 +11,8 @@ NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
     return result;
 }
 
-std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
-    std::vector<NArrow::TReplaceKey> points;
+std::vector<NArrow::TReplaceKeyView> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
+    std::vector<NArrow::TReplaceKeyView> points;
     if (MemoryUsage > ((ui64)1 << 30)) {
         for (auto&& i : Portions) {
             if (!CurrentLevelPortionIds.contains(i->GetPortionId())) {
@@ -48,7 +48,7 @@ std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool
         }
     }
     if (StopSeparation) {
-        points.emplace_back(*StopSeparation);
+        points.emplace_back(StopSeparation->GetView());
     }
     std::sort(points.begin(), points.end());
     return points;

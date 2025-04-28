@@ -94,12 +94,12 @@ private:
     }
 
 public:
-    TReplaceKeyView IndexKeyStart() const {
-        return TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), 0);
+    NArrow::TReplaceKeyView IndexKeyStart() const {
+        return NArrow::TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), 0);
     }
 
-    TReplaceKeyView IndexKeyEnd() const {
-        return TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), ReplaceKeyEdges.GetBatch()->num_rows() - 1);
+    NArrow::TReplaceKeyView IndexKeyEnd() const {
+        return NArrow::TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), ReplaceKeyEdges.GetBatch()->num_rows() - 1);
     }
 
     const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {

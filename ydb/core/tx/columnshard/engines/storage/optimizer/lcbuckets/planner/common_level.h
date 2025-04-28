@@ -8,7 +8,7 @@ class TLevelPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
 
-    std::set<TOrderedPortion> Portions;
+    std::set<TOrderedPortion, std::less<>> Portions;
     const TLevelCounters LevelCounters;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
@@ -29,7 +29,8 @@ private:
         return result;
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
+        const NArrow::TReplaceKeyView& from, const NArrow::TReplaceKeyView& to) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -97,7 +98,7 @@ public:
         return false;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKeyView& from, const NArrow::TReplaceKeyView& to) const override {
         if (Portions.empty()) {
             return 0;
         }

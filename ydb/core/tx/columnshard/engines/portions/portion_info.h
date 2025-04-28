@@ -247,7 +247,8 @@ public:
         return CrossPKWith(info.IndexKeyStart(), info.IndexKeyEnd());
     }
 
-    bool CrossPKWith(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+    template <class TReplaceKeyImpl>
+    bool CrossPKWith(const TReplaceKeyImpl& from, const TReplaceKeyImpl& to) const {
         if (from < IndexKeyStart()) {
             if (to < IndexKeyEnd()) {
                 return IndexKeyStart() <= to;

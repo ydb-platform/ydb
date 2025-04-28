@@ -43,7 +43,7 @@ bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
     return GetUsageClass(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::NoUsage;
 }
 
-TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TReplaceKeyView& start, const NArrow::TReplaceKeyView& end) const {
     {
         std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
         if (const auto& from = PredicateFrom.GetReplaceKey()) {
@@ -103,7 +103,7 @@ TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TP
     return TPKRangeFilter(std::move(from), std::move(to));
 }
 
-bool TPKRangeFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+bool TPKRangeFilter::CheckPoint(const NArrow::TReplaceKeyView& point) const {
     std::partial_ordering equalityWithFrom = std::partial_ordering::greater;
     if (const auto& from = PredicateFrom.GetReplaceKey()) {
         equalityWithFrom = point.ComparePartNotNull(*from, from->Size());

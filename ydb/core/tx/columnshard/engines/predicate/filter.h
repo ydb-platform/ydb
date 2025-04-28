@@ -58,11 +58,11 @@ public:
         return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
     }
 
-    bool IsUsed(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+    bool IsUsed(const NArrow::TReplaceKeyView& start, const NArrow::TReplaceKeyView& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
-    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
-    bool CheckPoint(const NArrow::TReplaceKey& point) const;
+    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKeyView& start, const NArrow::TReplaceKeyView& end) const;
+    bool CheckPoint(const NArrow::TReplaceKeyView& point) const;
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 

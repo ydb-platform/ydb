@@ -76,7 +76,7 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKeyView& point) const {
     for (auto&& i : SortedRanges) {
         if (i.CheckPoint(point)) {
             return true;
@@ -85,7 +85,7 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplaceKeyView& start, const NArrow::TReplaceKeyView& end) const {
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }

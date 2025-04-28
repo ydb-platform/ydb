@@ -52,11 +52,11 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+        const NArrow::TReplaceKeyView& /*from*/, const NArrow::TReplaceKeyView& /*to*/) const override {
         return std::nullopt;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKeyView& /*from*/, const NArrow::TReplaceKeyView& /*to*/) const override {
         return 0;
     }
 

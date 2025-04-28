@@ -373,7 +373,7 @@ public:
         for (auto&& s : Futures) {
             for (auto&& p : s.second) {
                 if (!result || p.second->IndexKeyStart() < *result) {
-                    result = p.second->IndexKeyStart();
+                    result = p.second->IndexKeyStart().GetToStore();
                 }
             }
         }
@@ -411,7 +411,7 @@ public:
             }
         }
         if (result.size() < sorted.size()) {
-            separatePoint = sorted[result.size()]->IndexKeyStart();
+            separatePoint = sorted[result.size()]->IndexKeyStart().GetToStore();
         }
         return result;
     }
@@ -666,7 +666,7 @@ private:
     void MoveNextBorderTo(TPortionsBucket& dest) {
         dest.NextBorder = NextBorder;
         if (dest.MainPortion) {
-            NextBorder = dest.MainPortion->IndexKeyStart();
+            NextBorder = dest.MainPortion->IndexKeyStart().GetToStore();
         } else {
             NextBorder = {};
         }
@@ -769,7 +769,8 @@ public:
         , Others(Counters, GetCommonFreshnessCheckDuration())
     {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(MainPortion->IndexKeyStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition sBatchPosition(
+                MainPortion->IndexKeyStart().GetToStore().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
             StartPos = std::move(sBatchPosition);
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
@@ -897,15 +898,18 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                MainPortion->IndexKeyStart().GetToStore().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                MainPortion->IndexKeyEnd().GetToStore().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
-            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);
         }
         return result;
@@ -914,7 +918,7 @@ public:
     void AddOther(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         auto gChartsThis = StartModificationGuard();
         if (NextBorder && MainPortion) {
-            AFL_VERIFY(portion->CrossPKWith(MainPortion->IndexKeyStart(), *NextBorder));
+            AFL_VERIFY(portion->CrossPKWith(MainPortion->IndexKeyStart(), NextBorder->GetView()));
 #ifndef NDEBUG
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
@@ -958,7 +962,7 @@ public:
         if (MainPortion) {
             AFL_VERIFY(MainPortion->IndexKeyEnd() < dest.MainPortion->IndexKeyStart());
         }
-        Others.SplitTo(dest.Others, dest.MainPortion->IndexKeyStart());
+        Others.SplitTo(dest.Others, dest.MainPortion->IndexKeyStart().GetToStore());
     }
 };
 
@@ -1010,7 +1014,7 @@ private:
     }
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
-        auto buckets = GetAffectedBuckets(portion->IndexKeyStart(), portion->IndexKeyEnd());
+        auto buckets = GetAffectedBuckets(portion->IndexKeyStart().GetToStore(), portion->IndexKeyEnd().GetToStore());
         AFL_VERIFY(buckets.size());
         for (auto&& i : buckets) {
             RemoveBucketFromRating(i);
@@ -1019,7 +1023,7 @@ private:
         }
     }
     void AddOther(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        auto buckets = GetAffectedBuckets(portion->IndexKeyStart(), portion->IndexKeyEnd());
+        auto buckets = GetAffectedBuckets(portion->IndexKeyStart().GetToStore(), portion->IndexKeyEnd().GetToStore());
         for (auto&& i : buckets) {
             RemoveBucketFromRating(i);
             i->AddOther(portion, now);
@@ -1027,7 +1031,7 @@ private:
         }
     }
     bool RemoveBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto it = Buckets.find(portion->IndexKeyStart());
+        auto it = Buckets.find(portion->IndexKeyStart().GetToStore());
         if (it == Buckets.end()) {
             return false;
         }
@@ -1051,7 +1055,8 @@ private:
     }
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
+        auto insertInfo =
+            Buckets.emplace(portion->IndexKeyStart().GetToStore(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
         AFL_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
@@ -1137,7 +1142,7 @@ public:
                 return bucketForOptimization->BuildOptimizationTask(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
             }
         } else {
-            auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
+            auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart().GetToStore());
             AFL_VERIFY(it != Buckets.end());
             ++it;
             if (it != Buckets.end()) {
@@ -1163,8 +1168,8 @@ public:
             return;
         }
 
-        auto itFrom = Buckets.upper_bound(portion->IndexKeyStart());
-        auto itTo = Buckets.upper_bound(portion->IndexKeyEnd());
+        auto itFrom = Buckets.upper_bound(portion->IndexKeyStart().GetToStore());
+        auto itTo = Buckets.upper_bound(portion->IndexKeyEnd().GetToStore());
         if (itFrom != itTo) {
             AddOther(portion, now);
         } else if (itFrom == Buckets.begin()) {

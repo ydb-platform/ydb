@@ -23,6 +23,8 @@ items:
       href: datashard-locks-and-change-visibility.md
     - name: Распределённые транзакции
       href: datashard-distributed-txs.md
+  - name: Конфигурация V2
+    href: configuration-v2.md
   - name: Тестирование с помощью нагружающих акторов
     href: load-actors-overview.md
     items:

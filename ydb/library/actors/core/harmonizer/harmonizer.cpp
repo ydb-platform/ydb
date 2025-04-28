@@ -442,7 +442,7 @@ void THarmonizer::InitIterationState() {
     IterationSharedThreadState.resize(sharedThreadsPerIteration * SAVED_ITERATION_COUNT);
     ui64 threadsPerIteration = sharedThreadsPerIteration * poolsPerIteration;
     for (auto &pool : Pools) {
-        threadsPerIteration += pool->GetFullThreadCount();
+        threadsPerIteration += pool->ThreadInfo.size();
     }
     IterationThreadState.resize(threadsPerIteration * SAVED_ITERATION_COUNT);
 

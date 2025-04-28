@@ -1,6 +1,7 @@
 RECURSE(
     async_replication
     dml
-    lib
     dump_restore
+    lib
+    split_merge
 )

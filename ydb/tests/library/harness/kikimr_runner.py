@@ -606,8 +606,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info(f"Writing node config to {node_config_path}")
-        logger.info(f"Config: {configurator.yaml_config}")
+        logger.info("Writing node config to {}".format(node_config_path))
+        logger.info("Config: {}".format(configurator.yaml_config))
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):

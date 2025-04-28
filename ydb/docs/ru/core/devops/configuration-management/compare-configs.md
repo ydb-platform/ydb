@@ -1,6 +1,6 @@
 # Сравнение конфигураций кластера {{ ydb-short-name }}: V1 и V2
 
-В {{ ydb-short-name }} существует два основных подхода к управлению конфигурацией кластера: [V1](../configuration-management/configuration-v1/index.md) и [V2](../configuration-management/configuration-v2/index.md). Начиная с версии {{ ydb-short-name }} 25.1, поддерживается конфигурация V2, которая унифицирует управление.
+В {{ ydb-short-name }} существует два основных подхода к управлению конфигурацией кластера: [V1](../configuration-management/configuration-v1/index.md) и [V2](../configuration-management/configuration-v2/index.md). Начиная с версии {{ ydb-short-name }} 25.1, поддерживается конфигурация V2, которая унифицирует управление кластерами {{ ydb-short-name }}, позволяет работать с конфигурацией полностью через [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), а также автоматизирует наиболее сложные аспекты конфигурации (управление [статической группой](../../reference/configuration/index.md#blob_storage_config) и [State Storage](../../reference/configuration/index.md#domains-state)).
 
 {% include [_](_includes/configuration-version-note.md) %}
 
@@ -8,9 +8,9 @@
 
 | Характеристика                 | Конфигурация V1                                  | Конфигурация V2                                     |
 | ------------------------------ | ------------------------------------------------ | -------------------------------------------------- |
-| **Структура конфигурации**     | Раздельная: **статическая** и **динамическая**. | [**Единая**](../configuration-management/configuration-v2/config-overview.md) конфигурация. |
+| **Структура конфигурации**     | Раздельная: [статическая](../../devops/configuration-management/configuration-v1/static-config.md) и [динамическая](../../devops/configuration-management/configuration-v1/dynamic-config.md). | [**Единая**](../configuration-management/configuration-v2/config-overview.md) конфигурация. |
 | **Управление файлами**         | Статическая: ручное размещение файла на каждом узле.<br>Динамическая: централизованная загрузка через CLI. | Единая: [централизованная загрузка](../configuration-management/configuration-v2/update-config.md) через CLI, автоматическая доставка на все узлы. |
-| **Механизм доставки/применения** | Статическая: читается и применяется из файла при запуске.<br>Динамическая: через [таблетку `Console`](../../concepts/glossary.md#console). | Через механизм [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration), сохранение в директории на узле. |
+| **Механизм доставки и применения** | Статическая: читается и применяется из локального файла при запуске.<br>Динамическая: через [таблетку `Console`](../../concepts/glossary.md#console). | Полностью автоматически через механизм [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). [Технические подробности](../../contributor/configuration-v2.md). |
 | **Управление State Storage и статической группой** | **Ручное**: через обязательные секции [`domains_config`](../../reference/configuration/index.md#domains-state) и [`blob_storage_config`](../../reference/configuration/index.md#blob_storage_config) в статической конфигурации. | **Автоматическое**: управляется системой [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). |
 | **Рекомендуется для версий {{ ydb-short-name }}** | Все версии до 25.1.                             | Версия 25.1 и выше.                                |
 

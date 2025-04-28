@@ -1,12 +1,12 @@
 # {{ ydb-short-name }} для DevOps-инженеров
 
-В этом разделе документации {{ ydb-short-name }} описано всё, что нужно знать для работы с production кластерами {{ ydb-short-name }}.
+В этом разделе документации {{ ydb-short-name }} описано всё, что нужно знать для работы с кластерами {{ ydb-short-name }}.
 
 Перед началом работы рекомендуется ознакомиться с [системными требованиями {{ ydb-short-name }}](concepts/system-requirements.md).
 
 Основные подразделы:
 
-* [{#T}](concepts/index.md) — концепции для DevOps-инженеров.
+* [{#T}](concepts/index.md) — дополнения к общему разделу [концепций](../concepts/index.md), актуальные для DevOps-инженеров.
 * [{#T}](configuration-management/index.md) — управление конфигурацией кластеров {{ ydb-short-name }}.
 * [{#T}](deployment-options/index.md) — способы развёртывания кластеров {{ ydb-short-name }}.
     * **[Ansible](deployment-options/ansible/index.md)**: для развертываний на физическом оборудовании и виртуальных машинах.

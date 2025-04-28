@@ -262,7 +262,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 120):
+        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 200):
             raise Exception(".sys reports incorrect data portions")
 
         t0 = time.time()

@@ -849,10 +849,9 @@ public:
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         }
-        case TEvYardControl::PDiskStop:
-            OnPDiskStop(ev->Sender, evControl.Cookie);
-            break;
         default:
+            // Only PDiskStart is allowed in StateError. PDiskStop is not allowed since PDisk in error state should already be stopped
+            // or in the process of being stopped.
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie, StateErrorReason));
             PDisk->Mon.YardControl.CountResponse();
             break;

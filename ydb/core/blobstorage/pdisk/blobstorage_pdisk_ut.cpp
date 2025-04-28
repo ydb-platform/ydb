@@ -111,23 +111,24 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestPDiskActorPDiskStopBroken) {
         TActorTestContext testCtx{{}};
 
-        const TVDiskID vDiskID(0, 1, 0, 0, 0);
-        testCtx.TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
-                NKikimrProto::OK);
+        auto *pdisk = testCtx.GetPDisk();
+
         testCtx.Send(new NPDisk::TEvDeviceError("test"));
 
+        // This doesn't stop the PDisk, it will be stopped by TEvDeviceError some time in the future
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
-                NKikimrProto::OK);
+                NKikimrProto::CORRUPTED);
+
+        testCtx.GetRuntime()->WaitFor("Block device stop", [&] {
+            return !pdisk->BlockDevice->IsGood();
+        });
 
         testCtx.Send(new NActors::TEvents::TEvPoisonPill());
     }
 
     Y_UNIT_TEST(TestPDiskActorPDiskStopUninitialized) {
         TActorTestContext testCtx{{}};
-
-        const TVDiskID vDiskID(0, 1, 0, 0, 0);
 
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),

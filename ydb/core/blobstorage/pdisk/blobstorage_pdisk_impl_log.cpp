@@ -1618,7 +1618,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
-                        params.OwnersInfo[ownerId] = {usedForOwner[ownerId], OwnerData[ownerId].VDiskId};
+                        params.OwnersInfo[ownerId] = {
+                            .ChunksOwned = usedForOwner[ownerId],
+                            .VDiskId = OwnerData[ownerId].VDiskId,
+                            .Weight = Cfg->GetOwnerWeight(OwnerData[ownerId].SlotSizeUnits),
+                        };
                         if (OwnerData[ownerId].IsStaticGroupOwner()) {
                             params.HasStaticGroups = true;
                         }

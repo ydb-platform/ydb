@@ -586,16 +586,7 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
 }
 
 ui32 TPDisk::GetNumActiveSlots() const {
-    ui32 sum = 0;
-    for (const auto& ownerData: OwnerData) {
-        if (ownerData.VDiskId == TVDiskID::InvalidId) {
-            continue;
-        }
-        ui32 u_vdisk = ownerData.SlotSizeUnits ?: 1;
-        ui32 u_pdisk = Cfg->SlotSizeUnits ?: 1;
-        sum += int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
-    }
-    return sum;
+    return Keeper.GetNumActiveSlots();
 }
 
 NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
@@ -1935,7 +1926,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         // Make sure owner round never decreases
         // Allocate quota for the owner
         // TODO(cthulhu): don't allocate more owners than expected
-        Keeper.AddOwner(owner, vDiskId);
+        Keeper.AddOwner(owner, vDiskId, Cfg->GetOwnerWeight(evYardInit.SlotSizeUnits));
 
         TOwnerData& ownerData = OwnerData[owner];
         ownerData.Reset(false);

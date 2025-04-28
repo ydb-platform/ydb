@@ -426,16 +426,10 @@ struct TPDiskConfig : public TThrRefBase {
         }
     }
 
-    static ui32 SlotSizeUnitsToInt(NKikimrBlobStorage::TPDiskSlotSizeUnits::E enum_value) {
-        switch (enum_value) {
-            case NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED:
-            case NKikimrBlobStorage::TPDiskSlotSizeUnits::SINGLE:
-                return 1;
-            case NKikimrBlobStorage::TPDiskSlotSizeUnits::DOUBLE:
-                return 2;
-            case NKikimrBlobStorage::TPDiskSlotSizeUnits::QUAD:
-                return 4;
-        }
+    ui32 GetOwnerWeight(NKikimrBlobStorage::TPDiskSlotSizeUnits::E ownerSizeUnits) {
+        ui32 u_vdisk = ownerSizeUnits ?: 1;
+        ui32 u_pdisk = SlotSizeUnits ?: 1;
+        return int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
     }
 };
 

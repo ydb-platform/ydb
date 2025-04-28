@@ -54,29 +54,42 @@ public:
         }
     }
 
+    size_t GetNumActiveSlots() {
+        size_t sum = 0;
+        for (TOwner id: ActiveOwnerIds) {
+            sum += QuotaForOwner[id].Weight ?: 1;
+        }
+        return sum;
+    }
+
     i64 ForceHardLimit(TOwner ownerId, i64 limit) {
         Y_VERIFY(limit >= 0);
         return QuotaForOwner[ownerId].ForceHardLimit(limit, ColorLimits);
     }
 
     void RedistributeQuotas() {
-        size_t parts = Max(ExpectedOwnerCount, ActiveOwnerIds.size());
-        if (parts) {
-            i64 limit = Total / parts;
+        size_t totalParts = ExpectedOwnerCount ?: GetNumActiveSlots();
+        if (!totalParts) {
+            return;
+        }
 
-            // Divide into equal parts and that's it.
-            for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, limit);
-            }
+        i64 limit = Total / totalParts;
+
+        // Distribute quota over owners and that's it.
+        for (TOwner id : ActiveOwnerIds) {
+            auto parts = Min((size_t)QuotaForOwner[id].Weight, totalParts);
+            ForceHardLimit(id, limit * parts);
+            totalParts -= parts;
         }
     }
 
-    void AddOwner(TOwner id, TVDiskID vdiskId) {
+    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight) {
         TQuotaRecord &record = QuotaForOwner[id];
         Y_VERIFY(record.GetHardLimit() == 0);
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
+        record.SetWeight(weight);
 
         ActiveOwnerIds.push_back(id);
         if (ActiveOwnerIds.size() <= ExpectedOwnerCount || ExpectedOwnerCount == 0) {
@@ -149,6 +162,7 @@ public:
         str << "<td>" << q.GetHardLimit() << "</td>";
         str << "<td>" << q.GetFree() << "</td>";
         str << "<td>" << q.GetUsed() << "</td>";
+        str << "<td>" << q.Weight << "</td>";
         double occupancy;
         str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0, &occupancy)) << "</td>";
         str << "<td>" << occupancy << "</td>";
@@ -170,6 +184,7 @@ public:
         str << "\nTotal# " << Total;
         str << "\nExpectedOwnerCount# " << ExpectedOwnerCount;
         str << "\nActiveOwners# " << ActiveOwnerIds.size();
+        str << "\nNumActiveSlots# " << GetNumActiveSlots();
         if (colorBorder) {
             str << "\nColorBorder# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*colorBorder);
         }
@@ -185,6 +200,7 @@ public:
                 <th>HardLimit</th>
                 <th>Free</th>
                 <th>Used</th>
+                <th>Weight</th>
                 <th>Color</th>
                 <th>Occupancy</th>
 
@@ -314,7 +330,7 @@ public:
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
-            AddOwner(ownerId, ownerInfo.VDiskId);
+            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight);
             if (chunks) {
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
@@ -344,14 +360,18 @@ public:
         return true;
     }
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
         Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->AddOwner(owner, vdiskId);
+        OwnerQuota->AddOwner(owner, vdiskId, weight);
     }
 
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->RemoveOwner(owner);
+    }
+
+    ui32 GetNumActiveSlots() const {
+        return OwnerQuota->GetNumActiveSlots();
     }
 
     i64 GetOwnerHardLimit(TOwner owner) const {

@@ -4,6 +4,11 @@
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
+В зависимости от используемой кластером [версии конфигурации](../../../../../devops/configuration-management/compare-configs.md), команда заменяет:
+
+* V1 — только [динамическую конфигурацию](../../../../../devops/configuration-management/configuration-v1/dynamic-config.md);
+* V2 — всю конфигурацию.
+
 Общий вид команды:
 
 ```bash

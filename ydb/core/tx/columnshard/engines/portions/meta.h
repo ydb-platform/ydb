@@ -80,10 +80,8 @@ private:
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
         : ReplaceKeyEdges(pk)
         , RecordSnapshotMin(min)
-        , RecordSnapshotMax(max)
-        , IndexKeyStart(pk.GetFirst())
-        , IndexKeyEnd(pk.GetLast()) {
-        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
+        , RecordSnapshotMax(max) {
+        AFL_VERIFY(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
     }
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
@@ -96,6 +94,14 @@ private:
     }
 
 public:
+    TReplaceKeyView IndexKeyStart() const {
+        return TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), 0);
+    }
+
+    TReplaceKeyView IndexKeyEnd() const {
+        return TReplaceKeyView(ReplaceKeyEdges.GetBatch()->columns(), ReplaceKeyEdges.GetBatch()->num_rows() - 1);
+    }
+
     const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
         return ReplaceKeyEdges;
     }
@@ -105,9 +111,6 @@ public:
     }
 
     using EProduced = NPortion::EProduced;
-
-    NArrow::TReplaceKey IndexKeyStart;
-    NArrow::TReplaceKey IndexKeyEnd;
 
     EProduced Produced = EProduced::UNSPECIFIED;
 

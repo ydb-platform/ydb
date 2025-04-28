@@ -379,12 +379,12 @@ public:
         return visible;
     }
 
-    const NArrow::TReplaceKey& IndexKeyStart() const {
-        return Meta.IndexKeyStart;
+    NArrow::TReplaceKeyView IndexKeyStart() const {
+        return Meta.IndexKeyStart();
     }
 
-    const NArrow::TReplaceKey& IndexKeyEnd() const {
-        return Meta.IndexKeyEnd;
+    NArrow::TReplaceKeyView IndexKeyEnd() const {
+        return Meta.IndexKeyEnd();
     }
 
     const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {

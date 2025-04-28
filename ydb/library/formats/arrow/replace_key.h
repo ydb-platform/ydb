@@ -238,6 +238,13 @@ private:
 };
 
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
+class TReplaceKeyView: public TReplaceKeyTemplate<TArrayVec*>, public TNonCopyable {
+private:
+    using TBase = TReplaceKeyTemplate<TArrayVec*>;
+
+public:
+    using TBase::TBase;
+};
 
 class TComparablePosition {
 private:

@@ -25,5 +25,5 @@ ydb [global options] admin cluster config [command options] <subcommand>
 Команда / подкоманда | Краткое описание
 --- | ---
 [admin cluster config fetch](./fetch.md) | Получение текущей конфигурации (псевдонимы: `get`, `dump`)
-[admin cluster config replace](./replace.md) | Замена динамической конфигурации
+[admin cluster config replace](./replace.md) | Замена текущей конфигурации
 [admin cluster config generate](./generate.md) | Генерация [конфигурации V2](../../../../../devops/configuration-management/configuration-v2/index.md) из [конфигурации V1](../../../../../devops/configuration-management/configuration-v1/index.md)

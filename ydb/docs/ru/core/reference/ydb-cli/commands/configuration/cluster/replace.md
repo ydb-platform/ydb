@@ -13,7 +13,7 @@ ydb [global options...] admin cluster config replace [options...]
 * `global options` — глобальные параметры.
 * `options` — [параметры подкоманды](#options).
 
-Посмотрите описание команды замены динамической конфигурации:
+Посмотрите описание команды замены конфигурации:
 
 ```bash
 ydb admin cluster config replace --help
@@ -38,19 +38,19 @@ ydb admin cluster config replace --help
 
 ## Примеры {#examples}
 
-Загрузите файл динамической конфигурации на кластер:
+Загрузите файл конфигурации на кластер:
 
 ```bash
 ydb admin cluster config replace --filename config.yaml
 ```
 
-Загрузите файл динамической конфигурации на кластер, игнорируя локальные проверки применимости:
+Загрузите файл конфигурации на кластер, игнорируя локальные проверки применимости:
 
 ```bash
 ydb admin cluster config replace -f config.yaml --ignore-local-validation
 ```
 
-Загрузите файл динамической конфигурации на кластер, игнорируя проверку конфигурации на неизвестные поля:
+Загрузите файл конфигурации на кластер, игнорируя проверку конфигурации на неизвестные поля:
 
 ```bash
 ydb admin cluster config replace -f config.yaml --allow-unknown-fields

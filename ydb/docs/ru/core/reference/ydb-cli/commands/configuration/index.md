@@ -30,9 +30,9 @@
 
 Доступные подкоманды:
 
-* [fetch](cluster/fetch.md) - получение текущей динамической конфигурации кластера.
-* [generate](cluster/generate.md) - генерация динамической конфигурации на основе статической на кластере.
-* [replace](cluster/replace.md) - замена динамической конфигурации.
+* [fetch](cluster/fetch.md) - получение текущей конфигурации кластера.
+* [generate](cluster/generate.md) - генерация [конфигурации V2](../../../../devops/configuration-management/configuration-v2/index.md) из [V1](../../../../devops/configuration-management/configuration-v1/index.md) для [миграции между ними](../../../../devops/configuration-management/migration/migration-to-v2.md).
+* [replace](cluster/replace.md) - замена текущей конфигурации кластера.
 
 ### Конфигурация узла {#node}
 

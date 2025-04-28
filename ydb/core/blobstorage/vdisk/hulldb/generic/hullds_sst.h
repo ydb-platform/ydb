@@ -203,35 +203,50 @@ namespace NKikimr {
         }
 
         void LoadLinearIndex(const TTrackableVector<TRec>& linearIndex) {
+            if (linearIndex.empty()) {
+                return;
+            }
+
+            IndexHigh.clear();
             IndexHigh.reserve(linearIndex.size());
+            IndexLow.clear();
             IndexLow.reserve(linearIndex.size());
 
-            TLogoBlobIdHigh highPrev;
-            for (const auto& rec : linearIndex) {
-                auto blobId = rec.Key.LogoBlobID();
+            const TRec* rec = linearIndex.begin();
+
+            auto blobId = rec->Key.LogoBlobID();
+            TLogoBlobIdHigh high(blobId);
+            TLogoBlobIdLow low(blobId);
+            TLogoBlobIdHigh highPrev = high;
+
+            IndexHigh.emplace_back(high);
+            IndexLow.emplace_back(low, rec->MemRec);
+            ++rec;
+
+            for (; rec != linearIndex.end(); ++rec) {
+                auto blobId = rec->Key.LogoBlobID();
                 TLogoBlobIdHigh high(blobId);
                 TLogoBlobIdLow low(blobId);
 
-                if (Y_UNLIKELY(IndexHigh.empty())) {
-                    IndexHigh.emplace_back(high);
-                    highPrev = high;
-                } else if (Y_UNLIKELY(high != highPrev)) {
+                if (Y_UNLIKELY(high != highPrev)) {
                     IndexHigh.back().LowRangeEndIndex = IndexLow.size();
                     IndexHigh.emplace_back(high);
                     highPrev = high;
                 }
 
-                IndexLow.emplace_back(low, rec.MemRec);
+                IndexLow.emplace_back(low, rec->MemRec);
             }
 
-            if (!IndexHigh.empty()) {
-                IndexHigh.back().LowRangeEndIndex = IndexLow.size();
-            }
-
+            IndexHigh.back().LowRangeEndIndex = IndexLow.size();
             IndexHigh.shrink_to_fit();
         }
 
         void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
+            if (IndexLow.empty()) {
+                return;
+            }
+
+            linearIndex->clear();
             linearIndex->reserve(IndexLow.size());
 
             const TRecHigh* high = IndexHigh.begin();
@@ -244,7 +259,7 @@ namespace NKikimr {
                 linearIndex->emplace_back(TKeyLogoBlob(blobId), low->MemRec);
 
                 ++low;
-                if (low == lowRangeEnd) {
+                if (Y_UNLIKELY(low == lowRangeEnd)) {
                     ++high;
                     if (high != IndexHigh.end()) {
                         lowRangeEnd = IndexLow.begin() + high->LowRangeEndIndex;

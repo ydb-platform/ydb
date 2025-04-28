@@ -3518,5 +3518,43 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         testHelper.ReadData("SELECT a, b FROM `/Root/ColumnTableTest` WHERE b = 2 LIMIT 2", "[[2u;2u]]");
     }
+
+    Y_UNIT_TEST(SimpleRequestHasProjections) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT 1
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+
+            CompareYson(result, R"([[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1]])");
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT count(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+
+            CompareYson(result, R"([[20u]])");
+        }
+    }
 }
 }

@@ -336,7 +336,7 @@ public:
                     SendingShards.insert(shardId);
                 }
             }
-            if (!shardInfo.Locks.empty()) {
+            if (!shardInfo.Locks.empty() || (shardInfo.Flags & EAction::READ)) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
                     sendingColumnShardsSet.insert(shardId);

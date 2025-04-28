@@ -280,7 +280,6 @@ private:
         auto &event = ev->Get()->Record;
 
         bool allowMultiBroadcasts = TableServiceConfig.GetAllowMultiBroadcasts();
-        bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
         bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
@@ -310,6 +309,7 @@ private:
 
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
+        bool enableFoldUdfs = TableServiceConfig.GetEnableFoldUdfs();
 
         bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
 
@@ -325,7 +325,6 @@ private:
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
-            TableServiceConfig.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
@@ -343,6 +342,7 @@ private:
             TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
+            TableServiceConfig.GetEnableFoldUdfs() != enableFoldUdfs ||
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||

@@ -16,15 +16,15 @@
 
 (let doJoin (lambda '(left right narrowMapLambda joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops) (block '(
     (let leftStream (WideToBlocks (FromFlow (ExpandMap left expandLambda))))
-    (let rightStream (WideToBlocks (FromFlow (ExpandMap right expandLambda))))
-    (let rightStreamItemType (StreamItemType (TypeOf rightStream)))
-    (let rightBlockIndex (BlockMapJoinIndex (BlockStorage rightStream) rightStreamItemType rightKeyColumns '()))
-    (return (Collect (NarrowMap (ToFlow (WideFromBlocks (BlockMapJoinCore leftStream rightBlockIndex rightStreamItemType joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops))) narrowMapLambda)))
+    (let rightList (ListToBlocks right))
+    (let rightListItemType (ListItemType (TypeOf rightList)))
+    (let rightBlockIndex (BlockMapJoinIndex (BlockStorage rightList) rightListItemType rightKeyColumns '()))
+    (return (ForwardList (NarrowMap (ToFlow (WideFromBlocks (BlockMapJoinCore leftStream rightBlockIndex rightListItemType joinKind leftKeyColumns leftKeyDrops rightKeyColumns rightKeyDrops))) narrowMapLambda)))
 ))))
 
-(let innerJoin (Apply doJoin (ToFlow table (DependsOn (String '0))) (ToFlow table (DependsOn (String '1))) narrowLambdaInner 'Inner '('0) '() '('0) '()))
-(let leftJoin (Apply doJoin (ToFlow table (DependsOn (String '2))) (ToFlow table (DependsOn (String '3))) narrowLambdaLeft 'Left '('0) '('0) '('0) '('0)))
-(let leftSemiJoin (Apply doJoin (ToFlow table (DependsOn (String '4))) (ToFlow table (DependsOn (String '5))) narrowLambdaLeftSemi 'LeftSemi '('0) '('0) '('0) '()))
+(let innerJoin (Apply doJoin (ToFlow table (DependsOn (String '0))) table narrowLambdaInner 'Inner '('0) '() '('"key") '()))
+(let leftJoin (Apply doJoin (ToFlow table (DependsOn (String '2))) table narrowLambdaLeft 'Left '('0) '('0) '('"key") '('"key")))
+(let leftSemiJoin (Apply doJoin (ToFlow table (DependsOn (String '4))) table narrowLambdaLeftSemi 'LeftSemi '('0) '('0) '('"key") '()))
 
 (let world (Write! world res_sink (Key) (AsStruct '('"inner" innerJoin) '('"left" leftJoin) '('"leftSemi" leftSemiJoin)) '('('type))))
 (let world (Commit! world res_sink))

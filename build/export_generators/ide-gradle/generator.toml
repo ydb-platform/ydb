@@ -19,6 +19,16 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
+[targets.junit4]
+template="build.gradle.kts.jinja"
+is_test = true
+is_extra_target = true
+
+[targets.junit5]
+template="build.gradle.kts.jinja"
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -29,6 +39,7 @@ junit4_test="flag"
 junit5_test="flag"
 app_main_class="str"
 jar_source_set="list"
+jar_resource_set="list"
 enable_preview="flag"
 use_annotation_processor="list"
 use_errorprone="flag"
@@ -89,6 +100,7 @@ target_commands-ITEM="dict"
 target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
+target_commands-flags="list"
 
 [attrs.root]
 

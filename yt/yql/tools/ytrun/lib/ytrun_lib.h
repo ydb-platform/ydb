@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
+#include <yt/yql/providers/yt/lib/secret_masker/secret_masker.h>
 
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
@@ -11,8 +12,6 @@
 #include <util/generic/hash.h>
 
 namespace NYql {
-
-constexpr TStringBuf FastMapReduceGatewayName = "fmr";
 
 class TYtRunTool: public TFacadeRunner {
 public:
@@ -26,6 +25,7 @@ protected:
     virtual IYtGateway::TPtr CreateYtGateway();
     virtual IOptimizerFactory::TPtr CreateCboFactory();
     virtual IDqHelper::TPtr CreateDqHelper();
+    virtual ISecretMasker::TPtr CreateSecretMasker();
 
 protected:
     TString MrJobBin_;
@@ -36,6 +36,7 @@ protected:
     NFmr::IFmrWorker::TPtr FmrWorker_;
     TString FmrCoordinatorServerUrl_;
     bool DisableLocalFmrWorker_ = false;
+    TString FmrOperationSpecFilePath_;
 };
 
 } // NYql

@@ -1540,6 +1540,15 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     break;
                 }
             }
+
+#define UPDATE_EXPLICIT_CONFIG(NAME) \
+            if (domains.HasExplicit##NAME##Config()) { \
+                config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
+            }
+
+            UPDATE_EXPLICIT_CONFIG(StateStorage)
+            UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+            UPDATE_EXPLICIT_CONFIG(SchemeBoard)
         }
     }
 

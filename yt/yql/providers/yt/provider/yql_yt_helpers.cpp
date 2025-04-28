@@ -714,7 +714,7 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
     VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "<", "<=", ">", ">=", "==", "!="})) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
             return true;
         }
         if (node->IsCallable("Member")) {
@@ -950,6 +950,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .OperationHash(calcHash)
             .SecureParams(secureParams)
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
+            .LangVer(state->Types->LangVer)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());

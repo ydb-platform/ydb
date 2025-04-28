@@ -143,7 +143,8 @@ private:
             return;
         }
 
-        if (Compressor_ = TryDetectOptionalCompressors(ContentEncoding_, this)) {
+        Compressor_ = TryDetectOptionalCompressors(ContentEncoding_, this);
+        if (Compressor_) {
             return;
         }
 
@@ -261,7 +262,8 @@ private:
             return;
         }
 
-        if (Decompressor_ = TryDetectOptionalDecompressors(ContentEncoding_, this)) {
+        Decompressor_ = TryDetectOptionalDecompressors(ContentEncoding_, this);
+        if (Decompressor_) {
             return;
         }
 

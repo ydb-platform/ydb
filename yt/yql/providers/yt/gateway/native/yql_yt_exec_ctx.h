@@ -45,6 +45,7 @@ struct TInputInfo {
     TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0)
         : Name(name)
         , Path(path)
+        , Cluster(info.Cluster)
         , Temp(temp)
         , Dynamic(info.Meta->IsDynamic)
         , Strict(strict)
@@ -59,6 +60,7 @@ struct TInputInfo {
 
     TString Name;
     NYT::TRichYPath Path;
+    TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
     bool Strict = true;
@@ -154,6 +156,7 @@ public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TFileStoragePtr FileStorage_;
     TYtGatewayConfigPtr Config_;
+    ISecretMasker::TPtr SecretMasker;
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TSession::TPtr Session_;

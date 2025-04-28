@@ -857,6 +857,32 @@ auth_config:
 | `special_chars` | Специальные символы, которые допустимо использовать в пароле. Допускается указать любое подмножество из следующих символов `!@#$%^&*()_+{}\|<>?=`. Значение (`""`) эквивалентно списку `!@#$%^&*()_+{}\|<>?=` | `""` |
 | `can_contain_username` | Может ли пароль содержать имя пользователя | `false` |
 
+{% note info %}
+
+Любые изменения политики паролей не затрагивают уже действующие пароли пользователей, поэтому изменять существующие пароли не требуется, они будут приниматься в текущем виде.
+
+{% endnote %}
+
+### Блокировка пользователя после неуспешных попыток ввода пароля {#account-lockout}
+
+{{ ydb-short-name }} позволяет заблокировать возможность аутентификации пользователя после неудачных попыток ввода пароля. Правила блокировки настраиваются в секции `account_lockout`.
+
+Пример секции `account_lockout`:
+
+```yaml
+auth_config:
+  ...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  ...
+```
+
+| Параметр | Описание | Значение по умолчанию |
+| :--- | :--- | :---: |
+| `attempt_threshold` | Максимальное количество неуспешных попыток ввода правильного пароля. После `attempt_threshold` неуспешных попыток пользователь будет заблокирован на время, заданное в параметре `attempt_reset_duration`. Нулевое значение параметра `attempt_threshold` указывает на отсутствие каких-либо ограничений на число попыток ввода пароля. После успешной аутентификации (ввода правильных имени пользователя и пароля), счетчик неуспешных попыток сбрасывается в значение 0. | 4 |
+| `attempt_reset_duration` | Период времени блокировки пользователя. В течение этого периода пользователь не сможет аутентифицироваться в системе даже если введёт правильные имя пользователя и пароль. Период блокировки отсчитывается с момента последней неверной попытки ввода пароля. Если задан нулевой (`"0s"` - запись, эквивалентная 0 секунд) период блокировки, то пользователь будет считаться заблокированным на неограниченное время. В этом случае снять блокировку должен Администратор системы.<br/><br/>Минимальный интервал времени блокировки 1 секунда. <br/>Поддерживаемые единицы измерения:<ul><li>Секунды. `30s`</li><li>Минуты. `20m`</li><li>Часы. `5h`</li><li>Дни. `3d`</li></ul>Не допускается комбинировать единицы измерения в одной строке. Например такая запись некорректна: `1d12h`. Такую запись нужно заменить на эквивалентную, например `36h`. | "1h" |
+
 ### Конфигурация LDAP аутентификации {#ldap-auth-config}
 
 Одним из способов аутентификации пользователей в {{ ydb-short-name }} является использование LDAP каталога. Подробнее о таком виде аутентификации написано в разделе про [использование LDAP каталога](../../security/authentication.md#ldap). Для конфигурирования LDAP аутентификации необходимо описать секцию `ldap_authentication`.
@@ -865,29 +891,28 @@ auth_config:
 
 ```yaml
 auth_config:
-  ...
+  #...
   ldap_authentication:
     hosts:
       - "ldap-hostname-01.example.net"
       - "ldap-hostname-02.example.net"
       - "ldap-hostname-03.example.net"
     port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+    scheme: "ldap"
+    base_dn: "dc=mycompany,dc=net"
+    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
+    bind_password: "serviceAccauntPassword"
+    search_filter: "uid=$username"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+        enable_nested_groups_search: true
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
-  ...
+  #...
 ```
 
 | Параметр                                        | Описание                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

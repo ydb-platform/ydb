@@ -958,6 +958,15 @@ public:
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
+            for (const auto& operation : evWrite->Record.GetOperations()) {
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                       || operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                    Counters->WriteActorReadWriteOperations->Inc();
+                } else {
+                    Counters->WriteActorWriteOnlyOperations->Inc();
+                }
+            }
+
             SendTime[shardId] = TInstant::Now();
         } else {
             YQL_ENSURE(!isPrepare);
@@ -1024,10 +1033,11 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
-        } else if ((TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::PREPARED
-                    || TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING)
+        } else if ((state == IKqpTransactionManager::PREPARED
+                    || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
             auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
@@ -1035,28 +1045,30 @@ public:
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
+        } else if (state == IKqpTransactionManager::EXECUTING) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder()
+                    << "State of operation is unknown. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
+            return;
+        } else if (state == IKqpTransactionManager::PROCESSING
+                || state == IKqpTransactionManager::PREPARING
+                || state == IKqpTransactionManager::PREPARED) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Kikimr cluster or one of its subsystems was unavailable. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+            return;
         } else {
-            if (TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING) {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNDETERMINED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder()
-                        << "State of operation is unknown. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
-                return;
-            } else {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder()
-                        << "Kikimr cluster or one of its subsystems was unavailable. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
-                return;
-            }
+            AFL_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
         }
     }
 
@@ -1747,7 +1759,6 @@ public:
 
     void Handle(TEvBufferWrite::TPtr& ev) {
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
-
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
@@ -1992,7 +2003,6 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
-        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -2968,6 +2978,12 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+
+        WriteToken = result->Get()->Token;
+        OnFlushed();
+    }
+
+    void OnFlushed() {
         InFlight = false;
 
         EgressStats.Bytes += DataSize;
@@ -2976,8 +2992,6 @@ private:
         EgressStats.Resume();
 
         Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-
-        WriteToken = result->Get()->Token;
         DataSize = 0;
 
         if (Closed) {
@@ -3032,6 +3046,12 @@ private:
         }
 
         ev->SendTime = TInstant::Now();
+
+        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
+            // Nothing was written
+            OnFlushed();
+            return;
+        }
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));

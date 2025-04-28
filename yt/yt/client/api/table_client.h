@@ -141,6 +141,7 @@ struct TAlterTableReplicaOptions
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NYPath::TYPath> ReplicaPath;
+    bool Force = false;
 };
 
 struct TGetTablePivotKeysOptions

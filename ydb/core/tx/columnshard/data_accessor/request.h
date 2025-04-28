@@ -127,7 +127,7 @@ public:
         return sb;
     }
 
-    TPathFetchingState(const TInternalPathId pathId)
+    explicit TPathFetchingState(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
@@ -286,11 +286,12 @@ public:
         AFL_VERIFY(portion);
         AFL_VERIFY(FetchStage <= 1);
         AFL_VERIFY(PortionIds.emplace(portion->GetPortionId()).second);
-        PathIds.emplace(portion->GetPathId());
-        auto it = PathIdStatus.find(portion->GetPathId());
+        const auto& pathId = portion->GetPathId();
+        PathIds.emplace(pathId);
+        auto it = PathIdStatus.find(pathId);
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(portion->GetPathId(), portion->GetPathId()).first;
+            it = PathIdStatus.emplace(pathId, TPathFetchingState{pathId}).first;
         }
         it->second.AddPortion(portion);
     }

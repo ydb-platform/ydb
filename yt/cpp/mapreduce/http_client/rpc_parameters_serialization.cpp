@@ -49,18 +49,10 @@ static void SetPathParam(TNode* node, const TString& pathPrefix, const TYPath& p
     (*node)["path"] = std::move(updatedPath);
 }
 
-static TNode SerializeAttributeFilter(const TAttributeFilter& attributeFilter)
+template <typename TFilter>
+static TNode SerializeAttributeFilter(const TFilter& attributeFilter)
 {
-    TNode result = TNode::CreateList();
-    for (const auto& attribute : attributeFilter.Attributes_) {
-        result.Add(attribute);
-    }
-    return result;
-}
-
-static TNode SerializeAttributeFilter(const TOperationAttributeFilter& attributeFilter)
-{
-    TNode result = TNode::CreateList();
+    auto result = TNode::CreateList();
     for (const auto& attribute : attributeFilter.Attributes_) {
         result.Add(ToString(attribute));
     }
@@ -513,11 +505,14 @@ TNode SerializeParamsForUpdateOperationParameters(
 TNode SerializeParamsForGetJob(
     const TOperationId& operationId,
     const TJobId& jobId,
-    const TGetJobOptions& /* options */)
+    const TGetJobOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
     result["job_id"] = GetGuidAsString(jobId);
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
+    }
     return result;
 }
 
@@ -596,6 +591,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.IncludeControllerAgent_) {
         result["include_controller_agent"] = *options.IncludeControllerAgent_;
+    }
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
     }
     return result;
 }

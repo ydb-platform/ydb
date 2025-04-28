@@ -631,7 +631,6 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     }
 
     kqpConfig.EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
-    kqpConfig.EnableKqpDataQueryStreamLookup = serviceConfig.GetEnableKqpDataQueryStreamLookup();
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
@@ -650,6 +649,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
     kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
+    kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
     kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();

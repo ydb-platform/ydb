@@ -621,6 +621,61 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
+### A Password Complexity Policies {#password-complexity}
+
+{{ ydb-short-name }} allows users to be authenticated by login and password. More details can be found in the section [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }} it is possible to configure the complexity of user passwords. You can enable the password complexity policy due include addition section `password_complexity`.
+
+Syntax of the `password_complexity` section:
+
+```yaml
+auth_config:
+  #...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  #...
+```
+
+| Parameter | Description | Default value
+|:---|:---|:---:|
+| `min_length` | Minimal length of the password | 0 |
+| `min_lower_case_count` | Minimal count of letters in lower case | 0 |
+| `min_upper_case_count` | Minimal cont of letters in upper case | 0 |
+| `min_numbers_count` | Minimal count of number in the password | 0 |
+| `min_special_chars_count` | Minimal count of special chars in the password from list `special_chars`| 0 |
+| `special_chars` | Special characters which can be used in the password. Allow use chars from list `!@#$%^&*()_+{}\|<>?=` only. Value (`""`) is equivalent to list `!@#$%^&*()_+{}\|<>?=` | Empty list. Equivalent to all allowed characters: `!@#$%^&*()_+{}\|<>?=` |
+| `can_contain_username` | Allow use username in the password | `false` |
+
+{% note info %}
+
+Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+
+{% endnote %}
+
+### Account lockout after unsuccessful password attempts {#account-lockout}
+
+{{ ydb-short-name }} allows for the blocking of user authentication after unsuccessful password entry attempts. Lockout rules are configured in the `account_lockout` section.
+
+Syntax of the `account_lockout` section:
+```yaml
+auth_config:
+  #...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  #...
+```
+
+| Parameter | Description | Default value |
+| :--- | :--- | :---: |
+| `attempt_threshold` | The maximum number of unsuccessful password entry attempts. After `attempt_threshold` unsuccessful attempts, the user will be locked out for the duration specified in the `attempt_reset_duration` parameter. A zero value for the `attempt_threshold` parameter indicates no restrictions on the number of password entry attempts. After successful authentication (correct username and password), the counter for unsuccessful attempts is reset to 0. | 4 |
+| `attempt_reset_duration` | The duration of the user lockout period. During this period, the user will not be able to authenticate in the system even if the correct username and password are entered. The lockout period starts from the moment of the last incorrect password attempt. If a zero ("0s" - a notation equivalent to 0 seconds) lockout period is set, the user will be considered locked out indefinitely. In this case, the system administrator must lift the lockout.<br/><br/>The minimum lockout duration is 1 second.<br/>Supported time units:<ul><li>Seconds: `30s`</li><li>Minutes: `20m`</li><li>Hours: `5h`</li><li>Days: `3d`</li></ul>It is not allowed to combine time units in one entry. For example, the entry "1d12h" is incorrect. It should be replaced with an equivalent, such as "36h". | "1h" |
+
 ### Configuring LDAP authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
@@ -636,20 +691,19 @@ auth_config:
       - "ldap-hostname-02.example.net"
       - "ldap-hostname-03.example.net"
     port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+    scheme: "ldap"
+    base_dn: "dc=mycompany,dc=net"
+    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
+    bind_password: "serviceAccauntPassword"
+    search_filter: "uid=$username"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+        enable_nested_groups_search: true
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
   #...
 ```

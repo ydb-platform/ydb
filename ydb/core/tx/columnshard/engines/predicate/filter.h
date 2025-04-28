@@ -120,6 +120,8 @@ public:
 
 class IScanCursor {
 private:
+    YDB_ACCESSOR_DEF(std::optional<ui64>, TabletId);
+
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
@@ -146,11 +148,17 @@ public:
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) {
+        if (proto.HasTabletId()) {
+            TabletId = proto.GetTabletId();
+        }
         return DoDeserializeFromProto(proto);
     }
 
     NKikimrKqp::TEvKqpScanCursor SerializeToProto() const {
         NKikimrKqp::TEvKqpScanCursor result;
+        if (TabletId) {
+            result.SetTabletId(*TabletId);
+        }
         DoSerializeToProto(result);
         return result;
     }

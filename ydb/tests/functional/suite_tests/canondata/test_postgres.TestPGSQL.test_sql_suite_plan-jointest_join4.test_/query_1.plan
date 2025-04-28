@@ -47,7 +47,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "{b1: ExtractMembers.nt2.b1,b2: ExtractMembers.nt2.b2,b3: ExtractMembers.nt2.b1 AND {a1: ExtractMembers.a1,a2: ExtractMembers.a2,a3: Exist(ExtractMembers.id),id: ExtractMembers.id}.a3,id: ExtractMembers.nt2.id,nt1_id: ExtractMembers.nt2.nt1_id}.b3"
+                                                "Predicate": "If"
                                             },
                                             {
                                                 "Condition": "nt3.nt2_id = ss2.nt2.id",
@@ -128,7 +128,6 @@
                                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
                                                                                         "ReadColumns": [
                                                                                             "b1",
-                                                                                            "b2",
                                                                                             "id",
                                                                                             "nt1_id"
                                                                                         ],
@@ -171,8 +170,6 @@
                                                                                                                         "Name": "TableFullScan",
                                                                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/nt1",
                                                                                                                         "ReadColumns": [
-                                                                                                                            "a1",
-                                                                                                                            "a2",
                                                                                                                             "id"
                                                                                                                         ],
                                                                                                                         "ReadRanges": [
@@ -227,8 +224,6 @@
             "reads": [
                 {
                     "columns": [
-                        "a1",
-                        "a2",
                         "id"
                     ],
                     "scan_by": [
@@ -244,7 +239,6 @@
                 {
                     "columns": [
                         "b1",
-                        "b2",
                         "id",
                         "nt1_id"
                     ],

@@ -44,7 +44,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     TScannerConstructorContext context(snapshot, 0, sorting);
     {
-        TReadDescription read(snapshot, sorting);
+        TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         read.PathId = request.GetPathId();
         read.LockId = LockId;

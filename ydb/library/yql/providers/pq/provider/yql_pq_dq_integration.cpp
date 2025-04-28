@@ -253,6 +253,7 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
+                *srcDesc.MutableDisposition() = State_->Disposition;
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));

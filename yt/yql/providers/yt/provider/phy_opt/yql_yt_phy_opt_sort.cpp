@@ -674,7 +674,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         const size_t index = FromString(input.Cast<TYtOutput>().OutIndex().Value());
         TYtOutTableInfo outTable(op.Output().Item(index));
         if (builder) {
-            YQL_ENSURE(!builder->NeedMap());
+            YQL_ENSURE(!builder->NeedMap() || op.Maybe<TYtDqProcessWrite>());
             builder->FillRowSpecSort(*outTable.RowSpec);
         }
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());

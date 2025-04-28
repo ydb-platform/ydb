@@ -801,7 +801,7 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
                     "Offset": 11,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 12,
                     "StorageSize": 38,
                     "TimestampDiff": "not-zero-number",
@@ -813,7 +813,7 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
                     "Offset": 12,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 13,
                     "StorageSize": 38,
                     "TimestampDiff": "not-zero-number",
@@ -825,7 +825,7 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
                     "Offset": 13,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 14,
                     "StorageSize": 38,
                     "TimestampDiff": "not-zero-number",
@@ -837,7 +837,7 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
                     "Offset": 14,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 15,
                     "StorageSize": 38,
                     "TimestampDiff": "not-zero-number",
@@ -849,7 +849,7 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
                     "Offset": 15,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 16,
                     "StorageSize": 38,
                     "TimestampDiff": "not-zero-number",
@@ -857,7 +857,7 @@
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         },
         "response_metadata": {
             "EndOffset": 21,
@@ -878,7 +878,7 @@
                     ],
                     "Offset": 10,
                     "OriginalSize": 17,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 11,
                     "StorageSize": 37,
                     "TimestampDiff": "not-zero-number",
@@ -886,7 +886,7 @@
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         },
         "response_not_truncated": {
             "EndOffset": 21,
@@ -897,9 +897,71 @@
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
                     "Offset": 20,
                     "OriginalSize": 20,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
                     "WriteTimestamp": "not-zero-number"
                 }
@@ -916,7 +978,7 @@
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 1,
                     "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
@@ -928,7 +990,7 @@
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 2,
                     "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
@@ -940,7 +1002,7 @@
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 3,
                     "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
@@ -952,7 +1014,7 @@
                     "Message": "bWVzc2FnZS0z",
                     "Offset": 3,
                     "OriginalSize": 9,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 4,
                     "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
@@ -964,7 +1026,7 @@
                     "Message": "bWVzc2FnZS00",
                     "Offset": 4,
                     "OriginalSize": 9,
-                    "ProducerId": "text",
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 5,
                     "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
@@ -972,7 +1034,7 @@
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         }
     },
     "test.test_transfer_describe": {
@@ -1956,8 +2018,8 @@
         "Hosts": "2",
         "LoadAverage": "not-zero-number",
         "MapDataCenters": {
-            "1": 1,
-            "value": 2
+            "": 2,
+            "1": 1
         },
         "MapNodeRoles": {
             "Bootstrapper": 1,

@@ -44,7 +44,9 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientConnected::TPtr& /*ev*/) {
     }
 
-    void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/) {
+    void TBlobStorageController::TConsoleInteraction::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC33, "Console pipe destroyed", (ConsolePipe, ConsolePipe),
+            (ClientId, ev->Get()->ClientId), (Working, Working));
         ConsolePipe = {};
         if (Working) {
             if (ClientId) {
@@ -56,15 +58,11 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::MakeGetBlock() {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC34, "Issuing GetBlock for BSC");
         auto ev = std::make_unique<TEvBlobStorage::TEvGetBlock>(Self.TabletID(), TInstant::Max());
         auto bsProxyEv = CreateEventForBSProxy(Self.SelfId(), Self.Info()->GroupFor(0, Self.Executor()->Generation()),
             ev.release(), 0);
         TActivationContext::Schedule(TDuration::MilliSeconds(GetBlockBackoff.NextBackoffMs()), bsProxyEv);
-    }
-
-    void TBlobStorageController::TConsoleInteraction::MakeRetrySession() {
-        NeedRetrySession = false;
-        Start();
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr &ev) {
@@ -105,7 +103,8 @@ namespace NKikimr::NBsController {
 
                     TYamlConfig yamlConfig(std::move(yaml), version, std::move(yamlReturnedByFetch));
                     Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
-                        std::move(storageConfig), std::nullopt, nullptr, std::nullopt));
+                        std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
+                        std::nullopt));
                     CommitInProgress = true;
                 }
             } catch (const std::exception& ex) {
@@ -185,8 +184,10 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Stop() {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC35, "Stopping console interaction", (ConsolePipe, ConsolePipe), (Working, Working));
         if (ConsolePipe) {
             NTabletPipe::CloseClient(Self.SelfId(), ConsolePipe);
+            ConsolePipe = {};
         }
         Working = false;
     }
@@ -199,8 +200,8 @@ namespace NKikimr::NBsController {
         auto& record = ev->Get()->Record;
         switch (auto status = record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch:
+                NTabletPipe::CloseAndForgetClient(Self.SelfId(), ConsolePipe);
                 MakeGetBlock();
-                NeedRetrySession = true;
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
@@ -225,10 +226,13 @@ namespace NKikimr::NBsController {
         auto& record = ev->Get()->Record;
 
         const bool reasonOngoingCommit = CommitInProgress || (ClientId && ClientId != ev->Sender);
-        if (reasonOngoingCommit || (!Self.EnableConfigV2 && !record.GetSwitchEnableConfigV2())) {
+        if (!ConsolePipe || reasonOngoingCommit || (!Self.EnableConfigV2 && !record.GetSwitchEnableConfigV2())) {
             // reply to newly came query
             const TActorId temp = std::exchange(ClientId, ev->Sender);
-            if (reasonOngoingCommit) {
+            if (!ConsolePipe) {
+                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
+                    "connection to Console tablet terminated");
+            } else if (reasonOngoingCommit) {
                 IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
             } else {
                 IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
@@ -239,6 +243,9 @@ namespace NKikimr::NBsController {
 
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;
+
+        // audit log settings
+        AuditLogInfo.emplace(record.GetPeerName(), NACLib::TUserToken{record.GetUserToken()});
 
         if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
             return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit,
@@ -396,6 +403,8 @@ namespace NKikimr::NBsController {
         validateConfigEv->Record.SetYAML(record.GetClusterYaml());
         validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
         validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC36, "Sending TEvControllerValidateConfigRequest to console",
+            (ConsolePipe, ConsolePipe));
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
     }
 
@@ -447,8 +456,8 @@ namespace NKikimr::NBsController {
         auto& record = ev->Get()->Record;
         switch (auto status = record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::IdPipeServerMismatch:
+                NTabletPipe::CloseAndForgetClient(Self.SelfId(), ConsolePipe);
                 MakeGetBlock();
-                NeedRetrySession = true;
                 return;
 
             case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid:
@@ -517,7 +526,8 @@ namespace NKikimr::NBsController {
             }
 
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2,
+                std::move(AuditLogInfo)));
             CommitInProgress = true;
             PendingYamlConfig.reset();
         } catch (const TExError& error) {
@@ -526,22 +536,25 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev) {
+        auto* msg = ev->Get();
+
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC37, "TEvGetBlockResult received", (ConsolePipe, ConsolePipe),
+            (Working, Working), (Status, msg->Status), (BlockedGeneration, msg->BlockedGeneration),
+            (Generation, Self.Executor()->Generation()));
+
         if (!Working) {
             return;
         }
-        auto* msg = ev->Get();
-        auto status = msg->Status;
+
         auto blockedGeneration = msg->BlockedGeneration;
         auto generation = Self.Executor()->Generation();
-        switch (status) {
+        switch (msg->Status) {
             case NKikimrProto::OK:
                 if (generation <= blockedGeneration) {
-                    Self.HandlePoison(TActivationContext::AsActorContext());
-                    return;
+                    return Self.HandlePoison(TActivationContext::AsActorContext());
                 }
-                if (generation == blockedGeneration + 1 && NeedRetrySession) {
-                    MakeRetrySession();
-                    return;
+                if (generation == blockedGeneration + 1 && !ConsolePipe) {
+                    return Start();
                 }
                 Y_VERIFY_DEBUG_S(generation == blockedGeneration + 1, "BlockedGeneration#" << blockedGeneration
                     << " Tablet generation#" << generation);

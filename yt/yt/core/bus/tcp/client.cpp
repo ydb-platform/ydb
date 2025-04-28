@@ -160,7 +160,7 @@ public:
         return *EndpointAttributes_;
     }
 
-    void OnDynamicConfigChanged(const NBus::TBusClientDynamicConfigPtr& config) override
+    void Reconfigure(const NBus::TBusClientDynamicConfigPtr& config) override
     {
         DynamicConfig_.Store(config);
     }
@@ -201,7 +201,7 @@ public:
             std::move(poller),
             PacketTranscoderFactory_,
             MemoryUsageTracker_,
-            DynamicConfig_.Acquire()->NeedRejectConnectionDueMemoryOvercommit);
+            DynamicConfig_.Acquire()->NeedRejectConnectionOnMemoryOvercommit);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));

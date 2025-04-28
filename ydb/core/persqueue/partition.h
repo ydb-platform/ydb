@@ -273,7 +273,6 @@ private:
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
-
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
@@ -1014,6 +1013,11 @@ private:
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
+
+    void OnReadComplete(TReadInfo& info,
+                        TUserInfo* userInfo,
+                        const TEvPQ::TEvBlobResponse* blobResponse,
+                        const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

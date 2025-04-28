@@ -1,4 +1,4 @@
-/* custom error:Expected list with at least two columns, group: "g1"*/
+/* custom error: Expected non empty column list, group: "g1" */
 USE plato;
 
 -- empty group

@@ -13,12 +13,10 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
 
 #include <util/string/join.h>
-#include <util/string/strip.h>
-#include <util/string/split.h>
 
 namespace NYql::NSo {
 
-using namespace yandex::monitoring::api::v3;
+using namespace yandex::cloud::priv::monitoring::v3;
 
 namespace {
 
@@ -72,17 +70,7 @@ TString MetricTypeToString(MetricType type) {
     }
 }
 
-std::vector<TString> ParseKnownLabelNames(const TString& selectors) {
-    auto selectorValues = StringSplitter(selectors.substr(1, selectors.size() - 2)).Split(',').SkipEmpty().ToList<TString>();
-    std::vector<TString> result;
-    result.reserve(selectorValues.size());
-    for (const auto& value : selectorValues) {
-        result.push_back(StripString(value.substr(0, value.find('='))));
-    }
-    return result;
-}
-
-TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, std::vector<TString>&& knownLabelNames) {
+TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, const std::map<TString, TString>& knownSelectors) {
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -113,7 +101,9 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
             result.Labels.push_back(name.GetString());
         }
     }
-    result.Labels.insert(result.Labels.end(), knownLabelNames.begin(), knownLabelNames.end());
+    for (const auto& [key, value] : knownSelectors) {
+        result.Labels.push_back(key);
+    }
 
     return TGetLabelsResponse(std::move(result));
 }
@@ -141,11 +131,14 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     }
 
     const auto pagesInfo = json["page"];
-    if (!pagesInfo.IsMap() || !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger()) {
+    if (!pagesInfo.IsMap() || 
+        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
+        !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
         return TListMetricsResponse("Invalid paging info from monitoring api");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
+    result.TotalCount = pagesInfo["totalCount"].GetInteger();
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
@@ -163,7 +156,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     return TListMetricsResponse(std::move(result));
 }
 
-TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, size_t expectedSize) {
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response) {
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -181,21 +174,11 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
         return TGetPointsCountResponse(TStringBuilder{} << "Failed to parse points count response from monitoring api: " << e.what());
     }
 
-    if (!json.Has("vector") || !json["vector"].IsArray()) {
+    if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
         return TGetPointsCountResponse("Invalid points count result from monitoring api");
     }
 
-    const auto counts = json["vector"].GetArray();
-    if (counts.size() != expectedSize) {
-        return TGetPointsCountResponse("Invalid points count response size from monitoring api");
-    }
-
-    for (size_t i = 0; i < counts.size(); ++i) {
-        if (!counts[i].IsMap() || !counts[i].Has("scalar") || !counts[i].GetMap().at("scalar").IsInteger()) {
-            return TGetPointsCountResponse("Invalid points count response format from monitoring api");
-        }
-        result.PointsCount.push_back(counts[i].GetMap().at("scalar").GetInteger());
-    }
+    result.PointsCount = json["scalar"].GetInteger();
 
     return TGetPointsCountResponse(std::move(result));
 }
@@ -238,11 +221,9 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
-        const ui64 defaultGrpcPort,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
-        , DefaultGrpcPort(defaultGrpcPort)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
@@ -261,22 +242,26 @@ public:
     }
 
 public:
-    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TString& selectors) const override final {
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const override final {
+        auto requestUrl = BuildGetLabelsUrl(selectors);
+
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
         auto cb = [resultPromise, selectors](NYql::IHTTPGateway::TResult&& result) mutable {
-            resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), ParseKnownLabelNames(selectors)));
+            resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), selectors));
         };
 
         DoHttpRequest(
             std::move(cb),
-            BuildGetLabelsUrl(selectors)
+            std::move(requestUrl)
         );
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TString& selectors, int pageSize, int page) const override final {
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const override final {
+        auto requestUrl = BuildListMetricsUrl(selectors, pageSize, page);
+
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
         auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
@@ -285,20 +270,23 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            BuildListMetricsUrl(selectors, pageSize, page)
+            std::move(requestUrl)
         );
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::vector<TMetric>& metrics) const override final {
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const override final {
+        auto fullSelectors = AddRequiredLabels(selectors);
+        TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
+
         auto requestUrl = BuildGetPointsCountUrl();
-        auto requestBody = BuildGetPointsCountBody(metrics);
+        auto requestBody = BuildGetPointsCountBody(program);
 
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        auto cb = [resultPromise, expectedSize = metrics.size()](NYql::IHTTPGateway::TResult&& response) mutable {
-            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), expectedSize));
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& response) mutable {
+            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response)));
         };
 
         DoHttpRequest(
@@ -310,12 +298,22 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(TMetric metric, TInstant from, TInstant to) const override final {
-        return GetData(BuildSelectorsProgram(metric), from, to);
+    NThreading::TFuture<TGetDataResponse> GetData(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {
+        auto fullSelectors = AddRequiredLabels(selectors);
+
+        if (Settings.GetClusterType() == NProto::CT_MONITORING) {
+            fullSelectors["folderId"] = fullSelectors["cluster"];
+            fullSelectors.erase("cluster");
+            fullSelectors.erase("project");
+        }
+
+        TString program = BuildSelectorsProgram(fullSelectors, true);
+
+        return GetData(program, from, to);
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const override final {
-        const auto request = BuildGetDataRequest(selectors, from, to);
+    NThreading::TFuture<TGetDataResponse> GetData(TString program, TInstant from, TInstant to) const override final {
+        const auto request = BuildGetDataRequest(program, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
         if (auto authInfo = GetAuthInfo()) {
@@ -366,11 +364,11 @@ private:
     }
 
     TString GetHttpSolomonEndpoint() const {
-        return (Settings.GetUseSsl() ? "https://" : "http://") + Settings.GetEndpoint();
+        return TStringBuilder() << (Settings.GetUseSsl() ? "https://" : "http://") << Settings.GetHttpEndpoint();
     }
 
     TString GetGrpcSolomonEndpoint() const {
-        return TStringBuilder() << Settings.GetEndpoint() << ":" << DefaultGrpcPort;
+        return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
     template <typename TCallback>
@@ -417,7 +415,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const TString& selectors) const {
+    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -427,13 +425,13 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
-        builder.AddUrlParam("selectors", selectors);
+        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const TString& selectors, int pageSize, int page) const {
+    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, int pageSize, int page) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -442,12 +440,10 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        builder.AddUrlParam("selectors", selectors);
+        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToIsoStringLocalUpToSeconds());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToIsoStringLocalUpToSeconds());
 
         return builder.Build();
     }
@@ -465,46 +461,37 @@ private:
         return builder.Build();
     }
 
-    TString BuildGetPointsCountBody(const std::vector<TMetric>& metrics) const {
-        std::vector<TString> selectors;
-        selectors.reserve(metrics.size());
-        std::transform(
-            metrics.begin(),
-            metrics.end(),
-            std::back_inserter(selectors),
-            [this](const TMetric& metric) -> TString {
-                return TStringBuilder() << "count(" << BuildSelectorsProgram(metric) << ")";
-            }
-        );
-
-        TString program = TStringBuilder() << "[" << JoinSeq(",", selectors) << "]";
-
+    TString BuildGetPointsCountBody(const TString& program) const {
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(TInstant::Seconds(Settings.GetFrom()).ToString())
             .UnsafeWriteKey("to").WriteString(TInstant::Seconds(Settings.GetTo()).ToString())
             .UnsafeWriteKey("program").WriteString(program)
+            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
 
         if (!ds.GetDisabled()) {
-            w.UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
+            w
+                .UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
                 .UnsafeWriteKey("fill").WriteString(ds.GetFill())
                 .UnsafeWriteKey("gridMillis").WriteLongLong(ds.GetGridMs());
         }
-        w.EndObject()
-            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
-        .EndObject();
+        w.EndObject().EndObject();
 
         return w.Str();
     }
 
-    ReadRequest BuildGetDataRequest(const TString& selectors, TInstant from, TInstant to) const {
+    ReadRequest BuildGetDataRequest(const TString& program, TInstant from, TInstant to) const {
         ReadRequest request;
 
-        request.mutable_container()->set_project_id(Settings.GetProject());
+        if (Settings.GetClusterType() == NProto::CT_SOLOMON) {
+            request.mutable_container()->set_project_id(Settings.GetProject());
+        } else {
+            request.mutable_container()->set_folder_id(Settings.GetCluster());
+        }
         *request.mutable_from_time() = NProtoInterop::CastToProto(from);
         *request.mutable_to_time() = NProtoInterop::CastToProto(to);
         *request.mutable_force_replica() = DefaultReplica;
@@ -519,37 +506,47 @@ private:
         }
 
         auto query = request.mutable_queries()->Add();
-        *query->mutable_value() = selectors;
+        *query->mutable_value() = program;
         *query->mutable_name() = "query";
         query->set_hidden(false);
 
         return request;
     }
 
-    TString BuildSelectorsProgram(const TMetric& metric) const {
-        std::vector<TString> mappedValues;
-        mappedValues.reserve(Settings.GetRequiredLabelNames().size());
-        std::transform(
-            Settings.GetRequiredLabelNames().begin(),
-            Settings.GetRequiredLabelNames().end(),
-            std::back_inserter(mappedValues),
-            [&labels = metric.Labels](const TString& labelName) -> TString {
-                if (labels.find(labelName) == labels.end()) {
-                    return TStringBuilder() << labelName << "=\"-\"";
-                }
-                return TStringBuilder() << labelName << "=\"" << labels.at(labelName) << "\"";
+    std::map<TString, TString> AddRequiredLabels(const std::map<TString, TString>& labels) const {
+        std::map<TString, TString> fullSelectors;
+        for (const auto& labelName : Settings.GetRequiredLabelNames()) {
+            if (auto it = labels.find(labelName); it != labels.end()) {
+                fullSelectors[labelName] = it->second;
+            } else {
+                fullSelectors[labelName] = "-";
             }
-        );
+        }
+        return fullSelectors;
+    }
 
-        return TStringBuilder() << "{" << JoinSeq(",", mappedValues) << "}";
+    TString BuildSelectorsProgram(const std::map<TString, TString>& labels, bool useNewFormat = false) const {
+        std::vector<TString> mappedValues;
+        for (const auto& [key, value] : labels) {
+            if (useNewFormat && key == "name"sv) {
+                continue;
+            }
+            mappedValues.push_back(TStringBuilder() << key << "=\"" << value << "\"");
+        }
+
+        TStringBuilder result;
+        if (auto it = labels.find("name"); useNewFormat && it != labels.end()) {
+            result << "\"" << it->second << "\"";
+        }
+
+        return result << "{" << JoinSeq(",", mappedValues) << "}";
     }
 
 private:
     const TString DefaultReplica;
-    const ui64 DefaultGrpcPort;
     const ui64 ListSizeLimit = 1ull << 20;
-    const ui64 HttpMaxInflight = 200;
-    const ui64 GrpcMaxInflight = 2000;
+    const ui64 HttpMaxInflight = 1000;
+    const ui64 GrpcMaxInflight = 1000;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
@@ -568,17 +565,12 @@ ISolomonAccessorClient::Make(
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
     const auto& settings = source.settings();
 
-    TString defaultReplica = "sas";
+    TString defaultReplica;
     if (auto it = settings.find("solomonClientDefaultReplica"); it != settings.end()) {
         defaultReplica = it->second;
     }
 
-    ui64 defaultGrpcPort = 443;
-    if (auto it = settings.find("grpcPort"); it != settings.end()) {
-        defaultGrpcPort = FromString<ui64>(it->second);
-    }
-
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, defaultGrpcPort, std::move(source), credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

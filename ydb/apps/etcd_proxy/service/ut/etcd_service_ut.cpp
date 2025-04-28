@@ -1050,6 +1050,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 grpc::ClientContext compactCtx;
                 etcdserverpb::CompactionRequest compactionRequest;
                 compactionRequest.set_revision(revForCompact);
+                compactionRequest.set_physical(true);
                 etcdserverpb::CompactionResponse compactionResponse;
                 UNIT_ASSERT(etcd->Compact(&compactCtx, compactionRequest, &compactionResponse).ok());
             }

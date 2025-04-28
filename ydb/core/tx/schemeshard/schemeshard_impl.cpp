@@ -4701,15 +4701,15 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
-    EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
-    EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
-    EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
+    EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
+    EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -7297,15 +7297,16 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasQueryServiceConfig()) {
-        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        const auto& availableExternalDataSources = appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources();
+        const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
+        const auto& hostnamePatterns = queryServiceConfig.GetHostnamePatterns();
+        const auto& availableExternalDataSources = queryServiceConfig.GetAvailableExternalDataSources();
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
             nullptr,
-            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
+            queryServiceConfig.GetS3().GetGeneratorPathsLimit(),
             nullptr,
-            appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
-            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles(),
+            EnableExternalSourceSchemaInference,
+            queryServiceConfig.GetS3().GetAllowLocalFiles(),
             std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
         );
     }
@@ -7342,17 +7343,15 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
-    EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
-    EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
-    EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = featureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

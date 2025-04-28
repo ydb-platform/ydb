@@ -2150,6 +2150,12 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
+                        || HasNonEmptyKeyFilter(TYtSection(section))))
+                    {
+                        exclusiveOuts.insert(outIndex);
+                    }
+
                     // Section may be used multiple times in different operations
                     // So, check only unique pair of operation + section
                     if (!duplicateCheck[outIndex].insert(std::make_pair(op, section)).second) {
@@ -3007,7 +3013,7 @@ private:
                                 if (!groups.empty()) {
                                     groupSpec = NYT::TNode::CreateMap();
                                     // If we keep all groups then use the group with max size as default
-                                    if (allGroups && maxGrpIt != groups.end()) {
+                                    if (allGroups && maxGrpIt != groups.end() && (groups.size() > 1 || usage.FullUsage[i])) {
                                         groupSpec["default"] = NYT::TNode::CreateEntity();
                                         groups.erase(maxGrpIt);
                                     }

@@ -37,6 +37,7 @@ public:
     using TPtr = TIntrusivePtr<IFederatedTopicClient>;
 
     virtual NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() = 0;
+    virtual std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& settings) = 0;
 };
 
 class TNativeTopicClient : public ITopicClient {
@@ -102,6 +103,9 @@ public:
 
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
         return FederatedClient_.GetAllClusterInfo();
+    }
+    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& settings) override {
+        return FederatedClient_.CreateWriteSession(settings);
     }
 
     ~TNativeFederatedTopicClient() {}

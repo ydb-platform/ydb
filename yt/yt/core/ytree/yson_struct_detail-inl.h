@@ -7,12 +7,15 @@
 #include "ypath_client.h"
 #include "yson_schema.h"
 #include "yson_struct.h"
+#include "proto_yson_struct.h"
 
 #include <yt/yt/core/yson/token_writer.h>
 
 #include <library/cpp/yt/yson_string/string.h>
 
 #include <library/cpp/yt/misc/wrapper_traits.h>
+
+#include <google/protobuf/util/message_differencer.h>
 
 namespace NYT::NYTree {
 
@@ -620,7 +623,7 @@ inline void ResetOnLoad(TMap& parameter)
 
 // Any T.
 template <class T>
-bool CompareValue(const T& lhs, const T& rhs);
+bool CompareValues(const T& lhs, const T& rhs);
 
 // TIntrusivePtr.
 template <class T>
@@ -644,6 +647,9 @@ concept CNode = CNodePtr<TIntrusivePtr<T>>;
 // INode, IListNode, IMapNode.
 template <CNode T>
 bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs);
+
+template <CProtobufMessage T>
+bool CompareValues(const T& lhs, const T& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -736,6 +742,12 @@ template <CNode T>
 bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 {
     return AreNodesEqual(lhs, rhs);
+}
+
+template <CProtobufMessage T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
 }
 
 } // namespace NPrivate

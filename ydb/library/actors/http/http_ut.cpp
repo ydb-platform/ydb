@@ -40,7 +40,7 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
 Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(BasicParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "GET");
         UNIT_ASSERT_EQUAL(request->URL, "/test");
@@ -52,21 +52,21 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(HeaderParsingError_Request) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nHeader-Without-A-Colon\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nHeader-Without-A-Colon\r\n\r\n");
         UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
         UNIT_ASSERT_EQUAL_C(request->GetErrorText(), "Invalid http header", static_cast<int>(request->LastSuccessStage));
     }
 
     Y_UNIT_TEST(HeaderParsingError_Response) {
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nHeader-Without-A-Colon\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nHeader-Without-A-Colon\r\n\r\n");
         UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
         UNIT_ASSERT_EQUAL_C(response->GetErrorText(), "Invalid http header", static_cast<int>(response->LastSuccessStage));
     }
 
     Y_UNIT_TEST(GetWithSpecifiedContentType) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "GET");
         UNIT_ASSERT_EQUAL(request->URL, "/test");
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(BasicParsingChunkedBodyRequest) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "POST");
         UNIT_ASSERT_EQUAL(request->URL, "/Url");
@@ -89,9 +89,55 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Body, "this is test.");
     }
 
+    Y_UNIT_TEST(BasicParsingChunkedBigBodyRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString bigChunk = TString(NHttp::THttpConfig::BUFFER_MIN_STEP, 'a');
+        TString testBody;
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n");
+        for (size_t size = 0; size < NHttp::THttpConfig::BUFFER_SIZE; size += bigChunk.size()) {
+            EatPartialString(request, (std::ostringstream() << std::hex << bigChunk.size() << "\r\n").str());
+            EatPartialString(request, bigChunk);
+            EatPartialString(request, "\r\n");
+            testBody += bigChunk;
+        }
+        EatPartialString(request, "0\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "POST");
+        UNIT_ASSERT_EQUAL(request->URL, "/Url");
+        UNIT_ASSERT_EQUAL(request->Connection, "close");
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
+        UNIT_ASSERT_EQUAL(request->Version, "1.1");
+        UNIT_ASSERT_EQUAL(request->TransferEncoding, "chunked");
+        UNIT_ASSERT_EQUAL(request->Body, testBody);
+    }
+
+    Y_UNIT_TEST(BasicParsingBigHeadersRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Header);
+        TString bigChunk = TString(NHttp::THttpIncomingRequest::MaxHeaderSize * 2, 'a');
+        EatPartialString(request, bigChunk);
+        UNIT_ASSERT_VALUES_EQUAL(int(request->Stage), int(NHttp::THttpIncomingRequest::EParseStage::Error));
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::Header);
+    }
+
+    Y_UNIT_TEST(BrokenParsingMethod) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POSTPOSTPOSTPOSTPOSTPOSTPOST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::Method);
+    }
+
+    Y_UNIT_TEST(BrokenParsingChunkedBodyRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::ChunkLength);
+    }
+
     Y_UNIT_TEST(BasicPost) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "POST");
         UNIT_ASSERT_EQUAL(request->URL, "/Url");
@@ -105,7 +151,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(BasicParsingChunkedBodyResponse) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
         UNIT_ASSERT_EQUAL(response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Connection, "close");
@@ -118,14 +164,14 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(InvalidParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT(response->IsError());
     }
 
     Y_UNIT_TEST(AdvancedParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
         UNIT_ASSERT_EQUAL(response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Connection, "close");
@@ -137,7 +183,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(CreateCompressedResponse) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
+        EatPartialString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
         TString compressedBody = "something very long to compress with deflate algorithm. something very long to compress with deflate algorithm.";
         response->EnableCompression();

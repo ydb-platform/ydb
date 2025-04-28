@@ -42,7 +42,7 @@ enum Ev : ui32 {
 };
 
 struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, Ev::QueryResult> {
-    TEvQueryResult(const NYdb::TResultSets& result): Results(result) {}
+    TEvQueryResult(const NYdb::TResultSets& result = {}): Results(result) {}
 
     const NYdb::TResultSets Results;
 };

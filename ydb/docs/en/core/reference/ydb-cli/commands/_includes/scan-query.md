@@ -1,5 +1,7 @@
 # Performing scan queries
 
+{% include notitle [warning](../../_includes/deprecated_command_warning.md) %}
+
 You can run a query using [Scan Queries](../../../../concepts/scan_query.md) via the {{ ydb-short-name }} CLI by adding the `-t scan` flag to the `{{ ydb-cli }} table query execute` command.
 
 Run the data query:

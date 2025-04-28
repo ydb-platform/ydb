@@ -33,7 +33,9 @@ namespace NYql {
                     EFlag::ImplicitConversionToInt64 | 
                     EFlag::DateTimeTypes |
                     EFlag::TimestampCtor |
-                    EFlag::StringTypes);
+                    EFlag::StringTypes |
+                    EFlag::LikeOperator 
+                );
             }
         };
 

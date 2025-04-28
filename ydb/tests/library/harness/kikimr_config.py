@@ -165,8 +165,8 @@ class KikimrConfigGenerator(object):
             default_clusteradmin=None,
             enable_resource_pools=None,
             domain_login_only=None,
-            breakpad_minidumps_path: str = None,
-            breakpad_minidumps_script: str = None,
+            breakpad_minidumps_path=None,
+            breakpad_minidumps_script=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []

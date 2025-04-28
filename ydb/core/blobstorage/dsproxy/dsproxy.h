@@ -767,6 +767,16 @@ struct TBlobStorageGroupRestoreGetParameters {
 };
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params, NWilson::TTraceId traceId);
 
+struct TBlobStorageGroupCheckIntegrityParameters {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCheckIntegrity>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCheckIntegrity>::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_CHECKINTEGRITY,
+        .Name = "DSProxy.CheckIntegrity",
+        .Activity = NKikimrServices::TActivity::BS_PROXY_CHECKINTEGRITY_ACTOR,
+    };
+};
+IActor* CreateBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters params, NWilson::TTraceId traceId);
+
 struct TBlobStorageGroupDiscoverParameters {
     TBlobStorageGroupRequestActor<TEvBlobStorage::TEvDiscover>::TCommonParameters Common;
     TBlobStorageGroupRequestActor<TEvBlobStorage::TEvDiscover>::TTypeSpecificParameters TypeSpecific = {

@@ -105,8 +105,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test[1051200]
-ydb/tests/olap test_log_scenario.py.TestLogScenario.test[180]
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
 ydb/tests/olap/column_family/compression sole chunk chunk
 ydb/tests/olap/data_quotas [*/*] chunk chunk

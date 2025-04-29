@@ -299,21 +299,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         }
                     }
                     const TString childPath = CanonizePath(TStringBuilder() << path << "/" << child.Name);
+                    TString destination;
+                    if (it->second.Destination) {
+                        destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
+                    }
                     if (IsItemSupportedInExport(kind)) {
-                        auto [newIt, inserted] = ExportItems.insert({childPath, TExportItemInfo{}});
-                        if constexpr (IsYtExport) {
-                            if (inserted) {
-                                newIt->second.Destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
-                            }
-                        }
+                        ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                     }
                     if (IsLikeDirectory(kind)) {
-                        auto [newIt, inserted] = DirectoryItems.insert({childPath, TExportItemInfo{}});
-                        if constexpr (IsYtExport) {
-                            if (inserted) {
-                                newIt->second.Destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
-                            }
-                        }
+                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                     }
                 }
                 DirectoryItems.erase(it);

@@ -1502,7 +1502,7 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
-            (QueryState) ? QueryState->GetResultSetType() : Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED, Nothing());
+            (QueryState) ? QueryState->GetResultSetType() : Ydb::ResultSetType::UNSPECIFIED, Nothing());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2092,36 +2092,11 @@ public:
                         ++trailingResultsCount;
                         YQL_ENSURE(trailingResultsCount <= 1);
 
-                        switch (QueryState->GetResultSetType()) {
-                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED:
-                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE: {
-                                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
-                                    phyQuery.GetResultBindings(i), response->GetArena(), {});
+                        auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                            phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), {});
 
-                                YQL_ENSURE(ydbResult);
-                                response->AddYdbResults()->Swap(ydbResult);
-                                break;
-                            }
-                            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
-                                auto batch = QueryState->QueryData->GetArrowTxResult(
-                                    phyQuery.GetResultBindings(i));
-
-                                TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
-                                YQL_ENSURE(serializedBatch);
-
-                                *response->AddResultData() = serializedBatch;
-
-                                if (!response->HasArrowBatchSettings()) {
-                                    TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-                                    YQL_ENSURE(serializedSchema);
-
-                                    response->MutableArrowBatchSettings()->set_schema(serializedSchema);
-                                }
-                                break;
-                            }
-                            default:
-                                YQL_ENSURE(false);
-                        }
+                        YQL_ENSURE(ydbResult);
+                        response->AddYdbResults()->Swap(ydbResult);
                     }
 
                     continue;
@@ -2131,31 +2106,12 @@ public:
                 if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
-                switch (QueryState->GetResultSetType()) {
-                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED: {
-                        auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
-                            phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
 
-                        YQL_ENSURE(ydbResult);
-                        response->AddYdbResults()->Swap(ydbResult);
-                        break;
-                    }
-                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
-                        auto batch = QueryState->QueryData->GetArrowTxResult(
-                            phyQuery.GetResultBindings(i));
-                        *response->AddResultData() = NArrow::SerializeBatchNoCompression(batch);
+                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                    phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), effectiveRowsLimit);
 
-                        if (!response->HasArrowBatchSettings()) {
-                            TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
-                            YQL_ENSURE(serializedSchema);
-
-                            response->MutableArrowBatchSettings()->set_schema(serializedSchema);
-                        }
-                        break;
-                    }
-                    default:
-                        YQL_ENSURE(false);
-                }
+                YQL_ENSURE(ydbResult);
+                response->AddYdbResults()->Swap(ydbResult);
             }
         }
 

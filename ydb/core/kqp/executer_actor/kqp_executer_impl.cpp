@@ -83,7 +83,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    Ydb::Query::ResultSetType resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings)
+    Ydb::ResultSetType resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction

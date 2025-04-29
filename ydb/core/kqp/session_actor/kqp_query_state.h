@@ -210,7 +210,7 @@ public:
         return RequestEv->GetSyntax();
     }
 
-    Ydb::Query::ResultSetType GetResultSetType() const {
+    Ydb::ResultSetType GetResultSetType() const {
         return RequestEv->GetResultSetType();
     }
 

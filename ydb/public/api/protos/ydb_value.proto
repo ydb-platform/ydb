@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/ydb_formats.proto";
 import "google/protobuf/struct.proto";
 
 package Ydb;
@@ -176,9 +177,9 @@ message Column {
 }
 
 enum ResultSetType {
-    RESULT_SET_TYPE_UNSPECIFIED = 0;
-    RESULT_SET_TYPE_MESSAGE = 1;
-    RESULT_SET_TYPE_ARROW = 2;
+    UNSPECIFIED = 0;
+    MESSAGE = 1;
+    ARROW = 2;
 }
 
 // Represents table-like structure with ordered set of rows and columns

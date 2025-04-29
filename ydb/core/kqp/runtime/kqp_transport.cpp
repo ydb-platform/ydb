@@ -54,18 +54,37 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
+    Ydb::ResultSetType resultSetType,
     const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
 {
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
+
+    resultSet.set_result_set_type(resultSetType);
+
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
+    std::set<std::string> arrowNotNullColumns;
 
     TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = resultSet.add_columns();
         ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
-        column->set_name(TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex)));
-        ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
+
+        auto columnName = TString(columnHints && columnHints->size() ? order.at(idx).LogicalName : mkqlSrcRowStructType->GetMemberName(memberIndex));
+        auto* columnType = mkqlSrcRowStructType->GetMemberType(memberIndex);
+
+        column->set_name(columnName);
+        ExportTypeToProto(columnType, *column->mutable_type());
+
+        if (resultSetType == Ydb::ResultSetType::ARROW) {
+            if (columnType->GetKind() != TType::EKind::Pg && !columnType->IsOptional()) {
+                arrowNotNullColumns.insert(columnName);
+            }
+
+            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(columnType);
+            arrowSchema.emplace_back(std::move(columnName), std::move(typeInfo));
+        }
     }
 
     THolder<TGuard<TScopedAlloc>> guard;
@@ -77,86 +96,55 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     if (!data.empty()) {
         transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
     }
+
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+    YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
+
+    TRowBuilder rowBuilder(arrowSchema.size());
+
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
     for (auto& part : data) {
         if (part.ChunkCount()) {
             TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
-            rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-                ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
-            });
-        }
-    }
-}
 
-void TKqpProtoBuilder::BuildArrow(
-    std::shared_ptr<arrow::RecordBatch>& batch,
-    TVector<NYql::NDq::TDqSerializedBatch>&& data,
-    NKikimr::NMiniKQL::TType* mkqlSrcRowType,
-    const TVector<ui32>* columnOrder,
-    const TVector<TString>* columnHints)
-{
-    YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
-    const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
+            switch (resultSetType) {
+                case Ydb::ResultSetType::UNSPECIFIED:
+                    resultSet.set_result_set_type(Ydb::ResultSetType::MESSAGE);
+                case Ydb::ResultSetType::MESSAGE:{
+                    rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                        ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
+                    });
+                    break;
+                }
+                case Ydb::ResultSetType::ARROW:{
+                    rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                        for (size_t i = 0; i < arrowSchema.size(); ++i) {
+                            const auto& [name, type] = arrowSchema[i];
+                            rowBuilder.AddCell(i, type, value.GetElement(i), type.GetPgTypeMod(name));
+                        }
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
-    std::set<std::string> notNullColumns;
+                        auto cells = rowBuilder.BuildCells();
+                        batchBuilder.AddRow(cells);
+                    });
 
-    TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
-    for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
-        ui32 memberIndex = (!columnOrder || columnOrder->empty()) ? idx : (*columnOrder)[idx];
+                    std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.FlushBatch(false);
 
-        auto name = TString(columnHints && columnHints->size()
-            ? order.at(idx).LogicalName
-            : mkqlSrcRowStructType->GetMemberName(memberIndex));
+                    TString serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+                    YQL_ENSURE(serializedBatch);
 
-        auto* type = mkqlSrcRowStructType->GetMemberType(memberIndex);
-        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(type);
+                    TString serializedSchema = NArrow::SerializeSchema(*batch->schema());
+                    YQL_ENSURE(serializedSchema);
 
-        if (type->GetKind() != TType::EKind::Pg && !type->IsOptional()) {
-            notNullColumns.insert(name);
-        }
-
-        columns.emplace_back(std::move(name), std::move(typeInfo));
-    }
-
-    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
-    YQL_ENSURE(batchBuilder.Start(columns).ok());
-
-    TRowBuilder rowBuilder(columns.size());
-
-    THolder<TGuard<TScopedAlloc>> guard;
-    if (SelfHosted) {
-        guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
-    }
-
-    auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-    if (!data.empty()) {
-        transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
-    }
-
-    NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
-
-    for (auto& part : data) {
-        if (!part.ChunkCount()) {
-            continue;
-        }
-
-        TUnboxedValueBatch rows(mkqlSrcRowType);
-        dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
-
-        rows.ForEachRow([&](const NUdf::TUnboxedValue& row) {
-            for (size_t i = 0; i < columns.size(); ++i) {
-                const auto& [name, type] = columns[i];
-                rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));
+                    resultSet.set_data(std::move(serializedBatch));
+                    resultSet.mutable_arrow_batch_settings()->set_schema(std::move(serializedSchema));
+                    break;
+                }
+                default:
+                    break;
             }
-
-            auto cells = rowBuilder.BuildCells();
-            batchBuilder.AddRow(cells);
-        });
+        }
     }
-
-    batch = batchBuilder.FlushBatch(false);
 }
 
 } // namespace NKqp

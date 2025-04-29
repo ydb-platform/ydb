@@ -21,10 +21,8 @@ public:
     ~TKqpProtoBuilder();
 
     void BuildYdbResultSet(Ydb::ResultSet& resultSet, TVector<NYql::NDq::TDqSerializedBatch>&& data,
-        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr, const TVector<TString>* columnHints = nullptr);
-
-    void BuildArrow(std::shared_ptr<arrow::RecordBatch>& batch, TVector<NYql::NDq::TDqSerializedBatch>&& data,
-        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr, const TVector<TString>* columnHints = nullptr);
+        NKikimr::NMiniKQL::TType* srcRowType, Ydb::ResultSetType resultSetType, const TVector<ui32>* columnOrder = nullptr,
+        const TVector<TString>* columnHints = nullptr);
 
   private:
     NMiniKQL::TScopedAlloc* Alloc = nullptr;

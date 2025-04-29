@@ -169,7 +169,7 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
-    optional Ydb.Query.ResultSetType ResultSetType = 38;
+    optional Ydb.ResultSetType ResultSetType = 38;
 }
 
 message TKqpPathIdProto {
@@ -319,9 +319,6 @@ message TQueryResponse {
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
     optional TQueryResponseExtraInfo ExtraInfo = 16;
-    optional Ydb.Formats.ArrowBatchSettings ArrowBatchSettings = 17;
-
-    repeated bytes ResultData = 1000;
 }
 
 message TEvQueryResponse {
@@ -517,9 +514,6 @@ message TEvExecuterStreamData {
     optional uint32 QueryResultIndex = 3;
     optional uint32 ChannelId = 4;
     optional NActorsProto.TActorId ChannelActorId = 5;
-    optional Ydb.Formats.ArrowBatchSettings ArrowBatchSettings = 6;
-
-    optional bytes ResultData = 1000;
 };
 
 message TEvExecuterStreamDataAck {

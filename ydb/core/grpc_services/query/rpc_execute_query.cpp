@@ -260,7 +260,7 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
-        Ydb::Query::ResultSetType resultSetType = req->result_set_type();
+        Ydb::ResultSetType resultSetType = req->result_set_type();
 
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {
@@ -355,21 +355,7 @@ private:
         Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
         response->set_status(Ydb::StatusIds::SUCCESS);
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
-
-        switch (Request_->GetProtoRequest()->result_set_type()) {
-            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED:
-            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE: {
-                response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
-                break;
-            }
-            case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
-                response->set_result_data(ev->Get()->Record.GetResultData());
-                response->mutable_arrow_batch_settings()->Swap(ev->Get()->Record.MutableArrowBatchSettings());
-                break;
-            }
-            default:
-                break;
-        }
+        response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
@@ -449,30 +435,10 @@ private:
             Request_->SetRuHeader(record.GetConsumedRu());
 
             if (QueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE) {
-                switch (Request_->GetProtoRequest()->result_set_type()) {
-                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_UNSPECIFIED:
-                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_MESSAGE: {
-                        for(int i = 0; i < kqpResponse.GetYdbResults().size(); i++) {
-                            hasTrailingMessage = true;
-                            response.set_result_set_index(i);
-                            response.mutable_result_set()->Swap(record.MutableResponse()->MutableYdbResults(i));
-                        }
-                        break;
-                    }
-                    case Ydb::Query::ResultSetType::RESULT_SET_TYPE_ARROW: {
-                        for(int i = 0; i < kqpResponse.GetYdbResults().size(); i++) {
-                            hasTrailingMessage = true;
-                            response.set_result_set_index(i);
-                            response.set_result_data(record.MutableResponse()->GetResultData(i));
-
-                            if (i == 0) {
-                                response.mutable_arrow_batch_settings()->Swap(record.MutableResponse()->MutableArrowBatchSettings());
-                            }
-                        }
-                        break;
-                    }
-                        default:
-                    break;
+                for(int i = 0; i < kqpResponse.GetYdbResults().size(); i++) {
+                    hasTrailingMessage = true;
+                    response.set_result_set_index(i);
+                    response.mutable_result_set()->Swap(record.MutableResponse()->MutableYdbResults(i));
                 }
             }
 

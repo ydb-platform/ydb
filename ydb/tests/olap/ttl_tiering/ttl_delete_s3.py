@@ -159,6 +159,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
         upsert_number = 100
         self.teset_generator(test_name, buckets, ttl, single_upsert_row_count, upsert_number)
 
+
     # TODO FIXME after https://github.com/ydb-platform/ydb/issues/13523
     def data_deleted_from_buckets(self, cold_bucket, frozen_bucket):
         cold_bucket_stat = self.s3_client.get_bucket_stat(cold_bucket)

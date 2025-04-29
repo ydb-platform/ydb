@@ -183,15 +183,15 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
-    void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::string& expectedMessage = "") {
+    void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::optional<std::string> expectedMessage = std::nullopt) {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
-            if (!expectedMessage.empty()) {
+            if (expectedMessage) {
                 UNIT_ASSERT(!res.IsSuccess());
                 Cerr << ">>>>> ACTUAL: " << res.GetIssues().ToOneLineString() << Endl << Flush;
                 Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
-                UNIT_ASSERT(res.GetIssues().ToOneLineString().contains(expectedMessage));
+                UNIT_ASSERT(res.GetIssues().ToOneLineString().contains(expectedMessage.value()));
             } else {
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
@@ -278,10 +278,11 @@ struct MainTestCase {
     }
 
     struct CreateTransferSettings {
-        std::optional<TString> TopicName = std::nullopt;
-        std::optional<TString> ConsumerName = std::nullopt;
+        std::optional<std::string> TopicName = std::nullopt;
+        std::optional<std::string> ConsumerName = std::nullopt;
         std::optional<TDuration> FlushInterval = TDuration::Seconds(1);
         std::optional<ui64> BatchSizeBytes = 8_MB;
+        std::optional<std::string> ExpectedError = std::nullopt;
 
         CreateTransferSettings() {};
 
@@ -302,6 +303,12 @@ struct MainTestCase {
             CreateTransferSettings result;
             result.FlushInterval = flushInterval;
             result.BatchSizeBytes = batchSize;
+            return result;
+        }
+
+        static CreateTransferSettings WithExpectedError(const std::string& expected) {
+            CreateTransferSettings result;
+            result.ExpectedError = expected;
             return result;
         }
     };
@@ -331,7 +338,7 @@ struct MainTestCase {
             );
         )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), ConnectionString.data(), sb.data());
 
-        ExecuteDDL(ddl);
+        ExecuteDDL(ddl, true, settings.ExpectedError);
     }
 
     struct AlterTransferSettings {

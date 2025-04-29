@@ -94,7 +94,7 @@ $(document).ready(function() {
             tabElements.forEach(tabEl => {
                 tabEl.addEventListener('click', function(event) {
                     event.preventDefault();
-                    const tabId = this.getAttribute('data-bs-target');
+                    const tabId = this.getAttribute('data-bs-target').substring(1); // Убираем #
                     console.log('Переключение на вкладку:', tabId);
                     
                     // Удаляем активный класс со всех вкладок
@@ -114,9 +114,8 @@ $(document).ready(function() {
                     this.setAttribute('aria-selected', 'true');
                     
                     // Активируем соответствующую панель содержимого
-                    const targetPane = document.querySelector(tabId);
+                    const targetPane = document.querySelector("#" + tabId);
                     if (targetPane) {
-                        // Делаем активной с отключенной анимацией
                         targetPane.classList.add('show', 'active');
                         
                         // Форсируем пересчет размеров после переключения
@@ -124,13 +123,13 @@ $(document).ready(function() {
                         
                         // Обновляем графики для активной вкладки
                         if (currentData) {
-                            if (tabId === '#chartsTab') {
+                            if (tabId === 'chartsTab') {
                                 console.log('Обновляем графики на вкладке Метрики');
                                 setTimeout(() => {
                                     renderMetricsChart(); // Вызов из charts.js
                                     renderPoolChart();    // Вызов из charts.js
                                 }, 100); // Небольшая задержка для перерисовки DOM
-                            } else if (tabId === '#cpuTab') {
+                            } else if (tabId === 'cpuTab') {
                                 console.log('Обновляем графики на вкладке CPU');
                                 setTimeout(() => {
                                     renderCpuCharts();    // Вызов из charts.js
@@ -138,6 +137,13 @@ $(document).ready(function() {
                             }
                         }
                     }
+                    
+                    // Обновляем URL с новым параметром tab
+                    const currentUrlParams = new URLSearchParams(window.location.search);
+                    currentUrlParams.set('tab', tabId);
+                    const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
+                    history.pushState({tab: tabId}, '', newUrl);
+                    console.log("URL обновлен:", newUrl);
                 });
             });
             
@@ -168,6 +174,58 @@ $(document).ready(function() {
     poolCheckboxesContainer = $('#poolCheckboxes');
     poolSelectorContainer = $('#poolSelectorContainer');
 
+    // Читаем параметры из URL и устанавливаем значения полей
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromIterationParam = urlParams.get('fromIteration');
+    const toIterationParam = urlParams.get('toIteration');
+    const tabParam = urlParams.get('tab'); // Читаем параметр tab
+
+    if (fromIterationParam !== null) {
+        iterationFrom.val(fromIterationParam);
+        console.log("Установлено значение 'От итерации' из URL:", fromIterationParam);
+    }
+    if (toIterationParam !== null) {
+        iterationTo.val(toIterationParam);
+        console.log("Установлено значение 'До итерации' из URL:", toIterationParam);
+    }
+
+    // Активируем вкладку из URL или по умолчанию
+    const validTabIds = ['dataTab', 'chartsTab', 'cpuTab'];
+    const defaultTabId = 'dataTab';
+    let targetTabId = defaultTabId;
+
+    if (tabParam && validTabIds.includes(tabParam)) {
+        targetTabId = tabParam;
+        console.log(`Активируем вкладку из URL: #${targetTabId}`);
+    } else {
+        console.log(`Активируем вкладку по умолчанию: #${defaultTabId}`);
+    }
+
+    // Деактивируем все вкладки и панели
+    document.querySelectorAll('#mainTabs .nav-link').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#mainTabsContent .tab-pane').forEach(p => {
+        p.classList.remove('show', 'active');
+    });
+
+    // Активируем нужную вкладку и панель
+    const targetTabButton = document.querySelector(`#mainTabs button[data-bs-target="#${targetTabId}"]`);
+    const targetTabPane = document.getElementById(targetTabId);
+
+    if (targetTabButton && targetTabPane) {
+        targetTabButton.classList.add('active');
+        targetTabButton.setAttribute('aria-selected', 'true');
+        targetTabPane.classList.add('show', 'active');
+    } else {
+        // Если что-то пошло не так, активируем вкладку по умолчанию
+        console.warn(`Не удалось найти элементы для вкладки #${targetTabId}, активируем ${defaultTabId}`);
+        document.querySelector(`#mainTabs button[data-bs-target="#${defaultTabId}"]`)?.classList.add('active');
+        document.querySelector(`#mainTabs button[data-bs-target="#${defaultTabId}"]`)?.setAttribute('aria-selected', 'true');
+        document.getElementById(defaultTabId)?.classList.add('show', 'active');
+    }
+
     // Проверяем наличие элементов
     console.log("Проверка элементов формы:", {
         refreshButton: refreshButton.length > 0,
@@ -192,11 +250,30 @@ $(document).ready(function() {
     iterationFrom.on('change', function() {
         console.log("Изменено значение 'От итерации':", iterationFrom.val());
         fetchData(); // Вызов из data.js
+        
+        // Обновляем URL
+        const currentUrlParams = new URLSearchParams(window.location.search);
+        currentUrlParams.set('fromIteration', iterationFrom.val());
+        const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
+        history.pushState(null, '', newUrl);
+        console.log("URL обновлен (fromIteration):");
     });
     
     iterationTo.on('change', function() {
-        console.log("Изменено значение 'До итерации':", iterationTo.val());
+        const toValue = iterationTo.val();
+        console.log("Изменено значение 'До итерации':", toValue);
         fetchData(); // Вызов из data.js
+        
+        // Обновляем URL
+        const currentUrlParams = new URLSearchParams(window.location.search);
+        if (toValue) {
+            currentUrlParams.set('toIteration', toValue);
+        } else {
+            currentUrlParams.delete('toIteration'); // Удаляем параметр, если поле пустое
+        }
+        const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
+        history.pushState(null, '', newUrl);
+        console.log("URL обновлен (toIteration):");
     });
     
     timeMode.on('change', function() {

@@ -487,7 +487,9 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
     } else if (predicate.Maybe<TCoCmpEndsWith>()) {
         compareOperator = "ends_with";
     } else if constexpr(NSsa::RuntimeVersion >= 6) {
-        if (predicate.Maybe<TCoCmpStringContainsIgnoreCase>()) {
+        if (predicate.Maybe<TCoCmpEqualsIgnoreCase>()) {
+            compareOperator = "equals_ignore_case";
+        } else if (predicate.Maybe<TCoCmpStringContainsIgnoreCase>()) {
             compareOperator = "string_contains_ignore_case";
         } else if (predicate.Maybe<TCoCmpStartsWithIgnoreCase>()) {
             compareOperator = "starts_with_ignore_case";

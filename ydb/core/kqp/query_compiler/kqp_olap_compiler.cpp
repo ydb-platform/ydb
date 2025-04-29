@@ -663,6 +663,8 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
         op = TKernelRequestBuilder::EBinaryOp::StartsWith;
     } else if (oper == "ends_with"sv) {
         op = TKernelRequestBuilder::EBinaryOp::EndsWith;
+    } else if (oper == "equals_ignore_case") {
+        op = TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase; //TODO fixme
     } else if (oper == "string_contains_ignore_case"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase;
     } else if (oper == "starts_with_ignore_case"sv) {

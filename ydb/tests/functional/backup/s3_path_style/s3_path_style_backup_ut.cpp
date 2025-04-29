@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing/dir1/dir2", "RecursiveFolderProcessingPrefix6");
                 exportSettings
                     .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Table2"})
-                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir3"});
+                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/local/RecursiveFolderProcessing/dir1/dir2/dir3"}); // absolute paths are also accepted
                 auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
                 WaitOpSuccess(res);
 
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/dir2"})
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir2/"});
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SCHEME_ERROR, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
         }
 
         // Export directory with encryption
@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                     .SymmetricKey("Cool random key!")
                     .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix13/001", .Dst = "/local/RecursiveFolderProcessingRestored13/Table0"});
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::CANCELLED, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
             }
         }
 

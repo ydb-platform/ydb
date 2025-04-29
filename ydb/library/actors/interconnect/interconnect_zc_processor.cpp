@@ -17,6 +17,7 @@
 
 #include <linux/errqueue.h>
 #include <linux/netlink.h>
+#include <linux/socket.h>
 
 #ifndef MSG_ZEROCOPY
 #define MSG_ZEROCOPY 0x4000000

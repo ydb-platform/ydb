@@ -197,16 +197,15 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
+    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
 
 public:
-    friend class TTxInit;
-
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters,
         const ui64 tabletId);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {

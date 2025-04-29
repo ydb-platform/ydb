@@ -60,6 +60,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();

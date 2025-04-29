@@ -89,9 +89,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
         TTestInsertTableDB dbTable;
-        TInsertTable insertTable;
+        std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<TVersionCounters>();
+        TInsertTable insertTable(versionCounters);
         ui64 indexSnapshot = 0;
-        
+
         // insert, not commited
         auto userData1 = std::make_shared<TUserData>(tableId0, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
         insertTable.RegisterPathInfo(tableId0);

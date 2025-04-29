@@ -132,6 +132,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
+    NOlap::TVersionCounters::TVersionToKey& versionToKey = VersionCounters->GetVersionToKey();
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
@@ -151,16 +152,18 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            auto& key = versionToKey[info.GetSchema().GetVersion()];
+            key.emplace_back(id, version.GetPlanStep(), version.GetTxId());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)(
                 "version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
 
             AFL_VERIFY(info.HasSchema());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)(
-                "version", info.GetSchema().GetVersion());
+                "version", info.GetSchema().GetVersion())("has_diff", info.HasDiff());
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-                    version, preset->Id, schemaInitializationData, PortionsStats);
+                    version, preset->Id, schemaInitializationData, PortionsStats, VersionCounters);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -274,15 +277,20 @@ void TTablesManager::AddSchemaVersion(
 
     versionInfo.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
-    if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
-        for (auto&& i : Tables) {
-            PrimaryIndex->RegisterTable(i.first);
+    if (versionInfo.HasSchema()) {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
+                version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats, VersionCounters);
+            for (auto&& i : Tables) {
+                PrimaryIndex->RegisterTable(i.first);
+            }
+            PrimaryIndex->OnTieringModified(GetTtl());
+        } else {
+            PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
         }
-        PrimaryIndex->OnTieringModified(GetTtl());
-    } else {
-        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
+        key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
+        AFL_VERIFY((key.size() == 1) || (key[key.size() - 2] < key.back()));
     }
 }
 
@@ -327,11 +335,12 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
     const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+    const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters,
     const ui64 tabletId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
+    , VersionCounters(versionCounters)
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId) {

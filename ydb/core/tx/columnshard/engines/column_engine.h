@@ -6,6 +6,7 @@
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
 #include "scheme/versions/versioned_index.h"
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -158,9 +159,10 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& info) = 0;
+   virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
     virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
+    virtual void RemoveSchemaVersion(const ui64 version) = 0;
 
     virtual ui64 MemoryUsage() const {
         return 0;

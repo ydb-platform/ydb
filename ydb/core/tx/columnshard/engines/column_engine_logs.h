@@ -3,13 +3,16 @@
 #include "column_engine.h"
 #include "defs.h"
 
+
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
@@ -104,11 +107,11 @@ public:
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-        const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
+        const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters, const std::shared_ptr<TVersionCounters>& versionCounters);
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema,
-        const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
+        const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters, const std::shared_ptr<TVersionCounters>& versionCounters);
 
     void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) override;
     void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) override;
@@ -238,9 +241,14 @@ public:
     void AppendPortion(const TPortionDataAccessor& portionInfo);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
+    void RemoveSchemaVersion(const ui64 version) override {
+        VersionedIndex.RemoveVersion(version);
+    }
+
 private:
     ui64 TabletId;
     std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
+    std::shared_ptr<TVersionCounters> VersionCounters;
     std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
     ui64 LastPortion;
     ui64 LastGranule;

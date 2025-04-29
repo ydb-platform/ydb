@@ -16,6 +16,9 @@
 #include "bg_tasks/events/events.h"
 #include "bg_tasks/manager/manager.h"
 #include "blobs_action/storages_manager/manager.h"
+#include "blobs_action/transaction/tx_clean_versions.h"
+#include "blobs_action/transaction/tx_remove_blobs.h"
+#include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
@@ -85,11 +88,12 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
+    , VersionCounters(std::make_shared<NOlap::TVersionCounters>())
     , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
-          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), info->TabletID)
+          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), VersionCounters, info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTable(std::make_unique<NOlap::TInsertTable>())
+    , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounters))
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -532,6 +536,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupTtl();
     SetupGC();
     SetupCleanupInsertTable();
+    SetupCleanupUnusedSchemaVersions();
 }
 
 class TChangesTask: public NConveyor::ITask {
@@ -1121,6 +1126,18 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
     StartCompaction(ev->Get()->GetGuard());
 }
 
+void TColumnShard::SetupCleanupUnusedSchemaVersions() {
+    if (!VersionCounters->HasUnusedSchemaVersions()) {
+        return;
+    }
+    if (BackgroundController.IsActiveCleanupUnusedSchemaVersions()) {
+        ACFL_DEBUG("background", "cleanup_unused_schema_versions")("skip_reason", "in_progress");
+        return;
+    }
+    BackgroundController.StartActiveCleanupUnusedSchemaVersions();
+    Execute(new TTxSchemaVersionsCleanup(this, std::move(VersionCounters->ExtractVersionsToErase())));
+}
+  
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(

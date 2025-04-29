@@ -17,9 +17,14 @@
 
 #include <linux/errqueue.h>
 #include <linux/netlink.h>
+#include <linux/socket.h>
 
 #ifndef MSG_ZEROCOPY
 #define MSG_ZEROCOPY 0x4000000
+#endif
+
+#ifndef SO_ZEROCOPY
+#define SO_ZEROCOPY 60
 #endif
 
 static bool CmsgIsIpLevel(const cmsghdr& cmsg) {

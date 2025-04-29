@@ -120,8 +120,8 @@ public:
         return nullptr;
     }
 
-    THolder<TTestActorRuntime>& GetRuntime() {
-        return Runtime;
+    TTestActorRuntime* GetRuntime() {
+        return Runtime.Get();
     }
 
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg, bool reformat = false) {

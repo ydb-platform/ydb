@@ -510,7 +510,7 @@ namespace NKikimr::NColumnShard {
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
-            txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
+            txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }

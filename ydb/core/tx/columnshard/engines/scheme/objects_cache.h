@@ -89,7 +89,6 @@ private:
             : Tenant(tenant)
             , Owner(owner) {
             AFL_VERIFY(!!Owner);
-            AFL_VERIFY(!!Tenant);
         }
 
         operator size_t() const {
@@ -119,12 +118,7 @@ private:
 
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId, const TPathId& tenantPathId) {
-        if (!!ownerPathId && !!tenantPathId) {
-            return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
-        }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "use_exclusive_schema_cache")("has_owner_path_id", !!ownerPathId)(
-            "has_tenant_path_id", !!tenantPathId);
-        return std::make_shared<TSchemaObjectsCache>();
+        return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 
     static void DropCaches() {

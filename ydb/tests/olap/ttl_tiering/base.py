@@ -14,6 +14,22 @@ logger = logging.getLogger(__name__)
 
 
 class TllTieringTestBase(object):
+
+    row_count = 10 ** 7
+    single_upsert_row_count = 10 ** 6
+    days_to_cool = 1000
+    days_to_freeze = 3000
+
+    @classmethod
+    def portions_actualized_in_sys(self, table):
+        portions = table.get_portion_stat_by_tier()
+        logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
+        return "__DEFAULT" in portions and self.row_count > portions["__DEFAULT"]["Rows"]
+
+    @classmethod
+    def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
+        return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
+
     @classmethod
     def setup_class(cls):
         cls.endpoint = get_external_param("endpoint", None)

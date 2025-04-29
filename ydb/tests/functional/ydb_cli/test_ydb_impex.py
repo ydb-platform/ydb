@@ -123,6 +123,7 @@ ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []
 
 BOM_UTF8 = b'\xEF\xBB\xBF'
 
+
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
         return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))

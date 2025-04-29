@@ -212,6 +212,10 @@ Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
 
         NanoSleep(5ULL * 1000 * 1000 * 1000);
         // Zero copy send via loopback causes hidden copy inside linux kernel
+#if defined (__linux__)
         UNIT_ASSERT_VALUES_EQUAL("DisabledHiddenCopy", GetZcState(testCluster, 1, 2));
+#else
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+#endif
     }
 }

@@ -290,6 +290,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
 
+    def enable_config_dir(self):
+        self.__configurator.use_config_store = True
+        self.update_command(self.__make_run_command())
+
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name='cluster'):
@@ -600,6 +604,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.prepare()
         for node in self.nodes.values():
             node.start()
+
+    def enable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = True
+        for node_id in node_ids:
+            self.nodes[node_id].enable_config_dir()
 
     @property
     def config_path(self):

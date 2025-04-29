@@ -118,31 +118,35 @@ public:
         }
     };    
 
-    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, const TValidatedWriteTxOperation* validatedOperation, TTransactionContext& txc, const TActorContext& ctx) {
+    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, size_t operationIndexToPrecharge, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
         
-        if (validatedOperation) {
-            const ui64 tableId = validatedOperation->GetTableId().PathId.LocalPathId;
-            const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
-            const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
+        // Precharge
+        if (operationIndexToPrecharge != SIZE_MAX) {
+            const TValidatedWriteTx::TPtr& writeTx = writeOp.GetWriteTx();
+            for (size_t operationIndex = operationIndexToPrecharge; operationIndex < writeTx->GetOperations().size(); ++operationIndex) {
+                const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[operationIndex];
+                const ui64 tableId = validatedOperation.GetTableId().PathId.LocalPathId;
+                const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
+                const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
 
-            const NTable::TScheme& scheme = txc.DB.GetScheme();
-            const NTable::TScheme::TTableInfo& tableInfo = *scheme.GetTableInfo(userTable.LocalTid);
+                const NTable::TScheme& scheme = txc.DB.GetScheme();
+                const NTable::TScheme::TTableInfo& tableInfo = *scheme.GetTableInfo(userTable.LocalTid);
 
-            const TSerializedCellMatrix& matrix = validatedOperation->GetMatrix();
-            const auto operationType = validatedOperation->GetOperationType();
+                const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
+                const auto operationType = validatedOperation.GetOperationType();
 
-            TSmallVec<TRawTypeValue> key;
+                TSmallVec<TRawTypeValue> key;
 
-            // Precharge
-            if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
-                operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
-                userDb.NeedToReadBeforeWrite(fullTableId))
-            {
-                for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
-                    FillKey(scheme, userTable, tableInfo, *validatedOperation, rowIdx, key);
-                    userDb.PrechargeRow(fullTableId, key);
-                } 
+                if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    userDb.NeedToReadBeforeWrite(fullTableId))
+                {
+                    for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
+                        FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
+                        userDb.PrechargeRow(fullTableId, key);
+                    }
+                }
             }
         }
 
@@ -254,7 +258,7 @@ public:
         }
 
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
-        const TValidatedWriteTxOperation* validatedOperation = nullptr;
+        size_t validatedOperationIndex = SIZE_MAX;
 
         DataShard.ReleaseCache(*writeOp);
 
@@ -400,12 +404,12 @@ public:
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
             if (writeTx->HasOperations()) {
-                for (const auto& validatedOperationIter : writeTx->GetOperations()) {
-                    validatedOperation = &validatedOperationIter;
-                    DoUpdateToUserDb(userDb, *validatedOperation, txc);
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation->GetMatrix().GetRowCount());
+                for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
+                    const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
+                    DoUpdateToUserDb(userDb, validatedOperation, txc);
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
                 }
-                validatedOperation = nullptr;
+                validatedOperationIndex = SIZE_MAX;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
             }
@@ -491,7 +495,7 @@ public:
             }
             return EExecutionStatus::Continue;
         } catch (const TNotReadyTabletException&) {
-            return OnTabletNotReadyException(userDb, *writeOp, validatedOperation, txc, ctx);
+            return OnTabletNotReadyException(userDb, *writeOp, validatedOperationIndex, txc, ctx);
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 

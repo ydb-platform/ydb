@@ -1020,12 +1020,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
-        result->Loaded = std::move(request.ReadyPages);
+        result->Pages = std::move(request.ReadyPages);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection result " << result->Origin->Label()
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection result " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
-            << " pages " << result->Loaded);
+            << " pages " << result->Pages);
 
         Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();
@@ -1040,7 +1040,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection error " << result->Origin->Label()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection error " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
             << " error " << error);

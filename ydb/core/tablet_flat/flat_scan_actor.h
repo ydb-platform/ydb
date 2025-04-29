@@ -216,7 +216,7 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Loaded);
+                Loader->Save(msg->Cookie, msg->Pages);
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -618,7 +618,7 @@ namespace NOps {
                 return Terminate(EAbort::Host);
             }
 
-            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
+            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);

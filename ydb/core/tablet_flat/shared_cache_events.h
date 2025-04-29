@@ -89,17 +89,17 @@ namespace NKikimr::NSharedCache {
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
+        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ui64 cookie, EStatus status)
             : Status(status)
             , Cookie(cookie)
-            , Origin(origin)
+            , PageCollection(pageCollection)
         { }
 
         void Describe(IOutputStream &out) const
         {
             out
-                << "TEvResult{" << Loaded.size() << " pages"
-                << " " << Origin->Label()
+                << "TEvResult{" << Pages.size() << " pages"
+                << " " << PageCollection->Label()
                 << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
@@ -107,7 +107,7 @@ namespace NKikimr::NSharedCache {
         ui64 Bytes() const
         {
             return
-                std::accumulate(Loaded.begin(), Loaded.end(), ui64(0),
+                std::accumulate(Pages.begin(), Pages.end(), ui64(0),
                     [](ui64 bytes, const TLoaded& loaded)
                         { return bytes + TPinnedPageRef(loaded.Page)->size(); });
         }
@@ -124,8 +124,8 @@ namespace NKikimr::NSharedCache {
 
         const EStatus Status;
         const ui64 Cookie;
-        const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
-        TVector<TLoaded> Loaded;
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TLoaded> Pages;
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {

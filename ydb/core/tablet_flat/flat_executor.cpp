@@ -769,9 +769,9 @@ void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
             auto partStore = partView.As<NTable::TPartStore>();
             for (auto &pageCollection : partStore->PageCollections) {
                 // Note: page collection search optimization seems useless
-                if (pageCollection->PageCollection == msg->Origin) {
+                if (pageCollection->PageCollection == msg->PageCollection) {
                     ui64 stickySizeBefore = pageCollection->GetStickySize();
-                    for (auto& loaded : msg->Loaded) {
+                    for (auto& loaded : msg->Pages) {
                         pageCollection->AddSticky(loaded.PageId, loaded.Page);
                     }
                     StickyPagesMemory += pageCollection->GetStickySize() - stickySizeBefore;
@@ -2974,7 +2974,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case EPageCollectionRequest::Cache:
     case EPageCollectionRequest::InMemPages:
         {
-            TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
+            TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->PageCollection->Label());
             if (!collectionInfo) // collection could be outdated
                 return;
 
@@ -2993,7 +2993,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             if (requestType == EPageCollectionRequest::InMemPages) {
                 StickInMemPages(msg);
             }
-            for (auto& loaded : msg->Loaded) {
+            for (auto& loaded : msg->Pages) {
                 TPrivatePageCache::TPage::TWaitQueuePtr transactionsToActivate = PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
                 ActivateWaitingTransactions(transactionsToActivate);
             }
@@ -3002,7 +3002,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
     case EPageCollectionRequest::PendingInit:
         {
-            const auto *pageCollection = msg->Origin.Get();
+            const auto *pageCollection = msg->PageCollection.Get();
             TPendingPartSwitch *foundSwitch = nullptr;
             TPendingPartSwitch::TNewBundle *foundBundle = nullptr;
             TPendingPartSwitch::TLoaderStage *foundStage = nullptr;
@@ -3039,7 +3039,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            foundStage->Loader.Save(msg->Cookie, msg->Loaded);
+            foundStage->Loader.Save(msg->Cookie, msg->Pages);
             foundSwitch->PendingLoads--;
 
             if (PrepareExternalPart(*foundSwitch, *foundBundle)) {

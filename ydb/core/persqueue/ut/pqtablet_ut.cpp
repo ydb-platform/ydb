@@ -22,7 +22,6 @@
 
 #include "make_config.h"
 #include "pqtablet_mock.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -2016,47 +2015,6 @@ Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
     WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
 
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
-}
-
-Y_UNIT_TEST_F(Abcdef, TPQTabletFixture)
-{
-    DBGTRACE("Abcdef");
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = txId_1 + 1;
-    const ui64 mockTabletId = 22222;
-
-    DBGTRACE_LOG("");
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    DBGTRACE_LOG("");
-    SendProposeTransactionRequest({.TxId=txId_1,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=100, .TxIds={txId}});
-
-    WaitForCalcPredicateResult();
-
-    SendProposeTransactionRequest({.TxId=txId_2,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-
-    DBGTRACE_LOG("");
-    TAutoPtr<IEventHandle> kvRequest;
-    InterceptSaveTxState(kvRequest);
-
-    SendSaveTxState(kvRequest);
-
-    DBGTRACE_LOG("");
-    WaitProposeTransactionResponse({.TxId=txId_2,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 }

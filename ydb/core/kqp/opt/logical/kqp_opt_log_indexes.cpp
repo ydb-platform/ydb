@@ -317,7 +317,7 @@ bool CheckIndexCovering(const TRead& read, const TIntrusivePtr<TKikimrTableMetad
 }
 
 TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
-    const TKikimrTableDescription& tableDesc, TIntrusivePtr<TKikimrTableMetadata> indexMeta, bool useStreamLookup,
+    const TKikimrTableDescription& tableDesc, TIntrusivePtr<TKikimrTableMetadata> indexMeta,
     const TVector<TString>& extraColumns, const std::function<TExprBase(const TExprBase&)>& middleFilter = {})
 {
     const bool needDataRead = CheckIndexCovering(read, indexMeta);
@@ -381,22 +381,14 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
             .Done();
     }
 
-    if (useStreamLookup) {
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
-        return Build<TKqlStreamLookupTable>(ctx, read.Pos())
-            .Table(read.Table())
-            .LookupKeys(readIndexTable.Ptr())
-            .Columns(read.Columns())
-            .Settings(settings.BuildNode(ctx, read.Pos()))
-            .Done();
-    } else {
-        return Build<TKqlLookupTable>(ctx, read.Pos())
-            .Table(read.Table())
-            .LookupKeys(readIndexTable.Ptr())
-            .Columns(read.Columns())
-            .Done();
-    }
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    return Build<TKqlStreamLookupTable>(ctx, read.Pos())
+        .Table(read.Table())
+        .LookupKeys(readIndexTable.Ptr())
+        .Columns(read.Columns())
+        .Settings(settings.BuildNode(ctx, read.Pos()))
+        .Done();
 }
 
 auto NewLambdaFrom(TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces, const TExprNode& args, const TExprBase& body) {
@@ -711,7 +703,7 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
         YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
             "index read doesn't support vector index: " << indexName);
 
-        return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), {});
+        return DoRewriteIndexRead(indexRead, ctx, tableDesc, implTable, {});
     }
 
     return node;
@@ -1116,7 +1108,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
     };
 
     auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable,
-        kqpCtx.IsScanQuery(), extraColumns, filter);
+        extraColumns, filter);
 
     return Build<TCoTopBase>(ctx, node.Pos())
         .CallableName(node.Ref().Content())
@@ -1170,7 +1162,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
         return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, takeChild.Ptr()));
     };
 
-    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, kqpCtx.IsScanQuery(), extraColumns, filter);
+    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, extraColumns, filter);
 }
 
 } // namespace NKikimr::NKqp::NOpt

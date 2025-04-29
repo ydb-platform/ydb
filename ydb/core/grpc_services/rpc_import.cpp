@@ -110,6 +110,9 @@ public:
                 if (settings.encryption_settings().symmetric_key().key().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
                 }
+                if (!commonSourcePrefixSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
+                }
             }
         } else {
             if (settings.items().empty()) {

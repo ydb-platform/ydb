@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
+#include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 

@@ -8,6 +8,7 @@
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/system/info.h>
+#include <sstream>
 
 size_t NKikimr::RealNumberOfCpus() {
     // copy-pasted from util/system/info.cpp

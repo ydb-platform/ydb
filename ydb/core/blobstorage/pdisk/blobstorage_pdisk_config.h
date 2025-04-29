@@ -429,7 +429,14 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 GetOwnerWeight(NKikimrBlobStorage::TPDiskSlotSizeUnits::E ownerSizeUnits) {
         ui32 u_vdisk = ownerSizeUnits ?: 1;
         ui32 u_pdisk = SlotSizeUnits ?: 1;
-        return int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+        ui32 ret = int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+        Cerr << (TStringBuilder() << "[ PD20 ] GetOwnerWeight"
+            << ", PDiskId# " << PDiskId
+            << ", ownerSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(ownerSizeUnits) 
+            << ", PDisk.SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits) 
+            << ", ret# " << ret
+            << Endl); 
+        return ret;
     }
 };
 

@@ -43,6 +43,10 @@ public:
     //
 
     bool Reset(const TKeeperParams& params, const TColorLimits &limits, TString &outErrorReason) {
+        Cerr << (TStringBuilder() << "[ PD15 ] TKeeper::Reset"
+            << ", TotalChunks# " << params.TotalChunks
+            << ", ExpectedOwnerCount# " << params.ExpectedOwnerCount
+            << Endl);
         return ChunkTracker.Reset(params, limits, outErrorReason);
     }
 
@@ -59,6 +63,11 @@ public:
     //
 
     void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
+        Cerr << (TStringBuilder() << "[ PD11 ] TKeeper::AddOwner"
+            << ", Owner# " << owner
+            << ", VDiskID# " << vdiskId
+            << ", Weight# " << weight
+            << Endl);
         ChunkTracker.AddOwner(owner, vdiskId, weight);
     }
 

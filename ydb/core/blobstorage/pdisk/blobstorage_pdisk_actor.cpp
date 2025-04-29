@@ -635,7 +635,7 @@ public:
             } else {
                 NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
                     it->SlotId, it->SlotSizeUnits);
-                P_LOG(PRI_NOTICE, PD06, "TPDiskActor::InitSuccess", (TEvYardInit, evInit.ToString()));
+                Cerr << (TStringBuilder() << "[ PD06 ] TPDiskActor::InitSuccess, TEvYardInit# " << evInit.ToString() << Endl);
                 auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
                 PDisk->InputRequest(request);
             }
@@ -649,7 +649,7 @@ public:
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
         const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        P_LOG(PRI_NOTICE, PD05, "TPDiskActor::InitHandle", (TEvYardInit, evYardInit.ToString()));
+        Cerr << (TStringBuilder() << "[ PD05 ] TPDiskActor::InitHandle, TEvYardInit# " << evYardInit.ToString() << Endl);
 
         InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.SlotSizeUnits, evYardInit.PDiskGuid,
             ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);

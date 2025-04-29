@@ -214,6 +214,9 @@ void TPDisk::ReadSysLog(const TActorId &pDiskActor) {
 }
 
 bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TString& errorReason) {
+    Cerr << (TStringBuilder() << "[ PD22 ] ProcessChunk0"
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl);
     TGuard<TMutex> guard(StateMutex);
     ui64 writePosition = 0;
     ui64 lastLsn = 0;
@@ -685,6 +688,9 @@ void TPDisk::ProcessLogReadQueue() {
 // SysLog writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId) {
+    Cerr << (TStringBuilder() << "[ PD21 ] WriteSysLogRestorePoint"
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl); 
     TGuard<TMutex> guard(StateMutex);
     LoggedNonces = SysLogRecord.Nonces;
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
@@ -1616,6 +1622,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
                 params.SpaceColorBorder = Cfg->SpaceColorBorder;
                 params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
+                ui32 sumWeight = 0;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
                         params.OwnersInfo[ownerId] = {
@@ -1623,11 +1630,24 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             .VDiskId = OwnerData[ownerId].VDiskId,
                             .Weight = Cfg->GetOwnerWeight(OwnerData[ownerId].SlotSizeUnits),
                         };
+                        Cerr << (TStringBuilder() << "[ PD14 ] Processed OwnerData"
+                            << ", ownerId#" << ownerId
+                            << ", SlotSizeUnits#" << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(OwnerData[ownerId].SlotSizeUnits)
+                            << ", PDiskId# " << PCtx->PDiskId
+                            << Endl);
+                        sumWeight += params.OwnersInfo[ownerId].Weight;
                         if (OwnerData[ownerId].IsStaticGroupOwner()) {
                             params.HasStaticGroups = true;
                         }
                     }
                 }
+                
+                Cerr << (TStringBuilder() << "[ PD10 ] Construct TKeeperParams"
+                    << ", TotalChunks#" << params.TotalChunks
+                    << ", ExpectedOwnerCount#" << params.ExpectedOwnerCount
+                    << ", OwnersInfoSumWeight#" << sumWeight
+                    << ", PDiskId# " << PCtx->PDiskId
+                    << Endl);
 
                 TString errorReason;
                 if (

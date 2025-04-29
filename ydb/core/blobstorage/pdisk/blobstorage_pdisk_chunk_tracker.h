@@ -87,6 +87,12 @@ public:
         TQuotaRecord &record = QuotaForOwner[id];
         Y_VERIFY(record.GetHardLimit() == 0);
         Y_VERIFY(record.GetFree() == 0);
+        Cerr << (TStringBuilder() << "[ PD13 ] TPerOwnerQuotaTracker::AddOwner"
+            << ", Owner# " << id
+            << ", VDiskID# " << vdiskId
+            << ", Weight# " << weight
+            << Endl);
+
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
         record.SetWeight(weight);
@@ -266,6 +272,17 @@ public:
 
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
+        ui32 sumWeight = 0;
+        for (const auto& owner: params.OwnersInfo) {
+            if (owner.second.VDiskId != TVDiskID::InvalidId) {
+                sumWeight += owner.second.Weight;
+            }
+        }
+        Cerr << (TStringBuilder() << "[ PD16 ] TChunkTracker::Reset"
+            << ", TotalChunks# " << params.TotalChunks
+            << ", ExpectedOwnerCount# " << params.ExpectedOwnerCount
+            << ", OwnersInfoSumWeight# " << sumWeight
+            << Endl);
 
         GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
@@ -362,6 +379,11 @@ public:
 
     void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
         Y_VERIFY(IsOwnerUser(owner));
+        Cerr << (TStringBuilder() << "[ PD12 ] TChunkTracker::AddOwner" 
+            << ", Owner# " << owner
+            << ", VDiskID# " << vdiskId
+            << ", Weight# " << weight
+            << Endl);
         OwnerQuota->AddOwner(owner, vdiskId, weight);
     }
 

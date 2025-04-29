@@ -587,6 +587,21 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
 
 ui32 TPDisk::GetNumActiveSlots() const {
     return Keeper.GetNumActiveSlots();
+    
+    // ui32 sum = 0;
+    // for (const auto& ownerData: OwnerData) {
+    //     if (ownerData.VDiskId == TVDiskID::InvalidId) {
+    //         continue;
+    //     }
+    //     ui32 u_vdisk = ownerData.SlotSizeUnits ?: 1;
+    //     ui32 u_pdisk = Cfg->SlotSizeUnits ?: 1;
+    //     sum += int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+    // }
+    // P_LOG(PRI_NOTICE, PD09, "TPDisk::GetNumActiveSlots()",
+    //     (Keeper_GetNumActiveSlots, Keeper.GetNumActiveSlots()),
+    //     (OwnerData_Sum, sum)
+    // );
+    // return sum;
 }
 
 NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
@@ -1778,6 +1793,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     // Just register cut log id and reply with starting points.
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
 
+    
     TOwnerData &ownerData = OwnerData[owner];
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitForKnownVDisk, OwnerId# " << owner
             << ", evYardInit# " << evYardInit.ToString());
@@ -1826,7 +1842,8 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     P_LOG(PRI_NOTICE, BPD30, "Registered known VDisk",
             (VDisk, vDiskId),
             (OwnerId, owner),
-            (OwnerRound, ownerRound));
+            (OwnerRound, ownerRound),
+            (SlotSizeUnits, NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(evYardInit.SlotSizeUnits)));
 
     PCtx->ActorSystem->Send(evYardInit.Sender, result.Release());
     Mon.YardInit.CountResponse();
@@ -1836,7 +1853,10 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 }
 
 bool TPDisk::YardInitStart(TYardInit &evYardInit) {
-    P_LOG(PRI_NOTICE, PD03, "YardInitStart", (TYardInit, evYardInit));
+    Cerr << (TStringBuilder() << "[ PD03 ] YardInitStart"
+        << ", TYardInit# " << evYardInit.ToString()
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl);
     if (evYardInit.VDisk == TVDiskID::InvalidId) {
         ReplyErrorYardInitResult(evYardInit, "VDisk == InvalidId. Marker# BPD03");
         return false;
@@ -1905,7 +1925,10 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
 }
 
 void TPDisk::YardInitFinish(TYardInit &evYardInit) {
-    P_LOG(PRI_NOTICE, PD04, "YardInitFinish", (TYardInit, evYardInit));
+    Cerr << (TStringBuilder() << "[ PD04 ] YardInitFinish"
+        << ", TYardInit# " << evYardInit.ToString()
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl);
     TOwner owner = evYardInit.Owner;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
     {
@@ -1914,6 +1937,11 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
         auto it = VDiskOwners.find(vDiskId);
         if (it != VDiskOwners.end()) {
+            Cerr << (TStringBuilder() << "[ PD04 ] YardInitForKnownVDisk"
+                << ", TYardInit# " << evYardInit.ToString()
+                << ", owner# " << it->second
+                << ", PDiskId# " << PCtx->PDiskId
+                << Endl);
             YardInitForKnownVDisk(evYardInit, it->second);
             return;
         }

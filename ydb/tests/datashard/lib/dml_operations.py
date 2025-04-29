@@ -28,6 +28,7 @@ class DMLOperations():
         }
         sql_create_table = create_table_sql_request(
             table_name, columns, pk_columns, index_columns, unique, sync)
+        print(sql_create_table)
         self.query(sql_create_table)
         if ttl != "":
             sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==

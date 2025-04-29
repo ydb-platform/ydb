@@ -1,4 +1,4 @@
-Boost Graph Library  [![Build Status](https://drone.cpp.al/api/badges/boostorg/graph/status.svg)](https://drone.cpp.al/boostorg/graph)[![Build Status](https://github.com/boostorg/graph/workflows/CI/badge.svg?branch=develop)](https://github.com/boostorg/graph/actions)
+# Boost Graph Library
 
 ===================
 
@@ -6,7 +6,7 @@ A generic interface for traversing graphs, using C++ templates.
 
 The full documentation is available on [boost.org](http://www.boost.org/doc/libs/release/libs/graph/doc/index.html).
 
-## Support, bugs and feature requests ##
+## Support, bugs and feature requests
 
 Bugs and feature requests can be reported through the [Github issue page](https://github.com/boostorg/graph/issues).
 
@@ -22,12 +22,14 @@ You can submit your changes through a [pull request](https://github.com/boostorg
 There is no mailing-list specific to Boost Graph, although you can use the general-purpose Boost [mailing-list](http://lists.boost.org/mailman/listinfo.cgi/boost-users) using the tag [graph].
 
 
-## Development ##
+### Build Status
 
 |                  |  Master  |   Develop   |
 |------------------|----------|-------------|
-| Github Actions | [![Build Status](https://github.com/boostorg/graph/workflows/CI/badge.svg?branch=master)](https://github.com/boostorg/graph/actions) | [![Build Status](https://github.com/boostorg/graph/workflows/CI/badge.svg?branch=develop)](https://github.com/boostorg/graph/actions) |
+| Github Actions | [![Build Status](https://github.com/boostorg/graph/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/boostorg/graph/actions) | [![Build Status](https://github.com/boostorg/graph/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/boostorg/graph/actions) |
 |Drone | [![Build Status](https://drone.cpp.al/api/badges/boostorg/graph/status.svg?ref=refs/heads/master)](https://drone.cpp.al/boostorg/graph) | [![Build Status](https://drone.cpp.al/api/badges/boostorg/graph/status.svg)](https:/drone.cpp.al/boostorg/graph) |
+
+## Development
 
 Clone the whole boost project, which includes the individual Boost projects as submodules ([see boost+git doc](https://github.com/boostorg/boost/wiki/Getting-Started)):
 
@@ -45,7 +47,7 @@ Boost Graph Library is mostly made of headers but also contains some compiled co
 
 **Note:** The Boost Graph Library cannot currently be built outside of Boost itself.
 
-### Running tests ###
+### Running tests
 First, make sure you are in `libs/graph/test`.
 You can either run all the 300+ tests listed in `Jamfile.v2` or run a single test:
 

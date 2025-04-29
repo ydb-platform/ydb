@@ -300,7 +300,7 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
 bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
     static const char optName[] = "UnorderedOverSortImproved";
     YQL_ENSURE(optCtx.Types);
-    const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
     if (!optEnabled) {
         return false;
     }

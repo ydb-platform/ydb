@@ -21,8 +21,9 @@ class TestDeleteS3Ttl(TllDeleteBase):
     def setup_class(cls):
         super(TestDeleteS3Ttl, cls).setup_class()
 
-    def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
-        return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
+    def get_aggregated(self, table_path):
+        answer = self.ydb_client.query(f"SELECT count(*), sum(val), sum(Digest::Fnv32(s)) from `{table_path}`")
+        return [answer[0].rows[0][0], answer[0].rows[0][1], answer[0].rows[0][2]]
 
     def create_table(self, table_path):
         self.ydb_client.query(

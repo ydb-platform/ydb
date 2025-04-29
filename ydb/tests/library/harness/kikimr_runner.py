@@ -619,6 +619,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node in self.nodes.values():
             node.start()
 
+    def enable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = True
+        for node_id in node_ids:
+            self.nodes[node_id].enable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:

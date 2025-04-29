@@ -175,8 +175,9 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
-    auto logFlushDelayOverrideUsecControlType = NUtil::GetLogFlushDelayOverrideUsecTabletTypeControl(Owner->TabletType());
-    AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, logFlushDelayOverrideUsecControlType);
+    if (auto logFlushDelayOverrideUsecControlType = NUtil::GetLogFlushDelayOverrideUsecTabletTypeControl(Owner->TabletType())) {
+        AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, *logFlushDelayOverrideUsecControlType);
+    }
     AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
 
     // instantiate alert counters so even never reported alerts are created

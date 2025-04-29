@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["embedding"]
-              DataColumnNames: ["covered"]
+              DataColumnNames: ["embedding", "covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
-              NLs::IndexDataColumns({"covered"}),
+              NLs::IndexDataColumns({"embedding", "covered"}),
               NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                                           1024,
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "covered"}, {}, {ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding", "covered"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -77,14 +77,12 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               Name: "vectors"
               Columns { Name: "id" Type: "Uint64" }
               Columns { Name: "embedding" Type: "String" }
-              Columns { Name: "covered" Type: "String" }
               Columns { Name: "prefix" Type: "String" }
               KeyColumnNames: ["id"]
             }
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["prefix", "embedding"]
-              DataColumnNames: ["covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
@@ -96,7 +94,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"prefix", "embedding"}),
-              NLs::IndexDataColumns({"covered"}),
+              NLs::IndexDataColumns({}),
               NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
                                           1024,
@@ -115,7 +113,63 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "covered"}, {}, {ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id"}, {}, {ParentColumn, "id"}, true) });
+
+
+        TVector<ui64> dropTxIds;
+        TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot", "vectors");
+        env.TestWaitNotification(runtime, dropTxIds);
+    }
+
+    Y_UNIT_TEST(CreateTablePrefixCovering) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "covered" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["prefix", "embedding"]
+              DataColumnNames: ["prefix", "embedding", "covered"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector"),
+            { NLs::PathExist,
+              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+              NLs::IndexKeys({"prefix", "embedding"}),
+              NLs::IndexDataColumns({"prefix", "embedding", "covered"}),
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                          Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                                          1024,
+                                          4,
+                                          5
+                                          ),
+            });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPrefixTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(PrefixTable, {"prefix", IdColumn}, {}, {"prefix", IdColumn}, true) });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
+            { NLs::PathExist,
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding", "covered", "prefix"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
@@ -139,7 +193,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["prefix", "embedding"]
-              DataColumnNames: ["covered"]
+              DataColumnNames: ["prefix", "embedding", "covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
@@ -217,7 +271,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["embedding"]
-              DataColumnNames: ["covered1", "covered2"]
+              DataColumnNames: ["covered1", "covered2", "embedding"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
@@ -229,7 +283,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
-              NLs::IndexDataColumns({"covered1", "covered2"}),
+              NLs::IndexDataColumns({"covered1", "covered2", "embedding"}),
             });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
@@ -238,7 +292,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2", "embedding"}, {}, {ParentColumn, "id1", "id2"}, true) });
     }
 
     Y_UNIT_TEST(VectorKmeansTreePostingImplTable) {
@@ -260,8 +314,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         *data2->MutableName() = "data2";
 
       }
-      NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
-      auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
+      THashSet<TString> indexDataColumns = {"data2", "data1"};
+      auto desc = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, "something");
       std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
       for (size_t i = 0; auto& column : desc.GetColumns()) {
         UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
@@ -301,7 +355,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             IndexDescription {
               Name: "idx_vector"
               KeyColumnNames: ["embedding"]
-              DataColumnNames: ["id"]
+              DataColumnNames: ["id", "embedding"]
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }

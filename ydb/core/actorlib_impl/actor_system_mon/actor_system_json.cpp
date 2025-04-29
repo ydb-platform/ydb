@@ -67,8 +67,11 @@ void GenerateJson(const TIterableDoubleRange<THarmonizerIterationState>& history
             });
             begin = it - history.begin();
         } else if constexpr (std::is_same_v<T, TRangeWindowIteration>) {
-            begin = arg.IterationStart;
-            end = begin + arg.IterationCount;
+            auto itBegin = std::upper_bound(history.begin(), history.end(), arg.IterationStart, [](ui64 iteration, const THarmonizerIterationState& state) {
+                return iteration < state.Iteration;
+            });
+            begin = itBegin - history.begin();
+            end = Min(begin + arg.IterationCount, history.size());
         } else if constexpr (std::is_same_v<T, TRangeWindowTime>) {
             auto itBegin = std::upper_bound(history.begin(), history.end(), arg.WindowStart, [](ui64 ts, const THarmonizerIterationState& state) {
                 return ts < state.Ts;

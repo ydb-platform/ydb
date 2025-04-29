@@ -63,22 +63,25 @@ void GenerateJson(const TIterableDoubleRange<THarmonizerIterationState>& history
         } else if constexpr (std::is_same_v<T, TLastWindowTime>) {
             ui64 currentTs = GetCycleCountFast();
             auto it = std::upper_bound(history.begin(), history.end(), currentTs - arg.LastWindowTs, [](ui64 ts, const THarmonizerIterationState& state) {
-                return ts < state.Ts;
+                return ts <= state.Ts;
             });
             begin = it - history.begin();
         } else if constexpr (std::is_same_v<T, TRangeWindowIteration>) {
             auto itBegin = std::upper_bound(history.begin(), history.end(), arg.IterationStart, [](ui64 iteration, const THarmonizerIterationState& state) {
-                return iteration < state.Iteration;
+                return iteration <= state.Iteration;
             });
             begin = itBegin - history.begin();
-            end = Min(begin + arg.IterationCount, history.size());
+            auto itEnd = std::upper_bound(itBegin, history.end(), arg.IterationStart + arg.IterationCount, [](ui64 iteration, const THarmonizerIterationState& state) {
+                return iteration <= state.Iteration;
+            });
+            end = itEnd - history.begin();
         } else if constexpr (std::is_same_v<T, TRangeWindowTime>) {
             auto itBegin = std::upper_bound(history.begin(), history.end(), arg.WindowStart, [](ui64 ts, const THarmonizerIterationState& state) {
-                return ts < state.Ts;
+                return ts <= state.Ts;
             });
             begin = itBegin - history.begin();
             auto itEnd = std::upper_bound(itBegin, history.end(), arg.WindowStart + arg.WindowTs, [](ui64 ts, const THarmonizerIterationState& state) {
-                return ts < state.Ts;
+                return ts <= state.Ts;
             });
             end = itEnd - history.begin();
         }
@@ -289,14 +292,14 @@ public:
                 if (cgi.Has("window_iteration_count")) {
                     count = FromString<ui64>(cgi.Get("window_iteration_count"));
                 }
-                cfg.Window = TRangeWindowIteration{start, count};
+                cfg.Window = TRangeWindowIteration{count, start};
             } else if (cgi.Has("window_ts_start")) {
                 ui64 start = FromString<ui64>(cgi.Get("window_ts_start"));
                 ui64 count = Us2Ts(10'000'000);
                 if (cgi.Has("window_ts_count")) {
                     count = FromString<ui64>(cgi.Get("window_ts_count"));
                 }
-                cfg.Window = TRangeWindowTime{start, count};
+                cfg.Window = TRangeWindowTime{count, start};
             }
             GenerateJson(history, str, cfg);
         });

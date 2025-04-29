@@ -571,7 +571,8 @@ struct TestTableDescription {
     }
 };
 
-[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {},
+    TString codec = "none", const ui64 txId = 10);
 [[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(

@@ -503,10 +503,9 @@ namespace NKikimr::NColumnShard {
         return planStep;
     }
 
-    NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec) {
+    NTxUT::TPlanStep SetupSchema(
+        TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec, const ui64 txId) {
         using namespace NTxUT;
-        const ui64 txId = 10;
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
@@ -516,7 +515,6 @@ namespace NKikimr::NColumnShard {
         }
         return SetupSchema(runtime, sender, txBody, txId);
     }
-
 
     NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;

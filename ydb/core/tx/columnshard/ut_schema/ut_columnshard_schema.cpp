@@ -920,8 +920,7 @@ void TestDrop(bool reboots) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto planStep = SetupSchema(runtime, sender,
-        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
     TString data1 = MakeTestBlob({0, PORTION_ROWS}, testYdbSchema);
     UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(data1.size() < 7 * 1024 * 1024);
@@ -985,8 +984,7 @@ void TestDropWriteRace() {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
-    auto planStep = SetupSchema(runtime, sender,
-        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
@@ -1023,8 +1021,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto planStep = SetupSchema(runtime, sender,
-        TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    auto planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
     // Set tiering
 
     ui64 ts = 1620000000;
@@ -1115,6 +1112,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         ui64 txId = 100;
         ui64 generation = 0;
 
+        planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId++, schema, pk), txId++);
         for (auto& ydbType : intTypes) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));

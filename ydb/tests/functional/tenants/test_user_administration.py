@@ -71,9 +71,8 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     # prepare root database
     driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
-            session.execute_scheme("create user clusteradmin password '1234'")
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries("create user clusteradmin password '1234'")
 
 
 @pytest.fixture(scope='module')
@@ -84,22 +83,21 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
     database_path = ydb_database_module_scope
     driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
     with ydb.Driver(driver_config) as driver:
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.QuerySessionPool(driver) as pool:
             # setup for database admins, first
-            session.execute_scheme("create user dbadmin password '1234'")
-            session.execute_scheme('create group dbadmins')
-            session.execute_scheme('alter group dbadmins add user dbadmin')
+            pool.execute_with_retries("create user dbadmin password '1234'")
+            pool.execute_with_retries('create group dbadmins')
+            pool.execute_with_retries('alter group dbadmins add user dbadmin')
 
             # additional setup for individual tests
-            session.execute_scheme("create user ordinaryuser password '1234'")
+            pool.execute_with_retries("create user ordinaryuser password '1234'")
 
-            session.execute_scheme("create group ordinarygroup")
-            session.execute_scheme("create user dbadmin2 password '1234'")
-            session.execute_scheme("create user dbadmin3 password '1234' nologin")
-            session.execute_scheme("create user dbadmin4 password '1234'")
-            session.execute_scheme("create group dbsubadmins")
-            session.execute_scheme('alter group dbadmins add user dbadmin2, dbadmin3, dbadmin4, dbsubadmins')
+            pool.execute_with_retries("create group ordinarygroup")
+            pool.execute_with_retries("create user dbadmin2 password '1234'")
+            pool.execute_with_retries("create user dbadmin3 password '1234' nologin")
+            pool.execute_with_retries("create user dbadmin4 password '1234'")
+            pool.execute_with_retries("create group dbsubadmins")
+            pool.execute_with_retries('alter group dbadmins add user dbadmin2, dbadmin3, dbadmin4, dbsubadmins')
 
         # setup for database admins, second
         # make dbadmin the real admin of the database
@@ -129,9 +127,8 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
-            session.execute_scheme(f"alter user {subject_user} password '4321'")
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries(f"alter user {subject_user} password '4321'")
 
     user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '4321')
 
@@ -170,10 +167,9 @@ def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.QuerySessionPool(driver) as pool:
             with pytest.raises(ydb.issues.Error) as exc_info:
-                session.execute_scheme(query)
+                pool.execute_with_retries(query)
 
             assert exc_info.type is ydb.issues.Unauthorized
             assert 'Access denied.' in exc_info.value.message
@@ -193,10 +189,9 @@ def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_r
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
+        with ydb.QuerySessionPool(driver) as pool:
             with pytest.raises(ydb.issues.Error) as exc_info:
-                session.execute_scheme(query)
+                pool.execute_with_retries(query)
 
         assert exc_info.type is ydb.issues.Unauthorized
         logger.debug(exc_info.value.message)
@@ -212,6 +207,5 @@ def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
 
-        pool = ydb.SessionPool(driver)
-        with pool.checkout() as session:
-            session.execute_scheme("create user testuser password '1234'")
+        with ydb.QuerySessionPool(driver) as pool:
+            pool.execute_with_retries("create user testuser password '1234'")

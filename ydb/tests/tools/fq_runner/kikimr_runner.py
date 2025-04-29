@@ -670,47 +670,41 @@ class StreamingOverKikimr(object):
             logging.error("Connect failed to YDB. Last reported errors by discovery: "
                           + self.driver.discovery_debug_details())
             raise e
-        self.session_pool = ydb.SessionPool(self.driver, size=1)
+        self.session_pool = ydb.QuerySessionPool(self.driver, size=1)
         self.table_prefix = os.path.join(
             os.getenv("YDB_DATABASE"),
             self.control_plane.fq_config['control_plane_storage']['storage']['table_prefix']
         )
+        if not self.table_prefix.startswith("/"):
+            self.table_prefix = "/" + self.table_prefix
 
         if len(_tenant_mapping) > 0 or len(configuration.cloud_mapping) > 0:
             # manually create tables, do not wait for autocreation from binary
-            def _create_tenants_table(session, path):
-                return session.create_table(
-                    path,
-                    ydb.TableDescription().with_column(
-                        ydb.Column('tenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('common', ydb.OptionalType(ydb.DataType.Bool))
-                    ).with_column(
-                        ydb.Column('state', ydb.OptionalType(ydb.DataType.Uint32))
-                    ).with_column(
-                        ydb.Column('state_time', ydb.OptionalType(ydb.DataType.Timestamp))
-                    ).with_primary_key('tenant')
-                )
+            self.session_pool.execute_with_retries(
+                f"""
+                CREATE TABLE  `{os.path.join(self.table_prefix, "tenants")}`
+                (
+                tenant String,
+                vtenant String,
+                common Bool,
+                state Uint32,
+                state_time Timestamp,
+                PRIMARY KEY (tenant)
+                );
+                """
+            )
 
-            self.session_pool.retry_operation_sync(_create_tenants_table, None,
-                                                   os.path.join(self.table_prefix, "tenants"))
-
-            def _create_mappings_table(session, path):
-                return session.create_table(
-                    path,
-                    ydb.TableDescription().with_column(
-                        ydb.Column('subject_type', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_primary_keys('subject_type', 'subject_id')
-                )
-
-            self.session_pool.retry_operation_sync(_create_mappings_table, None,
-                                                   os.path.join(self.table_prefix, "mappings"))
+            self.session_pool.execute_with_retries(
+                f"""
+                CREATE TABLE `{os.path.join(self.table_prefix, "mappings")}`
+                (
+                subject_type String,
+                subject_id String,
+                vtenant String,
+                PRIMARY KEY (subject_type, subject_id)
+                );
+                """
+            )
 
             query = """--!syntax_v1
             PRAGMA TablePathPrefix("{}");
@@ -725,11 +719,7 @@ class StreamingOverKikimr(object):
             self.control_plane.fq_config['control_plane_storage']['use_db_mapping'] = True
 
     def exec_db_statement(self, query):
-        self.session_pool.retry_operation_sync(
-            lambda session: session.transaction(ydb.SerializableReadWrite()).execute(
-                query.format(self.table_prefix),
-                commit_tx=True
-            ))
+        self.session_pool.execute_with_retries(query.format(self.table_prefix))
 
     def stop_mvp_mock_server(self):
         self.mvp_mock_server.terminate()

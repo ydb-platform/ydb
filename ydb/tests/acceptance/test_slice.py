@@ -34,13 +34,12 @@ class TestWithSlice(object):
             )
         )
         with ydb.Driver(driver_config) as driver:
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
-                        "create table `{}` (key Int32, value String, primary key(key));".format(
-                            "sample_table"
-                        )
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                pool.execute_with_retries(
+                    "create table `{}` (key Int32, value String, primary key(key));".format(
+                        "sample_table"
                     )
+                )
 
     def test_serializable(self):
         yatest.common.execute(

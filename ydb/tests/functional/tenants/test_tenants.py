@@ -219,12 +219,10 @@ class TestTenants():
 
         database_nodes = ydb_cluster.register_and_start_slots(database_path, count=1)
 
-        with ydb.SessionPool(driver, size=1) as pool:
-            def callee(session):
-                session.execute_scheme(
-                    "CREATE TABLE warmUp (id utf8, PRIMARY KEY (id));"
-                )
-            pool.retry_operation_sync(callee, robust_retries)
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                "CREATE TABLE warmUp (id utf8, PRIMARY KEY (id));"
+            )
 
         ydb_cluster.remove_database(
             database_path,

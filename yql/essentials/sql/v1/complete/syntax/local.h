@@ -6,6 +6,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 
 namespace NSQLComplete {
 
@@ -25,10 +26,10 @@ namespace NSQLComplete {
         };
 
         TKeywords Keywords;
-        std::optional<TPragma> Pragma;
+        TMaybe<TPragma> Pragma;
         bool IsTypeName = false;
-        std::optional<TFunction> Function;
-        std::optional<THint> Hint;
+        TMaybe<TFunction> Function;
+        TMaybe<THint> Hint;
     };
 
     class ILocalSyntaxAnalysis {

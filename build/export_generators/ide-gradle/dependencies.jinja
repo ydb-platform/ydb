@@ -41,9 +41,11 @@
 {%-             if library.excludes.consumer|length -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
-{%-                     set classpath_parts = split(classpath, ':') %}
+{%-                     set classpath_parts = split(classpath, ':') -%}
+{%-                     if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%-                endfor %}
+{%-                     endif -%}
+{%-                 endfor %}
     }
 {%-             endif -%}
 {%-         endif -%}
@@ -67,7 +69,7 @@ dependencies {
 {%-     set errorprones = target.consumer|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations') -%}
 {%-     if errorprones|length -%}
 {%-         for errorprone in errorprones -%}
-{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-             set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
 {%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
 {%-         endfor -%}

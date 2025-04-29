@@ -555,6 +555,11 @@ private:
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
 
     void DeleteSupportivePartitions(const TActorContext& ctx);
+
+    TDeque<TAutoPtr<IEventHandle>> PendingEvents;
+
+    void AddPendingEvent(IEventHandle* ev);
+    void ProcessPendingEvents();
 };
 
 

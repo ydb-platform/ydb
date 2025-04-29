@@ -2128,6 +2128,16 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
+    bool TryParsePDiskStatus(const TString& statusString, ui32& statusNumber) {
+        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        const auto* valueDescriptor = descriptor->FindValueByName(statusString);
+        if (!valueDescriptor) {
+            return false;
+        }
+        statusNumber = valueDescriptor->number();
+        return true;
+    }
+
     void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
@@ -2148,53 +2158,97 @@ public:
         const auto& pDisk = itPDisk->second->GetInfo();
 
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->begin()->set_path(pDisk.GetPath());
-        const auto& stateString = pDisk.GetState();
-        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
-        auto state = descriptor->FindValueByName(stateString);
-        if (!state) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "Unknown PDisk state: " << stateString,
-                                 ETags::PDiskState);
-            storagePDiskStatus.set_overall(context.GetOverallStatus());
-            context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
-            return;
-        }
-        auto stateEnum = static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number());
-        switch (stateEnum) {
-            case NKikimrBlobStorage::TPDiskState::Normal:
-            case NKikimrBlobStorage::TPDiskState::Stopped:
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                break;
-            case NKikimrBlobStorage::TPDiskState::Initial:
-            case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-            case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-            case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
-                                        TStringBuilder() << "PDisk state is " << stateString,
-                                        ETags::PDiskState);
-                break;
-            case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-            case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-            case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-            case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-            case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-            case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-            case NKikimrBlobStorage::TPDiskState::OpenFileError:
-            case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
-            case NKikimrBlobStorage::TPDiskState::DeviceIoError:
-            case NKikimrBlobStorage::TPDiskState::Missing:
-            case NKikimrBlobStorage::TPDiskState::Timeout:
-            case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
-            case NKikimrBlobStorage::TPDiskState::Unknown:
+
+        if (pDisk.HasState()) {
+            const auto& stateString = pDisk.GetState();
+            const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+            auto state = descriptor->FindValueByName(stateString);
+            if (!state) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                        TStringBuilder() << "PDisk state is " << stateString,
+                                        TStringBuilder() << "Unknown PDisk state: " << stateString,
                                         ETags::PDiskState);
-                break;
-            case NKikimrBlobStorage::TPDiskState::Reserved15:
-            case NKikimrBlobStorage::TPDiskState::Reserved16:
-            case NKikimrBlobStorage::TPDiskState::Reserved17:
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
-                break;
+                storagePDiskStatus.set_overall(context.GetOverallStatus());
+                context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
+                return;
+            }
+            auto stateEnum = static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number());
+
+            switch (stateEnum) {
+                case NKikimrBlobStorage::TPDiskState::Normal:
+                case NKikimrBlobStorage::TPDiskState::Stopped:
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    break;
+                case NKikimrBlobStorage::TPDiskState::Initial:
+                case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
+                                            TStringBuilder() << "PDisk state is " << stateString,
+                                            ETags::PDiskState);
+                    break;
+                case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
+                case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
+                case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
+                case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+                case NKikimrBlobStorage::TPDiskState::OpenFileError:
+                case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
+                case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+                case NKikimrBlobStorage::TPDiskState::Missing:
+                case NKikimrBlobStorage::TPDiskState::Timeout:
+                case NKikimrBlobStorage::TPDiskState::NodeDisconnected:
+                case NKikimrBlobStorage::TPDiskState::Unknown:
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                            TStringBuilder() << "PDisk state is " << stateString,
+                                            ETags::PDiskState);
+                    break;
+                case NKikimrBlobStorage::TPDiskState::Reserved15:
+                case NKikimrBlobStorage::TPDiskState::Reserved16:
+                case NKikimrBlobStorage::TPDiskState::Reserved17:
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
+                    break;
+            }
+
+            ui32 statusNumber;
+            if (!TryParsePDiskStatus(pDisk.GetStatusV2(), statusNumber)) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                    TStringBuilder() << "Unknown PDisk state: " << pDisk.GetStatusV2(),
+                                    ETags::PDiskState);
+                storagePDiskStatus.set_overall(context.GetOverallStatus());
+                context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
+                return;
+            }
+            if (statusNumber == NKikimrBlobStorage::FAULTY) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                    TStringBuilder() << "PDisk state is " << pDisk.GetStatusV2(),
+                                    ETags::PDiskState);
+            }
+        } else { // for backward compatibility
+            ui32 statusNumber;
+            if (!TryParsePDiskStatus(pDisk.GetStatusV2(), statusNumber)) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                    TStringBuilder() << "Unknown PDisk state: " << pDisk.GetStatusV2(),
+                                    ETags::PDiskState);
+                storagePDiskStatus.set_overall(context.GetOverallStatus());
+                context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
+                return;
+            }
+            switch (statusNumber) {
+                case NKikimrBlobStorage::ACTIVE:
+                case NKikimrBlobStorage::INACTIVE: {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                    break;
+                }
+                case NKikimrBlobStorage::FAULTY:
+                case NKikimrBlobStorage::BROKEN:
+                case NKikimrBlobStorage::TO_BE_REMOVED: {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
+                                        TStringBuilder() << "PDisk state is " << pDisk.GetStatusV2(),
+                                        ETags::PDiskState);
+                    break;
+                }
+            }
         }
 
         if (pDisk.GetAvailableSize() != 0 && pDisk.GetTotalSize() != 0) { // do not replace it with Has()

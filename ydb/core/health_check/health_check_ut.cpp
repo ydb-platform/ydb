@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
         ui32 Generation = DEFAULT_GROUP_GENERATION;
         NKikimrBlobStorage::TPDiskState::E PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+        NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
                        ui32 generation = DEFAULT_GROUP_GENERATION)
@@ -83,6 +84,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TPDiskState::E pDiskState = NKikimrBlobStorage::TPDiskState::Normal)
             : Status(status)
             , PDiskState(pDiskState)
+        {
+        }
+
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::EDriveStatus pDiskStatus)
+            : Status(status)
+            , PDiskStatus(pDiskStatus)
         {
         }
     };
@@ -235,14 +242,16 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         record.clear_entries();
         auto pdiskId = PDISK_START_ID;
         const size_t totalSize = 3'200'000'000'000ull;
-        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        const auto *descriptorState = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        const auto *descriptorStatusV2 = NKikimrBlobStorage::EDriveStatus_descriptor();
         for (const auto& vslot : vslots) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_pdiskid(pdiskId);
             entry->mutable_info()->set_totalsize(totalSize);
             entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
-            entry->mutable_info()->set_state(descriptor->FindValueByNumber(vslot.PDiskState)->name());
+            entry->mutable_info()->set_state(descriptorState->FindValueByNumber(vslot.PDiskState)->name());
+            entry->mutable_info()->set_statusv2(descriptorStatusV2->FindValueByNumber(vslot.PDiskStatus)->name());
             ++pdiskId;
         }
     }
@@ -738,6 +747,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(OnlyDiskIssueOnInitialPDisks) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::Initial}});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
+    }
+
+    Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);

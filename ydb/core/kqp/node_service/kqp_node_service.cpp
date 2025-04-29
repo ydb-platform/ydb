@@ -43,7 +43,7 @@ namespace {
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
 // Max interval in case of no activety
-constexpr TDuration MaxStatInterval = TDuration::MilliSeconds(100);
+constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {

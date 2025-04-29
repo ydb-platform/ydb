@@ -286,11 +286,14 @@ message TDqTaskStats {
     uint64 CreateTimeMs = 166;
     uint64 StartTimeMs = 158;
     uint64 FinishTimeMs = 5;
+    uint64 UpdateTimeMs = 169;
 
     reserved 4;   // was FirstRowTimeMs
     reserved 104;
     uint64 WaitInputTimeUs = 111;  // wait input wall time  (any input: channels, source, ...)
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
+    uint64 CurrentWaitInputTimeUs = 167;  // last periof iff is waiting now (mutually exclusive with CurrentWaitOutputTimeUs)
+    uint64 CurrentWaitOutputTimeUs = 168; // last periof iff is waiting now (mutually exclusive with CurrentWaitInputTimeUs)
     reserved 107;
     reserved 108;
     reserved 109;
@@ -401,6 +404,7 @@ message TDqStageStats {
 
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;
+    uint32 FinishedTasksCount = 50;
 
     TDqStatsAggr CpuTimeUs = 8;
     TDqStatsAggr SourceCpuTimeUs = 25;
@@ -436,6 +440,7 @@ message TDqStageStats {
     TDqStatsAggr FinishTimeMs = 32;
     TDqStatsAggr StartTimeMs = 33;
     TDqStatsAggr DurationUs = 34;    // just aggregate over task.DurationUs
+    uint64 UpdateTimeMs = 51;
 
     TDqStatsAggr WaitInputTimeUs = 35;
     TDqStatsAggr WaitOutputTimeUs = 36;

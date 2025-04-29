@@ -294,10 +294,6 @@ protected:
         size_t Size() const {
             return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
         }
-
-        ui32 RowCount() const {
-            return Proto.GetChannelData().GetData().GetRows();
-        }
     };
 
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
@@ -432,7 +428,15 @@ protected:
         if (state.HasStats()) {
             ui64 cycleCount = GetCycleCountFast();
 
-            Stats->UpdateTaskStats(taskId, state.GetStats());
+            Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
+
+            if (Stats->DeadlockedStageId) {
+                NYql::TIssues issues;
+                issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
+                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
+                this->Send(this->SelfId(), abortEv.Release());
+            }
+
             if (Request.ProgressStatsPeriod) {
                 auto now = TInstant::Now();
                 if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -475,6 +479,7 @@ protected:
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
                         std::move(*state.MutableStats()),
+                        (NYql::NDqProto::EComputeState) state.GetState(),
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
 
@@ -578,8 +583,8 @@ protected:
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, Request.Transactions,
-            TasksGraph);
+        FillKqpTasksGraphStages(TasksGraph, Request.Transactions);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");

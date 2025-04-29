@@ -23,6 +23,10 @@
 #define MSG_ZEROCOPY 0x4000000
 #endif
 
+#ifndef SO_ZEROCOPY
+#define SO_ZEROCOPY 60
+#endif
+
 static bool CmsgIsIpLevel(const cmsghdr& cmsg) {
     return (cmsg.cmsg_level == SOL_IPV6 && cmsg.cmsg_type == IPV6_RECVERR) ||
        (cmsg.cmsg_level == SOL_IP && cmsg.cmsg_type == IP_RECVERR);

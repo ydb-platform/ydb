@@ -90,11 +90,11 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
         // Compute node implementation
 
         Cerr << "Compute graph result" << Endl;
-        const auto graphTimeStart = TInstant::Now();
+        const auto graphTimeStart = GetThreadCPUTime();
         size_t lineCount = CountWideStreamOutputs<2>(computeGraphPtr->GetValue());
         Cerr << lineCount << Endl;
 
-        return TInstant::Now() - graphTimeStart;
+        return GetThreadCPUTimeDelta(graphTimeStart);
     };
 
     auto measureRefTime = [&](auto& computeGraphPtr, IDataSampler& sampler) {
@@ -102,10 +102,10 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 
         Cerr << "Compute reference result" << Endl;
         auto referenceStream = sampler.MakeStream(computeGraphPtr->GetHolderFactory());
-        const auto cppTimeStart = TInstant::Now();
+        const auto cppTimeStart = GetThreadCPUTime();
         sampler.ComputeReferenceResult(*referenceStream);
 
-        return TInstant::Now() - cppTimeStart;
+        return GetThreadCPUTimeDelta(cppTimeStart);
     };
 
     auto graphRun1 = BuildGraph(setup, spillerFactory, *sampler);

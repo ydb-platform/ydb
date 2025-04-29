@@ -47,7 +47,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 
 8. If auto-merge was not enabled in step 6, the **primary reviewer** clicks the "Squash and merge" button.
 9. After the content lands in the `main` branch, it will be automatically published to the official {{ ydb-short-name }} website via CI/CD.
-10. {{ ydb-short-name }} documentation is multilingual, and **authors** are expected to provide synchronized changes for all supported languages (currently English and Russian), if applicable. If the **author** does not know all required languages, using a [LLM](https://en.wikipedia.org/wiki/Large_language_model) or machine translation is acceptable. The translation timing depends on complexity:
+10. {{ ydb-short-name }} documentation is multilingual, and **authors** are expected to provide synchronized changes for all supported languages (currently English and Russian), if applicable. If the **author** does not know all required languages, using an [LLM](https://en.wikipedia.org/wiki/Large_language_model) or machine translation is acceptable. The translation timing depends on complexity:
 
     - For simple changes, it's usually best to translate at the beginning and go through the review process with a single pull request covering all languages.
     - For complex changes likely requiring multiple review iterations, it's acceptable to first complete the review process in one language and then start a separate translation pull request after approval.

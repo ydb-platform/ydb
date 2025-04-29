@@ -197,6 +197,7 @@ protected:
 
     void WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TReadSetAckMatcher& matcher);
     void SendReadSetAck(NHelpers::TPQTabletMock& tablet);
+    void WaitForNoReadSetAck(NHelpers::TPQTabletMock& tablet);
 
     void SendDropTablet(const TDropTabletParams& params);
     void WaitDropTabletReply(const TDropTabletReplyMatcher& matcher);
@@ -206,7 +207,7 @@ protected:
 
     void SendCancelTransactionProposal(const TCancelTransactionProposalParams& params);
 
-    void StartPQWriteTxsObserver();
+    void StartPQWriteTxsObserver(TAutoPtr<IEventHandle>* ev = nullptr);
     void WaitForPQWriteTxs();
 
     template <class T> void WaitForEvent(size_t count);
@@ -215,7 +216,7 @@ protected:
 
     void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
 
-    void StartPQWriteObserver(bool& flag, unsigned cookie);
+    void StartPQWriteObserver(bool& flag, unsigned cookie, TAutoPtr<IEventHandle>* ev = nullptr);
     void WaitForPQWriteComplete(bool& flag);
 
     bool FoundPQWriteState = false;
@@ -240,6 +241,9 @@ protected:
 
     void WaitForTxState(ui64 txId, NKikimrPQ::TTransaction::EState state);
     void WaitForExecStep(ui64 step);
+
+    void InterceptSaveTxState(TAutoPtr<IEventHandle>& event);
+    void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -522,6 +526,17 @@ void TPQTabletFixture::WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TRe
     }
 }
 
+void TPQTabletFixture::WaitForNoReadSetAck(NHelpers::TPQTabletMock& tablet)
+{
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return tablet.ReadSetAck.Defined();
+    };
+    Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(2));
+
+    UNIT_ASSERT(!tablet.ReadSetAck.Defined());
+}
+
 void TPQTabletFixture::SendDropTablet(const TDropTabletParams& params)
 {
     auto event = MakeHolder<TEvPersQueue::TEvDropTablet>();
@@ -745,18 +760,21 @@ void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
-void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
+void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie, TAutoPtr<IEventHandle>* ev)
 {
     flag = false;
 
-    auto observer = [&flag, cookie](TAutoPtr<IEventHandle>& event) {
+    auto observer = [&flag, cookie, ev](TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
-            if (kvResponse->Record.HasCookie()) {
-            }
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
                 (kvResponse->Record.GetCookie() == cookie)) {
                 flag = true;
+
+                if (ev) {
+                    *ev = event;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
             }
         }
 
@@ -793,9 +811,9 @@ void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionPro
                event.Release());
 }
 
-void TPQTabletFixture::StartPQWriteTxsObserver()
+void TPQTabletFixture::StartPQWriteTxsObserver(TAutoPtr<IEventHandle>* event)
 {
-    StartPQWriteObserver(FoundPQWriteTxs, 5); // TPersQueue::WRITE_TX_COOKIE
+    StartPQWriteObserver(FoundPQWriteTxs, 5, event); // TPersQueue::WRITE_TX_COOKIE
 }
 
 void TPQTabletFixture::WaitForPQWriteTxs()
@@ -1028,6 +1046,40 @@ void TPQTabletFixture::WaitForExecStep(ui64 step)
     }
 
     UNIT_FAIL("expected execution step " << step);
+}
+
+void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
+{
+    bool found = false;
+
+    TTestActorRuntimeBase::TEventFilter prev;
+    auto filter = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && (msg->Record.GetCookie() == 5)) { // WRITE_TX_COOKIE
+                ev = event;
+                found = true;
+                return true;
+            }
+        }
+
+        return false;
+    };
+    prev = Ctx->Runtime->SetEventFilter(filter);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    UNIT_ASSERT(found);
+
+    Ctx->Runtime->SetEventFilter(prev);
+}
+
+void TPQTabletFixture::SendSaveTxState(TAutoPtr<IEventHandle>& event)
+{
+    Ctx->Runtime->Send(event);
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -1924,6 +1976,45 @@ Y_UNIT_TEST_F(After_Restarting_The_Tablet_Sends_A_TEvReadSet_For_Transactions_In
 
     // the PQ tablet should send a TEvReadSet for the executed transaction
     WaitReadSetEx(*tablet, {.Step=100, .TxId=txId_1, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=2});
+}
+
+Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForCalcPredicateResult();
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    //WaitProposeTransactionResponse({.TxId=txId,
+    //                               .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    TAutoPtr<IEventHandle> kvRequest;
+    InterceptSaveTxState(kvRequest);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitForNoReadSetAck(*tablet);
+
+    SendSaveTxState(kvRequest);
+
+    WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
 }

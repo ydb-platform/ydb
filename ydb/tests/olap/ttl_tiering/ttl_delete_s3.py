@@ -7,7 +7,15 @@ from ydb.tests.library.test_meta import link_test_case
 logger = logging.getLogger(__name__)
 
 
-class TestDeleteS3Ttl(TllTieringTestBase):
+class TllDeleteBase(TllTieringTestBase):
+
+    row_count = 10 ** 7
+    single_upsert_row_count = 10 ** 6
+    days_to_cool = 1000
+    days_to_freeze = 3000
+
+
+class TestDeleteS3Ttl(TllDeleteBase):
 
     @classmethod
     def setup_class(cls):
@@ -269,7 +277,7 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             pass
 
 
-class TestDeleteTtl(TllTieringTestBase):
+class TestDeleteTtl(TllDeleteBase):
 
     @classmethod
     def setup_class(cls):

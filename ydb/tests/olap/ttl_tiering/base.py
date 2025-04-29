@@ -15,11 +15,6 @@ logger = logging.getLogger(__name__)
 
 class TllTieringTestBase(object):
 
-    row_count = 10 ** 7
-    single_upsert_row_count = 10 ** 6
-    days_to_cool = 1000
-    days_to_freeze = 3000
-
     @classmethod
     def portions_actualized_in_sys(self, table):
         portions = table.get_portion_stat_by_tier()

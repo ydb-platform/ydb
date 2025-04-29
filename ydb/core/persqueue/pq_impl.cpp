@@ -3744,15 +3744,17 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
                                  NKikimrClient::TKeyValueRequest& request)
 {
-    Y_ABORT_UNLESS(!WriteTxsInProgress);
+    Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
     for (auto& [txId, state] : WriteTxs) {
+        PQ_LOG_D("write key for TxId " << txId);
+
         auto tx = GetTransaction(ctx, txId);
-        Y_ABORT_UNLESS(tx);
+        if (tx) {
+            tx->AddCmdWrite(request, state);
 
-        tx->AddCmdWrite(request, state);
-
-        ChangedTxs.emplace(tx->Step, txId);
+            ChangedTxs.emplace(tx->Step, txId);
+        }
     }
 
     WriteTxs.clear();
@@ -3761,9 +3763,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
                                   NKikimrClient::TKeyValueRequest& request)
 {
-    Y_ABORT_UNLESS(!WriteTxsInProgress,
-                   "PQ %" PRIu64,
-                   TabletID());
+    Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
     for (ui64 txId : DeleteTxs) {
         PQ_LOG_D("delete key for TxId " << txId);
@@ -5166,18 +5166,18 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvError, Handle);
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle); // +
         HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);
-        HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
-        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
+        HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle); // +
+        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle); // +
         HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
         HFuncTraced(TEvPQ::TEvTxCalcPredicateResult, Handle);
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle); // +
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle); // +
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

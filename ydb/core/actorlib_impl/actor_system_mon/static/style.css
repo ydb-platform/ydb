@@ -111,7 +111,6 @@ svg[id$="Chart"] {
     padding: 10px;
     font-size: 12px;
     background: rgba(0, 0, 0, 0.8);
-    color: #fff;
     border-radius: 5px;
     pointer-events: none;
     z-index: 1000;
@@ -285,21 +284,4 @@ svg[id$="Chart"] {
     stroke: #777;
 }
 
-/* Стили для блока выбора диапазона */
-.range-selector {
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 15px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.05);
-}
-
-.range-selector .form-label {
-    margin-bottom: 0;
-    line-height: 2;
-}
-
-.range-selector .form-check {
-    margin-bottom: 0;
-} 
+/* Удаляем стили для блока выбора диапазона */ 

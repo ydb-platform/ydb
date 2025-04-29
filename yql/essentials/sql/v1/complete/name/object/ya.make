@@ -11,5 +11,6 @@ PEERDIR(
 END()
 
 RECURSE(
+    simple
     static
 )

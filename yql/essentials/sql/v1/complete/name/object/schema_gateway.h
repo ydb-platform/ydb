@@ -10,6 +10,9 @@
 namespace NSQLComplete {
 
     struct TFolderEntry {
+        static constexpr const char* Folder = "Folder";
+        static constexpr const char* Table = "Table";
+
         TString Type;
         TString Name;
 

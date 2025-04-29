@@ -133,3 +133,6 @@ items:
       href: workload-tpcds.md
   - name: Работа с конфигурацией
     href: configs.md
+    include:
+      mode: link
+      path: commands/configuration/toc_p.yaml

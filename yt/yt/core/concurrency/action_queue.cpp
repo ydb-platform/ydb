@@ -110,15 +110,20 @@ const IInvokerPtr& TActionQueue::GetInvoker()
 
 class TSerializedInvoker
     : public TInvokerWrapper<false>
-    , public TInvokerProfileWrapper
+    , public TInvokerProfilingWrapper
 {
 public:
+    explicit TSerializedInvoker(
+        IInvokerPtr underlyingInvoker)
+        : TInvokerWrapper(std::move(underlyingInvoker))
+    { }
+
     TSerializedInvoker(
         IInvokerPtr underlyingInvoker,
         const NProfiling::TTagSet& tagSet,
         NProfiling::IRegistryPtr registry)
         : TInvokerWrapper(std::move(underlyingInvoker))
-        , TInvokerProfileWrapper(std::move(registry), "/serialized", tagSet)
+        , TInvokerProfilingWrapper(std::move(registry), "/serialized", tagSet)
     { }
 
     using TInvokerWrapper::Invoke;
@@ -244,33 +249,58 @@ private:
     }
 };
 
-IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
+IInvokerPtr CreateSerializedInvoker(
+    IInvokerPtr underlyingInvoker)
 {
     if (underlyingInvoker->IsSerialized()) {
         return underlyingInvoker;
     }
 
-    return New<TSerializedInvoker>(std::move(underlyingInvoker), tagSet, registry);
+    return New<TSerializedInvoker>(
+        std::move(underlyingInvoker));
 }
 
-IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryPtr registry)
+IInvokerPtr CreateSerializedInvoker(
+    IInvokerPtr underlyingInvoker,
+    const NProfiling::TTagSet& tagSet,
+    NProfiling::IRegistryPtr registry)
 {
-    NProfiling::TTagSet tagSet;
-    tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
-    return CreateSerializedInvoker(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
+    if (underlyingInvoker->IsSerialized()) {
+        return underlyingInvoker;
+    }
+
+    return New<TSerializedInvoker>(
+        std::move(underlyingInvoker),
+        tagSet,
+        std::move(registry));
+}
+
+IInvokerPtr CreateSerializedInvoker(
+    IInvokerPtr underlyingInvoker,
+    const std::string& invokerName,
+    NProfiling::IRegistryPtr registry)
+{
+    return CreateSerializedInvoker(
+        std::move(underlyingInvoker),
+        NProfiling::TTagSet({{"invoker", invokerName}}),
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPrioritizedInvoker
     : public TInvokerWrapper<true>
-    , public TInvokerProfileWrapper
+    , public TInvokerProfilingWrapper
     , public virtual IPrioritizedInvoker
 {
 public:
+    explicit TPrioritizedInvoker(IInvokerPtr underlyingInvoker)
+        : TInvokerWrapper(std::move(underlyingInvoker))
+    { }
+
     TPrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
         : TInvokerWrapper(std::move(underlyingInvoker))
-        , TInvokerProfileWrapper(std::move(registry), "/prioritized", tagSet)
+        , TInvokerProfilingWrapper(std::move(registry), "/prioritized", tagSet)
     { }
 
     using TInvokerWrapper::Invoke;
@@ -318,19 +348,35 @@ private:
         guard.Release();
         callback();
     }
-
 };
 
-IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
+IPrioritizedInvokerPtr CreatePrioritizedInvoker(
+    IInvokerPtr underlyingInvoker)
 {
-    return New<TPrioritizedInvoker>(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
+    return New<TPrioritizedInvoker>(
+        std::move(underlyingInvoker));
 }
 
-IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryPtr registry)
+IPrioritizedInvokerPtr CreatePrioritizedInvoker(
+    IInvokerPtr underlyingInvoker,
+    const NProfiling::TTagSet& tagSet,
+    NProfiling::IRegistryPtr registry)
 {
-    NProfiling::TTagSet tagSet;
-    tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
-    return CreatePrioritizedInvoker(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
+    return New<TPrioritizedInvoker>(
+        std::move(underlyingInvoker),
+        std::move(tagSet),
+        std::move(registry));
+}
+
+IPrioritizedInvokerPtr CreatePrioritizedInvoker(
+    IInvokerPtr underlyingInvoker,
+    const std::string& invokerName,
+    NProfiling::IRegistryPtr registry)
+{
+    return CreatePrioritizedInvoker(
+        std::move(underlyingInvoker),
+        NProfiling::TTagSet({{"invoker", invokerName}}),
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

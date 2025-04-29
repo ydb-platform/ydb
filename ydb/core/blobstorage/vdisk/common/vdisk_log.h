@@ -60,7 +60,7 @@ namespace NKikimr {
             NLog::EComponent mComponent,
             const char* fileName,
             ui64 lineNumber,
-            TString&& str
+            TString&& str,
             bool json) override
         {
             ::NActors::DeliverLogMessage(
@@ -92,7 +92,7 @@ namespace NKikimr {
             NLog::EComponent mComponent,
             const char* fileName,
             ui64 lineNumber,
-            TString&& str
+            TString&& str,
             bool /*json*/) override
         {
             Y_UNUSED(fileName);
@@ -121,7 +121,7 @@ namespace NActors {
             NLog::EComponent mComponent,
             const char *fileName,
             ui64 lineNumber,
-            TString &&str
+            TString &&str,
             bool json)
     {
         ctx.DeliverLogMessage(

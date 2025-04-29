@@ -130,6 +130,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
     static const ui64 DO_GC_TAG = 1;
+    static const ui64 NO_QUEUE_COOKIE = 0;
+    static const ui64 ASYNC_QUEUE_COOKIE = 1;
+    static const ui64 SCAN_QUEUE_COOKIE = 2;
 
     struct TCacheCachePageTraits {
         static ui64 GetWeight(const TPage* page) {
@@ -364,16 +367,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    void Registered(TActorSystem *sys, const TActorId &owner)
-    {
+    void Registered(TActorSystem *sys, const TActorId &owner) {
         NActors::TActorBootstrapped<TSharedPageCache>::Registered(sys, owner);
         Owner = owner;
 
         SharedCachePages = sys->AppData<TAppData>()->SharedCachePages.Get();
     }
 
-    void TakePoison(const TActorContext& ctx)
-    {
+    void TakePoison(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Poison"
             << " cache serviced " << StatBioReqs << " reqs"
             << " hit {" << Counters.CacheHitPages->Val() << " " << Counters.CacheHitBytes->Val() << "b}"
@@ -621,7 +622,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     AddInFlyPages(pagesToRequest.size(), pagesToRequestBytes);
                     // fetch cookie -> requested size
                     auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, request->PageCollection, std::move(pagesToRequest), std::move(request->TraceId));
-                    NBlockIO::Start(this, request->Sender, 0, request->Priority, fetch);
+                    NBlockIO::Start(this, request->Sender, NO_QUEUE_COOKIE, request->Priority, fetch);
                 }
             }
         } else {
@@ -699,9 +700,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                         AddInFlyPages(toLoad.size(), sizeToLoad);
                         // fetch cookie -> requested size;
-                        // event cookie -> ptr to queue
-                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, wa.PageCollection, std::move(toLoad), std::move(wa.TraceId));
-                        NBlockIO::Start(this, wa.Sender, (ui64)&queue, wa.Priority, fetch);
+                        // event cookie -> queue type
+                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, wa.PageCollection, std::move(toLoad), wa.TraceId.GetTraceId());
+                        NBlockIO::Start(this, wa.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), wa.Priority, fetch);
                     }
                 }
             }
@@ -864,8 +865,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         RemoveInFlyPages(msg->Fetch->Pages.size(), msg->Fetch->Cookie);
 
-        if (TRequestQueue *queue = (TRequestQueue *)ev->Cookie) {
-            Y_ENSURE(queue == &ScanRequests || queue == &AsyncRequests);
+        TRequestQueue *queue = nullptr;
+        if (ev->Cookie == ASYNC_QUEUE_COOKIE) {
+            queue = &AsyncRequests;
+        } else if (ev->Cookie == SCAN_QUEUE_COOKIE) {
+            queue = &ScanRequests;
+        } else {
+            Y_ENSURE(ev->Cookie == NO_QUEUE_COOKIE);
+        }
+
+        if (queue) {
             Y_ENSURE(queue->InFly >= msg->Fetch->Cookie);
             queue->InFly -= msg->Fetch->Cookie;
             RequestFromQueue(*queue);

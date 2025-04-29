@@ -86,20 +86,19 @@ class TestVectorIndex(VectoreBase):
         all_types["String"] = lambda i: f"String {i}"
         dml.create_table(table_name, pk_types, all_types,
                          index, ttl, unique, sync)
-        sql_create_vector_index = create_vector_index_sql_request(
-            table_name, "col_String", vector_type)
         self.vectors = []
-        dml.query(sql_create_vector_index)
         self.insert(table_name, all_types, pk_types, index, ttl, vector_type)
-        print(self.vectors)
+        sql_create_vector_index = create_vector_index_sql_request(
+            table_name, "col_String", vector_type, 10)
+        dml.query(sql_create_vector_index)
         self.select(table_name, "col_String")
 
-    def get_random_vector(self, type, size):
+    def get_vector(self, type, size, numb):
         if type == "float":
-            values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
+            values = [float(numb) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
 
-        values = [random.randint(0, 255) for _ in range(size)]
+        values = [numb for _ in range(size)]
         return ",".join(str(val) for val in values)
     
     
@@ -113,7 +112,7 @@ class TestVectorIndex(VectoreBase):
                                pk_types, index, ttl, vector_type)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
-        vector = self.get_random_vector(vector_type, 10)
+        vector = self.get_vector(vector_type, 10, value)
         self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
@@ -137,11 +136,14 @@ class TestVectorIndex(VectoreBase):
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
+        print(insert_sql)
         self.query(insert_sql)
         
     def select(self, table_name, col_name):
         for vector in self.vectors:
-            rows = self.query(f"""select pk_Int64
+            rows = self.query(f"""select col_String
                               from {table_name} view idx_vector_{col_name}
+                              order by Knn::CosineDistance(col_String, "{vector}")
+                              limit 10
                               """)
             print(rows)

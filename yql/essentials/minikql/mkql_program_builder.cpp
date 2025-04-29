@@ -1217,11 +1217,11 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list) {
     std::vector<std::conditional_t<OnStruct, std::string_view, ui32>> members;
     const bool multiOptional = CollectOptionalElements<IsFilter>(itemType, members, filteredItems);
 
-    const auto predicate = [=](TRuntimeNode item) {
+    const auto predicate = [=, this](TRuntimeNode item) {
         std::vector<TRuntimeNode> checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=](const auto& i){ return Exists(Element(item, i)); });
+            [=, this](const auto& i){ return Exists(Element(item, i)); });
         return And(checkMembers);
     };
 
@@ -1263,11 +1263,11 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list, const TArrayRe
         THROW yexception() << "Expected flow or list or stream or optional of struct.";
     }
 
-    const auto predicate = [=](TRuntimeNode item) {
+    const auto predicate = [=, this](TRuntimeNode item) {
         TRuntimeNode::TList checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=](const auto& i){ return Exists(Element(item, i)); });
+            [=, this](const auto& i){ return Exists(Element(item, i)); });
         return And(checkMembers);
     };
 
@@ -1297,7 +1297,7 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list, const TArrayRe
         TRuntimeNode::TList checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=](const auto& i){ return Element(item, i); });
+            [=, this](const auto& i){ return this->Element(item, i); });
 
         return IfPresent(checkMembers, [&](TRuntimeNode::TList items) {
             std::conditional_t<OnStruct, std::vector<std::pair<std::string_view, TRuntimeNode>>, TRuntimeNode::TList> row;

@@ -3146,6 +3146,11 @@ void TPersQueue::SetTxInFlyCounter()
 
 void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+
     PQ_LOG_D("Handle TEvPersQueue::TEvCancelTransactionProposal");
 
     NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
@@ -3162,6 +3167,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
@@ -3341,6 +3351,11 @@ void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransa
 
 void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx)
 {
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+
     PQ_LOG_D("Handle TEvTxProcessing::TEvPlanStep " << ev->Get()->Record.ShortDebugString());
 
     EvPlanStepQueue.emplace_back(ev->Sender, ev->Release().Release());
@@ -3350,12 +3365,12 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvTxProcessing::TEvReadSet " << ev->Get()->Record.ShortDebugString());
-
     if (!InitCompleted) {
         AddPendingEvent(ev.Release());
         return;
     }
+
+    PQ_LOG_D("Handle TEvTxProcessing::TEvReadSet " << ev->Get()->Record.ShortDebugString());
 
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
@@ -4913,6 +4928,11 @@ void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx)
 {
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+
     PQ_LOG_D("Handle TEvPersQueue::TEvProposeTransactionAttach " << ev->Get()->Record.ShortDebugString());
 
     const ui64 txId = ev->Get()->Record.GetTxId();
@@ -5166,18 +5186,18 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvError, Handle);
         HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle); // +
+        HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
         HFuncTraced(TEvPQ::TEvPartitionConfigChanged, Handle);
-        HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle); // +
-        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle); // +
+        HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
+        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
         HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
         HFuncTraced(TEvPQ::TEvTxCalcPredicateResult, Handle);
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle); // +
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle); // +
+        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

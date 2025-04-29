@@ -141,6 +141,14 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSetType
 
             TRowBuilder rowBuilder(arrowSchema.size());
             Rows.ForEachRow([&](const NUdf::TUnboxedValue& row) -> bool {
+                if (rowsLimitPerWrite) {
+                    if (*rowsLimitPerWrite == 0) {
+                        ydbResult->set_truncated(true);
+                        return false;
+                    }
+                    --(*rowsLimitPerWrite);
+                }
+
                 for (size_t i = 0; i < arrowSchema.size(); ++i) {
                     const auto& [name, type] = arrowSchema[i];
                     rowBuilder.AddCell(i, type, row.GetElement(i), type.GetPgTypeMod(name));

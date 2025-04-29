@@ -260,8 +260,6 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
-        Ydb::ResultSetType resultSetType = req->result_set_type();
-
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {
             txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(Request_->GetArena());
@@ -285,7 +283,7 @@ private:
             .SetKeepSession(false)
             .SetUseCancelAfter(false)
             .SetSyntax(syntax)
-            .SetResultSetType(resultSetType)
+            .SetResultSetType(req->result_set_type())
             .SetSupportStreamTrailingResult(true)
             .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 

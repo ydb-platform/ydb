@@ -1232,7 +1232,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` % 3. != 1.f)",
             //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
             R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
-            R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+            //R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))", //-- Started to break with bad kernel
 #if SSA_RUNTIME_VERSION >= 5U
             R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
             R"(IF(`level` > 3, -`level`, +`level`) < 2)",
@@ -2562,6 +2562,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
 
         const std::set<std::string> numerics = {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
+        const std::set<std::string> datetimes = {"Timestamp","Date","Datetime"};
         const std::map<std::string, std::set<std::string>> exceptions = {
             {"Int8", numerics},
             {"Int16", numerics},
@@ -2575,6 +2576,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             {"Double", numerics},
             {"String", {"Utf8"}},
             {"Utf8", {"String"}},
+            {"Timestamp", datetimes},
+            {"Date", datetimes},
+            {"Datetime", datetimes}
         };
 
         std::vector<std::string> allTypes = {

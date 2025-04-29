@@ -2417,7 +2417,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(!pdiskIssueFoundInResult);
     }
 
-    Y_UNIT_TEST(TestWhiteboardResponseOnSameNode) {
+    Y_UNIT_TEST(TestSystemStateRetriesAfterReceivingResponse) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -2434,47 +2434,33 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        std::optional<TNodeId> nodeId;
+        std::optional<TActorId> targetActor;
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvWhiteboard::EvVDiskStateResponse: {
-                    auto* msg = ev->Release<TEvWhiteboard::TEvVDiskStateResponse>().Release();
-                    msg->Record.ClearVDiskStateInfo(); // whiteboard doesn't have any update
-                    ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, msg, ev->Flags, *nodeId));
-                    break;
-                }
                 case TEvWhiteboard::EvSystemStateResponse: {
-                    if (!nodeId) {
-                        nodeId = ev->Cookie;
-                    } else {
-                        auto* msg = ev->Release<TEvWhiteboard::TEvSystemStateResponse>().Release();
-                        msg->Record.ClearSystemStateInfo(); // whiteboard doesn't have any update
-                        ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, msg, ev->Flags, *nodeId));
+                    if (ev->Cookie == 1) {
+                        if (!targetActor) {
+                            targetActor = ev->Recipient;
+                            runtime.Send(ev.Release());
+                            runtime.Send(new IEventHandle(
+                                *targetActor,
+                                sender,
+                                new NHealthCheck::TEvPrivate::TEvRetryNodeWhiteboard(1, TEvWhiteboard::TEvSystemStateRequest::EventType)
+                            ));
+
+                        }
+                        return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
                 }
             }
-
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
-
-
-
-        if (!delayed) {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
-                return bool(delayed);
-            });
-            server->GetRuntime()->DispatchEvents(opts);
-        }
-
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
-        Cerr << "iiiiii try 1" << Endl;
-        runtime.GrabEdgeEvent<TEvWhiteboard::TEvSystemStateResponse>(handle);
-        Cerr << "iiiiii try 2" << Endl;
+
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
-        Cerr << result.ShortDebugString();
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 }
 }

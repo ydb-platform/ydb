@@ -109,6 +109,26 @@ struct TSharedPageCacheMock {
         return *this;
     }
 
+    TSharedPageCacheMock& Detach(TActorId sender, TIntrusiveConstPtr<TPageCollectionMock> collection) {
+        auto detach = new TEvDetach(collection->Label());
+        Send(sender, detach);
+
+        TWaitForFirstEvent<TEvDetach> waiter(Runtime);
+        waiter.Wait();
+
+        return *this;
+    }
+
+    TSharedPageCacheMock& Unregister(TActorId sender) {
+        auto unregister = new TEvUnregister();
+        Send(sender, unregister);
+
+        TWaitForFirstEvent<TEvUnregister> waiter(Runtime);
+        waiter.Wait();
+
+        return *this;
+    }
+
     TSharedPageCacheMock& CheckFetches(const TVector<NPageCollection::TFetch>& expected) {
         Runtime.WaitFor(TStringBuilder() << "fetches #" << RequestId, 
             [&]{return Fetches->size() >= expected.size();}, TDuration::Seconds(5));
@@ -557,6 +577,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
 
+        // call again
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
@@ -595,6 +616,65 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+    }
+
+    Y_UNIT_TEST(Detach_Basics) {
+        TSharedPageCacheMock sharedCache;
+        
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2);
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 3);
+
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+
+        // call again
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+
+        sharedCache.Detach(sharedCache.Sender2, sharedCache.Collection2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Unregister_Basics) {
+        TSharedPageCacheMock sharedCache;
+        
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2);
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 3);
+
+        sharedCache.Unregister(sharedCache.Sender1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+
+        // call again
+        sharedCache.Unregister(sharedCache.Sender1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+
+        sharedCache.Unregister(sharedCache.Sender2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
     }
 
 }

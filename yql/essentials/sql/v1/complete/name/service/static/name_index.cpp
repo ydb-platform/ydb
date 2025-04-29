@@ -7,6 +7,10 @@
 namespace NSQLComplete {
 
     TString NormalizeName(const TString& name) {
+        if (name.find("::") != TString::npos) {
+            return name;
+        }
+
         return NYql::NormalizeName(name);
     }
 

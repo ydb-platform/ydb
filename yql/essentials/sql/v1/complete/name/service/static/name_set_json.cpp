@@ -1,4 +1,5 @@
 #include "name_set.h"
+#include "name_set_json.h"
 
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 
@@ -13,12 +14,6 @@ namespace NSQLComplete {
         TString text;
         Y_ENSURE(NResource::FindExact(filename, &text));
         return NJson::ReadJsonFastTree(text);
-    }
-
-    template <class T, class U>
-    T Merge(T lhs, U rhs) {
-        std::copy(std::begin(rhs), std::end(rhs), std::back_inserter(lhs));
-        return lhs;
     }
 
     TVector<TString> ParseNames(NJson::TJsonValue::TArray& json) {

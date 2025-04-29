@@ -714,6 +714,7 @@ protected:
         requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
     }
 
+    // Beware! Borrows ownership of ev content, nullify ev
     template <class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,
         NActors::TActorSystem* actorSystem,
@@ -725,7 +726,7 @@ protected:
         const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;

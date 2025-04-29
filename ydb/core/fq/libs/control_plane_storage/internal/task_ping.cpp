@@ -680,7 +680,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
         prepare,
         debugInfo);
 
-    success.Apply([=, actorSystem=NActors::TActivationContext::ActorSystem(), meteringRecords=pingTaskParams.MeteringRecords](const auto& future) {
+    success.Apply([startTime, queryId, finalStatus, scope, actorSystem=NActors::TActivationContext::ActorSystem(), meteringRecords=pingTaskParams.MeteringRecords](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             const auto success = future.GetValue();
             LWPROBE(PingTaskRequest, queryId, delta, success);
@@ -692,7 +692,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
             if (success) {
                 actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
-                    request.query_id().value(), finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
+                    queryId, finalStatus->JobId, finalStatus->CloudId, scope, std::move(finalStatus->FinalStatistics),
                     finalStatus->Status, finalStatus->StatusCode, finalStatus->QueryType, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });

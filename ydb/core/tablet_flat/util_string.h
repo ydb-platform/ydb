@@ -58,17 +58,27 @@ inline void ShrinkToFit(TString& input) {
     X(BackupController)
 
 
-inline EStaticControlType GetLogFlushDelayOverrideUsecTabletTypeControl(TTabletTypes::EType type) {
+inline TMaybe<EStaticControlType> GetLogFlushDelayOverrideUsecTabletTypeControl(TTabletTypes::EType type) {
 #define CASE_TYPE_CONTROL(tablet)\
         case TTabletTypes::tablet: \
             return EStaticControlType::tablet ## LogFlushDelayOverrideUsec;
 
     switch (type) {
         TABLET_TYPES_LIST(CASE_TYPE_CONTROL)
-    default:
-        break;
+    case NKikimrTabletBase::TTabletTypes_EType_Reserved43:
+        return Nothing();
+    case NKikimrTabletBase::TTabletTypes_EType_Reserved44:
+        return Nothing();
+    case NKikimrTabletBase::TTabletTypes_EType_Reserved45:
+        return Nothing();
+    case NKikimrTabletBase::TTabletTypes_EType_Reserved46:
+        return Nothing();
+    case NKikimrTabletBase::TTabletTypes_EType_TypeInvalid:
+        return Nothing();
+    case NKikimrTabletBase::TTabletTypes_EType_UserTypeStart:
+        return Nothing();
     };
-    Y_ENSURE(false, "Unsupported tablet type");
+    return Nothing();
 }
 
 #undef CASE_TYPE_CONTROL

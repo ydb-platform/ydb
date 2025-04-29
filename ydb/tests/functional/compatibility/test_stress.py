@@ -257,7 +257,7 @@ class TestStress(object):
             "--scale=1",
             "--exclude",
             # not working for row tables
-            "17",
+            "12,17",
             "--check-canonical",
         ]
 

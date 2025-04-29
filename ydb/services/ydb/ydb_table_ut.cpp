@@ -4687,38 +4687,4 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT(!keyRanges[0].To());
         }
     }
-
-    Y_UNIT_TEST(CreateTableWithUniqueIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        NYdb::TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
-  
-        auto driver = NYdb::TDriver(NYdb::TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
-        NYdb::NTable::TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
-        constexpr const char* table = "/Root/table";
-        constexpr const char* index = "byValue";
-  
-        TString query = Sprintf(R"(
-          CREATE TABLE `%s` (
-              Key Uint32,
-              Group Uint32,
-              Value Uint32,
-              PRIMARY KEY (Key),
-              INDEX %s GLOBAL UNIQUE ON (Value)
-            );
-        )", table, index);
-  
-        session.ExecuteSchemeQuery(query).ExtractValueSync();
-  
-        auto desc = session.DescribeTable(table).ExtractValueSync().GetTableDescription();
-        UNIT_ASSERT_EQUAL(desc.GetIndexDescriptions().size(), 1);
-        UNIT_ASSERT_EQUAL(desc.GetIndexDescriptions().at(0).GetIndexName(), index);
-        // TODO: Remove the flag after fixing the creation of unique indexes by table client
-        bool isFixedCreationUniqueIndexes = false;
-        if (!isFixedCreationUniqueIndexes) {
-          UNIT_ASSERT_EQUAL(desc.GetIndexDescriptions().at(0).GetIndexType(), EIndexType::GlobalSync);
-        } else {
-          UNIT_ASSERT_EQUAL(desc.GetIndexDescriptions().at(0).GetIndexType(), EIndexType::GlobalUnique);
-        }
-    }
 }

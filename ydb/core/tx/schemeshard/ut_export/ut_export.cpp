@@ -2807,6 +2807,9 @@ attributes {
             }
         )", S3Port());
 
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+
         Run(Runtime(), Env(), TVector<TString>{
             R"(
                 Name: "Table"

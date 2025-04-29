@@ -3762,10 +3762,10 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
     Y_ABORT_UNLESS(!WriteTxsInProgress, "PQ %" PRIu64, TabletID());
 
     for (auto& [txId, state] : WriteTxs) {
-        PQ_LOG_D("write key for TxId " << txId);
-
+        // There may be cases when in one iteration of a record we change the state of a transaction and delete it
         auto tx = GetTransaction(ctx, txId);
         if (tx) {
+            PQ_LOG_D("write key for TxId " << txId);
             tx->AddCmdWrite(request, state);
 
             ChangedTxs.emplace(tx->Step, txId);

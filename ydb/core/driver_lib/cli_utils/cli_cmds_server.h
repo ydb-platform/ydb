@@ -33,6 +33,10 @@ protected:
     std::unique_ptr<NConfig::IInitialConfiguratorDepsRecorder> DepsRecorder;
 
     NConfig::TInitialConfigurator InitCfg;
+
+private:
+    NKikimrConfig::TAppConfig AppConfig;
+    TKikimrRunConfig RunConfig;
 };
 
 } // namespace NKikimr::NDriverClient

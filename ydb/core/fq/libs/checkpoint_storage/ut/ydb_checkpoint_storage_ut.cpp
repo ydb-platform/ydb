@@ -30,7 +30,8 @@ TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGen
 
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, credFactory, entityIdGenerator, yqSharedResources);
+    auto ydbConnectionPtr = NewYdbConnection(checkpointStorageConfig, credFactory, yqSharedResources->UserSpaceYdbDriver);
+    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
     auto issues = storage->Init().GetValueSync();
     UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     return storage;

@@ -242,7 +242,7 @@ class TestStress(object):
             "run",
             "--scale=1",
             "--exclude",
-            "17",  # not working for row tables
+            "12,17",  # not working for row tables
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design

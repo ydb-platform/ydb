@@ -1,17 +1,17 @@
 {%- set javac_flags = [] -%}
-{%- set jvm_flags = [] -%}
+{%- set compiler_jvm_flags = [] -%}
 {%- if target.javac.flags|length -%}
-{#-     skip errorprone options -#}
+{#-     skip errorprone options and JVM args -#}
 {%-     set javac_flags = target.javac.flags|reject('startsWith', '-Xep')|reject('startsWith', '-J') -%}
 {%-     if javac_flags|length -%}
 {%-         if (javac_flags|length == 1) and (javac_flags|first == '-parameters') -%}
 {%-             set javac_flags = [] -%}
 {%-         endif -%}
 {%-     endif -%}
-{%-     set jvm_flags = target.javac.flags|select('startsWith', '-J') -%}
+{%-     set compiler_jvm_flags = target.javac.flags|select('startsWith', '-J') -%}
 {%- endif -%}
 
-{%- if javac_flags|length or jvm_flags|length or has_errorprone %}
+{%- if javac_flags|length or compiler_jvm_flags|length or has_errorprone %}
 
 tasks.withType<JavaCompile> {
 {%-     if javac_flags|length -%}
@@ -20,18 +20,18 @@ tasks.withType<JavaCompile> {
 {%-         endfor -%}
 {%-     endif -%}
 
-{%-     if jvm_flags|length %}
+{%-     if compiler_jvm_flags|length %}
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
-{%-         for jvm_flag in jvm_flags -%}
-"{{ jvm_flag|replace("-J", "") }}"{% if not loop.last %}, {% endif -%}
+{%-         for compiler_jvm_flag in compiler_jvm_flags -%}
+"{{ compiler_jvm_flag|replace("-J", "") }}"{% if not loop.last %}, {% endif -%}
 {%-         endfor -%})
 {%      endif -%}
 
 {%-     if has_errorprone -%}
 {%-         set ep_checks = target.javac.flags|select('startsWith', '-Xep:') -%}
 {%-         set ep_checkopts = target.javac.flags|select('startsWith', '-XepOpt:') -%}
-{%-         set ep_props = target.javac.flags|reject('startsWith', '-XepOpt:')|select('startsWith', '-Xep') -%}
+{%-         set ep_props = target.javac.flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:')|select('startsWith', '-Xep') -%}
 {%-         if ep_checks|length %}
     options.errorprone.checks.set(
         mapOf(

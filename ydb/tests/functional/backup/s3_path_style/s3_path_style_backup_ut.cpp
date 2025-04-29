@@ -309,7 +309,6 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         }
 
         // Specify empty directory and existing table
-        DISABLE
         {
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing/dir1/dir2", "RecursiveFolderProcessingPrefix6");
@@ -326,7 +325,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                     "RecursiveFolderProcessingPrefix6/Table2/metadata.json",
                     "RecursiveFolderProcessingPrefix6/Table2/scheme.pb",
                     "RecursiveFolderProcessingPrefix6/Table2/data_00.csv",
-                }, bucketName, S3Client(), "RecursiveFolderProcessingPrefix3");
+                }, bucketName, S3Client(), "RecursiveFolderProcessingPrefix6");
             }
 
             {
@@ -376,7 +375,6 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         }
 
         // Export without common destination prefix, trying to import with filter by YDB path (error, because no SchemaMapping)
-        DISABLE
         {
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing/dir1", "");
@@ -397,7 +395,15 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 importSettings
                     .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored8/Table1", .SrcPath = "/local/RecursiveFolderProcessingRestored8/Table1"});
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::CANCELLED, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            }
+
+            {
+                NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix8", "");
+                importSettings
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored8/Table1", .SrcPath = "/local/RecursiveFolderProcessingRestored8/Table1"});
+                auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
             }
         }
 
@@ -721,6 +727,56 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 ValidateDoesNotHaveYdbTables({
                     "/local/RecursiveFolderProcessingRestored15/Table0",
                     "/local/RecursiveFolderProcessingRestored15/dir1/Table1",
+                });
+            }
+
+            {
+                // Both src path and src prefix are incorrect
+                NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix15", "/local/RecursiveFolderProcessingRestored15");
+                importSettings
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "/local/RecursiveFolderProcessingRestored15/dir1/dir2/Table2", .Dst = "/local/RecursiveFolderProcessingRestored15/Table0", .SrcPath = "dir1/dir2/Table2"});
+                UNIT_ASSERT_EXCEPTION(YdbImportClient().ImportFromS3(importSettings).GetValueSync(), NYdb::TContractViolation);
+            }
+        }
+
+        // Export recursive, but without destination prefix
+        {
+            {
+                NExport::TExportToS3Settings exportSettings = makeExportSettings("", "");
+                exportSettings
+                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1", .Dst = "RecursiveFolderProcessingPrefix16"});
+                auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+                WaitOpSuccess(res);
+
+                ValidateS3FileList({
+                    "RecursiveFolderProcessingPrefix16/dir1/Table1/metadata.json",
+                    "RecursiveFolderProcessingPrefix16/dir1/Table1/scheme.pb",
+                    "RecursiveFolderProcessingPrefix16/dir1/Table1/data_00.csv",
+                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/metadata.json",
+                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/scheme.pb",
+                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/data_00.csv",
+                }, bucketName, S3Client(), "RecursiveFolderProcessingPrefix16");
+            }
+
+            {
+                // Impossible to import with common prefix
+                NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix16", "");
+                auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            }
+
+            {
+                // Possible to import in old style with explicit paths
+                NImport::TImportFromS3Settings importSettings = makeImportSettings("", "");
+                importSettings
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/dir1/Table1", .Dst = "/local/RecursiveFolderProcessingRestored16/Table11"})
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2", .Dst = "/local/RecursiveFolderProcessingRestored16/Table12"});
+                auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+                WaitOpSuccess(res);
+
+                ValidateHasYdbTables({
+                    "/local/RecursiveFolderProcessingRestored16/Table11",
+                    "/local/RecursiveFolderProcessingRestored16/Table12",
                 });
             }
         }

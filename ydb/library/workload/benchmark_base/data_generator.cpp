@@ -74,7 +74,11 @@ public:
         , Decompressor(OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path)))
         , Header(JoinSeq(delimiter, owner.ColumnNames))
         , Foramt(foramt)
-    {}
+    {
+        if (!Header) {
+            Decompressor->ReadLine(Header);
+        }
+    }
 
     virtual TDataPortionPtr GetPortion() override final {
         TVector<TString> lines;

@@ -130,6 +130,9 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     if (json.Has("table")) {
         GenerateDDLForTable(result.Out, json["table"], true);
     }
+    if (result) {
+        return "--!syntax_v1\n" + result;
+    }
     return result;
 }
 

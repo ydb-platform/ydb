@@ -52,10 +52,41 @@ private:
     TLogoBlobID Id;
 };
 
+struct TExecutorMock : public TActorBootstrapped<TExecutorMock> {
+public:
+    TExecutorMock(std::deque<NSharedCache::TEvResult::TPtr>& results)
+        : Results(results)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSharedCache::TEvResult, Handle);
+        }
+    }
+
+    void Handle(NSharedCache::TEvResult::TPtr& ev) {
+        auto& result = *ev->Get();
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR, "Receive page collection result " << result.PageCollection->Label()
+            << " status " << result.Status
+            << " pages " << result.Pages
+            << " cookie " << result.Cookie);
+
+        Results.push_back(ev);
+    }
+
+    std::deque<NSharedCache::TEvResult::TPtr>& Results;
+};
+
 struct TSharedPageCacheMock {
     TSharedPageCacheMock() {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
+        Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
         Runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         TSharedCacheConfig config;
@@ -67,12 +98,11 @@ struct TSharedPageCacheMock {
         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 1);
         Runtime.DispatchEvents(options);
 
-        Sender1 = Runtime.AllocateEdgeActor();
-        Sender2 = Runtime.AllocateEdgeActor();
+        Sender1 = Runtime.Register(new TExecutorMock(Results));
+        Sender2 = Runtime.Register(new TExecutorMock(Results));
         BlockIoSender = Runtime.AllocateEdgeActor();
 
         Fetches = MakeHolder<TBlockEvents<NBlockIO::TEvFetch>>(Runtime);
-        Results = MakeHolder<TBlockEvents<NSharedCache::TEvResult>>(Runtime);
 
         Counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(Runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
     }
@@ -154,11 +184,11 @@ struct TSharedPageCacheMock {
             Runtime.SimulateSleep(TDuration::Seconds(1));
         } else {
             Runtime.WaitFor(TStringBuilder() << "results #" << RequestId, 
-                [&]{return Results->size() >= expected.size();}, TDuration::Seconds(5));
+                [&]{return Results.size() >= expected.size();}, TDuration::Seconds(5));
         }
         
         TVector<NPageCollection::TFetch> actual;
-        for (auto& r : *Results) {
+        for (auto& r : Results) {
             UNIT_ASSERT_VALUES_EQUAL(r->Get()->Status, status);
             auto& result = *r->Get();
             actual.push_back(NPageCollection::TFetch{result.Cookie, result.PageCollection, {}});
@@ -166,22 +196,28 @@ struct TSharedPageCacheMock {
                 actual.back().Pages.push_back(p.PageId);
             }
         }
-        Results->clear();
+        Results.clear();
         
-        // blocked results to different senders may be reordered, sort them before check:
-        auto cmp = [](const auto& l, const auto& r){
-            return l.Cookie < r.Cookie;
-        };
-        Sort(expected, cmp);
-        Sort(actual, cmp);
-
         Cerr << "Checking results#" << RequestId << Endl;
         CheckFetches(expected, actual);
 
         return *this;
     }
 
-    void CheckFetches(const TVector<NPageCollection::TFetch>& expected, const TVector<NPageCollection::TFetch>& actual) {
+    void CheckFetches(TVector<NPageCollection::TFetch> expected, TVector<NPageCollection::TFetch> actual) {
+        // blocked results to different senders may be reordered, sort them before check:
+        auto cmp = [](const auto& l, const auto& r){
+            if (l.PageCollection->Label() != r.PageCollection->Label()) {
+                return l.PageCollection->Label() < r.PageCollection->Label();
+            }
+            if (l.Cookie != r.Cookie) {
+                return l.Cookie < r.Cookie;
+            }
+            return l.Pages < r.Pages;
+        };
+        Sort(expected, cmp);
+        Sort(actual, cmp);
+
         Cerr << "Expected:" << Endl;
         for (auto f : expected) {
             Cerr << "  " << f.DebugString(true) << Endl;
@@ -209,7 +245,7 @@ struct TSharedPageCacheMock {
     THolder<TSharedPageCacheCounters> Counters;
 
     THolder<TBlockEvents<NBlockIO::TEvFetch>> Fetches;
-    THolder<TBlockEvents<NSharedCache::TEvResult>> Results;
+    std::deque<NSharedCache::TEvResult::TPtr> Results;
 
     TActorId Sender1;
     TActorId Sender2;

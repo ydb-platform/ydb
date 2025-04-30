@@ -221,7 +221,7 @@
 
 {wide-content}
 
-## Observability
+## Диагностика
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|

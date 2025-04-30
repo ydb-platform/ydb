@@ -1235,6 +1235,7 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
         Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
@@ -1320,7 +1321,7 @@ partitioning_settings {
     Y_UNIT_TEST(CheckItemProgress) {
         Env(); // Init test env
         ui64 txId = 100;
-
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
         TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(Runtime(), [](auto&& ev) {
             return ev->Get()->Request.GetKey() == "/data_01.csv";
         });

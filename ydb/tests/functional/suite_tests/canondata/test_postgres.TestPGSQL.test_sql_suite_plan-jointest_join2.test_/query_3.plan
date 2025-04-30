@@ -99,7 +99,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "precompute_0_0",
+                                                                        "CTE Name": "precompute",
                                                                         "Node Type": "ConstantExpr-Aggregate",
                                                                         "Operators": [
                                                                             {
@@ -112,58 +112,12 @@
                                                                                 "Name": "Iterator"
                                                                             },
                                                                             {
-                                                                                "Input": "precompute_0_0",
+                                                                                "Input": "precompute",
                                                                                 "Inputs": [],
                                                                                 "Name": "PartitionByKey"
                                                                             }
                                                                         ],
-<<<<<<< HEAD
                                                                         "PlanNodeId": 7
-=======
-                                                                        "PlanNodeId": 9,
-                                                                        "Plans": [
-                                                                            {
-                                                                                "Columns": [
-                                                                                    "n",
-                                                                                    "name"
-                                                                                ],
-                                                                                "E-Cost": "No estimate",
-                                                                                "E-Rows": "No estimate",
-                                                                                "E-Size": "No estimate",
-                                                                                "LookupKeyColumns": [
-                                                                                    "name"
-                                                                                ],
-                                                                                "Node Type": "TableLookup",
-                                                                                "Path": "/Root/postgres_jointest/join2.test_plan/t3",
-                                                                                "PlanNodeId": 8,
-                                                                                "PlanNodeType": "Connection",
-                                                                                "Plans": [
-                                                                                    {
-                                                                                        "CTE Name": "precompute",
-                                                                                        "Node Type": "ConstantExpr-Aggregate",
-                                                                                        "Operators": [
-                                                                                            {
-                                                                                                "Inputs": [
-                                                                                                    {
-                                                                                                        "InternalOperatorId": 1
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Iterator": "PartitionByKey",
-                                                                                                "Name": "Iterator"
-                                                                                            },
-                                                                                            {
-                                                                                                "Input": "precompute",
-                                                                                                "Inputs": [],
-                                                                                                "Name": "PartitionByKey"
-                                                                                            }
-                                                                                        ],
-                                                                                        "PlanNodeId": 7
-                                                                                    }
-                                                                                ],
-                                                                                "Table": "postgres_jointest/join2.test_plan/t3"
-                                                                            }
-                                                                        ]
->>>>>>> 5a3c89e1091 ([] test flip fi)
                                                                     }
                                                                 ],
                                                                 "Table": "postgres_jointest/join2.test_plan/t3"

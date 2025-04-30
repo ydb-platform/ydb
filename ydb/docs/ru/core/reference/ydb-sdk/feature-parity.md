@@ -2,8 +2,11 @@
 
 Данный раздел позволяет сравнить возможности {{ ydb-short-name  }} SDK, которые реализованы для разных языков программирования.
 
+## Общий функционал
+
 | Функционал | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Строка подключения вида 'grpc[s]://endpoint:port/database' | [![issue 491 status](https://github.ydb.tech/issues/ydb-cpp-sdk/491)](https://github.com/ydb-platform/ydb-cpp-sdk/issues/491) | [![issue 651 status](https://github.ydb.tech/issues/ydb-python-sdk/651)](https://github.com/ydb-platform/ydb-python-sdk/issues/651) | [![issue 1771 status](https://github.ydb.tech/issues/ydb-go-sdk/1771)](https://github.com/ydb-platform/ydb-go-sdk/issues/1771) | [![issue 460 status](https://github.ydb.tech/issues/ydb-java-sdk/460)](https://github.com/ydb-platform/ydb-java-sdk/issues/460) | [![issue 513 status](https://github.ydb.tech/issues/ydb-js-sdk/513)](https://github.com/ydb-platform/ydb-js-sdk/issues/513) | [![issue 401 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/401)](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/401) | [![issue 331 status](https://github.ydb.tech/issues/ydb-rs-sdk/331)](https://github.com/ydb-platform/ydb-rs-sdk/issues/331) | [![issue 238 status](https://github.ydb.tech/issues/ydb-php-sdk/238)](https://github.com/ydb-platform/ydb-php-sdk/issues/238) |
 | Поддержка SSL/TLS (системные сертификаты) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} |
 | Поддержка SSL/TLS (кастомные сертификаты) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | [![issue 312 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/312)](https://github\.com/ydb-platform/ydb-dotnet-sdk/issues/312) | [![issue 270 status](https://github.ydb.tech/issues/ydb-rs-sdk/270)](https://github\.com/ydb-platform/ydb-rs-sdk/issues/270) | {{ sign_plus }} |
 | Configure/enable GRPC KeepAlive (keeping the connection alive in the background) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | [![issue 439 status](https://github.ydb.tech/issues/ydb-java-sdk/439)](https://github\.com/ydb-platform/ydb-java-sdk/issues/439) | [![issue 499 status](https://github.ydb.tech/issues/ydb-js-sdk/499)](https://github\.com/ydb-platform/ydb-js-sdk/issues/499) | [![issue 313 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/313)](https://github\.com/ydb-platform/ydb-dotnet-sdk/issues/313) | [![issue 271 status](https://github.ydb.tech/issues/ydb-rs-sdk/271)](https://github\.com/ydb-platform/ydb-rs-sdk/issues/271) | {{ sign_plus }} |
@@ -62,7 +65,7 @@
 
 {wide-content}
 
-## Поддержка типов данных YDB*
+## Поддержка типов данных YDB
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -87,7 +90,9 @@
 
 {wide-content}
 
-## Клиент Query-сервиса
+## Клиенты gRPC-сервисов YDB
+
+### Query
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -103,7 +108,7 @@
 
 {wide-content}
 
-## Клиент Scheme-сервиса
+### Scheme
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -115,7 +120,7 @@
 
 {wide-content}
 
-## Клиент Table-сервиса
+### Table
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -146,7 +151,7 @@
 
 {wide-content}
 
-## Клиент Operation-сервиса
+### Operation
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -155,7 +160,7 @@
 
 {wide-content}
 
-## Клиент ScriptingYQL-сервиса
+### ScriptingYQL
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -165,7 +170,7 @@
 
 {wide-content}
 
-## Клиент Coordination-сервиса
+### Coordination
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -177,7 +182,7 @@
 
 {wide-content}
 
-## Клиент Topic-сервиса
+### Topic
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -191,7 +196,7 @@
 
 {wide-content}
 
-## Клиент Ratelimiter-сервиса
+### Ratelimiter
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|

@@ -6,6 +6,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| support connection string 'grpc[s]://endpoint:port/database'  | [![issue 491 status](https://github.ydb.tech/issues/ydb-cpp-sdk/491)](https://github.com/ydb-platform/ydb-cpp-sdk/issues/491) | [![issue 651 status](https://github.ydb.tech/issues/ydb-python-sdk/651)](https://github.com/ydb-platform/ydb-python-sdk/issues/651) | [![issue 1771 status](https://github.ydb.tech/issues/ydb-go-sdk/1771)](https://github.com/ydb-platform/ydb-go-sdk/issues/1771) | [![issue 460 status](https://github.ydb.tech/issues/ydb-java-sdk/460)](https://github.com/ydb-platform/ydb-java-sdk/issues/460) | [![issue 513 status](https://github.ydb.tech/issues/ydb-js-sdk/513)](https://github.com/ydb-platform/ydb-js-sdk/issues/513) | [![issue 401 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/401)](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/401) | [![issue 331 status](https://github.ydb.tech/issues/ydb-rs-sdk/331)](https://github.com/ydb-platform/ydb-rs-sdk/issues/331) | [![issue 238 status](https://github.ydb.tech/issues/ydb-php-sdk/238)](https://github.com/ydb-platform/ydb-php-sdk/issues/238) |
 | SSL/TLS support (system certificates) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} |
 | SSL/TLS support (custom certificates) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | [![issue 312 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/312)](https://github\.com/ydb-platform/ydb-dotnet-sdk/issues/312) | [![issue 270 status](https://github.ydb.tech/issues/ydb-rs-sdk/270)](https://github\.com/ydb-platform/ydb-rs-sdk/issues/270) | {{ sign_plus }} |
 | Configure/enable GRPC KeepAlive (keeping the connection alive in the background) | {{ sign_plus }} | {{ sign_plus }} | {{ sign_plus }} | [![issue 439 status](https://github.ydb.tech/issues/ydb-java-sdk/439)](https://github\.com/ydb-platform/ydb-java-sdk/issues/439) | [![issue 499 status](https://github.ydb.tech/issues/ydb-js-sdk/499)](https://github\.com/ydb-platform/ydb-js-sdk/issues/499) | [![issue 313 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/313)](https://github\.com/ydb-platform/ydb-dotnet-sdk/issues/313) | [![issue 271 status](https://github.ydb.tech/issues/ydb-rs-sdk/271)](https://github\.com/ydb-platform/ydb-rs-sdk/issues/271) | {{ sign_plus }} |
@@ -89,7 +90,9 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Query service client
+## YDB gRPC services clients
+
+### Query
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -105,7 +108,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Scheme service client
+### Scheme
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -117,7 +120,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Table service client
+### Table
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -148,7 +151,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Operation service client
+### Operation
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -157,7 +160,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## ScriptingYQL service client
+### ScriptingYQL
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -167,7 +170,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Coordination service client
+### Coordination
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -179,7 +182,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Topic service client
+### Topic
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -193,7 +196,7 @@ This section allows you to compare the capabilities of the {{ ydb-short-name }} 
 
 {wide-content}
 
-## Ratelimiter service client
+### Ratelimiter
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|

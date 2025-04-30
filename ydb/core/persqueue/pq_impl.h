@@ -568,8 +568,6 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
-
-    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 };
 
 

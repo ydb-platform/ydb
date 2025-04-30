@@ -3614,8 +3614,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     PendingSupportivePartitions = std::move(NewSupportivePartitions);
     NewSupportivePartitions.clear();
 
-    DumpKeyValueRequest(request->Record);
-
     PQ_LOG_D("Send TEvKeyValue::TEvRequest (WRITE_TX_COOKIE)");
     ctx.Send(ctx.SelfID, request.Release());
 
@@ -3825,30 +3823,6 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     }
 
     DeleteTxs.clear();
-}
-
-void TPersQueue::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
-{
-    PQ_LOG_D("=== DumpKeyValueRequest ===");
-    PQ_LOG_D("--- delete ----------------");
-    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-        const auto& cmd = request.GetCmdDeleteRange(i);
-        const auto& range = cmd.GetRange();
-        PQ_LOG_D((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
-                 ", " <<
-                 range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
-    }
-    PQ_LOG_D("--- write -----------------");
-    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-        const auto& cmd = request.GetCmdWrite(i);
-        PQ_LOG_D(cmd.GetKey());
-    }
-    PQ_LOG_D("--- rename ----------------");
-    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-        const auto& cmd = request.GetCmdRename(i);
-        PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
-    }
-    PQ_LOG_D("===========================");
 }
 
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,

@@ -110,6 +110,8 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-external_sources
   core-filestore-core
   core-kesus-tablet
+  ydb-core-keyvalue
+  core-keyvalue-protos
   ydb-core-metering
   ydb-core-persqueue
   core-persqueue-config

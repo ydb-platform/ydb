@@ -245,6 +245,12 @@ message FetchStartupConfigResult {
 
 message GetConfigurationVersionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // List nodes with V1 configuration version
+    bool list_v1_nodes = 2;
+    // List nodes with V2 configuration version
+    bool list_v2_nodes = 3;
+    // List nodes with unknown configuration version
+    bool list_unknown_nodes = 4;
 }
 
 message GetConfigurationVersionResponse {
@@ -255,8 +261,14 @@ message GetConfigurationVersionResponse {
 message GetConfigurationVersionResult {
     // Count of nodes with V1 configuration version
     uint32 V1_nodes = 1;
+    // List of NodeIds with V1 configuration version
+    repeated uint32 V1_nodes_list = 2;
     // Count of nodes with V2 configuration version
-    uint32 V2_nodes = 2;
+    uint32 V2_nodes = 3;
+    // List of NodeIds with V2 configuration version
+    repeated uint32 V2_nodes_list = 4;
     // Count of nodes with unknown configuration version
-    uint32 unknown_nodes = 3;
+    uint32 unknown_nodes = 5;
+    // List of NodeIds with unknown configuration version
+    repeated uint32 unknown_nodes_list = 6;
 }

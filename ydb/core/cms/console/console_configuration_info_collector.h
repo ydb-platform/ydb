@@ -17,6 +17,9 @@ private:
     ui32 V1Nodes = 0;
     ui32 V2Nodes = 0;
     ui32 UnknownNodes = 0;
+    TVector<ui32> V1NodesList;
+    TVector<ui32> V2NodesList;
+    TVector<ui32> UnknownNodesList;
 
     THashSet<ui32> PendingNodes;
     ui32 TotalNodes = 0;

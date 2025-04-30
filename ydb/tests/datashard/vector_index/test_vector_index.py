@@ -82,6 +82,7 @@ class TestVectorIndex(VectoreBase):
         ]
     )
     def test_vector_index(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str, vector_type: str):
+        self.n = 2
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
         dml.create_table(table_name, pk_types, all_types,
@@ -89,7 +90,7 @@ class TestVectorIndex(VectoreBase):
         self.vectors = []
         self.insert(table_name, all_types, pk_types, index, ttl, vector_type)
         sql_create_vector_index = create_vector_index_sql_request(
-            table_name, "col_String", vector_type, 2)
+            table_name, "col_String", vector_type, self.n)
         print(sql_create_vector_index)
         dml.query(sql_create_vector_index)
         self.select(table_name, "col_String", vector_type)
@@ -113,7 +114,7 @@ class TestVectorIndex(VectoreBase):
                                pk_types, index, ttl, vector_type)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
-        vector = self.get_vector(vector_type, 2, value)
+        vector = self.get_vector(vector_type, self.n, value)
         self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []

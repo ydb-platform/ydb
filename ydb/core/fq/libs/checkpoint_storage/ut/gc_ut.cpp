@@ -89,8 +89,8 @@ struct TTestRuntime {
         storageConfig.SetTablePrefix(TablePrefix);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), credFactory, yqSharedResources->UserSpaceYdbDriver);
+        NYdb::TDriver driver(NYdb::TDriverConfig{});
+        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), credFactory, driver);
         CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());

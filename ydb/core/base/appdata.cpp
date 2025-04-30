@@ -63,6 +63,7 @@ struct TAppData::TImpl {
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };
 
 TAppData::TAppData(
@@ -116,6 +117,7 @@ TAppData::TAppData(
     , SharedCacheConfig(Impl->SharedCacheConfig)
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
+    , QueryServiceConfig(Impl->QueryServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

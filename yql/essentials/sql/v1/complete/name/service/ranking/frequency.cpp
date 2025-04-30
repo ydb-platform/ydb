@@ -1,6 +1,6 @@
 #include "frequency.h"
 
-#include "name_index.h"
+#include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
@@ -56,20 +56,9 @@ namespace NSQLComplete {
         }
     };
 
-    TFrequencyData Convert(TVector<TFrequencyItem> items, auto normalize) {
+    TFrequencyData Collect(const TVector<TFrequencyItem>& items) {
         TFrequencyData data;
         for (auto& item : items) {
-            if (item.Parent == Json.Parent.Pragma ||
-                item.Parent == Json.Parent.Type ||
-                item.Parent == Json.Parent.Func ||
-                item.Parent == Json.Parent.Keyword ||
-                item.Parent == Json.Parent.ModuleFunc ||
-                item.Parent == Json.Parent.Module ||
-                item.Parent == Json.Parent.ReadHint ||
-                item.Parent == Json.Parent.InsertHint) {
-                item.Rule = normalize(item.Rule);
-            }
-
             if (item.Parent == Json.Parent.Pragma) {
                 data.Pragmas[item.Rule] += item.Sum;
             } else if (item.Parent == Json.Parent.Type) {
@@ -91,24 +80,38 @@ namespace NSQLComplete {
         return data;
     }
 
-    TFrequencyData ParseJsonFrequencyData(const TStringBuf text, auto normalize) {
-        return Convert(TFrequencyItem::ParseListFromJsonText(text), normalize);
+    THashMap<TString, size_t> PrunedBy(const THashMap<TString, size_t>& data, auto normalize) {
+        THashMap<TString, size_t> pruned;
+        for (const auto& [name, count] : data) {
+            pruned[normalize(name)] += count;
+        }
+        return pruned;
+    }
+
+    TFrequencyData PrunedBy(const TFrequencyData& data, auto normalize) {
+        return {
+            .Keywords = PrunedBy(data.Keywords, normalize),
+            .Pragmas = PrunedBy(data.Pragmas, normalize),
+            .Types = PrunedBy(data.Types, normalize),
+            .Functions = PrunedBy(data.Functions, normalize),
+            .Hints = PrunedBy(data.Hints, normalize),
+        };
+    }
+
+    TFrequencyData Pruned(const TFrequencyData& data) {
+        return PrunedBy(data, [](TStringBuf s) {
+            return NYql::NormalizeName(s);
+        });
     }
 
     TFrequencyData ParseJsonFrequencyData(const TStringBuf text) {
-        return ParseJsonFrequencyData(text, NormalizeName);
+        return Collect(TFrequencyItem::ParseListFromJsonText(text));
     }
 
     TFrequencyData LoadFrequencyData() {
         TString text;
         Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
-        return ParseJsonFrequencyData(text, NormalizeName);
-    }
-
-    TFrequencyData LoadFrequencyDataForPrunning() {
-        TString text;
-        Y_ENSURE(NResource::FindExact("rules_corr_basic.json", &text));
-        return ParseJsonFrequencyData(text, UnchangedName);
+        return ParseJsonFrequencyData(text);
     }
 
 } // namespace NSQLComplete

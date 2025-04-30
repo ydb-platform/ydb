@@ -13,10 +13,10 @@ namespace NSQLComplete {
         THashMap<TString, size_t> Hints;
     };
 
+    TFrequencyData Pruned(const TFrequencyData& data);
+
     TFrequencyData ParseJsonFrequencyData(const TStringBuf text);
 
     TFrequencyData LoadFrequencyData();
-
-    TFrequencyData LoadFrequencyDataForPrunning();
 
 } // namespace NSQLComplete

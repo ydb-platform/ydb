@@ -591,25 +591,25 @@ private:
 
     bool IsSuccess(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        return record.Getstatus() == NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS;
+        return record.status() == NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS;
     }
 
     void HandleBadStatus(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) const {
         const auto& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxCompleteDataErasureShard: data erasure failed at KeyValue#" << record.Gettablet_id()
-            << " with status: " << NKikimrKeyValue::CleanUpDataResponse::Status_Name(record.Getstatus())
+            "TTxCompleteDataErasureShard: data erasure failed at KeyValue#" << record.tablet_id()
+            << " with status: " << NKikimrKeyValue::CleanUpDataResponse::Status_Name(record.status())
             << ", schemestard: " << Self->TabletID());
     }
 
     ui64 GetCleanupGeneration(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
-        return record.Getactual_generation();
+        return record.actual_generation();
     }
 
     ui64 GetTabletId(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
-        return record.Gettablet_id();
+        return record.tablet_id();
     }
 };
 

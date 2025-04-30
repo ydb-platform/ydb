@@ -27,16 +27,16 @@ target_link_libraries(name-service-static PUBLIC
   yutil
   essentials-core-sql_types
   complete-name-service
+  name-service-ranking
   v1-complete-text
   library-cpp-resource
 )
 
 target_sources(name-service-static PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/frequency.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/json_name_set.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_set_json.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_set.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_index.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/name_service.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/static/ranking.cpp
 )
 
 
@@ -49,6 +49,7 @@ target_link_libraries(name-service-static.global PUBLIC
   yutil
   essentials-core-sql_types
   complete-name-service
+  name-service-ranking
   v1-complete-text
   library-cpp-resource
 )

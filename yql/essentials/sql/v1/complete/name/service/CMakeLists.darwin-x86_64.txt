@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(static)
+add_subdirectory(ranking)
 
 add_library(complete-name-service INTERFACE)
 

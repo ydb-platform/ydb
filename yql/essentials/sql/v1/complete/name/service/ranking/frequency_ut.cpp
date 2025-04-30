@@ -7,7 +7,7 @@ using namespace NSQLComplete;
 Y_UNIT_TEST_SUITE(FrequencyTests) {
 
     Y_UNIT_TEST(FrequencyDataJson) {
-        TFrequencyData actual = ParseJsonFrequencyData(R"([
+        TFrequencyData actual = Pruned(ParseJsonFrequencyData(R"([
             {"parent":"FUNC","rule":"ABC","sum":1},
             {"parent":"TYPE","rule":"BIGINT","sum":7101},
             {"parent":"KEYWORD","rule":"UNION","sum":65064443},
@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(FrequencyTests) {
             {"parent":"READ_HINT","rule":"COLUMNS","sum":826110},
             {"parent":"INSERT_HINT","rule":"COLUMN_GROUPS","sum":225},
             {"parent":"TRule_action_or_subquery_args","rule":"TRule_action_or_subquery_args.Block2","sum":4874480}
-        ])");
+        ])"));
 
         TFrequencyData expected = {
             .Keywords = {

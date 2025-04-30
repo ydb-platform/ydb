@@ -1,7 +1,5 @@
 #include "ranking.h"
 
-#include "frequency.h"
-
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 
 #include <yql/essentials/core/sql_types/normalize_name.h>
@@ -18,8 +16,8 @@ namespace NSQLComplete {
         };
 
     public:
-        TRanking(TFrequencyData frequency)
-            : Frequency_(std::move(frequency))
+        explicit TRanking(TFrequencyData frequency)
+            : Frequency_(frequency)
         {
         }
 
@@ -115,11 +113,11 @@ namespace NSQLComplete {
     };
 
     IRanking::TPtr MakeDefaultRanking() {
-        return MakeIntrusive<TRanking>(LoadFrequencyData());
+        return MakeDefaultRanking(LoadFrequencyData());
     }
 
-    IRanking::TPtr MakeDefaultRanking(TFrequencyData frequency) {
-        return MakeIntrusive<TRanking>(frequency);
+    IRanking::TPtr MakeDefaultRanking(const TFrequencyData& frequency) {
+        return MakeIntrusive<TRanking>(Pruned(frequency));
     }
 
 } // namespace NSQLComplete

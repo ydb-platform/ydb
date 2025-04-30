@@ -178,10 +178,14 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     auto ydbSchema = TTestSchema::YdbSchema();
-    const auto ttlColumnNameIdx = useFirstPkColumnForTtl ? 0 : 8;
+    auto ydbPk = TTestSchema::YdbPkSchema();
+    const ui64 ttlColumnNameIdx = useFirstPkColumnForTtl ? 0 : 8;
     const auto ttlColumnName = ydbSchema[ttlColumnNameIdx].GetName();
     UNIT_ASSERT(ttlColumnName == (useFirstPkColumnForTtl ? "timestamp" : "saved_at")); //to detect default schema changes
     ydbSchema[ttlColumnNameIdx].SetType(ttlColumnTypeId);
+    if (ttlColumnNameIdx < ydbPk.size()) {
+        ydbPk[ttlColumnNameIdx].SetType(ttlColumnTypeId);
+    }
     const auto ttlIncSeconds = ttlColumnTypeId == NTypeIds::Date ? TDuration::Days(1).Seconds() : 1;
     TTestSchema::TTableSpecials specs;
 
@@ -215,8 +219,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     TTestSchema::TTableSpecials spec;
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = TDuration::Seconds(ttlSec);
-    auto planStep = SetupSchema(runtime, sender,
-        TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"), ++txId);
+    auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -264,7 +267,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     } else {
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
-    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchema, testYdbPk, spec), ++txId);
+    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchema, ydbPk, spec), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -286,8 +289,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
 
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
-    planStep =
-        SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 3, ydbSchema, testYdbPk, TTestSchema::TTableSpecials()), ++txId);
+    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 3, ydbSchema, ydbPk, TTestSchema::TTableSpecials()), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
@@ -309,7 +311,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 
-    if (spec.NeedTestStatistics(testYdbPk)) {
+    if (spec.NeedTestStatistics(ydbPk)) {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
         AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
@@ -1158,7 +1160,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {
-        for (auto typeId : {NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
+        for (auto typeId : { NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64 }) {
+            Cerr << "Running TestTtl ttlColumnType=" << NKikimr::NScheme::TypeName(typeId) << Endl;
             TestTtl(Reboot, Internal, FirstPkColumn, typeId);
         }
     }

@@ -69,11 +69,20 @@ struct TRequest : public TSimpleRefCount<TRequest> {
     {
     }
 
+    // TODO: do we need it?
     void EnsureResponded() const {
-        Y_ENSURE(!Sender, "All dropping requests should be responded first but request with"
+        Y_ENSURE(IsResponded(), "All dropping requests should be responded first but request with"
             << " owner " << Sender
             << " page collection " << PageCollection->Label()
             << " has pending pages " << PagesToRequest);
+    }
+
+    bool IsResponded() const {
+        return !Sender;
+    }
+
+    void MarkResponded() {
+        Sender = {};
     }
 
     const TLogoBlobID Label;
@@ -261,16 +270,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     };
 
     TActorId Owner;
-    THashMap<TLogoBlobID, TCollection> Collections;
-    THashMap<TActorId, THashSet<TCollection*>> Owners;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
+    TSharedCacheConfig Config;
+    TSharedPageCacheCounters Counters;
 
+    THashMap<TLogoBlobID, TCollection> Collections;
+    THashMap<TActorId, THashSet<TCollection*>> Owners;
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
 
-    TSharedCacheConfig Config;
-    TSharedPageCacheCounters Counters;
     TSwitchableCache<TPage, TCompositeCachePageTraits> Cache;
 
     ui64 StatBioReqs = 0;
@@ -554,13 +563,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TRequestQueue::TPagesToRequest *qpages = nullptr;
 
             if (queue) {
-            // register for loading regardless of pending state, to simplify actor deregister logic
-            // would be filtered on actual request
+                // register for loading regardless of pending state, to simplify actor deregister logic
+                // would be filtered on actual request
                 auto &owner = queue->Requests[ev->Sender];
                 auto &list = owner.Index[pageCollectionId];
 
                 qpages = &list.emplace_back();
-
                 qpages->Request = request;
                 owner.Listed.PushBack(qpages);
             }
@@ -663,7 +671,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             auto &wa = *owner.Listed.Front()->Request;
 
-            if (wa.Sender) { // is request already served?
+            if (!wa.IsResponded()) {
                 auto *collection = Collections.FindPtr(wa.Label);
                 Y_ENSURE(collection);
 
@@ -710,7 +718,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             // cleanup
-            if (!wa.Sender || nthToRequest == wa.PagesToRequest.size()) {
+            if (wa.IsResponded() || nthToRequest == wa.PagesToRequest.size()) {
                 {
                     auto reqit = owner.Index.find(wa.Label);
                     Y_ENSURE(reqit != owner.Index.end());
@@ -1021,7 +1029,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
         for (auto &[request, index] : pendingRequestsIt->second) {
-            Y_ENSURE(request->Sender);
+            Y_ENSURE(!request->IsResponded());
             auto &readyPage = request->ReadyPages[index];
             Y_ENSURE(readyPage.PageId == page->PageId);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
@@ -1033,7 +1041,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendReadyBlocks(TRequest &request) {
-        Y_ENSURE(request.Sender);
+        Y_ENSURE(!request.IsResponded());
         /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
 
         TAutoPtr<NSharedCache::TEvResult> result =
@@ -1049,12 +1057,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();
         Counters.SucceedRequests->Inc();
-        request.Sender = TActorId();
         StatBioReqs += 1;
+
+        request.MarkResponded();
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
-        Y_ENSURE(request.Sender);
+        Y_ENSURE(!request.IsResponded());
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
@@ -1068,8 +1077,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();
         Counters.FailedRequests->Inc();
-        request.Sender = TActorId();
         StatBioReqs += 1;
+
+        request.MarkResponded();
     }
 
     void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError) {
@@ -1078,7 +1088,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // decline all pending requests
         for (auto &[_, requests] : collection.PendingRequests) {
             for (auto &[request, _] : requests) {
-                if (request->Sender) {
+                if (!request->IsResponded()) { // TODO: how?
                     SendError(*request, blobStorageError);
                 }
             }

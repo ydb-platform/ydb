@@ -652,6 +652,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }, TTestData::Request());
     }
 
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        ForgetS3({
+            TTestData::IndexedTable()
+        }, TTestData::Request());
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        CancelS3({
+            TTestData::IndexedTable()
+        }, TTestData::Request());
+    }
+
     Y_UNIT_TEST(ShouldSucceedAutoDropping) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

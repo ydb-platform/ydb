@@ -6397,6 +6397,35 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         CancelShouldSucceed(GetSchemeWithChangefeed());
     }
 
+    THashMap<TString, TTypedScheme> GetSchemeWithUniqueIndex() {
+        THashMap<TString, TTypedScheme> schemes;
+        schemes.emplace("", R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+                name: "UniqueIndex"
+                index_columns: "value"
+                global_unique_index { }
+            }
+        )");
+        return schemes;
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleTableWithUniqueIndex) {
+        ShouldSucceed(GetSchemeWithUniqueIndex());
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleTableWithUniqueIndex) {
+        CancelShouldSucceed(GetSchemeWithUniqueIndex());
+    }
+
     Y_UNIT_TEST(CancelShouldSucceedOnDependentView) {
         CancelShouldSucceed(
             {

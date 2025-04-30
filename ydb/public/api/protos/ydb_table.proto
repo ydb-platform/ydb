@@ -1294,6 +1294,8 @@ message ExecuteScanQueryPartialResult {
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
     string query_full_diagnostics = 7 [deprecated = true];
+    // Optional snapshot that corresponds to the returned data
+    VirtualTimestamp snapshot = 8;
 }
 
 // Returns information about an external data source with a given path.

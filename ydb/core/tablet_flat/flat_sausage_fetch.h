@@ -36,8 +36,7 @@ namespace NPageCollection {
             return str;
         }
 
-        const ui64 Cookie = Max<ui64>();
-
+        ui64 Cookie = Max<ui64>();
         TIntrusiveConstPtr<IPageCollection> PageCollection;
         TVector<NTable::TPageId> Pages;
         NWilson::TTraceId TraceId;

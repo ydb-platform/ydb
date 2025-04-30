@@ -875,15 +875,18 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         } else {
             Y_ENSURE(ev->Cookie == NO_QUEUE_COOKIE);
         }
-
         if (queue) {
             Y_ENSURE(queue->InFly >= msg->Fetch->Cookie);
             queue->InFly -= msg->Fetch->Cookie;
-            RequestFromQueue(*queue);
         }
 
         auto collection = Collections.FindPtr(msg->Fetch->PageCollection->Label());
         if (!collection) {
+            // TODO: is it possible?
+            if (queue) {
+                RequestFromQueue(*queue);
+            }
+            DoGC();
             return;
         }
 
@@ -901,6 +904,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 BodyProvided(*collection, page);
                 Evict(Cache.Touch(page));
             }
+        }
+
+        if (queue) {
+            RequestFromQueue(*queue);
         }
 
         DoGC();

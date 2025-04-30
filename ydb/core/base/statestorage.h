@@ -144,18 +144,19 @@ struct TEvStateStorage {
             Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TEvUpdate(const TEvUpdate& ev) 
+        TEvUpdate(const TEvUpdate& ev, ui32 sigOffset, ui32 sigSize) 
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
             , ProposedLeaderTablet(ev.ProposedLeaderTablet)
             , ProposedGeneration(ev.ProposedGeneration)
             , ProposedStep(ev.ProposedStep)
-            , SignatureSz(ev.SignatureSz)
-            , Signature(new ui64[ev.SignatureSz])
+            , SignatureSz(sigSize)
+            , Signature(new ui64[sigSize])
             , ProxyOptions(ev.ProxyOptions) 
         {
-            Copy(ev.Signature.Get(), ev.Signature.Get() + ev.SignatureSz, Signature.Get());
+            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
+            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {
@@ -247,16 +248,17 @@ struct TEvStateStorage {
             Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TEvLock(const TEvLock& ev)
+        TEvLock(const TEvLock& ev, ui32 sigOffset, ui32 sigSize)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
             , ProposedGeneration(ev.ProposedGeneration)
-            , SignatureSz(ev.SignatureSz)
-            , Signature(new ui64[ev.SignatureSz])
+            , SignatureSz(sigSize)
+            , Signature(new ui64[sigSize])
             , ProxyOptions(ev.ProxyOptions) 
         {
-            Copy(ev.Signature.Get(), ev.Signature.Get() + ev.SignatureSz, Signature.Get());
+            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
+            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {

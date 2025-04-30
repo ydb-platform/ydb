@@ -392,7 +392,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
-        Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
+        // Reconfig StateStorage case replicas count can be the same, but actors changed
+        // Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
@@ -510,6 +511,11 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         }
     }
 
+    void HandleUpdateConfig(TEvStateStorage::TEvUpdateGroupConfig::TPtr /*ev*/) {
+        const ui64 rndDelay = AppData()->RandomProvider->GenRand() % 150;
+        SendResolveRequest(TDuration::MilliSeconds(150 + rndDelay), false);
+    }
+
     void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
         auto* msg = ev->Get();
 
@@ -617,6 +623,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, HandleUpdateConfig);
         }
     }
 
@@ -630,6 +637,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, HandleUpdateConfig);
         }
     }
 };

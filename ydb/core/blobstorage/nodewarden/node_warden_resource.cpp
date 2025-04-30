@@ -222,6 +222,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                 for (const auto& ring : ringGroup.Rings) {
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
+                            STLOG(PRI_INFO, BS_NODE, NW54, "Local replica found", (Component, comp), (ReplicaId, replicaId));
                             const auto [it, inserted] = localActorIds.insert(replicaId);
                             Y_ABORT_UNLESS(inserted);
                         }
@@ -239,8 +240,11 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                                 (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
                             as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
                                 AppData()->SystemPoolId));
-                        } else
+                        } else if (which == &StateStorageInfo) {
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
+                        } else {
+                            // TODO(alexvru): update other kinds of replicas
+                        }
                     }
                 }
             }

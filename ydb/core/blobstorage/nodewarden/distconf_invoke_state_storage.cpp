@@ -10,7 +10,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         const auto &newSSConfig = cmd.GetNewStateStorageConfig();
 
         if (newSSConfig.HasRing()) {

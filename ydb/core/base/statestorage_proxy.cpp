@@ -656,7 +656,7 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
-            Send(actorId, new TEvStateStorage::TEvUpdate(*msg));
+            Send(actorId, new TEvStateStorage::TEvUpdate(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
         }
     }
 
@@ -668,14 +668,19 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
-            Send(actorId, new TEvStateStorage::TEvLock(*msg));
+            Send(actorId, new TEvStateStorage::TEvLock(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
         }
     }
 
-    void UpdateSignature(ui32 ringGroupIdx, const ui64 *sig, ui32 sz) {
+    ui32 GetRingOffset(ui32 ringGroupIdx) {
         ui32 offset = 0;
         for (ui32 i = 0; i < ringGroupIdx; i++)
             offset += Info->RingGroups[i].NToSelect;
+        return offset;
+    }
+
+    void UpdateSignature(ui32 ringGroupIdx, const ui64 *sig, ui32 sz) {
+        ui32 offset = GetRingOffset(ringGroupIdx);
         Y_ABORT_UNLESS(offset + sz <= SignatureSz);
 
         for (ui32 i = 0; i < sz; i++, offset++) {
@@ -1015,7 +1020,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
-        for (size_t ringGroupIdx = 0; ringGroupIdx < Info->RingGroups.size(); ++ringGroupIdx) {
+        for (size_t ringGroupIdx = 0; ringGroupIdx < info->RingGroups.size(); ++ringGroupIdx) {
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
             info->SelectReplicas(tabletId, selection.Get(), ringGroupIdx);
             reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
@@ -1054,7 +1059,10 @@ public:
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
-            TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageRingGroupProxyRequest(Info)));
+            if (Info->RingGroups.size() > 1)
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageRingGroupProxyRequest(Info)));
+            else
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
             break;
         }
     }

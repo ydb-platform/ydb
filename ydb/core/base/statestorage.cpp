@@ -280,6 +280,8 @@ static void CopyStateStorageRingInfo(
             // reset for next ring
             serviceId[depth + 1] = char();
         }
+        // reset for next ring group
+        serviceId[depth] = char();
 
         return;
     }
@@ -295,7 +297,8 @@ static void CopyStateStorageRingInfo(
             const TActorId replicaActorID = TActorId(source.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
             ringGroup.Rings[inode].Replicas.push_back(replicaActorID);
         }
-
+        // reset for next ring group
+        serviceId[depth] = char();
         return;
     }
 
@@ -313,10 +316,11 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
             info->CompatibleVersions.push_back(version);
     }
     
-    const size_t offset = FindIndex(namePrefix, char());
-    Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
+
 
     for(size_t i = 0; i < config.RingGroupsSize(); i++) {
+        const size_t offset = FindIndex(namePrefix, char());
+        Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
         auto& ringGroup = config.GetRingGroups(i);
         const ui32 stateStorageGroup = 1;
         memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
@@ -324,6 +328,8 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
         CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset + sizeof(ui32));
     }
     if(config.HasRing() && config.RingGroupsSize() == 0) {
+        const size_t offset = FindIndex(namePrefix, char());
+        Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
         auto& ring = config.GetRing();
         const ui32 stateStorageGroup = 1;
         memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));

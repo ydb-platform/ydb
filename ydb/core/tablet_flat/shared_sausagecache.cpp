@@ -814,18 +814,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        // TODO: just unlink?
-        DropRequestsFromQueues(ev->Sender);
-
         for (auto& [collection, requests] : ownerIt->second) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister page collection " << collection->Id
+            for (auto& request : requests) {
+                SendError(request, NKikimrProto::RACE);
+            }
+            DropRequestsFromQueues(ev->Sender, collection->Id);
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove page collection " << collection->Id
                 << " owner " << ev->Sender);
             bool erased = collection->Owners.erase(ev->Sender);
             Y_ENSURE(erased);
             Counters.PageCollectionOwners->Dec();
-
-            // TODO
-            // DropRequests(*collection, ev->Sender);
 
             TryDropExpiredCollection(*collection);
         }
@@ -855,9 +854,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto& request : collectionIt->second) {
             SendError(request, NKikimrProto::RACE);
         }
-
         DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove page collection " << collection->Id
+            << " owner " << ev->Sender);
         ownerIt->second.erase(collectionIt);
         Counters.PageCollectionOwners->Dec();
 
@@ -1147,48 +1147,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         //TODO: delete ownership of dropping page collection
 
         TryDropExpiredCollection(collection);
-    }
-
-    void DropRequests(TCollection& collection, TActorId owner) {
-        TVector<TPageId> emptyRequests;
-        for (auto &[pageId, requests] : collection.PendingRequests) {
-            for (auto it = requests.begin(); it != requests.end(); ) {
-                if (it->first->Sender == owner) {
-                    SendError(*it->first, NKikimrProto::RACE);
-                    it = requests.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            if (requests.empty()) {
-                emptyRequests.push_back(pageId);
-            }
-        }
-        for (auto pageId : emptyRequests) {
-            collection.PendingRequests.erase(pageId);
-        }
-    }
-
-    void DropRequestsFromQueues(TActorId owner) {
-        DropRequestsFromQueue(ScanRequests, owner);
-        DropRequestsFromQueue(AsyncRequests, owner);
-    }
-
-    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId) {
-        auto it = queue.Requests.find(ownerId);
-        if (it == queue.Requests.end()) {
-            return;
-        }
-
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
-            << " owner " << ownerId
-            << " page collections " << it->second.Index.size());
-
-        for (const auto& r : it->second.Listed) {
-            r.Request->EnsureResponded();
-        }
-
-        queue.Requests.erase(it);
     }
 
     void DropRequestsFromQueues(TActorId owner, const TLogoBlobID &pageCollectionId) {

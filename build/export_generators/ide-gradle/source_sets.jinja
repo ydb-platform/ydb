@@ -46,34 +46,27 @@ sourceSets {
 {%-     if target.proto_grpc %}
         java.srcDir("$buildDir/generated/source/proto/test/grpc")
 {%-     endif -%}
-{%- else %}
-        java.srcDir("ut/java")
-        resources.srcDir("ut/resources")
-        java.srcDir("src/test-integration/java")
-        resources.srcDir("src/test-integration/resources")
-        java.srcDir("src/integration-test/java")
-        resources.srcDir("src/integration-test/resources")
-        java.srcDir("src/testFixtures/java")
-        resources.srcDir("src/testFixtures/resources")
-        java.srcDir("src/intTest/java")
-        resources.srcDir("src/intTest/resources")
-
-{%-     set extra_target_source_sets = extra_targets|selectattr('jar_source_set')|map(attribute='jar_source_set')|sum|reject('startsWith', 'src/test/java:')|unique -%}
-{%-     if extra_target_source_sets|length -%}
-{%-         for source_set in extra_target_source_sets -%}
+{%- elif extra_targets|length -%}
+{%-     for extra_target in extra_targets -%}
+{%-         set reldir = "" -%}
+{%-         if extra_target.test_reldir -%}
+{%-             set reldir = extra_target.test_reldir + "/" -%}
+{%-         endif -%}
+{%-         for source_set in extra_target.jar_source_set -%}
 {%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set srcdir = srcdir_glob[0] %}
+{%-             set srcdir = reldir + srcdir_glob[0] -%}
+{%-             if srcdir != "src/test/java" %}
         java.srcDir({{ PatchRoots(srcdir) }})
+{%-             endif -%}
 {%-         endfor -%}
-{%-     endif %}
-{%-     set extra_target_resource_sets = extra_targets|selectattr('jar_resource_set')|map(attribute='jar_resource_set')|sum|reject('startsWith', 'src/test/resources:')|unique -%}
-{%-     if extra_target_resource_sets|length -%}
-{%-         for resource_set in extra_target_resource_sets -%}
+{%-         for resource_set in extra_target.jar_resource_set -%}
 {%-             set resdir_glob = split(resource_set, ':') -%}
-{%-             set resdir = resdir_glob[0] %}
+{%-             set resdir = reldir + resdir_glob[0] -%}
+{%-             if resdir != "src/test/resources" %}
         resources.srcDir({{ PatchRoots(resdir) }})
+{%-             endif -%}
 {%-         endfor -%}
-{%-     endif -%}
+{%-     endfor -%}
 {%- endif %}
     }
 }

@@ -106,12 +106,3 @@ consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"
 consumer-prebuilt="flag"
-
-[merge]
-test=[
-    "/ut",
-    "/src/test",
-    "/src/test/java",
-    "/src/test-integration",
-    "/src/test-multicell"
-]

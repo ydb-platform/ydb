@@ -80,7 +80,7 @@ struct TSharedPageCacheMock {
     TSharedPageCacheMock& Request(TActorId sender, TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageId> pages, EPriority priority = EPriority::Fast) {
         auto fetch = new NPageCollection::TFetch(++RequestId, collection, pages);
         auto request = new TEvRequest(priority, fetch);
-        Send(sender, request);
+        Send(sender, request, RequestId);
 
         TWaitForFirstEvent<TEvRequest> waiter(Runtime);
         waiter.Wait();
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 2);
 
         sharedCache.Provide(sharedCache.Collection2, {3});
-        sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1)); // TODO: wtf?
+        // sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1)); // TODO: wtf?
         sharedCache.Provide(sharedCache.Collection1, {5});
         sharedCache.CheckResults({
             NPageCollection::TFetch{2, sharedCache.Collection2, {1, 2, 3}},

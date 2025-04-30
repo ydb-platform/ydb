@@ -610,6 +610,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << pageCollectionId
                 << " owner " << ev->Sender
+                << " cookie " << ev->Cookie
                 << " class " << request->Priority
                 << " from cache " << pagesToKeep
                 << " already requested " << traceLogPagesToWait
@@ -628,6 +629,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << pageCollectionId
                 << " owner " << ev->Sender
+                << " cookie " << ev->Cookie
                 << " class " << msg->Priority
                 <<  " from cache " << msg->Fetch->Pages);
             SendReadyBlocks(*request);
@@ -1034,7 +1036,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection result " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
-            << " pages " << result->Pages);
+            << " pages " << result->Pages
+            << " cookie " << request.EventCookie);
 
         Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();
@@ -1052,7 +1055,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection error " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
-            << " error " << error);
+            << " error " << error
+            << " cookie " << request.EventCookie);
 
         Send(request.Sender, result.Release(), 0, request.EventCookie);
         Counters.PendingRequests->Dec();

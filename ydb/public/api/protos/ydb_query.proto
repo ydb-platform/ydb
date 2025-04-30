@@ -201,6 +201,10 @@ message ExecuteQueryResponsePart {
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
+
+    // The virtual timestamp returns only for queries
+    // which acquires MVCC snapshot (read only requests).
+    // The timestamp present in the each part of stream response.
     VirtualTimestamp snapshot_timestamp = 7;
 }
 

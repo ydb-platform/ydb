@@ -77,7 +77,8 @@ class TestYdbWorkload(object):
             for i in range(ROWS_CHUNKS_COUNT):
                 res = do_upsert(i)
                 print(f"upsert #{i} ok, result:", res, file=sys.stderr)
-                described = self.cluster.client.describe('/Root', '')
+                described = self.cluster.client.describe('/Root/test', '')
+                print('Disk space usage {}'.format(described.PathDescription.DomainDescription.DiskSpaceUsage), file=sys.stderr)
                 print('Quota exceeded {}'.format(described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded), file=sys.stderr)
                 if timeout_seconds:
                     assert time.time() <= deadline, "deadline exceeded"
@@ -90,19 +91,42 @@ class TestYdbWorkload(object):
     @link_test_case("#13529")
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13529"""
-        self.database_name = '/Root'
+
+        self.database_name = os.path.join('/Root', 'test')
+        print('Database name {}'.format(self.database_name), file=sys.stderr)
+        self.cluster.create_database(
+            self.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            },
+        )
+        self.cluster.register_and_start_slots(self.database_name, count=1)
+        self.cluster.wait_tenant_up(self.database_name)
+
+        # Set soft and hard quotas to 40 Mb
+        self.alter_database_quotas(self.cluster.nodes[1], self.database_name, """
+            data_size_hard_quota: 40000000
+            data_size_soft_quota: 40000000
+        """)
+
         session = self.make_session()
 
+        table_path = os.path.join(self.database_name, 'huge')
+
         # Overflow the database
-        self.create_test_table(session, 'huge')
+        self.create_test_table(session, table_path)
         self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, 'huge', i, retries=0))
 
         # Cleanup
-        session.execute_with_retries("""DROP TABLE huge""")
 
+        session.execute_with_retries(f"""DROP TABLE `{table_path}`""")
+
+        table_path = os.path.join(self.database_name, 'small')
         # Check database health after cleanup
-        self.create_test_table(session, 'small')
-        self.upsert_test_chunk(session, 'small', 0)
+        described = self.cluster.client.describe('/Root/test', '')
+        print('Disk space usage {}'.format(described.PathDescription.DomainDescription.DiskSpaceUsage), file=sys.stderr)
+        self.create_test_table(session, table_path)
+        self.upsert_test_chunk(session, table_path, 0)
 
     def delete_test_chunk(self, session, table, chunk_id, retries=10):
         session.execute_with_retries(f"""

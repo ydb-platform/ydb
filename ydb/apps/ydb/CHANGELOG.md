@@ -1,3 +1,4 @@
+* Added `external` workload for work with bechmarks that cannot be included in `ydb` cli.
 * Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands. Sets the percentage of the benchmark's data size and workload to use, relative to full scale.
 * Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.

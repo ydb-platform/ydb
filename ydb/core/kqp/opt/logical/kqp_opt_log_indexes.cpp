@@ -504,11 +504,14 @@ void VectorReadLevel(
             break;
         }
 
-        read = Build<TKqlLookupTable>(ctx, pos)
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(levelTable)
             .LookupKeys(read)
             .Columns(levelColumns)
-        .Done().Ptr();
+            .Settings(settings.BuildNode(ctx, pos))
+            .Done().Ptr();
     }
 }
 
@@ -519,16 +522,20 @@ void VectorReadMain(
     TExprNodePtr& read)
 {
     // TODO(mbkkt) handle covered index columns
-    read = Build<TKqlLookupTable>(ctx, pos)
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    read = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(postingTable)
         .LookupKeys(read)
         .Columns(postingColumns)
+        .Settings(settings.BuildNode(ctx, pos))
     .Done().Ptr();
 
-    read = Build<TKqlLookupTable>(ctx, pos)
+    read = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(mainTable)
         .LookupKeys(read)
         .Columns(mainColumns)
+        .Settings(settings.BuildNode(ctx, pos))
     .Done().Ptr();
 }
 
@@ -670,10 +677,13 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     RemapIdToParent(ctx, pos, read);
 
-    read = Build<TKqlLookupTable>(ctx, pos)
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    read = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
         .LookupKeys(read)
         .Columns(levelColumns)
+        .Settings(settings.BuildNode(ctx, pos))
     .Done().Ptr();
 
     VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, read);

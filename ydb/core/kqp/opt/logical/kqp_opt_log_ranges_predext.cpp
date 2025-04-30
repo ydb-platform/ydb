@@ -287,7 +287,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Columns(read.Columns())
                         .LookupKeys(keys)
                         .Index(indexName.Cast())
-                        .LookupKeys(keys)
                         .Settings(settings.BuildNode(ctx, node.Pos()))
                         .Done();
                 } else {

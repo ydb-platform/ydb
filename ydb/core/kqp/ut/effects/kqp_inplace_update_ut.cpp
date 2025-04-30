@@ -279,12 +279,14 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, UseSink) {
             //     ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 1);
             // } else {
             if (UseSink) {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-                ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
-            } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+                ASSERT_LITERAL_PHASE(stats, 0);
+                ASSERT_PHASE_FULL(stats, 1, "/Root/InplaceUpdate", 1, 1, 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
+                ASSERT_LITERAL_PHASE(stats, 0);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 0);
+                ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 1);
             }
             // }
         },

@@ -1,0 +1,32 @@
+tables:
+  - name: test_table_1
+    columns:
+      - name: key_1
+        type: string_type
+        not_null: true
+      - name: key_2
+        type: Int64
+        not_null: true
+      - name: data_1
+        type: string_type
+      - name: data_2
+        type: Uint32
+    primary_key:
+      - key_1
+      - key_2
+
+  - name: test_table_2
+    columns:
+      - name: key_3
+        type: Uint32
+        not_null: true
+      - name: key_4
+        type: string_type
+        not_null: true
+      - name: data_3
+        type: Int32
+      - name: data_4
+        type: Uint64
+    primary_key:
+      - key_3
+      - key_4

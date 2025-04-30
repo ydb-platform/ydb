@@ -541,12 +541,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     const TTypedScheme TTestData::TableScheme = TTypedScheme {
         EPathTypeTable,
         Sprintf(R"(
-            TableDescription {
-                Name: "%s"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            }
+            Name: "%s"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
         )", TableName)
     };
 
@@ -564,9 +562,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     };
 
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
-        EPathTypeTable,
+        EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
-            %s
+            TableDescription {
+                %s
+            }
             IndexDescription {
                 Name: "ByValue"
                 KeyColumnNames: ["value"]

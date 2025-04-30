@@ -4,6 +4,8 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_block_grace_join_policy.h>
 
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -17,28 +19,39 @@ namespace {
 [[maybe_unused]] constexpr size_t L3_CACHE_SIZE = 16 * MB;
 
 // -------------------------------------------------------------------
-#define DEFINE_TEST_POLICY(name, useExternal, algo)             \
-struct name : public IBlockGraceJoinPolicy {                    \
-    name() {                                                    \
-        SetMaximumInitiallyFetchedData(L3_CACHE_SIZE);          \
-    }                                                           \
-                                                                \
-    bool UseExternalPayload(EJoinAlgo, size_t, ui64) const override { \
-        return useExternal;                                     \
-    }                                                           \
-                                                                \
-    EJoinAlgo PickAlgorithm(size_t, size_t) const override {    \
-        return algo;                                            \
-    }                                                           \
-};                                                              \
-                                                                \
-[[maybe_unused]] name g ## name{};                              \
-[[maybe_unused]] IBlockGraceJoinPolicy* gp ## name{&g ## name}
+#define DEFINE_TEST_POLICY(name, useExternal, algo)                            \
+struct name : public IBlockGraceJoinPolicy {                                   \
+    name() {                                                                   \
+        SetMaximumInitiallyFetchedData(L3_CACHE_SIZE);                         \
+        SetMaximumData(L3_CACHE_SIZE);                                         \
+    }                                                                          \
+                                                                               \
+    bool UseExternalPayload(EJoinAlgo, size_t, ui64) const override {          \
+        return useExternal;                                                    \
+    }                                                                          \
+                                                                               \
+    EJoinAlgo PickAlgorithm(size_t, size_t) const override { return algo; }    \
+};                                                                             \
+                                                                               \
+[[maybe_unused]] name g##name{};                                               \
+[[maybe_unused]] IBlockGraceJoinPolicy *gp##name { &g##name }
 
 DEFINE_TEST_POLICY(TAlwaysHashJoinPolicy,               false, EJoinAlgo::HashJoin);
 DEFINE_TEST_POLICY(TAlwaysInMemGraceJoinPolicy,         false, EJoinAlgo::InMemoryGraceJoin);
 DEFINE_TEST_POLICY(TAlwaysExternalHashJoinPolicy,       true,  EJoinAlgo::HashJoin);
 DEFINE_TEST_POLICY(TAlwaysExternalInMemGraceJoinPolicy, true,  EJoinAlgo::InMemoryGraceJoin);
+DEFINE_TEST_POLICY(TAlwaysGraceHashJoinPolicy,          false, EJoinAlgo::SpillingGraceJoin);
+
+struct TLowMemAlwaysGraceHashJoinPolicy : public IBlockGraceJoinPolicy {
+    TLowMemAlwaysGraceHashJoinPolicy() {
+        SetMaximumInitiallyFetchedData(L3_CACHE_SIZE);
+        SetMaximumData(32 * KB);
+    }
+
+    bool UseExternalPayload(EJoinAlgo, size_t, ui64) const override { return false; }
+    EJoinAlgo PickAlgorithm(size_t, size_t) const override { return EJoinAlgo::SpillingGraceJoin; }
+} gTLowMemAlwaysGraceHashJoinPolicy;
+[[maybe_unused]] IBlockGraceJoinPolicy *gpTLowMemAlwaysGraceHashJoinPolicy { &gTLowMemAlwaysGraceHashJoinPolicy };
 
 [[maybe_unused]] IBlockGraceJoinPolicy* gpDefaultPolicy{nullptr};
 
@@ -151,6 +164,7 @@ NUdf::TUnboxedValue DoTestBlockJoin(
     Y_ENSURE(joinItemType->IsTuple(), "List item has to be tuple");
 
     const auto graph = setup.BuildGraph(joinNode, {leftList.GetNode(), rightList.GetNode()});
+    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
 
     auto& ctx = graph->GetContext();
 
@@ -193,7 +207,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     static const TString hugeString(128, '1');
 
     Y_UNIT_TEST(TestInnerJoin) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -250,7 +264,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 
     Y_UNIT_TEST(TestInnerJoinMulti) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -312,7 +326,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 
     Y_UNIT_TEST(TestKeyTuple) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -373,7 +387,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 
     Y_UNIT_TEST(TestInnerJoinOutputSlicing) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -428,7 +442,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 
     Y_UNIT_TEST(TestInnerJoinHugeIterator) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -479,7 +493,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 
     Y_UNIT_TEST(TestInnerJoinWideProbeTuples) { // Test that external payload storage optimization works correctly
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysExternalHashJoinPolicy, gpTAlwaysExternalInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysExternalHashJoinPolicy, gpTAlwaysExternalInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -553,7 +567,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestOptional) {
     static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
 
     Y_UNIT_TEST(TestInnerJoin) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.
@@ -622,7 +636,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestOptional) {
     }
 
     Y_UNIT_TEST(TestKeyTuple) {
-        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy, gpTLowMemAlwaysGraceHashJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.

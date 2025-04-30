@@ -40,8 +40,17 @@ public:
         return *this;
     }
 
+    IBlockGraceJoinPolicy& SetMaximumData(size_t size) {
+        MaximumData_ = size;
+        return *this;
+    }
+
     size_t GetMaximumInitiallyFetchedData() const {
         return MaximumInitiallyFetchedData_;
+    }
+
+    size_t GetMaximumData() const {
+        return MaximumData_;
     }
 
     virtual bool UseExternalPayload(EJoinAlgo type, size_t payloadSize, ui64 cardinality) const = 0;
@@ -49,7 +58,9 @@ public:
     virtual EJoinAlgo PickAlgorithm(size_t leftFetchedTuples, size_t rightFetchedTuples) const = 0;
 
 private:
+    /// arent those just same parameters?
     size_t MaximumInitiallyFetchedData_{0}; // in bytes
+    size_t MaximumData_{0}; // in bytes
 };
 
 // -------------------------------------------------------------------
@@ -65,6 +76,7 @@ private:
 public:
     TDefaultBlockGraceJoinPolicy() {
         SetMaximumInitiallyFetchedData(200 * MB);
+        SetMaximumData(200 * MB);
     }
 
     // ratio arg is the ratio of the expected size of the large stream to the output size
@@ -94,21 +106,16 @@ public:
     }
 
     EJoinAlgo PickAlgorithm(size_t leftFetchedTuples, size_t rightFetchedTuples) const override {
-        // if at least one stream is not finished
-        if (leftFetchedTuples == STREAM_NOT_FETCHED || rightFetchedTuples == STREAM_NOT_FETCHED) {
-            // If one stream is small enough then use Hash Join
-            if (leftFetchedTuples <= TuplesCountTreshold_ || rightFetchedTuples <= TuplesCountTreshold_) {
-                return EJoinAlgo::HashJoin;
-            } else {
-                return EJoinAlgo::SpillingGraceJoin;
-            }
+        // if no stream is finished
+        if (leftFetchedTuples == STREAM_NOT_FETCHED && rightFetchedTuples == STREAM_NOT_FETCHED) {
+            return EJoinAlgo::SpillingGraceJoin;
+        }
+
+        // If one stream is small enough then use Hash Join
+        if (leftFetchedTuples <= TuplesCountTreshold_ || rightFetchedTuples <= TuplesCountTreshold_) {
+            return EJoinAlgo::HashJoin;
         } else {
-            // If one stream is small enough then use Hash Join
-            if (leftFetchedTuples <= TuplesCountTreshold_ || rightFetchedTuples <= TuplesCountTreshold_) {
-                return EJoinAlgo::HashJoin;
-            } else {
-                return EJoinAlgo::InMemoryGraceJoin;
-            }
+            return EJoinAlgo::InMemoryGraceJoin;
         }
     }
 

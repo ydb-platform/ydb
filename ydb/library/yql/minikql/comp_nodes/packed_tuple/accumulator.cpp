@@ -12,7 +12,7 @@ namespace NPackedTuple {
 
 // -----------------------------------------------------------------------
 THolder<TAccumulator> TAccumulator::Create(
-    const TTupleLayout* layout, ui32 log2Buckets,
+    const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets)
 {
@@ -20,36 +20,36 @@ THolder<TAccumulator> TAccumulator::Create(
     if (log2Buckets <= 6)
     {
         return MakeHolder<TAccumulatorImpl>(
-            layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
+            layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
 
     if (log2Buckets <= 13 && layout->TotalRowSize <= 128 && layout->VariableColumns.empty()) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
     {
         return MakeHolder<TSMBAccumulatorImpl>(
-           layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
+           layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
 
     return MakeHolder<TAccumulatorImpl>(
-        layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
+        layout, bitShift, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
 }
 
-THolder<TAccumulator> TAccumulator::Create(const TTupleLayout* layout, ui32 log2Buckets) {
+THolder<TAccumulator> TAccumulator::Create(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets) {
     // according to https://www.cidrdb.org/cidr2019/papers/p133-zhang-cidr19.pdf
     if (log2Buckets <= 6)
     {
-        return MakeHolder<TAccumulatorImpl>(layout, log2Buckets);
+        return MakeHolder<TAccumulatorImpl>(layout, bitShift, log2Buckets);
     }
 
     if (log2Buckets <= 13 && layout->TotalRowSize <= 128 && layout->VariableColumns.empty()) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
     {
-        return MakeHolder<TSMBAccumulatorImpl>(layout, log2Buckets);
+        return MakeHolder<TSMBAccumulatorImpl>(layout, bitShift, log2Buckets);
     }
 
-    return MakeHolder<TAccumulatorImpl>(layout, log2Buckets);
+    return MakeHolder<TAccumulatorImpl>(layout, bitShift, log2Buckets);
 }
 
 // -----------------------------------------------------------------------
-TAccumulatorImpl::TAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets)
+TAccumulatorImpl::TAccumulatorImpl(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets)
     : NBuckets_(1 << log2Buckets)
     , Layout_(layout)
     , PackedTupleBucketSizes_(NBuckets_, 0)
@@ -57,13 +57,12 @@ TAccumulatorImpl::TAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets)
     , PackedTupleBuckets_(NBuckets_)
     , OverflowBuckets_(NBuckets_)
 {
-    // Take leftmost bits for mask
-    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
-    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
+    Shift_ = sizeof(ui32) * 8 - (log2Buckets + bitShift);
+    Mask_ = (1u << log2Buckets) - 1;
 }
 
 TAccumulatorImpl::TAccumulatorImpl(
-    const TTupleLayout* layout, ui32 log2Buckets,
+    const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets
 )
@@ -75,9 +74,8 @@ TAccumulatorImpl::TAccumulatorImpl(
     , PackedTupleBuckets_(std::move(packedTupleBuckets))
     , OverflowBuckets_(std::move(overflowBuckets))
 {
-    // Take leftmost bits for mask
-    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
-    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
+    Shift_ = sizeof(ui32) * 8 - (log2Buckets + bitShift);
+    Mask_ = (1u << log2Buckets) - 1;
 }
 
 void TAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nItems) {
@@ -85,7 +83,7 @@ void TAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nItems
 
     if (!NoAllocations_) {
         Histogram hist;
-        hist.AddData(Layout_, data, nItems, TAccumulator::GetBucketId, PMask_, BitsCount_);
+        hist.AddData(Layout_, data, nItems, TAccumulator::GetBucketId, Shift_, Mask_);
         std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(NBuckets_, {0, 0});
         hist.EstimateSizes(sizes);
         for (ui32 i = 0; i < sizes.size(); ++i) {
@@ -97,7 +95,7 @@ void TAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nItems
 
     for (ui32 i = 0; i < nItems; ++i) {
         const ui8* tuple = data + i * layoutTotalRowSize;
-        const ui32 bucketId = GetBucketId(ReadUnaligned<ui32>(tuple), PMask_, BitsCount_);
+        const ui32 bucketId = GetBucketId(ReadUnaligned<ui32>(tuple), Shift_, Mask_);
         NYql::PrefetchForRead(tuple + layoutTotalRowSize * 32);
 
         ui8* ptStoreAddr = PackedTupleBuckets_[bucketId].data() + PackedTupleBucketSizes_[bucketId];
@@ -124,11 +122,13 @@ void TAccumulatorImpl::Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buc
         ui32 NTuples = static_cast<ui32>(PackedTupleBucketSizes_[i] / Layout_->TotalRowSize);
         buckets.emplace_back(
             std::move(PackedTupleBuckets_[i]), std::move(OverflowBuckets_[i]), NTuples, Layout_);
+        PackedTupleBuckets_[i].clear();
+        PackedTupleBucketSizes_[i] = 0;
     }
 }
 
 // -----------------------------------------------------------------------
-TSMBAccumulatorImpl::TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets)
+TSMBAccumulatorImpl::TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets)
     : NBuckets_(1 << log2Buckets)
     , Layout_(layout)
     , PackedTupleBucketSizes_(NBuckets_, 0)
@@ -138,15 +138,15 @@ TSMBAccumulatorImpl::TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 log2Bu
     , PackedTupleSMB_(2 * MB)
     , OverflowSMB_(2 * MB)
 {
-    // Take leftmost bits for mask
-    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
-    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
+    Shift_ = sizeof(ui32) * 8 - (log2Buckets + bitShift);
+    Mask_ = (1u << log2Buckets) - 1;
+
     std::memset(PackedTupleSMB_.data(), 0, 2 * MB);
     std::memset(OverflowSMB_.data(), 0, 2 * MB);
 }
 
 TSMBAccumulatorImpl::TSMBAccumulatorImpl(
-    const TTupleLayout* layout, ui32 log2Buckets,
+    const TTupleLayout* layout, ui32 bitShift, ui32 log2Buckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
     std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets
 )
@@ -160,9 +160,9 @@ TSMBAccumulatorImpl::TSMBAccumulatorImpl(
     , PackedTupleSMB_(2 * MB + sizeof(ui64) * NBuckets_)
     , OverflowSMB_(2 * MB)
 {
-    // Take leftmost bits for mask
-    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
-    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
+    Shift_ = sizeof(ui32) * 8 - (log2Buckets + bitShift);
+    Mask_ = (1u << log2Buckets) - 1;
+
     std::memset(PackedTupleSMB_.data(), 0, 2 * MB + sizeof(ui64) * NBuckets_);
     std::memset(OverflowSMB_.data(), 0, 2 * MB);
 }
@@ -177,7 +177,7 @@ void TSMBAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nIt
 
     if (!NoAllocations_) {
         Histogram hist;
-        hist.AddData(Layout_, data, nItems, TAccumulator::GetBucketId, PMask_, BitsCount_);
+        hist.AddData(Layout_, data, nItems, TAccumulator::GetBucketId, Shift_, Mask_);
         std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(NBuckets_, {0, 0});
         hist.EstimateSizes(sizes);
         for (ui32 i = 0; i < sizes.size(); ++i) {
@@ -193,7 +193,7 @@ void TSMBAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nIt
     ui8* ovStoreAddr = nullptr;
     for (ui32 i = 0; i < nItems; ++i) {
         const ui8* tuple = data + i * layoutTotalRowSize;
-        const ui32 bucketId = GetBucketId(ReadUnaligned<ui32>(tuple), PMask_, BitsCount_);
+        const ui32 bucketId = GetBucketId(ReadUnaligned<ui32>(tuple), Shift_, Mask_);
         NYql::PrefetchForRead(tuple + layoutTotalRowSize * 32);
         auto [nPackedTuples, bytesOverflow] = GetCounters(bucketId, maxBytesPerPartition);
 
@@ -266,6 +266,8 @@ void TSMBAccumulatorImpl::Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& 
         ui32 NTuples = static_cast<ui32>(PackedTupleBucketSizes_[i] / Layout_->TotalRowSize);
         buckets.emplace_back(
             std::move(PackedTupleBuckets_[i]), std::move(OverflowBuckets_[i]), NTuples, Layout_);
+        PackedTupleBuckets_[i].clear();
+        PackedTupleBucketSizes_[i] = 0;
     }
 }
 

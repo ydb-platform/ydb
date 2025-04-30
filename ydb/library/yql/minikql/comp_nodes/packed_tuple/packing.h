@@ -11,7 +11,7 @@ PackTupleFallbackRowImpl(const ui8 *const src_cols[], ui8 *const dst_rows,
                          const size_t col_sizes[], const size_t offsets[],
                          const size_t padded_size, const size_t start = 0) {
     for (size_t row = 0; row != size; ++row) {
-        for (ui8 col = 0; col != cols; ++col) {
+        for (size_t col = 0; col != cols; ++col) {
             switch (col_sizes[col] * 8) {
 
 #define MULTY_8x4(...)                                                         \
@@ -48,7 +48,7 @@ UnpackTupleFallbackRowImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
                            const size_t col_sizes[], const size_t offsets[],
                            const size_t padded_size, const size_t start = 0) {
     for (size_t row = 0; row != size; ++row) {
-        for (ui8 col = 0; col != cols; ++col) {
+        for (size_t col = 0; col != cols; ++col) {
             switch (col_sizes[col] * 8) {
 
 #define MULTY_8x4(...)                                                         \
@@ -110,7 +110,7 @@ PackTupleFallbackColImpl(const ui8 *const src_cols[], ui8 *const dst_rows,
                          const size_t cols, const size_t size,
                          const size_t col_sizes[], const size_t offsets[],
                          const size_t padded_size, const size_t start = 0) {
-    for (ui8 col = 0; col != cols; ++col) {
+    for (size_t col = 0; col != cols; ++col) {
         switch (col_sizes[col] * 8) {
 
 #define MULTY_8x4(...)                                                         \
@@ -145,7 +145,7 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
                            const size_t cols, const size_t size,
                            const size_t col_sizes[], const size_t offsets[],
                            const size_t padded_size, const size_t start = 0) {
-    for (ui8 col = 0; col != cols; ++col) {
+    for (size_t col = 0; col != cols; ++col) {
         switch (col_sizes[col] * 8) {
 
 #define MULTY_8x4(...)                                                         \
@@ -182,7 +182,7 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 
     const size_t block_size = size / block_rows;
     for (size_t block = 0; block != block_size; ++block) {
-        for (ui8 col = 0; col != cols; ++col) {
+        for (size_t col = 0; col != cols; ++col) {
             switch (col_sizes[col] * 8) {
 
 #define BLOCK_LOOP(...)                                                        \
@@ -233,7 +233,7 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 
     const size_t block_size = size / block_rows;
     for (size_t block = 0; block != block_size; ++block) {
-        for (ui8 col = 0; col != cols; ++col) {
+        for (size_t col = 0; col != cols; ++col) {
             switch (col_sizes[col] * 8) {
 
 #define BLOCK_LOOP(...)                                                        \

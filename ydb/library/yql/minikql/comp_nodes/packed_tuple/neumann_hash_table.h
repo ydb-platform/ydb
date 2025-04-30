@@ -66,7 +66,8 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true,
+          typename TAllocator = TMKQLAllocator<ui8>>
 class TNeumannHashTable {
     /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
     using Hash = ui32;
@@ -158,9 +159,12 @@ class TNeumannHashTable {
   public:
     using TIterator = TIteratorImpl<ConsecutiveDuplicates>;
   
-    TNeumannHashTable() = default;
+    TNeumannHashTable()
+        : DirectoriesData_(Allocator_)
+        , Buffer_(Allocator_) 
+    {}
 
-    explicit TNeumannHashTable(const TTupleLayout *layout) {
+    explicit TNeumannHashTable(const TTupleLayout *layout): TNeumannHashTable() {
         SetTupleLayout(layout);
     }
 
@@ -195,9 +199,17 @@ class TNeumannHashTable {
         Overflow_ = overflow;
 
         DirectoryHashBits_ = estimatedLogSize;
-        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_ ? kBloomHashBits : sizeof(Hash) * 8 - DirectoryHashBits_;
+        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_
+                                ? kBloomHashBits
+                                : sizeof(Hash) * 8 - DirectoryHashBits_;
         DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
-        Directories_.resize((1ul << DirectoryHashBits_) + 1);
+        
+        const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
+        DirectoriesData_.resize(dirsSize * sizeof(TDirectory));
+        Directories_ = std::span((TDirectory *)DirectoriesData_.data(), dirsSize);
+        for (auto& directory : Directories_) {
+            directory = {};
+        }
 
         for (ui32 ind = 0; ind != nItems; ++ind) {
             const THash thash =
@@ -286,7 +298,7 @@ class TNeumannHashTable {
         }
     }
 
-    const ui8 *NextMatch(TIterator &iter) const {
+    const ui8 *NextMatch(TIterator &iter, const ui8 *overflow) const {
         const ui8 *result = nullptr;
 
         if constexpr (ConsecutiveDuplicates) {
@@ -297,7 +309,7 @@ class TNeumannHashTable {
             }
         } else {
             for (auto& it = iter.It_; it != iter.End_; it += BufferSlotSize_) { /// allow multiple false calls
-                if (GetRowMatch(it, iter.Row_, Overflow_, result)) {
+                if (GetRowMatch(it, iter.Row_, overflow, result)) {
                     it += BufferSlotSize_;
                     break;
                 }
@@ -308,7 +320,7 @@ class TNeumannHashTable {
         return result;
     }
 
-    TIterator Find(const ui8 *const row, const ui8 *const overflow) {
+    TIterator Find(const ui8 *const row, const ui8 *const overflow) const {
         Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 
@@ -355,20 +367,26 @@ class TNeumannHashTable {
 
     template <size_t Size>
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
-                                          const ui8 *const overflow) {
+                                          const ui8 *const overflow) const {
         if constexpr (Prefetch) {
-            for (ui32 index = 0; index < Size && rows[index]; ++index) {
-                const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
-                const Hash dirSlot = getDirectorySlot(thash);
-                const TDirectory dir = Directories_[dirSlot];
-                
-                ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
-                NYql::PrefetchForRead(ptr);
+            if (Directories_.size_bytes() > 1024 * 1024) {
+                for (ui32 index = 0; index < Size && rows[index]; ++index) {
+                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const Hash dirSlot = getDirectorySlot(thash);
+                    NYql::PrefetchForRead(&Directories_[dirSlot]);
+                }    
+            } else {
+                for (ui32 index = 0; index < Size && rows[index]; ++index) {
+                    const THash &thash = reinterpret_cast<const THash &>(rows[index][0]);
+                    const Hash dirSlot = getDirectorySlot(thash);
+                    const TDirectory dir = Directories_[dirSlot]; 
+                    const ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
+                    NYql::PrefetchForRead(ptr);
+                }
             }
         }
 
         std::array<TIterator, Size> iters;
-
         for (ui32 index = 0; index < Size && rows[index]; ++index) {
             iters[index] = Find(rows[index], overflow);
         }
@@ -379,14 +397,16 @@ class TNeumannHashTable {
     void Apply(const ui8 *const row, const ui8 *const overflow,
                auto &&onMatch) {
         auto iter = Find(row, overflow);
-        while (auto matched = NextMatch(iter)) {
+        while (auto matched = NextMatch(iter, overflow)) {
             onMatch(matched);
         }
     }
 
     void Clear() {
-        Directories_.clear();
+        Directories_ = {};
+        DirectoriesData_.clear();
         Buffer_.clear();
+
         Tuples_ = nullptr;
         Overflow_ = nullptr;
     }
@@ -430,19 +450,21 @@ class TNeumannHashTable {
   private:
     const TTupleLayout * Layout_ = nullptr;
 
-    unsigned DirectoryHashBits_;
-    unsigned DirectoryHashShift_;
-    Hash DirectoryHashMask_;
-    std::vector<TDirectory, TMKQLAllocator<TDirectory>> Directories_;
+    const ui8 *Tuples_ = nullptr;
+    const ui8 *Overflow_ = nullptr;
 
-    std::vector<ui8, TMKQLAllocator<ui8>> Buffer_;
-    
     bool IsInplace_;
     ui32 BufferSlotSize_;
     ui32 RowIndexSize_;
 
-    const ui8 *Tuples_ = nullptr;
-    const ui8 *Overflow_ = nullptr;
+    unsigned DirectoryHashBits_;
+    unsigned DirectoryHashShift_;
+    Hash DirectoryHashMask_;
+
+    TAllocator Allocator_;
+    std::span<TDirectory> Directories_;
+    std::vector<ui8, TAllocator> DirectoriesData_;
+    std::vector<ui8, TAllocator> Buffer_;
 };
 
 } // namespace NPackedTuple

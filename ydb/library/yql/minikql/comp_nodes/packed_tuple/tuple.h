@@ -30,12 +30,19 @@ class TPaddedPtr
     using TRef = std::iterator_traits<TPaddedPtr>::reference;
 
   public:
-    TPaddedPtr(ui8 *ptr, uint32_t step)
+    TPaddedPtr(TData *ptr)
+        : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(sizeof(TData)) {}
+
+    TPaddedPtr(TData *ptr, ui32 step)
         : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
 
-    TPaddedPtr(TData *ptr, uint32_t step)
+    TPaddedPtr(ui8 *ptr, ui32 step)
         requires(!std::same_as<ui8, TData>)
         : Ptr_(reinterpret_cast<ui8 *>(ptr)), Step_(step) {}
+
+    ui32 Step() const {
+        return Step_;
+    }
 
     TRef operator[](int64_t ind) const {
         return TPtrTransform::ToRef(Ptr_ + Step_ * ind);
@@ -98,7 +105,7 @@ class TPaddedPtr
 
   private:
     ui8* Ptr_;
-    int64_t Step_;
+    i64 Step_;
 };
 
 namespace NPackedTuple {
@@ -143,6 +150,7 @@ struct TTupleLayout {
     ui32 KeyColumnsFixedNum; // Number of fixed-size columns
     ui32 KeyColumnsEnd; // First byte after key columns. Start of bitmask for
                         // row-based columns
+    ui32 KeySizeTag_;   // Simple byte key fast path tag
     ui32 BitmaskSize;   // Size of bitmask for null values flag in columns
     ui32 BitmaskOffset; // Offset of nulls bitmask. = KeyColumnsEnd
     ui32 BitmaskEnd;    // First byte after bitmask. = PayloadOffset
@@ -186,6 +194,12 @@ struct TTupleLayout {
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
+    void Join(
+        std::vector<ui8, TMKQLAllocator<ui8>>& dst,
+        std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
+        ui32 dstCount,
+        const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
+    
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
@@ -266,6 +280,59 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
     static constexpr std::array<size_t, 4> SIMDTranspositionsColSizes_ = {1, 2,
                                                                           4, 8};
 };
+
+bool TupleKeysEqual(const TTupleLayout *layout,
+    const ui8 *lhsRow, const ui8 *lhsOverflow,
+    const ui8 *rhsRow, const ui8 *rhsOverflow);
+
+Y_FORCE_INLINE
+bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
+                             const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+    static const void* keySizeDispatch[] = {&&keySize1, &&keySize2, &&keySize4, &&keySize8, &&keySize16, &&bigKeySize};
+    
+    const ui8 keyNullMask = (1u << KeyColumnsNum) - 1;
+    
+    goto *keySizeDispatch[KeySizeTag_];
+    // compare keys
+keySize1:
+    return ReadUnaligned<ui8>(lhsRow + KeyColumnsOffset) ==
+               ReadUnaligned<ui8>(rhsRow + KeyColumnsOffset) &&
+           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+               keyNullMask;
+keySize2:
+    return ReadUnaligned<ui16>(lhsRow + KeyColumnsOffset) ==
+               ReadUnaligned<ui16>(rhsRow + KeyColumnsOffset) &&
+           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+               keyNullMask;
+
+keySize4:
+    return ReadUnaligned<ui32>(lhsRow + KeyColumnsOffset) ==
+               ReadUnaligned<ui32>(rhsRow + KeyColumnsOffset) &&
+           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+               keyNullMask;
+
+keySize8:
+    return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
+               ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
+           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+               keyNullMask;
+
+keySize16:
+    return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
+            ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
+            ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset + 8) ==
+            ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset + 8) &&
+           (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
+            ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
+               keyNullMask;
+
+bigKeySize:
+    return TupleKeysEqual(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+}
 
 template <size_t Size>
 struct TEmbeddedTupleRowRef {

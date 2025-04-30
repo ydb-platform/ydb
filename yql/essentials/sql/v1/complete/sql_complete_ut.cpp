@@ -303,6 +303,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {PragmaName, "yson.CastToString"}};
+            auto completion = engine->CompleteAsync({"PRAGMA ys"}).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "ys");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "yson.CastToString"}};
             auto completion = engine->CompleteAsync({"PRAGMA yson"}).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
             UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");

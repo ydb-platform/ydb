@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/sql/v1/complete/name/service
     yql/essentials/sql/v1/complete/name/service/ranking
+    yql/essentials/sql/v1/complete/name/service/union
     yql/essentials/sql/v1/complete/text
 )
 

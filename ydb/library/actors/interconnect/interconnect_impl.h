@@ -6,6 +6,16 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NActors {
+    // node info
+    struct TEvInterconnect::TEvNodeAddress: public TEventPB<TEvInterconnect::TEvNodeAddress, NActorsInterconnect::TEvNodeInfo, TEvInterconnect::EvNodeAddress> {
+        TEvNodeAddress() {
+        }
+
+        TEvNodeAddress(ui32 nodeId) {
+            Record.SetNodeId(nodeId);
+        }
+    };
+
     // register node
     struct TEvInterconnect::TEvRegisterNode: public TEventBase<TEvInterconnect::TEvRegisterNode, TEvInterconnect::EvRegisterNode> {
     };

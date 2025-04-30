@@ -829,7 +829,9 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
 void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
+    if (!StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz)) {
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
+    }
 
     switch (msg->Status) {
     case NKikimrProto::OK:
@@ -863,7 +865,9 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
 void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
+    if (!StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz)) {
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
+    }
 
     switch (msg->Status){
     case NKikimrProto::OK:

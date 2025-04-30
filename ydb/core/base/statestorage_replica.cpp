@@ -414,11 +414,11 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         for (auto &xpair : Tablets) {
             const auto &entry = xpair.second;
             if (entry.CurrentGuardian)
-                Send(entry.CurrentGuardian, new TEvStateStorage::TEvUpdateGroupConfig(Info, nullptr, nullptr));
+                Send(entry.CurrentGuardian, new TEvStateStorage::TEvReplicaUpdateConfig());
 
             for (auto &spair : entry.Followers) {
                 const TActorId followerGuardian = spair.first;
-                Send(followerGuardian, new TEvStateStorage::TEvUpdateGroupConfig(Info, nullptr, nullptr));
+                Send(followerGuardian, new TEvStateStorage::TEvReplicaUpdateConfig());
             }
         }
     }

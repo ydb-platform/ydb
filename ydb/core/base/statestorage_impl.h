@@ -329,4 +329,7 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
     }
 };
 
+struct TEvStateStorage::TEvReplicaUpdateConfig : public TEventSimpleNonLocal<TEvStateStorage::TEvReplicaUpdateConfig, TEvStateStorage::EvReplicaUpdateConfig> {
+};
+
 }

@@ -50,6 +50,7 @@ struct TEvStateStorage {
         EvReplicaUnregFollower,
         EvReplicaDelete,
         EvReplicaCleanup,
+        EvReplicaUpdateConfig,
 
         EvReplicaInfo = EvLock + 3 * 512,
         EvReplicaShutdown,
@@ -418,6 +419,7 @@ struct TEvStateStorage {
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
     struct TEvRingGroupPassAway;
+    struct TEvReplicaUpdateConfig;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };

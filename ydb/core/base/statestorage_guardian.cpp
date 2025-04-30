@@ -511,7 +511,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         }
     }
 
-    void HandleUpdateConfig(TEvStateStorage::TEvUpdateGroupConfig::TPtr /*ev*/) {
+    void HandleUpdateConfig(TEvStateStorage::TEvReplicaUpdateConfig::TPtr /*ev*/) {
         const ui64 rndDelay = AppData()->RandomProvider->GenRand() % 150;
         SendResolveRequest(TDuration::MilliSeconds(150 + rndDelay), false);
     }
@@ -623,7 +623,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
-            hFunc(TEvStateStorage::TEvUpdateGroupConfig, HandleUpdateConfig);
+            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 
@@ -637,7 +637,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
-            hFunc(TEvStateStorage::TEvUpdateGroupConfig, HandleUpdateConfig);
+            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 };

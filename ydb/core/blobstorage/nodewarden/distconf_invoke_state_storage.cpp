@@ -29,6 +29,7 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage configuration is not filled in");
             return;
         }
+        
         //TODO: Validate new config at least 1 ringGroup in ReadWrite state should be not changed 
 
         config.MutableStateStorageConfig()->CopyFrom(newSSConfig);

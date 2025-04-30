@@ -88,4 +88,6 @@ namespace NSQLComplete {
         virtual ~INameService() = default;
     };
 
+    TString NormalizeName(TStringBuf name);
+
 } // namespace NSQLComplete

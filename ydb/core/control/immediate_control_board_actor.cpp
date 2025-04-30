@@ -108,7 +108,9 @@ private:
         TStringStream str;
 
         TControlBoardTableHtmlRenderer renderer;
+        renderer.AddNewTable("Static Controls");
         Icb->RenderAsHtml(renderer);
+        renderer.AddNewTable("Dynamic Controls");
         DynamicControlBoard->RenderAsHtml(renderer);
 
         str << renderer.GetHtml();

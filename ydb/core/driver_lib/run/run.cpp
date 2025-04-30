@@ -1277,6 +1277,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
+    if (runConfig.AppConfig.HasQueryServiceConfig()) {
+        AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

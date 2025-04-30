@@ -74,6 +74,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TDataErasureConfig DataErasureConfig;
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };
 
 TAppData::TAppData(
@@ -134,6 +135,7 @@ TAppData::TAppData(
     , DataErasureConfig(Impl->DataErasureConfig)
     , HealthCheckConfig(Impl->HealthCheckConfig)
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
+    , QueryServiceConfig(Impl->QueryServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

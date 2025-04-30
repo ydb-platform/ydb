@@ -521,6 +521,10 @@ public:
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
+    void ConfigureExternalSources(
+        const NKikimrConfig::TQueryServiceConfig& config,
+        const TActorContext& ctx);
+
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);

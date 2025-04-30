@@ -1,10 +1,10 @@
 function updateAllCharts() {
     if (!currentData) {
-        console.log("updateAllCharts: нет данных для обновления графиков");
+        console.log("updateAllCharts: no data to update charts");
         return;
     }
     
-    console.log("updateAllCharts: начало обновления графиков");
+    console.log("updateAllCharts: starting chart update");
     
     const metricsChartExists = document.getElementById("metricsChart") !== null;
     const poolChartExists = document.getElementById("poolChart") !== null;
@@ -12,7 +12,7 @@ function updateAllCharts() {
     const threadsChartExists = document.getElementById("threadsChart") !== null;
     const budgetChartExists = document.getElementById("budgetChart") !== null;
     
-    console.log("updateAllCharts: проверка наличия DOM элементов:", {
+    console.log("updateAllCharts: checking DOM element existence:", {
         metricsChartExists,
         poolChartExists,
         cpuPoolsChartExists,
@@ -23,11 +23,16 @@ function updateAllCharts() {
     const activeTab = document.querySelector('#mainTabs .nav-link.active');
     const activeTabId = activeTab ? activeTab.getAttribute('data-bs-target') : null;
     
-    console.log("updateAllCharts: активная вкладка:", activeTabId);
+    console.log("updateAllCharts: active tab:", activeTabId);
     
     if (activeTabId === '#chartsTab') {
         if (metricsChartExists) renderMetricsChart();
         if (poolChartExists) renderPoolChart();
+        if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
+            renderCpuCharts();
+        } else {
+            console.error("updateAllCharts: Elements for CPU charts not found");
+        }
     } else if (activeTabId === '#cpuTab') {
         if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
             renderCpuCharts();
@@ -42,7 +47,7 @@ function updateAllCharts() {
         }
     }
     
-    console.log("updateAllCharts: графики обновлены");
+    console.log("updateAllCharts: charts updated");
 }
 
 function renderData(data) {

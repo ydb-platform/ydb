@@ -29,7 +29,7 @@ document.head.insertAdjacentHTML('beforeend', `
 function initChart(svgId, margin = {top: 20, right: 80, bottom: 40, left: 60}) {
     const svgElement = document.getElementById(svgId);
     if (!svgElement) {
-        console.error(`initChart: не найден DOM элемент #${svgId}`);
+        console.error(`initChart: no DOM element found #${svgId}`);
         return null;
     }
 
@@ -40,7 +40,7 @@ function initChart(svgId, margin = {top: 20, right: 80, bottom: 40, left: 60}) {
     const containerHeight = svg.node().getBoundingClientRect().height;
     
     if (containerWidth <= margin.left + margin.right || containerHeight <= margin.top + margin.bottom) {
-        console.error(`initChart: слишком маленькие размеры контейнера для ${svgId}`, {
+        console.error(`initChart: container dimensions too small for ${svgId}`, {
             containerWidth, containerHeight, margin
         });
         
@@ -48,14 +48,14 @@ function initChart(svgId, margin = {top: 20, right: 80, bottom: 40, left: 60}) {
             .attr("x", 10)
             .attr("y", 30)
             .attr("fill", "red")
-            .text("Ошибка: невозможно отобразить график (размеры контейнера слишком малы)");
+            .text("Error: unable to display chart (container dimensions too small)");
         return null;
     }
     
     const width = containerWidth - margin.left - margin.right;
     const height = containerHeight - margin.top - margin.bottom;
     
-    console.log(`initChart: размеры графика для ${svgId}:`, {
+    console.log(`initChart: chart dimensions for ${svgId}:`, {
         containerWidth, containerHeight, width, height
     });
     
@@ -177,13 +177,12 @@ function createLegend(svg, items, margin, clickHandler = null) {
 
 function renderMetricsChart() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
-        console.log("renderMetricsChart: нет данных для отображения");
+        console.log("renderMetricsChart: no data to display");
         return;
     }
-    
-    console.log("renderMetricsChart: начинаем отрисовку, история:", currentData.history.length);
+    console.log("renderMetricsChart: starting render, history items:", currentData.history.length);
     const selectedMetric = chartMetricSelect.val();
-    console.log("renderMetricsChart: выбранная метрика:", selectedMetric);
+    console.log("renderMetricsChart: selected metric:", selectedMetric);
 
     const margin = {top: 20, right: 80, bottom: 40, left: 60};
     const chart = initChart("metricsChart", margin);
@@ -205,7 +204,7 @@ function renderMetricsChart() {
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("Нет данных для выбранной метрики");
+            .text("No data found for selected metric");
         return;
     }
     
@@ -213,7 +212,7 @@ function renderMetricsChart() {
         .domain([0, d3.max(metricValues) * 1.1])
         .range([height, 0]);
     
-    createAxes(g, x, y, width, height, "Итерация", selectedMetric);
+    createAxes(g, x, y, width, height, "Iteration", selectedMetric);
     
     const line = d3.line()
         .defined(d => d[selectedMetric] !== undefined && d[selectedMetric] !== null)
@@ -241,24 +240,24 @@ function renderMetricsChart() {
     const tooltipGenerator = (iteration, index) => {
         const dataPoint = metricData.find(d => d.iteration === iteration);
         if (!dataPoint) return null;
-        return `<strong>Итерация: ${dataPoint.iteration}</strong><br>${selectedMetric}: ${dataPoint[selectedMetric].toFixed(5)}`;
+        return `<strong>Iteration: ${dataPoint.iteration}</strong><br>${selectedMetric}: ${dataPoint[selectedMetric].toFixed(5)}`;
     };
     addBrushToChart(g, x, height, allIterations, tooltip, tooltipGenerator, findClosestIndex, dots);
 }
 
 function renderPoolChart() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
-        console.log("renderPoolChart: нет данных для отображения");
+        console.log("renderPoolChart: no data to display");
         return;
     }
 
     const selectedPool = poolSelect.val();
     const selectedMetric = poolMetricSelect.val();
     
-    console.log("renderPoolChart: начинаем отрисовку, пул:", selectedPool, "метрика:", selectedMetric);
+    console.log("renderPoolChart: starting render, pool:", selectedPool, "metric:", selectedMetric);
     
     if (!selectedPool || !selectedMetric) {
-        console.log("renderPoolChart: не выбран пул или метрика");
+        console.log("renderPoolChart: pool or metric not selected");
         return;
     }
     
@@ -288,7 +287,7 @@ function renderPoolChart() {
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("Нет данных для выбранного пула и метрики");
+            .text("No data found for selected pool and metric");
         return;
     }
     
@@ -300,7 +299,7 @@ function renderPoolChart() {
         .domain([0, d3.max(poolData, d => d.value) * 1.1])
         .range([height, 0]);
     
-    createAxes(g, x, y, width, height, "Итерация", selectedMetric);
+    createAxes(g, x, y, width, height, "Iteration", selectedMetric);
     
     const line = d3.line()
         .x(d => x(d.iteration))
@@ -338,7 +337,7 @@ function renderPoolChart() {
             const closestIterationIndex = findClosestIndex(poolData.map(d => d.iteration), iteration);
             const closestDataPoint = poolData[closestIterationIndex];
             
-            const tooltipText = `<strong>Итерация: ${closestDataPoint.iteration}</strong><br>${selectedMetric}: ${closestDataPoint.value.toFixed(5)}`;
+            const tooltipText = `<strong>Iteration: ${closestDataPoint.iteration}</strong><br>${selectedMetric}: ${closestDataPoint.value.toFixed(5)}`;
             
             showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
             
@@ -357,22 +356,22 @@ function renderPoolChart() {
 
 function renderCpuCharts() {
     if (!currentData || !currentData.history || currentData.history.length === 0) {
-        console.log("renderCpuCharts: нет данных для отображения");
+        console.log("renderCpuCharts: no data to display");
         return;
     }
     
     if (!document.getElementById("cpuPoolsChart") || 
         !document.getElementById("threadsChart") || 
         !document.getElementById("budgetChart")) {
-        console.error("renderCpuCharts: не найдены DOM элементы для графиков");
+        console.error("renderCpuCharts: DOM elements for charts not found");
         return;
     }
     
-    console.log("renderCpuCharts: начинаем отрисовку, история:", currentData.history.length);
+    console.log("renderCpuCharts: starting render, history items:", currentData.history.length);
     
     const cpuData = prepareCpuData();
     
-    console.log("renderCpuCharts: данные подготовлены, итераций:", cpuData.iterations.length);
+    console.log("renderCpuCharts: data prepared, iterations:", cpuData.iterations.length);
     
     renderCpuPoolsChart(cpuData);
     
@@ -382,7 +381,7 @@ function renderCpuCharts() {
 }
 
 function renderCpuPoolsChart(cpuData) {
-    console.log("renderCpuPoolsChart: начинаем отрисовку");
+    console.log("renderCpuPoolsChart: starting render");
     
     const margin = {top: 30, right: 80, bottom: 40, left: 60};
     const chart = initChart("cpuPoolsChart", margin);
@@ -391,12 +390,12 @@ function renderCpuPoolsChart(cpuData) {
     const { svg, g, width, height } = chart;
     
     if (cpuData.iterations.length === 0) {
-        console.log("renderCpuPoolsChart: нет итераций в данных");
+        console.log("renderCpuPoolsChart: no iterations in data");
         g.append("text")
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("Нет данных для построения графика");
+            .text("No data found for building chart");
         return;
     }
     
@@ -452,7 +451,7 @@ function renderCpuPoolsChart(cpuData) {
         stackData.push(point);
     });
     
-    createAxes(g, x, y, width, height, "Итерация", metricType === 'elapsedCpu' ? 'Elapsed CPU' : 'Used CPU');
+    createAxes(g, x, y, width, height, "Iteration", metricType === 'elapsedCpu' ? 'Elapsed CPU' : 'Used CPU');
     
     const legendItems = visiblePoolNames.map(poolName => ({
         name: poolName,
@@ -493,7 +492,7 @@ function renderCpuPoolsChart(cpuData) {
             return null;
         }
         
-        let tooltipText = `<strong>Итерация: ${iterationData.iteration}</strong><br>`;
+        let tooltipText = `<strong>Iteration: ${iterationData.iteration}</strong><br>`;
         visiblePoolNames.forEach(poolName => {
             const value = iterationData[poolName];
             if (value !== undefined) {
@@ -518,7 +517,7 @@ function renderThreadsChart(cpuData) {
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("Нет данных для построения графика");
+            .text("No data found for building chart");
         return;
     }
     
@@ -538,7 +537,7 @@ function renderThreadsChart(cpuData) {
         .domain([0, maxThreads * 1.1])
         .range([height, 0]);
     
-    createAxes(g, x, y, width, height, "Итерация", "Количество потоков");
+    createAxes(g, x, y, width, height, "Iteration", "Thread Count");
     
     const stackData = [];
     cpuData.iterations.forEach((iteration, i) => {
@@ -620,9 +619,9 @@ function renderThreadsChart(cpuData) {
             return null;
         }
 
-        let tooltipText = `<strong>Итерация: ${iteration}</strong><br>`;
-        tooltipText += `<strong>Всего потоков:</strong> ${filteredTotalThreadCount[index]}<br>`;
-        tooltipText += `<strong>Макс. потоков:</strong> ${filteredMaxThreadCount[index]}<br><br>`;
+        let tooltipText = `<strong>Iteration: ${iteration}</strong><br>`;
+        tooltipText += `<strong>Total Threads:</strong> ${filteredTotalThreadCount[index]}<br>`;
+        tooltipText += `<strong>Max Threads:</strong> ${filteredMaxThreadCount[index]}<br><br>`;
         
         visiblePools.forEach(poolName => {
             if (cpuData.poolsThreadCount[poolName]) {
@@ -652,7 +651,7 @@ function renderBudgetChart(cpuData) {
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("Нет данных для построения графика");
+            .text("No data found for building chart");
         return;
     }
     
@@ -672,7 +671,7 @@ function renderBudgetChart(cpuData) {
         .domain([0, maxValue * 1.1])
         .range([height, 0]);
     
-    createAxes(g, x, y, width, height, "Итерация", "Значение");
+    createAxes(g, x, y, width, height, "Iteration", "Value");
     
     const budgetLine = d3.line()
         .x((d, i) => x(cpuData.iterations[i]))
@@ -726,7 +725,7 @@ function renderBudgetChart(cpuData) {
         const cpuValue = cpuData.totalCpu[index];
         const iterationNumber = iteration;
         
-        let tooltipText = `<strong>Итерация: ${iterationNumber}</strong><br>`;
+        let tooltipText = `<strong>Iteration: ${iterationNumber}</strong><br>`;
         tooltipText += `<strong>Budget:</strong> ${budgetValue.toFixed(5)}<br>`;
         tooltipText += `<strong>${metricType === 'elapsedCpu' ? 'Total Elapsed CPU' : 'Total Used CPU'}:</strong> ${cpuValue.toFixed(5)}<br>`;
         console.log("[BudgetChart Tooltip] Iteration:", iteration, "Index:", index, "Generated text:", tooltipText);
@@ -782,7 +781,7 @@ function addBrushToChart(g, x, height, allIterations, tooltip, tooltipContentGen
                 }
             });
     } else {
-        console.warn("Не удалось найти .overlay в brush группе для добавления тултипов");
+        console.warn("Could not find .overlay in brush group to add tooltips");
     }
 
     function brushed() {
@@ -804,7 +803,7 @@ function addBrushToChart(g, x, height, allIterations, tooltip, tooltipContentGen
             return;
         }
             
-        console.log("Выбран диапазон итераций через brush:", startIteration, endIteration);
+        console.log("Iteration range selected via brush:", startIteration, endIteration);
 
         iterationFrom.val(startIteration);
         iterationTo.val(endIteration);

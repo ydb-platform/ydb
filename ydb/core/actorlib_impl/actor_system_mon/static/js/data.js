@@ -28,7 +28,7 @@ function prepareCpuData() {
     
     const sortedData = [...currentData.history].sort((a, b) => a.timestamp - b.timestamp);
     
-    console.log("prepareCpuData - sortedData:", sortedData.length ? "найдено" : "нет данных");
+    console.log("prepareCpuData - sortedData:", sortedData.length ? "found" : "no data");
     if (sortedData.length > 0) {
         console.log("Sample item:", JSON.stringify(sortedData[0], null, 2));
     }
@@ -138,10 +138,10 @@ function getApiUrl() {
     const level = 'thread';
     const isTimeMode = timeMode.is(':checked');
     
-    console.log("getApiUrl: запрашиваем данные с уровнем:", level, "timeMode:", isTimeMode);
+    console.log("getApiUrl: requesting data with level:", level, "timeMode:", isTimeMode);
     
     const baseUrl = getBaseUrl();
-    console.log("getApiUrl: базовый URL:", baseUrl);
+    console.log("getApiUrl: base URL:", baseUrl);
     
     if (isTimeMode) {
         const from = timeFrom.val();
@@ -174,13 +174,13 @@ function getApiUrl() {
 
 function getBaseUrl() {
     const currentUrl = window.location.href;
-    console.log("Текущий URL:", currentUrl);
+    console.log("Current URL:", currentUrl);
     
     const nodeMatch = currentUrl.match(/\/node\/(\d+)/);
     
     if (nodeMatch) {
         const nodePrefix = nodeMatch[0];
-        console.log("Найден префикс ноды:", nodePrefix);
+        console.log("Node prefix found:", nodePrefix);
         return `${nodePrefix}/actors/actor_system`;
     } else {
         return "/actors/actor_system";
@@ -189,7 +189,7 @@ function getBaseUrl() {
 
 function fetchData() {
     const url = getApiUrl();
-    console.log("Начинаем загрузку данных с URL:", url);
+    console.log("Starting data load from URL:", url);
     loadingIndicator.show();
     errorContainer.hide().empty();
     dataContainer.empty();
@@ -199,11 +199,11 @@ function fetchData() {
         method: 'GET',
         dataType: 'json',
         success: function(data) {
-            console.log("Данные успешно загружены, количество итераций:", data?.history?.length || 0);
+            console.log("Data loaded successfully, number of iterations:", data?.history?.length || 0);
             
             if (data && data.history && data.history.length > 0) {
                 const firstItem = data.history[0];
-                console.log("Первая итерация:", {
+                console.log("First iteration:", {
                     iteration: firstItem.iteration,
                     timestamp: firstItem.timestamp,
                     budget: firstItem.budget,
@@ -214,7 +214,7 @@ function fetchData() {
                 
                 if (firstItem.pools && firstItem.pools.length > 0) {
                     const firstPool = firstItem.pools[0];
-                    console.log("Первый пул:", {
+                    console.log("First pool:", {
                         name: firstPool.name,
                         threadCount: firstPool.currentThreadCount,
                         hasThreads: !!firstPool.threads,
@@ -223,7 +223,7 @@ function fetchData() {
                     
                     if (firstPool.threads && firstPool.threads.length > 0) {
                         const firstThread = firstPool.threads[0];
-                        console.log("Первый поток:", {
+                        console.log("First thread:", {
                             usedCpu: firstThread.usedCpu,
                             elapsedCpu: firstThread.elapsedCpu,
                             parkedCpu: firstThread.parkedCpu
@@ -237,15 +237,15 @@ function fetchData() {
             currentData = data;
             renderData(data);
             
-            console.log("Ожидаем перед обновлением графиков...");
+            console.log("Waiting before updating charts...");
             setTimeout(function() {
                 recalculateChartSizes();
-                console.log("Обновляем графики после загрузки данных");
+                console.log("Updating charts after data load");
                 updateAllCharts();
             }, 250);
         },
         error: function(jqXHR, textStatus, errorThrown) {
-            console.error("Ошибка AJAX запроса:", {
+            console.error("AJAX request error:", {
                 status: jqXHR.status,
                 statusText: jqXHR.statusText,
                 error: errorThrown,

@@ -1,8 +1,8 @@
 if (typeof jQuery === 'undefined') {
-    console.error('jQuery не загружен! Проверьте подключение библиотеки.');
-    document.body.innerHTML = '<div style="padding: 20px; color: red; font-weight: bold;">Ошибка: jQuery не загружен. Проверьте консоль браузера для получения дополнительной информации.</div>';
+    console.error('jQuery is not loaded! Check the library connection.');
+    document.body.innerHTML = '<div style="padding: 20px; color: red; font-weight: bold;">Error: jQuery is not loaded. Check the browser console for more information.</div>';
 } else {
-    console.log('jQuery версия:', jQuery.fn.jquery);
+    console.log('jQuery version:', jQuery.fn.jquery);
 }
 
 let currentData = null;
@@ -35,7 +35,7 @@ let chartMetricSelect, poolSelect, poolMetricSelect, refreshChartButton;
 let cpuMetricSelect, cpuValueSelect, refreshCpuButton, showAllPoolsCheckbox, poolCheckboxesContainer, poolSelectorContainer;
 
 function recalculateChartSizes() {
-    console.log("Форсированный пересчет размеров графиков...");
+    console.log("Forced recalculation of chart sizes...");
     
     const chartElements = document.querySelectorAll('svg[id$="Chart"]');
     
@@ -44,7 +44,7 @@ function recalculateChartSizes() {
         element.style.visibility = 'visible';
         
         const rect = element.getBoundingClientRect();
-        console.log(`Размеры элемента ${element.id}:`, {
+        console.log(`Element ${element.id} size:`, {
             width: rect.width,
             height: rect.height
         });
@@ -54,24 +54,24 @@ function recalculateChartSizes() {
         const activeTabId = document.querySelector('#mainTabs .nav-link.active').getAttribute('data-bs-target');
         
         if (activeTabId === '#chartsTab') {
-            console.log('Перерисовка графиков на вкладке Метрики после изменения размера');
+            console.log('Redrawing charts on Metrics tab after size change');
             renderMetricsChart();
             renderPoolChart();
         } else if (activeTabId === '#cpuTab') {
-            console.log('Перерисовка графиков на вкладке CPU после изменения размера');
+            console.log('Redrawing charts on CPU tab after size change');
             renderCpuCharts();
         }
     }
 }
 
 $(document).ready(function() {
-    console.log("Инициализация приложения...");
+    console.log("Initializing application...");
     
     if (typeof bootstrap === 'undefined') {
-        console.error('Bootstrap не загружен! Проверьте подключение библиотеки bootstrap.js.');
-        $('#mainTabsContent').before('<div class="alert alert-danger">Ошибка: Bootstrap JS не загружен. Проверьте консоль браузера для получения дополнительной информации.</div>');
+        console.error('Bootstrap is not loaded! Check the connection of bootstrap.js library.');
+        $('#mainTabsContent').before('<div class="alert alert-danger">Error: Bootstrap JS is not loaded. Check the browser console for more information.</div>');
     } else {
-        console.log('Bootstrap доступен');
+        console.log('Bootstrap is available');
         
         const tabElements = document.querySelectorAll('#mainTabs button[data-bs-toggle="tab"]');
         if (tabElements.length > 0) {
@@ -79,7 +79,7 @@ $(document).ready(function() {
                 tabEl.addEventListener('click', function(event) {
                     event.preventDefault();
                     const tabId = this.getAttribute('data-bs-target').substring(1);
-                    console.log('Переключение на вкладку:', tabId);
+                    console.log('Switching to tab:', tabId);
                     
                     document.querySelectorAll('#mainTabs .nav-link').forEach(t => {
                         t.classList.remove('active');
@@ -102,13 +102,13 @@ $(document).ready(function() {
                         
                         if (currentData) {
                             if (tabId === 'chartsTab') {
-                                console.log('Обновляем графики на вкладке Метрики');
+                                console.log('Updating charts on Metrics tab');
                                 setTimeout(() => {
                                     renderMetricsChart();
                                     renderPoolChart();
                                 }, 100);
                             } else if (tabId === 'cpuTab') {
-                                console.log('Обновляем графики на вкладке CPU');
+                                console.log('Updating charts on CPU tab');
                                 setTimeout(() => {
                                     renderCpuCharts();
                                 }, 100);
@@ -120,11 +120,11 @@ $(document).ready(function() {
                     currentUrlParams.set('tab', tabId);
                     const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
                     history.pushState({tab: tabId}, '', newUrl);
-                    console.log("URL обновлен:", newUrl);
+                    console.log("URL updated:", newUrl);
                 });
             });
             
-            console.log('Вкладки инициализированы');
+            console.log('Tabs initialized');
         }
     }
     
@@ -157,11 +157,11 @@ $(document).ready(function() {
 
     if (fromIterationParam !== null) {
         iterationFrom.val(fromIterationParam);
-        console.log("Установлено значение 'От итерации' из URL:", fromIterationParam);
+        console.log("Set 'From iteration' value from URL:", fromIterationParam);
     }
     if (toIterationParam !== null) {
         iterationTo.val(toIterationParam);
-        console.log("Установлено значение 'До итерации' из URL:", toIterationParam);
+        console.log("Set 'To iteration' value from URL:", toIterationParam);
     }
 
     const validTabIds = ['dataTab', 'chartsTab', 'cpuTab'];
@@ -170,9 +170,9 @@ $(document).ready(function() {
 
     if (tabParam && validTabIds.includes(tabParam)) {
         targetTabId = tabParam;
-        console.log(`Активируем вкладку из URL: #${targetTabId}`);
+        console.log(`Activating tab from URL: #${targetTabId}`);
     } else {
-        console.log(`Активируем вкладку по умолчанию: #${defaultTabId}`);
+        console.log(`Activating default tab: #${defaultTabId}`);
     }
 
     document.querySelectorAll('#mainTabs .nav-link').forEach(t => {
@@ -191,13 +191,13 @@ $(document).ready(function() {
         targetTabButton.setAttribute('aria-selected', 'true');
         targetTabPane.classList.add('show', 'active');
     } else {
-        console.warn(`Не удалось найти элементы для вкладки #${targetTabId}, активируем ${defaultTabId}`);
+        console.warn(`Could not find elements for tab #${targetTabId}, activating ${defaultTabId}`);
         document.querySelector(`#mainTabs button[data-bs-target="#${defaultTabId}"]`)?.classList.add('active');
         document.querySelector(`#mainTabs button[data-bs-target="#${defaultTabId}"]`)?.setAttribute('aria-selected', 'true');
         document.getElementById(defaultTabId)?.classList.add('show', 'active');
     }
 
-    console.log("Проверка элементов формы:", {
+    console.log("Checking form elements:", {
         refreshButton: refreshButton.length > 0,
         levelSelect: levelSelect.length > 0,
         iterationFrom: iterationFrom.length > 0,
@@ -207,29 +207,29 @@ $(document).ready(function() {
     });
 
     refreshButton.on('click', function() {
-        console.log("Нажата кнопка 'Обновить'");
+        console.log("Refresh button clicked");
         fetchData();
     });
     
     levelSelect.on('change', function() {
-        console.log("Изменен уровень детализации:", levelSelect.val());
+        console.log("Detail level changed:", levelSelect.val());
         fetchData();
     });
     
     iterationFrom.on('change', function() {
-        console.log("Изменено значение 'От итерации':", iterationFrom.val());
+        console.log("'From iteration' value changed:", iterationFrom.val());
         fetchData();
         
         const currentUrlParams = new URLSearchParams(window.location.search);
         currentUrlParams.set('fromIteration', iterationFrom.val());
         const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
         history.pushState(null, '', newUrl);
-        console.log("URL обновлен (fromIteration):");
+        console.log("URL updated (fromIteration):");
     });
     
     iterationTo.on('change', function() {
         const toValue = iterationTo.val();
-        console.log("Изменено значение 'До итерации':", toValue);
+        console.log("'To iteration' value changed:", toValue);
         fetchData();
         
         const currentUrlParams = new URLSearchParams(window.location.search);
@@ -240,97 +240,95 @@ $(document).ready(function() {
         }
         const newUrl = `${window.location.pathname}?${currentUrlParams.toString()}`;
         history.pushState(null, '', newUrl);
-        console.log("URL обновлен (toIteration):");
+        console.log("URL updated (toIteration):");
     });
     
     timeMode.on('change', function() {
         const isTimeMode = $(this).is(':checked');
         $('#iterationMode').toggle(!isTimeMode);
-        $('#timeMode').toggle(isTimeMode);
+        $('#timeModeControls').toggle(isTimeMode);
+        console.log("Time mode changed:", isTimeMode);
         fetchData();
     });
     
     timeFrom.on('change', function() {
-        console.log("Изменено значение 'От времени':", timeFrom.val());
+        console.log("'From time' value changed:", timeFrom.val());
         fetchData();
     });
     
     timeTo.on('change', function() {
-        console.log("Изменено значение 'До времени':", timeTo.val());
+        console.log("'To time' value changed:", timeTo.val());
         fetchData();
     });
     
     sortNewestFirstCheckbox.on('change', function() {
-        console.log("Изменен порядок сортировки, новые сверху:", sortNewestFirstCheckbox.prop('checked'));
+        console.log("Sort order changed, newest first:", sortNewestFirstCheckbox.prop('checked'));
         if (currentData) {
             renderData(currentData);
         }
     });
     
     chartMetricSelect.on('change', function() {
-        console.log("Выбрана метрика:", chartMetricSelect.val());
+        console.log("Metric selected:", chartMetricSelect.val());
         renderMetricsChart();
     });
     
     poolSelect.on('change', function() {
-        console.log("Выбран пул:", poolSelect.val());
+        console.log("Pool selected:", poolSelect.val());
         renderPoolChart();
     });
     
     poolMetricSelect.on('change', function() {
-        console.log("Выбрана метрика пула:", poolMetricSelect.val());
+        console.log("Pool metric selected:", poolMetricSelect.val());
         renderPoolChart();
     });
     
     refreshChartButton.on('click', function() {
-        console.log("Нажата кнопка 'Обновить график'");
+        console.log("Refresh chart button clicked");
         fetchData();
     });
     
     cpuMetricSelect.on('change', function() {
-        console.log("Выбран тип CPU метрики:", cpuMetricSelect.val());
+        console.log("CPU metric type selected:", cpuMetricSelect.val());
         renderCpuCharts();
     });
     
     cpuValueSelect.on('change', function() {
-        console.log("Выбрано значение CPU:", cpuValueSelect.val());
+        console.log("CPU value selected:", cpuValueSelect.val());
         renderCpuCharts();
     });
     
     refreshCpuButton.on('click', function() {
-        console.log("Нажата кнопка 'Обновить' для CPU графиков");
+        console.log("Refresh button clicked for CPU charts");
         fetchData();
     });
     
     showAllPoolsCheckbox.on('change', function() {
-        console.log("Изменен режим отображения всех пулов:", showAllPoolsCheckbox.prop('checked'));
+        console.log("Show all pools mode changed:", showAllPoolsCheckbox.prop('checked'));
         if ($(this).is(':checked')) {
             poolSelectorContainer.hide();
         } else {
             poolSelectorContainer.show();
         }
-        
         renderCpuCharts();
     });
 
     poolCheckboxesContainer.on('change', '.pool-checkbox', function() {
         const poolName = $(this).data('pool');
-        
         if ($(this).is(':checked')) {
             selectedPools.add(poolName);
         } else {
             selectedPools.delete(poolName);
         }
-        
+        console.log("Selected pools updated:", Array.from(selectedPools));
         renderCpuCharts();
     });
     
-    // Обработчик для кнопок сворачивания пулов (делегирование событий)
     dataContainer.on('click', '.pool-toggle-button', function() {
         const targetId = $(this).data('bs-target');
         const targetBody = $(targetId);
         const isExpanded = $(this).attr('aria-expanded') === 'true';
-
+        console.log(`Toggling pool body ${targetId}, currently expanded: ${isExpanded}`);
         if (isExpanded) {
             targetBody.collapse('hide');
             $(this).attr('aria-expanded', 'false');
@@ -346,11 +344,11 @@ $(document).ready(function() {
     $(window).on('resize', function() {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(function() {
-            console.log("Изменен размер окна, пересчитываем графики");
+            console.log("Window resized, recalculating charts");
             recalculateChartSizes();
         }, 250);
     });
     
-    console.log("Загружаем начальные данные...");
+    console.log("Loading initial data...");
     fetchData();
 }); 

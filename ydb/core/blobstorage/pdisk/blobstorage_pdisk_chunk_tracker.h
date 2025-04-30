@@ -48,10 +48,8 @@ public:
     // Increasing expected owner count is fundamentally unfair and may cause instant jumps right into 0 free,
     // overusers will keep their unfair share as a result.
     void SetExpectedOwnerCount(size_t newOwnerCount) {
-        if (newOwnerCount != ExpectedOwnerCount) {
-            ExpectedOwnerCount = newOwnerCount;
-            RedistributeQuotas();
-        }
+        ExpectedOwnerCount = newOwnerCount;
+        RedistributeQuotas();
     }
 
     i64 ForceHardLimit(TOwner ownerId, i64 limit) {
@@ -79,9 +77,7 @@ public:
         record.SetVDiskId(vdiskId);
 
         ActiveOwnerIds.push_back(id);
-        if (ActiveOwnerIds.size() <= ExpectedOwnerCount || ExpectedOwnerCount == 0) {
-            RedistributeQuotas();
-        }
+        RedistributeQuotas();
     }
 
     void RemoveOwner(TOwner id) {
@@ -96,6 +92,7 @@ public:
         }
         Y_VERIFY(isFound);
         ForceHardLimit(id, 0);
+        RedistributeQuotas();
     }
 
     i64 AddSystemOwner(TOwner id, i64 quota, TString name) {
@@ -199,12 +196,14 @@ public:
             </tr>
         )_";
         if (sharedQuota) {
+            str << "\n    ";
             PrintQuotaRow(str, *sharedQuota);
         }
         for (TOwner id : ActiveOwnerIds) {
+            str << "\n    ";
             PrintQuotaRow(str, QuotaForOwner[id]);
         }
-        str << "</table>";
+        str << "\n</table>";
     }
 
     ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {

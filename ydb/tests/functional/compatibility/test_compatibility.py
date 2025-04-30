@@ -141,13 +141,11 @@ class TestCompatibility(object):
                 )
 
             query_body = "SELECT SUM(value) as sum_value from `sample_table`"
-            query = ydb.ScanQuery(query_body, {})
-            self.execute_scan_query(query_body)[0]['sum_value'] == upsert_count * iteration_count + start_index
+            assert self.execute_scan_query(query_body)[0]['sum_value'] == upsert_count * iteration_count + start_index
 
         def create_table(self, store_type):
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
-                    store_type.upper()
                     session.execute_scheme(
                         """create table `sample_table` (
                             id Uint64 NOT NULL, value Uint64,

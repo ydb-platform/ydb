@@ -36,6 +36,12 @@ enum class EStatsMode {
     Profile = 40,
 };
 
+enum class EResultSetType {
+    Unspecified = 0,
+    Message = 1,
+    Arrow = 2,
+};
+
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 
@@ -80,6 +86,7 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
+    FLUENT_SETTING_DEFAULT(EResultSetType, ResultSetType, EResultSetType::Unspecified);
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);

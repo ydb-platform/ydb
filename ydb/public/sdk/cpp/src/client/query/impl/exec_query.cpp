@@ -212,6 +212,9 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 for (const auto& row : inRsProto.rows()) {
                     *resultSet.mutable_rows()->Add() = row;
                 }
+
+                resultSet.set_data(inRsProto.data());
+                resultSet.mutable_arrow_batch_settings()->set_schema(inRsProto.arrow_batch_settings().schema());
             }
 
             if (const auto& tx = part.GetTransaction()) {
@@ -234,6 +237,7 @@ public:
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
         request.set_pool_id(TStringType{settings.ResourcePool_});
+        request.set_result_set_type(::Ydb::ResultSetType(settings.ResultSetType_));
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         if (session.has_value()) {

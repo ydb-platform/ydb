@@ -49,6 +49,9 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
+    const TString& GetArrowBatch() const;
+    const TString& GetArrowSchema() const;
+
 private:
     const Ydb::ResultSet& GetProto() const;
 

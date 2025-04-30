@@ -84,6 +84,14 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
+const TString& TResultSet::GetArrowBatch() const {
+    return Impl_->ProtoResultSet_.data();
+}
+
+const TString& TResultSet::GetArrowSchema() const {
+    return Impl_->ProtoResultSet_.arrow_batch_settings().schema();
+}
+
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
 }

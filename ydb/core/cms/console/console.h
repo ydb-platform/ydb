@@ -457,7 +457,6 @@ namespace TEvConsole {
     struct TEvGetLogTailRequest : public TEventPB<TEvGetLogTailRequest, NKikimrConsole::TGetLogTailRequest, EvGetLogTailRequest> {};
 
     struct TEvGetLogTailResponse : public TEventPB<TEvGetLogTailResponse, NKikimrConsole::TGetLogTailResponse, EvGetLogTailResponse> {};
-
 };
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info);

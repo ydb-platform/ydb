@@ -151,6 +151,9 @@ public:
     void Config(TConfig&) override;
     int Run(TConfig&) override;
 private:
+    bool ListV1Nodes = false;
+    bool ListV2Nodes = false;
+    bool ListUnknownNodes = false;
     bool AllowEmptyDatabase = false;
 };
 

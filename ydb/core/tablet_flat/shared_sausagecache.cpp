@@ -449,7 +449,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ENSURE(pageCollectionId);
         Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Added page collection " << pageCollectionId);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId);
         Counters.PageCollections->Inc();
         TCollection &collection = Collections[pageCollectionId];
         collection.Id = pageCollectionId;
@@ -818,7 +818,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DropRequestsFromQueues(ev->Sender);
 
         for (auto& [collection, requests] : ownerIt->second) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregistered page collection " << collection->Id
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister page collection " << collection->Id
                 << " owner " << ev->Sender);
             bool erased = collection->Owners.erase(ev->Sender);
             Y_ENSURE(erased);
@@ -865,7 +865,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
 
-        LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Loaded page collection " << msg->Fetch->PageCollection->Label()
+        LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Receive page collection " << msg->Fetch->PageCollection->Label()
             << " status " << msg->Status
             << " pages " << msg->Fetch->Pages);
 
@@ -924,7 +924,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             collection.PageMap.used() == 0)
         {
             auto pageCollectionId = collection.Id;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping expired page collection " << pageCollectionId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop expired page collection " << pageCollectionId);
             Collections.erase(pageCollectionId);
             Counters.PageCollections->Dec();
         }
@@ -1011,7 +1011,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto msg = MakeHolder<NSharedCache::TEvUpdated>();
         msg->DroppedPages = std::move(droppedPages_);
         for (auto& [pageCollectionId, droppedPages] : msg->DroppedPages) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping page collection " << pageCollectionId
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropp page collection " << pageCollectionId
                 << " pages " << droppedPages
                 << " owner " << owner);
         }
@@ -1044,7 +1044,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
         result->Pages = std::move(request.ReadyPages);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection result " << result->PageCollection->Label()
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Send page collection result " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
             << " pages " << result->Pages
@@ -1064,7 +1064,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection error " << result->PageCollection->Label()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Send page collection error " << result->PageCollection->Label()
             << " owner " << request.Sender
             << " class " << request.Priority
             << " error " << error

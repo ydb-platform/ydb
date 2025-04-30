@@ -84,7 +84,6 @@ void TDistributor::Bootstrap() {
     if (!EnableProcesses) {
         AddProcess(0, TCPULimitsConfig(WorkersPool->GetMaxWorkerThreads(), ""));
     }
-
     AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersPool->GetWorkersCount());
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
     Become(&TDistributor::StateMain);

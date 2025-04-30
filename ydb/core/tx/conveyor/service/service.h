@@ -207,10 +207,10 @@ class TWorkersPool {
     YDB_READONLY(ui32, WorkersCount, 0);
     YDB_READONLY(double, MaxWorkerThreads, 0);
     YDB_READONLY(double, AmountCPULimit, 0);
-    std::vector<TWorkerInfo> Workers;
     ui32 ActiveWorkersCount = 0;
     double ActiveWorkerThreads = 0.0;
-    std::deque<ui32> ActiveWorkersIdx;
+    std::vector<TWorkerInfo> Workers;
+    std::vector<ui32> ActiveWorkersIdx;
     TCounters Counters;
 
 public:

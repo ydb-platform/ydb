@@ -4,11 +4,11 @@ namespace NKikimr::NConveyor {
 
 TInstant TWorker::GetWakeupInstance() const {
     AFL_VERIFY(!Instants.empty());
-    TInstant lastTaskFinish = TInstant::FromValue(Instants.back().GetValue());
+    auto result = TInstant::FromValue(Instants.back().GetValue());
     if (CPUSoftLimit < 1) {
-        lastTaskFinish += (Instants.back() - Instants.front()) * (1 - CPUSoftLimit) / CPUSoftLimit;
+        result += (Instants.back() - Instants.front()) * (1 - CPUSoftLimit) / CPUSoftLimit;
     }
-    return lastTaskFinish;
+    return result;
 }
 
 void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {

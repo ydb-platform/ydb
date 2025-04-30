@@ -88,7 +88,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 }
             }
         }
-
+        Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
         TActor::PassAway();
     }
 
@@ -251,7 +251,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
-        BLOG_D("ProxyRequest::HandleInit ev: " << msg->ToString());
+        BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
 
         PrepareInit(msg);
@@ -262,7 +262,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvUpdate::TPtr &ev) {
         TEvStateStorage::TEvUpdate *msg = ev->Get();
-        BLOG_D("ProxyRequest::HandleInit ev: %s" << msg->ToString());
+        BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
 
         PrepareInit(msg);
@@ -284,7 +284,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
         TEvStateStorage::TEvLock *msg = ev->Get();
-        BLOG_D("ProxyRequest::HandleInit ev: " << msg->ToString());
+        BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
 
         PrepareInit(msg);
@@ -356,21 +356,21 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleLookup(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleLookup ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         const ui32 node = ev->Get()->NodeId;
         MergeNodeError(node);
         CheckLookupReply();
     }
 
     void HandleLookup(TEvents::TEvUndelivered::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleLookup ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         const ui64 cookie = ev->Cookie;
         MergeConnectionError(cookie);
         CheckLookupReply();
     }
 
     void HandleLookup(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleLookup ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         MergeReply(msg);
         CheckLookupReply();
@@ -379,7 +379,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     // update handling
 
     void HandleUpdateTimeout() {
-        BLOG_D("ProxyRequest::HandleUpdateTimeout");
+        BLOG_D("ProxyRequest::HandleUpdateTimeout ringGroup:" << RingGroupIndex);
         switch (ReplyStatus) {
         case TStateStorageInfo::TSelection::StatusUnknown:
             ReplyAndDie(NKikimrProto::TIMEOUT);
@@ -431,21 +431,21 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdate(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleUpdate ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         const ui32 node = ev->Get()->NodeId;
         MergeNodeError(node);
         CheckUpdateReply();
     }
 
     void HandleUpdate(TEvents::TEvUndelivered::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleUpdate ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         const ui64 cookie = ev->Cookie;
         MergeConnectionError(cookie);
         CheckUpdateReply();
     }
 
     void HandleUpdate(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleUpdate ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         MergeReply(msg);
         CheckUpdateReply();
@@ -482,14 +482,14 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleUpdateSig(TEvents::TEvUndelivered::TPtr &ev) {
         const ui64 cookie = ev->Cookie;
-        BLOG_D("ProxyRequest::HandleUpdateSig undelivered for: " << cookie);
+        BLOG_D("ProxyRequest::HandleUpdateSig undelivered ringGroup:" << RingGroupIndex << " for: " << cookie);
 
         return UpdateSigFor(cookie, Max<ui64>());
     }
 
     void HandleUpdateSig(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 node = ev->Get()->NodeId;
-        BLOG_D("ProxyRequest::HandleUpdateSig node disconnected: " << node);
+        BLOG_D("ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " node disconnected: " << node);
 
         MergeSigNodeError(node);
 
@@ -500,7 +500,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdateSig(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        BLOG_D("ProxyRequest::HandleUpdateSig ev: " << ev->Get()->ToString());
+        BLOG_D("ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         const ui64 cookie = msg->Record.GetCookie();
@@ -511,7 +511,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdateSigTimeout() {
-        BLOG_D("ProxyRequest::HandleUpdateSigTimeout RepliesAfterReply# " << (ui32)RepliesAfterReply);
+        BLOG_D("ProxyRequest::HandleUpdateSigTimeout ringGroup:" << RingGroupIndex << " RepliesAfterReply# " << (ui32)RepliesAfterReply);
         if (RepliesAfterReply > 0)
             Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature.Get(), Replicas));
         PassAway();
@@ -615,7 +615,7 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
 
     TActorId Source;
     ui32 Replies;
-    ui32 SignatureReplies;
+    ui32 RingGroupPassAwayCounter;
     bool WaitAllReplies;
 
     TAutoPtr<TEvStateStorage::TEvInfo> Response;
@@ -648,27 +648,16 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
         }
     }
 
-    void HandleInit(TEvStateStorage::TEvUpdate::TPtr &ev) {
-        TEvStateStorage::TEvUpdate *msg = ev->Get();
+    template<class T>
+    void HandleInit(T::TPtr &ev) {
+        T *msg = ev->Get();
         Source = ev->Sender;
         WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
-            Send(actorId, new TEvStateStorage::TEvUpdate(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
-        }
-    }
-
-    void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
-        TEvStateStorage::TEvLock *msg = ev->Get();
-        Source = ev->Sender;
-        WaitAllReplies = true;
-        BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
-        for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
-            auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
-            RingGroupActors[actorId] = ringGroupIndex;
-            Send(actorId, new TEvStateStorage::TEvLock(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
+            Send(actorId, new T(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
         }
     }
 
@@ -688,6 +677,7 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
                 Signature[offset] = sig[i];
         }
     }
+
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
         if (Replies <= 1 && !Info->RingGroups[ringGroupIdx].writeOnly) {
             TabletID = msg->TabletID;
@@ -702,7 +692,7 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
                 Followers[k] = v;
             }
         } else {
-            //TODO: if ringGroups return different results?
+            // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
         }
         UpdateSignature(ringGroupIdx, msg->Signature.Get(), msg->SignatureSz);
     }
@@ -727,7 +717,6 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
-        SignatureReplies++;
         UpdateSignature(RingGroupActors[ev->Sender], msg->Signature.Get(), msg->Sz);
         auto *reply = new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature.Get(), SignatureSz);
         Send(Source, reply);
@@ -735,6 +724,13 @@ class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupP
 
     void Timeout() {
         PassAway();
+    }
+
+    void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
+        RingGroupPassAwayCounter++;
+        if (RingGroupPassAwayCounter >= Info->RingGroups.size()) {
+            PassAway();
+        }
     }
 
 public:
@@ -746,7 +742,7 @@ public:
         : TActor<TStateStorageRingGroupProxyRequest>(&TThis::StateInit)
         , Info(info)
         , Replies(0)
-        , SignatureReplies(0)
+        , RingGroupPassAwayCounter(0)
         , SignatureSz(info->RingGroupsSelectionSize())
         , Signature(new ui64[SignatureSz])
     {
@@ -756,11 +752,12 @@ public:
 
     STRICT_STFUNC(StateInit,
         hFunc(TEvStateStorage::TEvLookup, HandleInit);
-        hFunc(TEvStateStorage::TEvUpdate, HandleInit);
-        hFunc(TEvStateStorage::TEvLock, HandleInit);
+        hFunc(TEvStateStorage::TEvUpdate, HandleInit<TEvStateStorage::TEvUpdate>);
+        hFunc(TEvStateStorage::TEvLock, HandleInit<TEvStateStorage::TEvLock>);
 
         hFunc(TEvStateStorage::TEvInfo, HandleResult);
         hFunc(TEvStateStorage::TEvUpdateSignature, HandleResult);
+        hFunc(TEvStateStorage::TEvRingGroupPassAway, Handle);
         cFunc(TEvents::TSystem::Wakeup, Timeout);
     )
 
@@ -1017,6 +1014,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         }
     }
 
+    void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
+        // Do nothng 
+    }
+
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
@@ -1057,12 +1058,13 @@ public:
             hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
+            hFunc(TEvStateStorage::TEvRingGroupPassAway, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
-            if (Info->RingGroups.size() > 1)
+            // if (Info->RingGroups.size() > 1)
                 TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageRingGroupProxyRequest(Info)));
-            else
-                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
+            // else
+            //     TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
             break;
         }
     }

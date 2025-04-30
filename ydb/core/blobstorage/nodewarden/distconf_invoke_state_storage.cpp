@@ -21,7 +21,7 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration RingGroups is not filled in");
             return;
         }
-        if(newSSConfig.GetRingGroups(0).GetWriteOnly()) {
+        if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration first RingGroup is writeOnly");
             return;
         }
@@ -51,7 +51,7 @@ namespace NKikimr::NStorage {
             bool found = false;
 
             auto *m = (config.*mutableFunc)();
-            for(size_t i = 0; i < m->RingGroupsSize(); i++) {
+            for (size_t i = 0; i < m->RingGroupsSize(); i++) {
                 auto *ringGroup = m->MutableRingGroups(i);
                 auto *ring = ringGroup->MutableRing();
                 if (ring->RingSize() && ring->NodeSize()) {

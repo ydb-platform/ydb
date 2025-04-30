@@ -109,7 +109,7 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
 TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 // TODO: we really need this method in such way?
     TList<TActorId> replicas;
-    for(auto &ringGroup : RingGroups) {
+    for (auto &ringGroup : RingGroups) {
         for (auto &ring : ringGroup.Rings) {
             for (TActorId replica : ring.Replicas)
                 replicas.push_back(replica);
@@ -121,7 +121,7 @@ TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 
 ui32 TStateStorageInfo::RingGroupsSelectionSize() const {
     ui32 res = 0;
-    for(auto &ringGroup : RingGroups)
+    for (auto &ringGroup : RingGroups)
         res += ringGroup.NToSelect;
     return res;
 }
@@ -138,7 +138,7 @@ ui32 TStateStorageInfo::ContentHash() const {
     ui64 hash = RelaxedLoad<ui64>(&Hash);
     if (Y_UNLIKELY(hash == Max<ui64>())) {
         hash = 37;
-        for(auto &ringGroup : RingGroups) {
+        for (auto &ringGroup : RingGroups) {
             for (const TRing &ring : ringGroup.Rings) {
                 hash = Hash64to32((hash << 32) | ring.ContentHash());
             }
@@ -318,7 +318,7 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     
 
 
-    for(size_t i = 0; i < config.RingGroupsSize(); i++) {
+    for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         const size_t offset = FindIndex(namePrefix, char());
         Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
         auto& ringGroup = config.GetRingGroups(i);
@@ -327,7 +327,7 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
         info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetRing().GetNToSelect(), {}});
         CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset + sizeof(ui32));
     }
-    if(config.HasRing() && config.RingGroupsSize() == 0) {
+    if (config.HasRing() && config.RingGroupsSize() == 0) {
         const size_t offset = FindIndex(namePrefix, char());
         Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
         auto& ring = config.GetRing();

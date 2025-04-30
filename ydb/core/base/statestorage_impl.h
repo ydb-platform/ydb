@@ -65,6 +65,9 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
 
 };
 
+struct TEvStateStorage::TEvRingGroupPassAway : public TEventLocal<TEvRingGroupPassAway, EvRingGroupPassAway> {
+};
+
 struct TEvStateStorage::TEvUpdateGroupConfig : public TEventLocal<TEvUpdateGroupConfig, EvUpdateGroupConfig> {
     TIntrusivePtr<TStateStorageInfo> GroupConfig;
     TIntrusivePtr<TStateStorageInfo> BoardConfig;

@@ -75,6 +75,12 @@ namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
 
+namespace NKikimr::TEvKeyValue {
+    struct TEvCleanUpDataResponse;
+    using TEvCleanUpDataResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvCleanUpDataResponse>>;
+}
+
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -508,6 +514,10 @@ public:
     void ConfigureAccountLockout(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
+
+    void ConfigureExternalSources(
+        const NKikimrConfig::TQueryServiceConfig& config,
+        const TActorContext& ctx);
 
     void StartStopCompactionQueues();
 
@@ -1052,8 +1062,11 @@ public:
     struct TTxRunTenantDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
 
+    template <typename TEvType>
     struct TTxCompleteDataErasureShard;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
+
+    template <typename TEvType>
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvType& ev);
 
     struct TTxCompleteDataErasureTenant;
     NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureTenant(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
@@ -1169,6 +1182,7 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);

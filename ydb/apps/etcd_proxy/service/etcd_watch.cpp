@@ -602,7 +602,7 @@ private:
         sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime(`id`);" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` as h left only join $Leases as l using(`lease`);" << std::endl;
 
-        sql << "insert into `content`" << std::endl;
+        sql << "insert into `history`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
         sql << "delete from `current` on select `key` from $Victims;" << std::endl;
 

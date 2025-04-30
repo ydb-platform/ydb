@@ -1120,6 +1120,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             DropRequestsFromQueues(owner, collection.Id);
         }
 
+        //TODO: delete ownership of dropping page collection
+
         TryDropExpiredCollection(collection);
     }
 

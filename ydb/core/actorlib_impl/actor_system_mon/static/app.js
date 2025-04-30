@@ -325,6 +325,23 @@ $(document).ready(function() {
         renderCpuCharts();
     });
     
+    // Обработчик для кнопок сворачивания пулов (делегирование событий)
+    dataContainer.on('click', '.pool-toggle-button', function() {
+        const targetId = $(this).data('bs-target');
+        const targetBody = $(targetId);
+        const isExpanded = $(this).attr('aria-expanded') === 'true';
+
+        if (isExpanded) {
+            targetBody.collapse('hide');
+            $(this).attr('aria-expanded', 'false');
+            $(this).text('+');
+        } else {
+            targetBody.collapse('show');
+            $(this).attr('aria-expanded', 'true');
+            $(this).text('-');
+        }
+    });
+    
     let resizeTimeout;
     $(window).on('resize', function() {
         clearTimeout(resizeTimeout);

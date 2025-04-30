@@ -85,14 +85,31 @@ function renderData(data) {
 
         if (item.pools && item.pools.length > 0) {
             poolsContainer.append('<h5>Pools</h5>');
-            item.pools.forEach(pool => {
+            item.pools.forEach((pool, poolIdx) => {
+                const poolId = `pool-${item.iteration}-${poolIdx}`;
+                const poolBodyId = `pool-body-${item.iteration}-${poolIdx}`;
+                
+                let totalElapsedCpu = 0;
+                let totalUsedCpu = 0;
+                if (pool.threads && pool.threads.length > 0) {
+                    pool.threads.forEach(thread => {
+                        totalElapsedCpu += thread.elapsedCpu?.cpu || 0;
+                        totalUsedCpu += thread.usedCpu?.cpu || 0;
+                    });
+                }
+                
                 const poolCard = $(`
-                    <div class="card pool-card">
-                        <div class="card-header pool-card-header">
-                            Pool: <strong>${pool.name || 'Unknown'}</strong>
-                            <small class="text-muted float-end">Op: ${pool.operation || 'N/A'}</small>
+                    <div class="card pool-card" id="${poolId}">
+                        <div class="card-header pool-card-header d-flex justify-content-between align-items-center">
+                            <span>
+                                Pool: <strong>${pool.name || 'Unknown'}</strong>
+                                <small class="text-muted ms-2">Op: ${pool.operation || 'N/A'}</small>
+                            </span>
+                            <button class="btn btn-sm btn-outline-secondary pool-toggle-button" data-bs-target="#${poolBodyId}" aria-expanded="true">
+                                -
+                            </button>
                         </div>
-                        <div class="card-body pool-card-body">
+                        <div class="card-body pool-card-body collapse show" id="${poolBodyId}">
                             <div class="row">
                                 <div class="col-md-6">
                                     <p><strong>Threads:</strong> ${pool.currentThreadCount ?? 'N/A'} / ${pool.potentialMaxThreadCount ?? 'N/A'} (Pot. Max)</p>
@@ -104,6 +121,7 @@ function renderData(data) {
                                     ${pool.minLocalQueueSize !== undefined ? `
                                     <p><strong>Queue Limits:</strong> ${pool.minLocalQueueSize}-${pool.maxLocalQueueSize} (Min-Max)</p>
                                     ` : ''}
+                                    <p><strong>Total Elapsed CPU:</strong> ${totalElapsedCpu.toFixed(5)}</p> 
                                 </div>
                                 <div class="col-md-6">
                                     <p><strong>Avg Ping (us):</strong> ${pool.avgPingUs ?? 'N/A'} (Small Window: ${pool.avgPingUsWithSmallWindow ?? 'N/A'}, Max: ${pool.maxAvgPingUs ?? 'N/A'})</p>
@@ -114,6 +132,7 @@ function renderData(data) {
                                         ${pool.isHoggish ? '<span class="badge bg-success">Hoggish</span> ' : ''}
                                         ${!(pool.isNeedy || pool.isStarved || pool.isHoggish) ? 'Normal' : ''}
                                     </p>
+                                    <p><strong>Total Used CPU:</strong> ${totalUsedCpu.toFixed(5)}</p> 
                                 </div>
                             </div>
                             <div class="threads-container mt-3"></div>

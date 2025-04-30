@@ -87,6 +87,12 @@ void GenerateJson(const TIterableDoubleRange<THarmonizerIterationState>& history
         }
     }, cfg.Window);
 
+    if (begin >= end || begin < 0 || end < 0 || begin >= static_cast<i64>(history.size()) || end > static_cast<i64>(history.size())) {
+        writer.CloseArray();
+        writer.CloseMap();
+        return;
+    }
+
     for (i64 idx = begin; idx < end; ++idx) {
         writer.OpenMap();
         

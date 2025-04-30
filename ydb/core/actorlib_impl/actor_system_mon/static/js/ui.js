@@ -1,4 +1,3 @@
-// Функция для обновления всех графиков
 function updateAllCharts() {
     if (!currentData) {
         console.log("updateAllCharts: нет данных для обновления графиков");
@@ -7,7 +6,6 @@ function updateAllCharts() {
     
     console.log("updateAllCharts: начало обновления графиков");
     
-    // Проверяем наличие DOM элементов для графиков
     const metricsChartExists = document.getElementById("metricsChart") !== null;
     const poolChartExists = document.getElementById("poolChart") !== null;
     const cpuPoolsChartExists = document.getElementById("cpuPoolsChart") !== null;
@@ -22,29 +20,25 @@ function updateAllCharts() {
         budgetChartExists
     });
 
-    // Получаем активную вкладку
     const activeTab = document.querySelector('#mainTabs .nav-link.active');
     const activeTabId = activeTab ? activeTab.getAttribute('data-bs-target') : null;
     
     console.log("updateAllCharts: активная вкладка:", activeTabId);
     
-    // Обновляем графики в зависимости от активной вкладки
     if (activeTabId === '#chartsTab') {
-        if (metricsChartExists) renderMetricsChart(); // Вызов из charts.js
-        if (poolChartExists) renderPoolChart();       // Вызов из charts.js
+        if (metricsChartExists) renderMetricsChart();
+        if (poolChartExists) renderPoolChart();
     } else if (activeTabId === '#cpuTab') {
         if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
-            renderCpuCharts();    // Вызов из charts.js
+            renderCpuCharts();
         } else {
             console.error("updateAllCharts: Не найдены элементы для CPU графиков");
         }
     } else {
-        // Если нет активной вкладки или активна вкладка данных,
-        // пробуем обновить все графики, которые существуют в DOM
-        if (metricsChartExists) renderMetricsChart(); // Вызов из charts.js
-        if (poolChartExists) renderPoolChart();       // Вызов из charts.js
+        if (metricsChartExists) renderMetricsChart();
+        if (poolChartExists) renderPoolChart();
         if (cpuPoolsChartExists && threadsChartExists && budgetChartExists) {
-            renderCpuCharts();    // Вызов из charts.js
+            renderCpuCharts();
         }
     }
     
@@ -52,27 +46,22 @@ function updateAllCharts() {
 }
 
 function renderData(data) {
-    dataContainer.empty(); // Очищаем предыдущие данные
+    dataContainer.empty();
     if (!data || !data.history || data.history.length === 0) {
         dataContainer.html('<div class="alert alert-warning">No history data found.</div>');
         return;
     }
 
-    // Сохраняем данные для графиков
     currentData = data;
     
-    // Назначаем цвета для пулов
-    assignPoolColors(data); // Вызов из data.js
+    assignPoolColors(data);
 
-    // Выбираем порядок отображения итераций (по умолчанию от старых к новым)
-    let historyItems = [...data.history]; // Копируем массив
+    let historyItems = [...data.history];
     
-    // Если выбрана опция "новые сверху", то переворачиваем массив
     if (sortNewestFirstCheckbox.prop('checked')) {
         historyItems.reverse();
     }
 
-    // Обновляем список пулов для графиков
     updatePoolSelectAndCheckboxes(data);
 
     historyItems.forEach((item, idx) => {
@@ -133,16 +122,16 @@ function renderData(data) {
                 `);
 
                 if (pool.threads && pool.threads.length > 0) {
-                    poolCard.find('.threads-container').append('<h6>Threads</h6>').append(renderThreads(pool.threads)); // Вызов из renderUtils.js
+                    poolCard.find('.threads-container').append('<h6>Threads</h6>').append(renderThreads(pool.threads));
                 }
 
                 poolsContainer.append(poolCard);
             });
         }
 
-        if (item.shared && item.shared.threads && levelSelect.val() === 'thread') { // Отображаем shared только на уровне thread
+        if (item.shared && item.shared.threads && levelSelect.val() === 'thread') {
             sharedPoolContainer.append('<h5>Shared Pool Threads</h5>');
-            sharedPoolContainer.append(renderSharedThreads(item.shared.threads)); // Вызов из renderUtils.js
+            sharedPoolContainer.append(renderSharedThreads(item.shared.threads));
         }
 
         dataContainer.append(iterationCard);
@@ -154,10 +143,8 @@ function updatePoolSelectAndCheckboxes(data) {
         return;
     }
     
-    // Обновляем дропдаун для одиночного пула
     poolSelect.empty();
     
-    // Получаем уникальный список пулов из первой итерации
     const pools = data.history[0].pools;
     pools.forEach(pool => {
         if (pool.name) {
@@ -165,10 +152,8 @@ function updatePoolSelectAndCheckboxes(data) {
         }
     });
     
-    // Обновляем чекбоксы для множественного выбора пулов
     poolCheckboxesContainer.empty();
     
-    // Если это первая загрузка, добавляем все пулы в selectedPools
     if (selectedPools.size === 0) {
         pools.forEach(pool => {
             if (pool.name) {
@@ -178,7 +163,6 @@ function updatePoolSelectAndCheckboxes(data) {
         });
     }
     
-    // Создаем чекбоксы
     pools.forEach(pool => {
         if (pool.name) {
             const color = poolColorMap[pool.name] || "#000000";
@@ -196,11 +180,7 @@ function updatePoolSelectAndCheckboxes(data) {
         }
     });
     
-    // Настраиваем обработчики для чекбоксов (перенесены в app.js)
-    // $('.pool-checkbox').on('change', function() { ... });
-    
-    // Если выбран пул в одиночном дропдауне, перерисовываем его график
     if (poolSelect.val()) {
-        renderPoolChart(); // Вызов из charts.js
+        renderPoolChart();
     }
 } 

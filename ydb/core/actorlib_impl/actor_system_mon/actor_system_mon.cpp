@@ -75,6 +75,9 @@ void RegisterPages(NMonitoring::TIndexMonPage* index, NActors::TActorSystem*) {
     WWW_STATIC_FILE("actor_system_mon/static/js/renderUtils.js", JAVASCRIPT);
     WWW_STATIC_FILE("actor_system_mon/static/js/ui.js", JAVASCRIPT);
     WWW_STATIC_FILE("actor_system_mon/static/js/utils.js", JAVASCRIPT);
+
+    WWW_STATIC_FILE("actor_system_mon/static/js/d3.v5.min.js", JAVASCRIPT);
+    WWW_STATIC_FILE("actor_system_mon/static/js/bootstrap.bundle.min.js", JAVASCRIPT);
 }
 
 

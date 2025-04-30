@@ -21,8 +21,5 @@ function renderSharedThreads(sharedThreads) {
      if (!sharedThreads || sharedThreads.length === 0) {
         return '<p>No shared thread data available.</p>';
      }
-     // TODO: Реализовать отображение shared threads, если необходимо.
-     // Структура сложная (массив потоков, у каждого массив byPool)
-     // Пока просто выведем количество.
      return `<p>Shared threads count: ${sharedThreads.length}. Rendering details TBD.</p>`;
 } 

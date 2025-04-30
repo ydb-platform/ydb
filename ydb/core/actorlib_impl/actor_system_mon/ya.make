@@ -22,6 +22,9 @@ RESOURCE(
     static/js/renderUtils.js actor_system_mon/static/js/renderUtils.js
     static/js/ui.js actor_system_mon/static/js/ui.js
     static/js/utils.js actor_system_mon/static/js/utils.js
+
+    static/js/bootstrap.bundle.min.js actor_system_mon/static/js/bootstrap.bundle.min.js
+    static/js/d3.v5.min.js actor_system_mon/static/js/d3.v5.min.js
 )
 
 YQL_LAST_ABI_VERSION()

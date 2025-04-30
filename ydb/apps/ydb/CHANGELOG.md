@@ -1,4 +1,4 @@
-* Added `external` workload for work with bechmarks that cannot be included in `ydb` cli.
+* Added `external` workload for work with benchmarks that cannot be included in `ydb` cli.
 * Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
 * Brackets are now inserted in pairs in YDB CLI interactive mode
 * Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands. Sets the percentage of the benchmark's data size and workload to use, relative to full scale.

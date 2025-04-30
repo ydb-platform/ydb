@@ -341,10 +341,7 @@ namespace NYql {
                 const auto& tableName = settings.Table().StringValue();
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
-                bool isListify = false;
-                if (settings.Listify().Maybe<TCoAtom>()) {
-                    isListify = true;
-                }
+                const bool isListify = bool(settings.Listify().Maybe<TCoAtom>());
 
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"

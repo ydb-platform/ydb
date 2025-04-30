@@ -368,7 +368,7 @@ namespace NYql {
                     }
                 }
             }
-            return std::move(builder).Done().Ptr();
+            return builder.Done().Ptr();
         }
 
         void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,

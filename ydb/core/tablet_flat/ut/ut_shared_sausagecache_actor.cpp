@@ -96,6 +96,10 @@ struct TSharedPageCacheMock {
         }
         Send(BlockIoSender, data, eventCookie);
 
+        // TODO: why this broke everything?
+        // TWaitForFirstEvent<NBlockIO::TEvData> waiter(Runtime);
+        // waiter.Wait();
+
         return *this;
     }
 

@@ -154,12 +154,12 @@ ids {
 ids {
   code: KIKIMR_TEMPORARILY_UNAVAILABLE
   severity: S_ERROR
-  format: "Kikimr cluster or one of its subsystems was unavailable."
+  format: "YDB cluster or one of its subsystems was unavailable."
 }
 ids {
   code: KIKIMR_OVERLOADED
   severity: S_ERROR
-  format: "Kikimr cluster or one of its subsystems is overloaded."
+  format: "YDB cluster or one of its subsystems is overloaded."
 }
 ids {
   code: KIKIMR_BAD_OPERATION

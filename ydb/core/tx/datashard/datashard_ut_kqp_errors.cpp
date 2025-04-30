@@ -165,7 +165,7 @@ Y_UNIT_TEST(ProposeError) {
     test(TEvProposeTransactionResult::OVERLOADED,                    // propose error
          Ydb::StatusIds::OVERLOADED,                                 // ydb status
          NYql::TIssuesIds::KIKIMR_OVERLOADED,                        // issue status
-         "Kikimr cluster or one of its subsystems is overloaded.");  // main issue message (more detailed info can be in subissues)
+         "YDB cluster or one of its subsystems is overloaded.");  // main issue message (more detailed info can be in subissues)
 
     test(TEvProposeTransactionResult::ABORTED,
          Ydb::StatusIds::ABORTED,
@@ -175,7 +175,7 @@ Y_UNIT_TEST(ProposeError) {
     test(TEvProposeTransactionResult::TRY_LATER,
          Ydb::StatusIds::UNAVAILABLE,
          NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-         "Kikimr cluster or one of its subsystems was unavailable.");
+         "YDB cluster or one of its subsystems was unavailable.");
 
     test(TEvProposeTransactionResult::RESULT_UNAVAILABLE,
          Ydb::StatusIds::UNDETERMINED,
@@ -195,7 +195,7 @@ Y_UNIT_TEST(ProposeError) {
     test(TEvProposeTransactionResult::ERROR,
          Ydb::StatusIds::UNAVAILABLE,
          NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-         "Kikimr cluster or one of its subsystems was unavailable.");
+         "YDB cluster or one of its subsystems was unavailable.");
 
     test(TEvProposeTransactionResult::ERROR,
          Ydb::StatusIds::ABORTED,
@@ -281,7 +281,7 @@ Y_UNIT_TEST(ProposeErrorEvWrite) {
     test(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED,                    // propose error
          Ydb::StatusIds::OVERLOADED,                                 // ydb status
          NYql::TIssuesIds::KIKIMR_OVERLOADED,                        // issue status
-         "Kikimr cluster or one of its subsystems is overloaded.");  // main issue message (more detailed info can be in subissues)
+         "YDB cluster or one of its subsystems is overloaded.");  // main issue message (more detailed info can be in subissues)
 
     test(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED,
          Ydb::StatusIds::STATUS_CODE_UNSPECIFIED,
@@ -410,7 +410,7 @@ Y_UNIT_TEST_TWIN(ProposeResultLost_RwTx, UseSink) {
             IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
             UNIT_ASSERT_C(
                 HasIssueContains(issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    "Kikimr cluster or one of its subsystems was unavailable."),
+                    "YDB cluster or one of its subsystems was unavailable."),
                 record.GetResponse().DebugString());
         });
 

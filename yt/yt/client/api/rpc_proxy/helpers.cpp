@@ -1837,7 +1837,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded) ||
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
-        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)

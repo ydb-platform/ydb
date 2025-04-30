@@ -2298,5 +2298,60 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(LayoutCorrect) {
         LayoutCorrectTest(true);
     }
+
+    Y_UNIT_TEST(UnknowPDiskState) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    for (auto& entry : *record.mutable_entries()) {
+                        entry.mutable_info()->set_statusv2("ERROR");
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    for (auto& entry : *record.mutable_entries()) {
+                        entry.mutable_info()->set_statusv2("UNKNOWN_STATE?");
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TAutoPtr<IEventHandle> handle;
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        bool pdiskIssueFoundInResult = false;
+        for (const auto &issue_log : result.issue_log()) {
+            if (issue_log.type() == "PDISK") {
+                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Unknown PDisk state: UNKNOWN_STATE?");
+                pdiskIssueFoundInResult = true;
+            }
+        }
+        UNIT_ASSERT(pdiskIssueFoundInResult);
+    }
 }
 }

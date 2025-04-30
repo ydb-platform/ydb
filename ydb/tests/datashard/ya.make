@@ -1,6 +1,9 @@
 RECURSE(
     async_replication
     dml
-    lib
     dump_restore
+    copy_table
+    lib
+    split_merge
+    s3
 )

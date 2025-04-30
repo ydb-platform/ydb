@@ -45,6 +45,7 @@ TExecContextBase::TExecContextBase(const TYtNativeServices& services,
     : FunctionRegistry_(services.FunctionRegistry)
     , FileStorage_(services.FileStorage)
     , Config_(services.Config)
+    , SecretMasker(services.SecretMasker)
     , Clusters_(clusters)
     , MkqlCompiler_(mkqlCompiler)
     , Session_(session)

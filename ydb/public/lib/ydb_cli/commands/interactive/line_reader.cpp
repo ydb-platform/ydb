@@ -7,6 +7,7 @@
 #include <yql/essentials/sql/v1/complete/string_util.h>
 
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/system/file.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
@@ -64,6 +65,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
 {
     Rx.install_window_change_handler();
 
+    Rx.set_complete_on_empty(true);
+    Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
         return YQLCompleter->Apply(prefix, contextLen);
     });
@@ -74,20 +77,38 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
         }
         return hints;
     });
+
     Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
         YQLHighlighter->Apply(text, colors);
     });
-    Rx.enable_bracketed_paste();
-    Rx.set_unique_history(true);
-    Rx.set_complete_on_empty(true);
-    Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
-    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
-    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
-    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });
-    auto commit_action = [&](char32_t code) {
+
+    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { 
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { 
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { 
+        return replxx::Replxx::ACTION_RESULT::BAIL; 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
         return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
-    };
-    Rx.bind_key(replxx::Replxx::KEY::control('J'), commit_action);
+    });
+
+    for (const auto [lhs, rhs] : THashMap<char, char>{
+        {'(', ')'},
+        {'[', ']'},
+        {'{', '}'},
+        {'`', '`'},
+        {'\'', '\''},
+        {'"', '"'},
+    }) {
+        Rx.bind_key(lhs, [&, lhs, rhs](char32_t) {
+            Rx.invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, lhs);
+            Rx.invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, rhs);
+            return Rx.invoke(replxx::Replxx::ACTION::MOVE_CURSOR_LEFT, 0);
+        });
+    }
 
     auto fileLockGuard = LockFile(HistoryFileHandle);
     if (!fileLockGuard) {
@@ -95,6 +116,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
         return;
     }
 
+    Rx.enable_bracketed_paste();
+    Rx.set_unique_history(true);
     if (!Rx.history_load(HistoryFilePath)) {
         Rx.print("Loading history failed: %s\n", strerror(errno));
     }

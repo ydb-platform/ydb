@@ -113,7 +113,7 @@ namespace boost
         std::is_reference<Target>::value, Target
     >::type polymorphic_downcast(Source& x)
     {
-        typedef typename std::remove_reference<Target>::type* target_pointer_type;
+        using target_pointer_type = typename std::remove_reference<Target>::type*;
         return *boost::polymorphic_downcast<target_pointer_type>(
             std::addressof(x)
         );

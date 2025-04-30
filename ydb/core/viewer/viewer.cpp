@@ -729,11 +729,16 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
 }
 
 void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
+    TString requestOrigin = request && request.HasHeader("Origin") ? request.GetHeader("Origin") : TString();
     TString origin;
     if (AllowOrigin) {
-        origin = AllowOrigin;
-    } else if (request && request.HasHeader("Origin")) {
-        origin = request.GetHeader("Origin");
+        if (IsMatchesWildcards(requestOrigin, AllowOrigin)) {
+            origin = requestOrigin;
+        } else {
+            return; // no CORS headers - no access
+        }
+    } else if (requestOrigin) {
+        origin = requestOrigin;
     }
     if (origin.empty()) {
         origin = "*";

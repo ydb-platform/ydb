@@ -1,7 +1,7 @@
 name: Notify documentation review assignees on new commits
 
 on:
-  pull_request:
+  pull_request_target:
     # Fires on new commits and on label changes, so the job
     # starts as soon as the label is added, then on every push.
     types: [synchronize, labeled]

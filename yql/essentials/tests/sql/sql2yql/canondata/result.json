@@ -2542,9 +2542,9 @@
     ],
     "test_sql2yql.test[expr-current_op]": [
         {
-            "checksum": "dad23f292f63f624470a93ca339916d1",
-            "size": 1342,
-            "uri": "https://{canondata_backend}/937458/0263002581044055229fb35127ddc0a0a0025953/resource.tar.gz#test_sql2yql.test_expr-current_op_/sql.yql"
+            "checksum": "a1dc136c7cc38f00c8b50715c89b9656",
+            "size": 1509,
+            "uri": "https://{canondata_backend}/1871182/089a8d1b6980b7434eb00135a8e369216a14ff2a/resource.tar.gz#test_sql2yql.test_expr-current_op_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-current_tz]": [
@@ -3961,6 +3961,13 @@
             "uri": "https://{canondata_backend}/1937367/af84d06d0fb3153f82b596e7db07f2186d2ec3a2/resource.tar.gz#test_sql2yql.test_join-yql-19192_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-yql-19731]": [
+        {
+            "checksum": "4406d74deb57924adc9bbc0657e68c53",
+            "size": 3584,
+            "uri": "https://{canondata_backend}/212715/e102f70d9232d825c746de10ca1c287eb99f76ad/resource.tar.gz#test_sql2yql.test_join-yql-19731_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-yql-6199]": [
         {
             "checksum": "5421f92ec269e5d76133e1ca54b6d0d0",
@@ -4274,6 +4281,13 @@
             "checksum": "b7ec5ce6a050126e5cdffa4e6326f0e4",
             "size": 1085,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_library-library_yqls_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[like-ilike]": [
+        {
+            "checksum": "82ed5458d953d02cb6b225495713cd99",
+            "size": 11180,
+            "uri": "https://{canondata_backend}/1946324/f3be5399e4ba264ff20e7048ebc764e7239129dc/resource.tar.gz#test_sql2yql.test_like-ilike_/sql.yql"
         }
     ],
     "test_sql2yql.test[like-like_escape]": [
@@ -10284,6 +10298,11 @@
             "uri": "file://test_sql_format.test_join-yql-19192_/formatted.sql"
         }
     ],
+    "test_sql_format.test[join-yql-19731]": [
+        {
+            "uri": "file://test_sql_format.test_join-yql-19731_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[join-yql-6199]": [
         {
             "uri": "file://test_sql_format.test_join-yql-6199_/formatted.sql"
@@ -10507,6 +10526,11 @@
     "test_sql_format.test[library-library_yqls]": [
         {
             "uri": "file://test_sql_format.test_library-library_yqls_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[like-ilike]": [
+        {
+            "uri": "file://test_sql_format.test_like-ilike_/formatted.sql"
         }
     ],
     "test_sql_format.test[like-like_escape]": [

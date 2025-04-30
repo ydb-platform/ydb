@@ -40,6 +40,7 @@ private:
         UNIT_TEST(TestDataTypeFormat);
         UNIT_TEST(TestBlockTypeFormat);
         UNIT_TEST(TestArrowType);
+        UNIT_TEST(TestArrowTaggedType);
     UNIT_TEST_SUITE_END();
 
     TString FormatType(NUdf::TType* t) {
@@ -148,8 +149,8 @@ private:
 
     void TestTaggedTypeFormat() {
         {
-            auto s = FormatType(FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<i8>(), "my_resource"));
-            UNIT_ASSERT_VALUES_EQUAL(s, "Tagged<Int8,'my_resource'>");
+            auto s = FormatType(FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<i8>(), "my_tag"));
+            UNIT_ASSERT_VALUES_EQUAL(s, "Tagged<Int8,'my_tag'>");
         }
     }
 
@@ -340,6 +341,17 @@ private:
 
     void TestArrowType() {
         auto type = FunctionTypeInfoBuilder.SimpleType<ui64>();
+        auto atype1 = TypeInfoHelper->MakeArrowType(type);
+        UNIT_ASSERT(atype1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype1.Get())->GetType()->ToString(), std::string("uint64"));
+        ArrowSchema s;
+        atype1->Export(&s);
+        auto atype2 = TypeInfoHelper->ImportArrowType(&s);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype2.Get())->GetType()->ToString(), std::string("uint64"));
+    }
+
+    void TestArrowTaggedType() {
+        auto type = FunctionTypeInfoBuilder.Tagged(FunctionTypeInfoBuilder.SimpleType<ui64>(), "my_tag");
         auto atype1 = TypeInfoHelper->MakeArrowType(type);
         UNIT_ASSERT(atype1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<TArrowType*>(atype1.Get())->GetType()->ToString(), std::string("uint64"));

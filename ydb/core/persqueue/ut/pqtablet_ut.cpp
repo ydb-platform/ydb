@@ -2057,6 +2057,11 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
     const ui64 txId = 67890;
     const ui64 mockTabletId = MakeTabletID(false, 22222);
 
+    // We are simulating a situation where the recipient of TEvReadSet has already completed a transaction
+    // and has been deleted.
+    //
+    // To do this, we "forget" the TEvReadSet from the PQ tablet and send TEvClientConnected with the Dead flag
+    // instead of TEvReadSetAck.
     TTestActorRuntimeBase::TEventFilter prev;
     auto filter = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) -> bool {
         if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvReadSet>()) {
@@ -2091,11 +2096,14 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 
     SendPlanStep({.Step=100, .TxIds={txId}});
 
+    // We are sending a TEvReadSet so that the PQ tablet can complete the transaction.
     tablet->SendReadSet(*Ctx->Runtime,
                         {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
     WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
+    // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
+    // will switch from the WAIT_RS_AKS state to the DELETING state.
     WaitForTheTransactionToBeDeleted(txId);
 }
 

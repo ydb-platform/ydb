@@ -21,44 +21,53 @@ def create_or_update_pr(args, repo):
     pr_number = None
     body = get_body_content(args.body)
 
-    # Check for an existing PR
-    existing_prs = repo.get_pulls(head=args.branch_for_pr, base=args.base_branch, state='open')
-    for pr in existing_prs:
-        if pr.base.ref == args.base_branch and pr.head.ref == args.branch_for_pr:
-            current_pr = pr
-            break
+    # Получаем owner репозитория для формирования правильного формата head
+    owner = repo.owner.login
+    # Формируем правильный формат для параметра head: "owner:branch"
+    head_format = f"{owner}:{args.branch_for_pr}"
+    
+    print(f"Searching for PR with head branch '{head_format}' and base branch '{args.base_branch}'")
+    
+    # Используем правильный формат head для API
+    existing_prs = repo.get_pulls(head=head_format, base=args.base_branch, state='open')
+    
+    if existing_prs.totalCount > 0:
+        current_pr = existing_prs[0]
+        print(f"Found existing PR #{current_pr.number}: {current_pr.title}")
+    
     if current_pr:
-        print(f"Existing PR found. Updating PR #{current_pr.number}.")
+        print(f"Updating existing PR #{current_pr.number}.")
         current_pr.edit(title=args.title, body=body)
+        print(f"PR #{current_pr.number} updated successfully.")
     else:
-        print("No existing PR found. Creating a new PR.")
-        current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
+        print(f"No existing PR found. Creating a new PR from '{args.branch_for_pr}' to '{args.base_branch}'.")
+        try:
+            current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
+            print(f"New PR #{current_pr.number} created successfully.")
+        except Exception as e:
+            print(f"Error creating PR: {str(e)}")
+            raise
 
     pr_number = current_pr.number
-    if os.environ['GITHUB_OUTPUT']:
+    if 'GITHUB_OUTPUT' in os.environ and os.environ['GITHUB_OUTPUT']:
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             print(f"pr_number={pr_number}", file=gh_out)
 
-    print(f"PR created or updated successfully. PR number: {pr_number}")
+    print(f"PR operation completed. PR number: {pr_number}")
+    return pr_number
 
 def append_to_pr_body(args, repo):
     body_to_append = get_body_content(args.body)
     
-    pr = None
-    if args.pr_number:
-        pr = repo.get_pull(args.pr_number)
-    else:
-        existing_prs = repo.get_pulls(head=args.branch_for_pr, base=args.base_branch, state='open')
-        for p in existing_prs:
-            if p.base.ref == args.base_branch and p.head.ref == args.branch_for_pr:
-                pr = p
-                break
+    print(f"Looking for PR by number: {args.pr_number}")
+    pr = repo.get_pull(args.pr_number)
 
     if pr:
         print(f"Appending to PR #{pr.number}.")
         current_body = pr.body or ""
         new_body = current_body + "\n\n" + body_to_append
         pr.edit(body=new_body)
+        print(f"PR #{pr.number} body updated successfully.")
     else:
         print("No matching pull request found to append body.")
 

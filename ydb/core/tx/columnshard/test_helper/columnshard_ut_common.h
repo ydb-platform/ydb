@@ -336,11 +336,17 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
+    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         table->SetPathId(pathId);
         tx.MutableSeqNo()->SetRound(version);
+
+        auto* preset = table->MutableSchemaPreset();
+        preset->SetId(1);
+        preset->SetName("default");
+        InitSchema(columns, pk, specials, preset->MutableSchema());
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {

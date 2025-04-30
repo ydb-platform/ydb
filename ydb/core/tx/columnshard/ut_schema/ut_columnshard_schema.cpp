@@ -264,8 +264,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     } else {
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
-    planStep = SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 2, spec), ++txId);
+    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchema, testYdbPk, spec), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -287,8 +286,8 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
 
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
-    planStep = SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()), ++txId);
+    planStep =
+        SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 3, ydbSchema, testYdbPk, TTestSchema::TTableSpecials()), ++txId);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
@@ -583,7 +582,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
         if (i) {
             const ui32 version = 2 * i + 1;
-            planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, version, specs[i]), ++txId);
+            planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, version, testYdbSchema, testYdbPk, specs[i]), ++txId);
         }
         if (specs[i].HasTiers() || reboots) {
             csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
@@ -1037,8 +1036,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     spec.Tiers.back().EvictAfter = allow;
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
-                           ++txId);
+    planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, testYdbSchema, testYdbPk, spec), ++txId);
     csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
 
     // Writes

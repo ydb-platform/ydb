@@ -245,6 +245,8 @@ protected:
     void InterceptSaveTxState(TAutoPtr<IEventHandle>& event);
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
+    void WaitForTheTransactionToBeDeleted(ui64 txId);
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -1080,6 +1082,39 @@ void TPQTabletFixture::InterceptSaveTxState(TAutoPtr<IEventHandle>& ev)
 void TPQTabletFixture::SendSaveTxState(TAutoPtr<IEventHandle>& event)
 {
     Ctx->Runtime->Send(event);
+}
+
+void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
+{
+    const TString key = GetTxKey(txId);
+
+    for (size_t i = 0; i < 200; ++i) {
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(12345);
+        auto cmd = request->Record.AddCmdReadRange();
+        auto range = cmd->MutableRange();
+        range->SetFrom(key);
+        range->SetIncludeFrom(true);
+        range->SetTo(key);
+        range->SetIncludeTo(true);
+        cmd->SetIncludeData(false);
+        SendToPipe(Ctx->Edge, request.release());
+
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+        const auto& result = response->Record.GetReadRangeResult(0);
+        if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+            continue;
+        }
+
+        if (result.GetStatus() == NKikimrProto::NODATA) {
+            return;
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -2015,6 +2050,53 @@ Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
     WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
 
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
+{
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = MakeTabletID(false, 22222);
+
+    TTestActorRuntimeBase::TEventFilter prev;
+    auto filter = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) -> bool {
+        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvReadSet>()) {
+            const auto& r = msg->Record;
+            if (r.GetTabletSource() == Ctx->TabletId) {
+                runtime.Send(event->Sender,
+                             Ctx->Edge,
+                             new TEvTabletPipe::TEvClientConnected(mockTabletId,
+                                                                   NKikimrProto::ERROR,
+                                                                   event->Sender,
+                                                                   TActorId(),
+                                                                   true,
+                                                                   true, // Dead
+                                                                   0));
+                return true;
+            }
+        }
+        return false;
+    };
+    prev = Ctx->Runtime->SetEventFilter(filter);
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    tablet->SendReadSet(*Ctx->Runtime,
+                        {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitForTheTransactionToBeDeleted(txId);
 }
 
 }

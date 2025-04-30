@@ -56,11 +56,14 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
         PendingNodes.erase(nodeId);
         if (record.GetVersion() == "v1") {
             V1Nodes++;
+            V1NodesList.push_back(nodeId);
         } else if (record.GetVersion() == "v2") {
             V2Nodes++;
+            V2NodesList.push_back(nodeId);
         } else {
             STLOG(PRI_DEBUG, CMS_CONFIGS, CIG3, "Received unknown version '" << record.GetVersion() << "' from NodeId: " << nodeId);
             UnknownNodes++;
+            UnknownNodesList.push_back(nodeId);
         }
 
         if (PendingNodes.empty()) {
@@ -86,6 +89,16 @@ void TConfigurationInfoCollector::ReplyAndDie() {
     result->set_v1_nodes(V1Nodes);
     result->set_v2_nodes(V2Nodes);
     result->set_unknown_nodes(UnknownNodes);
+
+    for (ui32 nodeId : V1NodesList) {
+        result->add_v1_nodes_list(nodeId);
+    }
+    for (ui32 nodeId : V2NodesList) {
+        result->add_v2_nodes_list(nodeId);
+    }
+    for (ui32 nodeId : UnknownNodesList) {
+        result->add_unknown_nodes_list(nodeId);
+    }
 
     Send(ReplyToActorId, response.Release());
     PassAway();

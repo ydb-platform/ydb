@@ -671,13 +671,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             ui32 nthToLoad = 0;
             ui64 sizeToLoad = 0;
 
-            auto &wa = *owner.Listed.Front()->Request;
+            auto &request = *owner.Listed.Front()->Request;
 
-            if (!wa.IsResponded()) {
-                auto *collection = Collections.FindPtr(wa.Label);
+            if (!request.IsResponded()) {
+                auto *collection = Collections.FindPtr(request.Label);
                 Y_ENSURE(collection);
 
-                for (ui32 pageId : wa.PagesToRequest) {
+                for (ui32 pageId : request.PagesToRequest) {
                     ++nthToRequest;
 
                     auto* page = collection->PageMap[pageId].Get();
@@ -695,7 +695,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     if (nthToLoad != 0) {
                         TVector<ui32> toLoad;
                         toLoad.reserve(nthToLoad);
-                        for (ui32 pageId : wa.PagesToRequest) {
+                        for (ui32 pageId : request.PagesToRequest) {
                             auto* page = collection->PageMap[pageId].Get();
                             if (!page || page->State != PageStatePending)
                                 continue;
@@ -706,23 +706,23 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                                 break;
                         }
 
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << wa.Label
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.Label
                             << (&queue == &AsyncRequests ? " async" : " scan") << " queue"
                             << " pages " << toLoad);
 
                         AddInFlyPages(toLoad.size(), sizeToLoad);
                         // fetch cookie -> requested size;
                         // event cookie -> queue type
-                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, wa.PageCollection, std::move(toLoad), wa.TraceId.GetTraceId());
-                        NBlockIO::Start(this, wa.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), wa.Priority, fetch);
+                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, request.PageCollection, std::move(toLoad), request.TraceId.GetTraceId());
+                        NBlockIO::Start(this, request.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), request.Priority, fetch);
                     }
                 }
             }
 
             // cleanup
-            if (wa.IsResponded() || nthToRequest == wa.PagesToRequest.size()) {
+            if (request.IsResponded() || nthToRequest == request.PagesToRequest.size()) {
                 {
-                    auto reqit = owner.Index.find(wa.Label);
+                    auto reqit = owner.Index.find(request.Label);
                     Y_ENSURE(reqit != owner.Index.end());
                     reqit->second.pop_front();
 
@@ -737,7 +737,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 else
                     ++it;
             } else {
-                wa.PagesToRequest.erase(wa.PagesToRequest.begin(), wa.PagesToRequest.begin() + nthToRequest);
+                request.PagesToRequest.erase(request.PagesToRequest.begin(), request.PagesToRequest.begin() + nthToRequest);
                 ++it;
             }
 
@@ -1028,7 +1028,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
         for (auto &[request, index] : pendingRequestsIt->second) {
-            Y_ENSURE(!request->IsResponded()); // TODO
+            if (request->IsResponded()) {
+                continue;
+            }
             auto &readyPage = request->ReadyPages[index];
             Y_ENSURE(readyPage.PageId == page->PageId);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
@@ -1040,8 +1042,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendResult(TRequest &request) {
-        Y_ENSURE(!request.IsResponded());
-        /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
+        if (request.IsResponded()) {
+            return;
+        }
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
@@ -1062,7 +1065,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
-        Y_ENSURE(!request.IsResponded());
+        if (request.IsResponded()) {
+            return;
+        }
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
@@ -1088,9 +1093,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // decline all pending requests
         for (auto &[_, requests] : collection.PendingRequests) {
             for (auto &[request, _] : requests) {
-                if (!request->IsResponded()) {
-                    SendError(*request, blobStorageError);
-                }
+                SendError(*request, blobStorageError);
             }
         }
         collection.PendingRequests.clear();

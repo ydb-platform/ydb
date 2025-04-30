@@ -946,7 +946,25 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
 
-        // TODO: check remaining requests
+        sharedCache.Provide(sharedCache.Collection1, {1});
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{3, sharedCache.Collection1, {1}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {3});
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{4, sharedCache.Collection1, {1, 3}}
+        });
+        sharedCache.Provide(sharedCache.Collection2, {2});
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{2, sharedCache.Collection2, {2}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
     }
 
     Y_UNIT_TEST(Unregister_Basics) {

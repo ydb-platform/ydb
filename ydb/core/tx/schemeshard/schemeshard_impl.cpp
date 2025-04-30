@@ -7553,7 +7553,7 @@ void TSchemeShard::ConfigureAccountLockout(
 
 void TSchemeShard::ConfigureExternalSources(
     const NKikimrConfig::TQueryServiceConfig& config,
-    const TActorContext &ctx) {
+    const TActorContext& ctx) {
     const auto& hostnamePatterns = config.GetHostnamePatterns();
     const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
     ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(

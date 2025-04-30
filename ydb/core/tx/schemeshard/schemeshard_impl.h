@@ -511,7 +511,7 @@ public:
 
     void ConfigureExternalSources(
         const NKikimrConfig::TQueryServiceConfig& config,
-        const TActorContext &ctx);
+        const TActorContext& ctx);
 
     void StartStopCompactionQueues();
 

@@ -1,6 +1,12 @@
 // Добавляем CSS стили (если не добавлены в основной CSS)
 document.head.insertAdjacentHTML('beforeend', `
 <style>
+.brush .selection {
+    fill: #3498db;
+    fill-opacity: 0.2;
+    stroke: #2980b9;
+    stroke-width: 1px;
+}
 .tooltip {
     position: absolute;
     background-color: rgba(255, 255, 255, 0.95);
@@ -250,6 +256,7 @@ function renderMetricsChart() {
     
     // Получаем отсортированные по времени данные
     let metricData = [...currentData.history].sort((a, b) => a.timestamp - b.timestamp);
+    const allIterations = metricData.map(d => d.iteration); // Получаем все итерации для brush
     
     // Создаем шкалы
     const x = d3.scaleLinear()
@@ -302,44 +309,14 @@ function renderMetricsChart() {
     
     // Создаем tooltip
     const tooltip = createTooltip();
-    
-    // Создаем невидимую область для отслеживания движения мыши
-    g.append("rect")
-        .attr("width", width)
-        .attr("height", height)
-        .attr("fill", "none")
-        .attr("pointer-events", "all")
-        .on("mousemove", function() {
-            const mouseX = d3.mouse(this)[0];
-            const iteration = Math.round(x.invert(mouseX));
-            
-            // Находим ближайшую итерацию в данных
-            const dataPoints = metricData.filter(d => d[selectedMetric] !== undefined && d[selectedMetric] !== null);
-            if (dataPoints.length === 0) return;
-            
-            const closestIterationIndex = findClosestIndex(dataPoints.map(d => d.iteration), iteration);
-            const closestDataPoint = dataPoints[closestIterationIndex];
-            
-            // Формируем текст для tooltip
-            const tooltipText = `<strong>Итерация: ${closestDataPoint.iteration}</strong><br>${selectedMetric}: ${closestDataPoint[selectedMetric].toFixed(5)}`;
-            
-            // Отображаем tooltip
-            showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
-            
-            // Рисуем вертикальную линию
-            createMouseLine(g, x, closestDataPoint.iteration, height);
-            
-            // Увеличиваем размер точки
-            dots.attr("r", 3); // Сбрасываем размер для всех точек
-            dots.filter(d => d.iteration === closestDataPoint.iteration)
-                .attr("r", 5); // Увеличиваем нужную
-        })
-        .on("mouseout", function() {
-            // Убираем tooltip и линию
-            hideTooltip(tooltip);
-            g.selectAll(".mouseLine").remove();
-            dots.attr("r", 3); // Возвращаем размер точек
-        });
+
+    // Добавляем возможность выделения диапазона и передаем параметры для тултипа
+    const tooltipGenerator = (iteration, index) => {
+        const dataPoint = metricData.find(d => d.iteration === iteration);
+        if (!dataPoint) return null;
+        return `<strong>Итерация: ${dataPoint.iteration}</strong><br>${selectedMetric}: ${dataPoint[selectedMetric].toFixed(5)}`;
+    };
+    addBrushToChart(g, x, height, allIterations, tooltip, tooltipGenerator, findClosestIndex, dots);
 }
 
 // Функция для отрисовки графика пула
@@ -348,7 +325,7 @@ function renderPoolChart() {
         console.log("renderPoolChart: нет данных для отображения");
         return;
     }
-    
+
     const selectedPool = poolSelect.val();
     const selectedMetric = poolMetricSelect.val();
     
@@ -466,7 +443,7 @@ function renderPoolChart() {
             hideTooltip(tooltip);
             g.selectAll(".mouseLine").remove();
             dots.attr("r", 3); // Возвращаем размер точек
-        });
+    });
 }
 
 // Функция для отрисовки всех CPU графиков
@@ -542,7 +519,7 @@ function renderCpuPoolsChart(cpuData) {
     visiblePoolNames.forEach(poolName => {
         if (cpuData.pools[poolName]) {
             const values = cpuData.pools[poolName][metricType][valueType];
-            visiblePoolData[poolName] = values;
+                visiblePoolData[poolName] = values;
         }
     });
     
@@ -592,16 +569,16 @@ function renderCpuPoolsChart(cpuData) {
     
     // Создаем легенду
     createLegend(svg, legendItems, {left: margin.left, top: 10}, function(poolName) {
-        // Удаляем пул из видимых или добавляем обратно
-        if (visiblePools.has(poolName)) {
-            visiblePools.delete(poolName);
-            d3.select(this).classed("legend-item-disabled", true);
-        } else {
-            visiblePools.add(poolName);
-            d3.select(this).classed("legend-item-disabled", false);
-        }
-        renderCpuCharts();
-    });
+            // Удаляем пул из видимых или добавляем обратно
+            if (visiblePools.has(poolName)) {
+                visiblePools.delete(poolName);
+                d3.select(this).classed("legend-item-disabled", true);
+            } else {
+                visiblePools.add(poolName);
+                d3.select(this).classed("legend-item-disabled", false);
+            }
+            renderCpuCharts();
+        });
     
     // Для каждого пула рисуем область
     visiblePoolNames.forEach(poolName => {
@@ -620,43 +597,28 @@ function renderCpuPoolsChart(cpuData) {
     
     // Создаем tooltip
     const tooltip = createTooltip();
-    
-    // Создаем невидимую область для отслеживания движения мыши
-    g.append("rect")
-        .attr("width", width)
-        .attr("height", height)
-        .attr("fill", "none")
-        .attr("pointer-events", "all")
-        .on("mousemove", function() {
-            const mouseX = d3.mouse(this)[0];
-            const iteration = Math.round(x.invert(mouseX));
-            
-            // Находим ближайшую итерацию
-            const closestIterationIndex = findClosestIndex(cpuData.iterations, iteration);
-            
-            const iterationData = stackData[closestIterationIndex];
-            
-            // Формируем текст для tooltip
-            let tooltipText = `<strong>Итерация: ${iterationData.iteration}</strong><br>`;
-            
-            visiblePoolNames.forEach(poolName => {
-                const value = iterationData[poolName];
-                if (value !== undefined) {
-                    tooltipText += `${poolName}: ${value.toFixed(5)}<br>`;
-                }
-            });
-            
-            // Отображаем tooltip
-            showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
-            
-            // Рисуем вертикальную линию
-            createMouseLine(g, x, iterationData.iteration, height);
-        })
-        .on("mouseout", function() {
-            // Убираем tooltip и линию
-            hideTooltip(tooltip);
-            g.selectAll(".mouseLine").remove();
+
+    // Добавляем возможность выделения диапазона
+    const tooltipGenerator = (iteration) => { // Принимаем только iteration
+        // Находим данные для нужной итерации в stackData
+        const iterationData = stackData.find(d => d.iteration === iteration);
+        if (!iterationData) {
+            console.log("[CpuPoolsChart Tooltip] No data found for iteration:", iteration);
+            return null; // Если данных для итерации нет
+        }
+        
+        let tooltipText = `<strong>Итерация: ${iterationData.iteration}</strong><br>`;
+        visiblePoolNames.forEach(poolName => {
+            const value = iterationData[poolName];
+            if (value !== undefined) {
+                tooltipText += `${poolName}: ${value.toFixed(5)}<br>`;
+            }
         });
+        console.log("[CpuPoolsChart Tooltip] Iteration:", iteration, "Generated text:", tooltipText);
+        return tooltipText;
+    };
+    // Передаем findClosestIteration как iterationFinder, чтобы addBrushToChart нашел нужную итерацию
+    addBrushToChart(g, x, height, cpuData.iterations, tooltip, tooltipGenerator, findClosestIndex);
 }
 
 // Функция для отрисовки графика количества потоков
@@ -779,50 +741,35 @@ function renderThreadsChart(cpuData) {
     
     // Создаем tooltip
     const tooltip = createTooltip();
-    
-    // Создаем невидимую область для отслеживания движения мыши
-    g.append("rect")
-        .attr("width", width)
-        .attr("height", height)
-        .attr("fill", "none")
-        .attr("pointer-events", "all")
-        .on("mousemove", function() {
-            const mouseX = d3.mouse(this)[0];
-            const iteration = Math.round(x.invert(mouseX));
-            
-            // Находим ближайшую итерацию
-            const closestIterationIndex = findClosestIndex(cpuData.iterations, iteration);
-            
-            const iterationData = stackData[closestIterationIndex];
-            
-            // Формируем текст для tooltip
-            let tooltipText = `<strong>Итерация: ${iterationData.iteration}</strong><br>`;
-            tooltipText += `<strong>Всего потоков:</strong> ${filteredTotalThreadCount[closestIterationIndex]}<br>`;
-            tooltipText += `<strong>Макс. потоков:</strong> ${filteredMaxThreadCount[closestIterationIndex]}<br><br>`;
-            
-            visiblePools.forEach(poolName => {
-                if (cpuData.poolsThreadCount[poolName]) {
-                    // Данные текущего пула
-                    const currentThreads = cpuData.poolsThreadCount[poolName].current[closestIterationIndex];
-                    const maxThreads = cpuData.poolsThreadCount[poolName].potential[closestIterationIndex];
-                    
-                    if (currentThreads !== undefined) {
-                        tooltipText += `${poolName}: ${currentThreads} / ${maxThreads}<br>`;
-                    }
+
+    // Добавляем возможность выделения диапазона
+    const tooltipGenerator = (iteration) => { // Принимаем только iteration
+        // Находим индекс этой итерации в исходных данных
+        const index = cpuData.iterations.findIndex(it => it === iteration);
+        if (index === -1) {
+            console.log("[ThreadsChart Tooltip] Index not found for iteration:", iteration);
+            return null;
+        }
+
+        let tooltipText = `<strong>Итерация: ${iteration}</strong><br>`;
+        tooltipText += `<strong>Всего потоков:</strong> ${filteredTotalThreadCount[index]}<br>`;
+        tooltipText += `<strong>Макс. потоков:</strong> ${filteredMaxThreadCount[index]}<br><br>`;
+        
+        visiblePools.forEach(poolName => {
+            if (cpuData.poolsThreadCount[poolName]) {
+                const currentThreads = cpuData.poolsThreadCount[poolName].current[index];
+                const maxThreads = cpuData.poolsThreadCount[poolName].potential[index];
+                
+                if (currentThreads !== undefined) {
+                    tooltipText += `${poolName}: ${currentThreads} / ${maxThreads}<br>`;
                 }
-            });
-            
-            // Отображаем tooltip
-            showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
-            
-            // Рисуем вертикальную линию
-            createMouseLine(g, x, iterationData.iteration, height);
-        })
-        .on("mouseout", function() {
-            // Убираем tooltip и линию
-            hideTooltip(tooltip);
-            g.selectAll(".mouseLine").remove();
+            }
         });
+        console.log("[ThreadsChart Tooltip] Iteration:", iteration, "Index:", index, "Generated text:", tooltipText);
+        return tooltipText;
+    };
+    // Передаем null вместо dots
+    addBrushToChart(g, x, height, cpuData.iterations, tooltip, tooltipGenerator, findClosestIndex);
 }
 
 // Функция для отрисовки графика Budget и CPU
@@ -911,41 +858,173 @@ function renderBudgetChart(cpuData) {
     
     // Создаем tooltip
     const tooltip = createTooltip();
-    
-    // Создаем невидимую область для отслеживания движения мыши
-    g.append("rect")
-        .attr("width", width)
-        .attr("height", height)
-        .attr("fill", "none")
-        .attr("pointer-events", "all")
-        .on("mousemove", function() {
+
+    // Добавляем возможность выделения диапазона
+    const tooltipGenerator = (iteration) => { // Принимаем только iteration
+        // Находим индекс этой итерации в исходных данных
+        const index = cpuData.iterations.findIndex(it => it === iteration);
+        if (index === -1) {
+            console.log("[BudgetChart Tooltip] Index not found for iteration:", iteration);
+            return null;
+        }
+        
+        const budgetValue = cpuData.budget[index];
+        const cpuValue = cpuData.totalCpu[index];
+        const iterationNumber = iteration; // Используем найденную итерацию
+        
+        let tooltipText = `<strong>Итерация: ${iterationNumber}</strong><br>`;
+        tooltipText += `<strong>Budget:</strong> ${budgetValue.toFixed(5)}<br>`;
+        tooltipText += `<strong>${metricType === 'elapsedCpu' ? 'Total Elapsed CPU' : 'Total Used CPU'}:</strong> ${cpuValue.toFixed(5)}<br>`;
+        console.log("[BudgetChart Tooltip] Iteration:", iteration, "Index:", index, "Generated text:", tooltipText);
+        return tooltipText;
+    };
+    addBrushToChart(g, x, height, cpuData.iterations, tooltip, tooltipGenerator, findClosestIndex);
+}
+
+/**
+ * Вспомогательная функция для добавления brush (выделения диапазона) к графику
+ * @param {Object} g - группа SVG для отрисовки
+ * @param {Function} x - шкала X
+ * @param {number} height - высота графика
+ * @param {Array} allIterations - массив всех доступных итераций
+ * @param {Object} tooltip - D3 selection объекта tooltip
+ * @param {Function} tooltipContentGenerator - Функция (iterationData) => "html string" для генерации контента tooltip
+ * @param {Function} [iterationFinder=findClosestIndex] - Функция для поиска индекса итерации
+ * @param {Object} [dots=null] - D3 selection точек для подсветки
+ */
+function addBrushToChart(g, x, height, allIterations, tooltip, tooltipContentGenerator, iterationFinder = findClosestIteration, dots = null) {
+    // Сохраняем brush группы для возможности сброса
+    if (!window.brushGroups) window.brushGroups = [];
+
+    const brush = d3.brushX()
+        .extent([[0, 0], [g.attr("width"), height]])
+        .on("end", brushed); // Обработчик завершения выделения
+
+    const brushGroup = g.append("g")
+        .attr("class", "brush")
+        .call(brush);
+
+    // Сохраняем для сброса
+    window.brushGroups.push({ brushGroup, brush });
+
+    // --- Логика для тултипов --- 
+    // Находим overlay элемент, созданный d3.brush
+    const overlay = brushGroup.select(".overlay");
+    if (!overlay.empty()) {
+        overlay
+            .on("mousemove.tooltip", function() { // Добавляем .tooltip к имени события
+                if (!tooltipContentGenerator) return; // Если генератор не передан
+                
             const mouseX = d3.mouse(this)[0];
-            const iteration = Math.round(x.invert(mouseX));
+            const iterationValue = x.invert(mouseX);
             
             // Находим ближайшую итерацию
-            const closestIterationIndex = findClosestIndex(cpuData.iterations, iteration);
-            
-            // Формируем текст для tooltip
-            const iterationNumber = cpuData.iterations[closestIterationIndex];
-            const budgetValue = cpuData.budget[closestIterationIndex];
-            const cpuValue = cpuData.totalCpu[closestIterationIndex];
-            
-            let tooltipText = `<strong>Итерация: ${iterationNumber}</strong><br>`;
-            tooltipText += `<strong>Budget:</strong> ${budgetValue.toFixed(5)}<br>`;
-            tooltipText += `<strong>${metricType === 'elapsedCpu' ? 'Total Elapsed CPU' : 'Total Used CPU'}:</strong> ${cpuValue.toFixed(5)}<br>`;
-            
+                // Используем переданный iterationFinder
+                const closestIterationIndex = iterationFinder(allIterations, iterationValue);
+                const closestIteration = allIterations[closestIterationIndex];
+                
+                // Генерируем контент тултипа
+                // Предполагаем, что generator ожидает саму итерацию или индекс
+                // Адаптируем, если нужно передавать весь объект данных
+                const tooltipText = tooltipContentGenerator(closestIteration, closestIterationIndex);
+                
+                if (tooltipText) {
             // Отображаем tooltip
-            showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
+                    showTooltip(tooltip, tooltipText, d3.event.pageX, d3.event.pageY);
             
             // Рисуем вертикальную линию
-            createMouseLine(g, x, iterationNumber, height);
-        })
-        .on("mouseout", function() {
+                    createMouseLine(g, x, closestIteration, height);
+                    
+                    // Подсвечиваем точку, если dots переданы
+                    if (dots) {
+                        dots.attr("r", 3); // Сбрасываем размер для всех точек
+                        dots.filter(d => d.iteration === closestIteration)
+                            .attr("r", 5); // Увеличиваем нужную
+                    }
+                }
+            })
+            .on("mouseout.tooltip", function() { // Добавляем .tooltip к имени события
             // Убираем tooltip и линию
-            hideTooltip(tooltip);
+                hideTooltip(tooltip);
             g.selectAll(".mouseLine").remove();
-        });
+                // Возвращаем размер точек
+                if (dots) {
+                    dots.attr("r", 3);
+                }
+            });
+    } else {
+        console.warn("Не удалось найти .overlay в brush группе для добавления тултипов");
+    }
+    // --- Конец логики для тултипов ---
+
+    function brushed() { // Обработчик завершения выделения brush
+        if (!d3.event.sourceEvent) return; // Игнорируем программные события brush
+
+        // Сброс по двойному клику
+        if (d3.event.sourceEvent.type === 'dblclick') {
+            clearAllBrushes();
+            // Возможно, стоит сбросить поля ввода к значениям по умолчанию или полному диапазону?
+            // iterationFrom.val(-30); // Например
+            // iterationTo.val("");
+            // iterationFrom.trigger('change'); // Вызовет fetchData
+                return;
+            }
+            
+        // Если выделение снято (клик без протягивания)
+        if (!d3.event.selection) return;
+            
+            const [x0, x1] = d3.event.selection.map(x.invert);
+            
+        // Находим ближайшие итерации к границам выделения
+            const startIteration = findClosestIteration(allIterations, x0);
+            const endIteration = findClosestIteration(allIterations, x1);
+            
+        // Если начало и конец совпадают, ничего не делаем
+            if (startIteration === endIteration) {
+                return;
+            }
+            
+        console.log("Выбран диапазон итераций через brush:", startIteration, endIteration);
+
+        // Обновляем поля ввода
+        iterationFrom.val(startIteration);
+        iterationTo.val(endIteration);
+
+        // Триггерим событие change для обновления URL и загрузки данных
+        // Важно триггерить оба, чтобы URL обновился корректно
+        iterationFrom.trigger('change');
+        iterationTo.trigger('change');
+        
+        // Очищаем само выделение brush после обновления полей
+        // brushGroup.call(brush.move, null); // Можно раскомментировать, если нужно убирать выделение
+    }
+    
+    return brushGroup;
 }
+
+/**
+ * Вспомогательная функция для поиска ближайшей итерации к значению
+ * Используется в addBrushToChart
+ */
+function findClosestIteration(iterations, value) {
+    if (!iterations || iterations.length === 0) return undefined;
+    return iterations.reduce((closest, current) => {
+        return Math.abs(current - value) < Math.abs(closest - value) ? current : closest;
+    }, iterations[0]);
+}
+
+/**
+ * Функция для сброса выделения brush на всех графиках
+ */
+window.clearAllBrushes = function() {
+    if (window.brushGroups) {
+        window.brushGroups.forEach(({ brushGroup, brush }) => {
+            if (brushGroup && brush) {
+                brushGroup.call(brush.move, null);
+            }
+        });
+    }
+};
 
 // Вызываем функцию инициализации при загрузке страницы
 $(document).ready(function() {

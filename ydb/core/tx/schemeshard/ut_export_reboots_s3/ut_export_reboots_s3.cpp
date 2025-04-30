@@ -516,6 +516,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return TableScheme;
         } 
 
+        static const TTypedScheme& IndexedTable() {
+            return IndexedTableScheme;
+        } 
+
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;
         }
@@ -528,6 +532,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const char* TableName;
         static const TTypedScheme TableScheme;
         static const TTypedScheme ChangefeedScheme;
+        static const TTypedScheme IndexedTableScheme;
         static const TString RequestString;
     };
 
@@ -536,10 +541,12 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     const TTypedScheme TTestData::TableScheme = TTypedScheme {
         EPathTypeTable,
         Sprintf(R"(
-            Name: "%s"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
+            TableDescription {
+                Name: "%s"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
         )", TableName)
     };
 
@@ -554,6 +561,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 State: ECdcStreamStateReady
             }
         )", TableName)
+    };
+
+    const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
+        EPathTypeTable,
+        Sprintf(R"(
+            %s
+            IndexDescription {
+                Name: "ByValue"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalUnique
+            }  
+        )", TableScheme.Scheme.c_str())
     };
 
     const TString TTestData::RequestString = R"(
@@ -585,6 +604,12 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         ForgetS3({
             TTestData::Table(),
             TTestData::Changefeed()
+        }, TTestData::Request());
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithUniqueIndex) {
+        RunS3({
+            TTestData::IndexedTable()
         }, TTestData::Request());
     }
 

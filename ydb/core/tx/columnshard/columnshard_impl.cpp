@@ -852,21 +852,24 @@ private:
     std::shared_ptr<NOlap::TDataAccessorsRequest> Request;
     std::shared_ptr<TDataAccessorsSubscriberBase> Subscriber;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    const NOlap::TTabletId TabletId;
 
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) override {
         Subscriber->SetResourcesGuard(guard);
         Request->RegisterSubscriber(Subscriber);
-        DataAccessorsManager->AskData(Request);
+        DataAccessorsManager->AskData(TabletId, Request);
     }
 
 public:
     TAccessorsMemorySubscriber(const ui64 memory, const TString& externalTaskId, const NOlap::NResourceBroker::NSubscribe::TTaskContext& context,
         std::shared_ptr<NOlap::TDataAccessorsRequest>&& request, const std::shared_ptr<TDataAccessorsSubscriberBase>& subscriber,
-        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
+        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        NOlap::TTabletId tabletId)
         : TBase(0, memory, externalTaskId, context)
         , Request(std::move(request))
         , Subscriber(subscriber)
-        , DataAccessorsManager(dataAccessorsManager) {
+        , DataAccessorsManager(dataAccessorsManager)
+        , TabletId(tabletId){
     }
 };
 
@@ -912,7 +915,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         CompactTaskSubscription);
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetTaskIdentifier(),
-                                    CompactTaskSubscription, std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified()));
+                                    CompactTaskSubscription, std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), (NOlap::TTabletId)TabletID()));
 }
 
 class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
@@ -981,7 +984,7 @@ void TColumnShard::SetupMetadata() {
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
             std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), TTLTaskSubscription,
                 std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified()));
+                std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(), (NOlap::TTabletId)TabletID()));
     }
 }
 
@@ -1020,7 +1023,7 @@ bool TColumnShard::SetupTtl() {
             request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()) + memoryUsage;
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
             ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i->GetTaskIdentifier(), TTLTaskSubscription,
-                                        std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified()));
+                                        std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), (NOlap::TTabletId)TabletID()));
     }
     return true;
 }
@@ -1069,7 +1072,7 @@ void TColumnShard::SetupCleanupPortions() {
 
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, changes->GetTaskIdentifier(), TTLTaskSubscription,
-                                    std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified()));
+                                    std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), (NOlap::TTabletId)TabletID()));
 }
 
 void TColumnShard::SetupCleanupTables() {
@@ -1392,6 +1395,7 @@ class TAccessorsParsingTask: public NConveyor::ITask {
 private:
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
     std::vector<TPortionConstructorV2> Portions;
+    const NOlap::TTabletId TabletId;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         std::vector<NOlap::TPortionDataAccessor> accessors;
@@ -1399,7 +1403,7 @@ private:
         for (auto&& i : Portions) {
             accessors.emplace_back(i.BuildAccessor());
         }
-        FetchCallback->OnAccessorsFetched(std::move(accessors));
+        FetchCallback->OnAccessorsFetched(TabletId, std::move(accessors));
     }
     virtual void DoOnCannotExecute(const TString& reason) override {
         AFL_VERIFY(false)("cannot parse metadata", reason);
@@ -1411,9 +1415,10 @@ public:
     }
 
     TAccessorsParsingTask(
-        const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions)
+        const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions, const NOlap::TTabletId tabletId)
         : FetchCallback(callback)
         , Portions(std::move(portions))
+        , TabletId(tabletId)
     {
 
     }
@@ -1499,7 +1504,7 @@ public:
         }
 
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors), (NOlap::TTabletId)txc.Tablet));
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {

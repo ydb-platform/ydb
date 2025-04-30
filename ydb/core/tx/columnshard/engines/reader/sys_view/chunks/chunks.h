@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
+#include "ydb/core/tx/columnshard/engines/reader/abstract/read_context.h"
+
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
 class TConstructor: public TStatScannerConstructor<NKikimr::NSysView::Schema::PrimaryIndexStats> {
@@ -111,7 +113,7 @@ private:
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
             Guard = std::move(guard);
-            AccessorsManager->AskData(std::move(Request));
+            AccessorsManager->AskData((TTabletId)Context->GetReadMetadata()->GetTabletId(), std::move(Request));
             return true;
         }
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;

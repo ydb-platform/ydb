@@ -9,10 +9,8 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
-class TActor: public TActorBootstrapped<TActor> {
+class TNodeActor: public TActorBootstrapped<TNodeActor> {
 private:
-    const ui64 TabletId;
-    const NActors::TActorId Parent;
     std::shared_ptr<TLocalManager> Manager;
 
     std::shared_ptr<IAccessorCallback> AccessorsCallback;
@@ -38,17 +36,22 @@ private:
     void Handle(TEvAskServiceDataAccessors::TPtr& ev);
     
 public:
-    TActor(const ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
-        , Parent(parent) {
-        Y_UNUSED(TabletId);
+
+    static inline TActorId MakeActorId(ui32 nodeId) {
+        char x[12] = {'s', 'h', 'a', 'r', 'e', 
+            'd', 'm', 'e', 't', 'a', 'd', 't'};
+        return TActorId(nodeId, TStringBuf(x, 12));
     }
-    ~TActor() = default;
+
+    static NActors::IActor* CreateActor();
+
+    TNodeActor() = default;
+    ~TNodeActor() = default;
 
     void Bootstrap();
 
     STFUNC(StateWait) {
-        const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("self_id", SelfId())("tablet_id", TabletId)("parent", Parent);
+        const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("self_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvRegisterController, Handle);

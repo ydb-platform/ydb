@@ -24,8 +24,8 @@ private:
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) override;
 
 public:
-    TCollector(const TInternalPathId pathId, const ui64 maxSize, const NActors::TActorId& actorId)
-        : TBase(pathId)
+    TCollector(const TTabletId tabletId, const TInternalPathId pathId, const ui64 maxSize, const NActors::TActorId& actorId)
+        : TBase(tabletId, pathId)
         , TabletActorId(actorId)
         , AccessorsCache(maxSize) {
     }

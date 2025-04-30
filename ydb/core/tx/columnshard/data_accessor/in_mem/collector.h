@@ -14,8 +14,8 @@ private:
         const std::vector<ui64>& remove) override;
 
 public:
-    TCollector(const TInternalPathId pathId)
-        : TBase(pathId) {
+    TCollector(const TTabletId tabletId, const TInternalPathId pathId)
+        : TBase(tabletId, pathId) {
     }
 };
 

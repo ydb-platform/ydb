@@ -8,7 +8,7 @@ private:
     const NActors::TActorId TabletActorId;
     const ui64 MemoryCacheSize;
     const bool FetchOnStart = true;
-    virtual std::unique_ptr<IGranuleDataAccessor> DoBuildCollector(const TInternalPathId pathId) override;
+    virtual std::unique_ptr<IGranuleDataAccessor> DoBuildCollector(const TTabletId tabletId, const TInternalPathId pathId) override;
 
     virtual std::shared_ptr<ITxReader> DoBuildLoader(
         const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;

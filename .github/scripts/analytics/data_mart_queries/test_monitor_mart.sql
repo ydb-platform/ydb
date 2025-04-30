@@ -23,9 +23,9 @@ SELECT
     days_in_mute_state, 
     previous_state_filtered, 
     state_change_date_filtered, 
-    days_in_state_filtered
+    days_in_state_filtered,
     String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '') as owner_team
 FROM `test_results/analytics/tests_monitor`
-WHERE date_window >= CurrentUtcDate() - 7 * Interval("P1D")
+WHERE date_window >= CurrentUtcDate() - 1 * Interval("P1D") -- for init table better take 7* Interval("P1D")
 and ( branch = 'main' or branch like 'stable-%')
 

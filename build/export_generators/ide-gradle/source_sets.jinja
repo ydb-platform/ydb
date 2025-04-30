@@ -53,15 +53,25 @@ sourceSets {
 {%-             set reldir = extra_target.test_reldir + "/" -%}
 {%-         endif -%}
 {%-         for source_set in extra_target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set srcdir = reldir + srcdir_glob[0] -%}
+{%-             set srcdir_glob = split(source_set, ':', 2) -%}
+{%-             if srcdir_glob[0][0] == "/" -%}
+{#-                 Absolute path in glob -#}
+{%-                 set srcdir = srcdir_glob[0] -%}
+{%-             else -%}
+{%-                 set srcdir = reldir + srcdir_glob[0] -%}
+{%-             endif -%}
 {%-             if srcdir != "src/test/java" %}
         java.srcDir({{ PatchRoots(srcdir) }})
 {%-             endif -%}
 {%-         endfor -%}
 {%-         for resource_set in extra_target.jar_resource_set -%}
-{%-             set resdir_glob = split(resource_set, ':') -%}
-{%-             set resdir = reldir + resdir_glob[0] -%}
+{%-             set resdir_glob = split(resource_set, ':', 2) -%}
+{%-             if resdir_glob[0][0] == "/" -%}
+{#-                 Absolute path in glob -#}
+{%-                 set srcdir = resdir_glob[0] -%}
+{%-             else -%}
+{%-                 set resdir = reldir + resdir_glob[0] -%}
+{%-             endif -%}
 {%-             if resdir != "src/test/resources" %}
         resources.srcDir({{ PatchRoots(resdir) }})
 {%-             endif -%}

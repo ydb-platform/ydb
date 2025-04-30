@@ -16,10 +16,11 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         const TVector<TExpectedResult>&, const TApplyIf&);
 
     static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
-        {EPathTypeTable, &TestCreateIndexedTable},
+        {EPathTypeTable, &TestSimpleCreateTable},
         {EPathTypeView, &TestCreateView},
         {EPathTypeCdcStream, &TestCreateCdcStream},
         {EPathTypePersQueueGroup, &TestCreatePQGroup}
+        {EPathTypeTableIndex, &TestCreateIndexedTable},
     };
 
     auto it = functions.find(pathType);

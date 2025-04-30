@@ -1,8 +1,8 @@
 #include "name_service.h"
 
 #include "name_index.h"
-#include "ranking.h"
 
+#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/text/case.h>
 
 namespace NSQLComplete {
@@ -72,7 +72,7 @@ namespace NSQLComplete {
 
     class TStaticNameService: public INameService {
     public:
-        explicit TStaticNameService(NameSet names, IRanking::TPtr ranking)
+        explicit TStaticNameService(TNameSet names, IRanking::TPtr ranking)
             : Pragmas_(BuildNameIndex(std::move(names.Pragmas), NormalizeName))
             , Types_(BuildNameIndex(std::move(names.Types), NormalizeName))
             , Functions_(BuildNameIndex(std::move(names.Functions), NormalizeName))
@@ -139,11 +139,13 @@ namespace NSQLComplete {
         IRanking::TPtr Ranking_;
     };
 
-    INameService::TPtr MakeStaticNameService() {
-        return MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking());
+    INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
+        return INameService::TPtr(new TStaticNameService(
+            Pruned(std::move(names), frequency),
+            MakeDefaultRanking(std::move(frequency))));
     }
 
-    INameService::TPtr MakeStaticNameService(NameSet names, IRanking::TPtr ranking) {
+    INameService::TPtr MakeStaticNameService(TNameSet names, IRanking::TPtr ranking) {
         return MakeIntrusive<TStaticNameService>(std::move(names), std::move(ranking));
     }
 

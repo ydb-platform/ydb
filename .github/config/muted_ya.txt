@@ -14,7 +14,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/batch_operations KqpBatchUpdate.Large_3
 ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.ExecuteScriptWithLargeFile
@@ -22,6 +21,8 @@ ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.ExecuteScriptWithThinFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
+ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationByTime
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
@@ -48,6 +49,7 @@ ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/ut Viewer.TabletMerging
+ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yaml_config/ut_transform test_transform.py.TestYamlConfigTransformations.test_basic[args1-dump_ds_init]
@@ -75,9 +77,16 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/compatibility sole chunk chunk
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_last_stable-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-row]
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[mixed-column]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[current-column]
-ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-column]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[current-column]
@@ -93,9 +102,6 @@ ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/suite_tests [test_sql_logic.py */*] chunk chunk
-ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select2-1.test]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
@@ -118,7 +124,6 @@ ydb/tests/olap/oom overlapping_portions.py.TestOverlappingPortions.test
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
 ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
 ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk

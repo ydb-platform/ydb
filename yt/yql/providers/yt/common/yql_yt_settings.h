@@ -319,6 +319,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
     NCommon::TConfSetting<bool, false> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, false> UseNativeDynamicTableRead;
+    NCommon::TConfSetting<bool, false> DontForceTransformForInputTables;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

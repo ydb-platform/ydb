@@ -641,7 +641,7 @@ struct TSchemeShard::TTxCompleteDataErasureBSC : public TSchemeShard::TRwTxBase 
             manager->Complete();
             db.Table<Schema::DataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::DataErasureGenerations::Status>(Self->DataErasureManager->GetStatus());
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Progress data shred in BSC " << record.GetProgress10k());
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Progress data shred in BSC " << static_cast<double>(record.GetProgress10k()) / 100 << "%");
             NeedScheduleRequestToBSC = true;
         }
     }

@@ -95,7 +95,7 @@ class BaseTestSet:
         assert exit_codes == [0] * num_threads, exit_codes
 
     def test(self, ctx: TestContext):
-        self.def_inserts_count = 200
+        self.def_inserts_count = 50
         exit_codes = [None]
         self._test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
 

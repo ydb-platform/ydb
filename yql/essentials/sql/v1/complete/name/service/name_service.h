@@ -6,6 +6,7 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 
 namespace NSQLComplete {
 
@@ -51,10 +52,10 @@ namespace NSQLComplete {
     struct TNameRequest {
         TVector<TString> Keywords;
         struct {
-            std::optional<TPragmaName::TConstraints> Pragma;
-            std::optional<TTypeName::TConstraints> Type;
-            std::optional<TFunctionName::TConstraints> Function;
-            std::optional<THintName::TConstraints> Hint;
+            TMaybe<TPragmaName::TConstraints> Pragma;
+            TMaybe<TTypeName::TConstraints> Type;
+            TMaybe<TFunctionName::TConstraints> Function;
+            TMaybe<THintName::TConstraints> Hint;
         } Constraints;
         TString Prefix = "";
         size_t Limit = 128;

@@ -7,5 +7,6 @@ PEERDIR(
 END()
 
 RECURSE(
+    ranking
     static
 )

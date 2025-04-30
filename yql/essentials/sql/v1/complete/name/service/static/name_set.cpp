@@ -2,6 +2,8 @@
 
 #include "name_index.h"
 
+#include <yql/essentials/sql/v1/complete/name/service/name_service.h>
+
 namespace NSQLComplete {
 
     TVector<TString> Pruned(TVector<TString> names, const THashMap<TString, size_t>& frequency) {

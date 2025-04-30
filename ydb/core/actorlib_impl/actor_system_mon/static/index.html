@@ -1,66 +1,60 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Actor System Monitoring</title>
-    <!-- Подключаем Bootstrap CSS -->
+    <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="/lwtrace/mon/static/css/bootstrap.min.css">
-    <!-- Подключаем D3 стили -->
+    <!-- D3 styles -->
     <link rel="stylesheet" href="/lwtrace/mon/static/css/d3-gantt.css">
-    <!-- Подключаем наши стили -->
+    <!-- Our styles -->
     <link rel="stylesheet" href="/actor_system_mon/static/style.css">
 </head>
 <body>
     <div class="container mt-4">
         <h1>Actor System Harmonizer History</h1>
         <div class="range-selector mb-3">
-            <label for="levelSelect" class="form-label">Уровень детализации:</label>
-            <select id="levelSelect" class="form-select" style="width: auto; display: inline-block;">
-                <option value="iteration" selected>Итерация</option>
-                <option value="pool">Пул</option>
-                <option value="thread">Поток</option>
-            </select>
             <div class="form-check form-switch d-inline-block ms-3">
                 <input class="form-check-input" type="checkbox" id="timeMode">
-                <label class="form-check-label" for="timeMode">Режим времени</label>
+                <label class="form-check-label" for="timeMode">Time mode</label>
             </div>
             <div id="iterationMode">
-                <label for="iterationFrom" class="form-label ms-3">От итерации:</label>
+                <label for="iterationFrom" class="form-label ms-3">From iteration:</label>
                 <input type="number" id="iterationFrom" class="form-control" value="-30" style="width: 80px; display: inline-block;">
-                <label for="iterationTo" class="form-label ms-3">До итерации:</label>
-                <input type="number" id="iterationTo" class="form-control" placeholder="последняя" style="width: 80px; display: inline-block;">
+                <label for="iterationTo" class="form-label ms-3">To iteration:</label>
+                <input type="number" id="iterationTo" class="form-control" placeholder="last" style="width: 80px; display: inline-block;">
             </div>
-            <div id="timeMode" style="display: none;">
-                <label for="timeFrom" class="form-label ms-3">От времени (мс):</label>
+            <div id="timeModeControls" style="display: none;">
+                <label for="timeFrom" class="form-label ms-3">From time (ms):</label>
                 <input type="number" id="timeFrom" class="form-control" value="-10000000" style="width: 120px; display: inline-block;">
-                <label for="timeTo" class="form-label ms-3">До времени (мс):</label>
-                <input type="number" id="timeTo" class="form-control" placeholder="текущее" style="width: 120px; display: inline-block;">
+                <label for="timeTo" class="form-label ms-3">To time (ms):</label>
+                <input type="number" id="timeTo" class="form-control" placeholder="current" style="width: 120px; display: inline-block;">
             </div>
-            <button id="refreshButton" class="btn btn-primary ms-2">Обновить</button>
+            <button id="refreshButton" class="btn btn-primary ms-2">Refresh</button>
             <div class="form-check form-switch d-inline-block ms-3">
                 <input class="form-check-input" type="checkbox" id="sortNewestFirst">
-                <label class="form-check-label" for="sortNewestFirst">Новые сверху</label>
+                <label class="form-check-label" for="sortNewestFirst">Newest first</label>
             </div>
         </div>
         <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="data-tab" data-bs-toggle="tab" data-bs-target="#dataTab" type="button" role="tab" aria-controls="dataTab" aria-selected="true">История</button>
+                <button class="nav-link active" id="data-tab" data-bs-toggle="tab" data-bs-target="#dataTab" type="button" role="tab" aria-controls="dataTab" aria-selected="true">History</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="charts-tab" data-bs-toggle="tab" data-bs-target="#chartsTab" type="button" role="tab" aria-controls="chartsTab" aria-selected="false">Метрики</button>
+                <button class="nav-link" id="charts-tab" data-bs-toggle="tab" data-bs-target="#chartsTab" type="button" role="tab" aria-controls="chartsTab" aria-selected="false">Metrics</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="cpu-tab" data-bs-toggle="tab" data-bs-target="#cpuTab" type="button" role="tab" aria-controls="cpuTab" aria-selected="false">Использование CPU</button>
+                <button class="nav-link" id="cpu-tab" data-bs-toggle="tab" data-bs-target="#cpuTab" type="button" role="tab" aria-controls="cpuTab" aria-selected="false">CPU Usage</button>
             </li>
         </ul>
         
         <div class="tab-content" id="mainTabsContent">
             <div class="tab-pane fade show active" id="dataTab" role="tabpanel" aria-labelledby="data-tab">
-                <div id="loading" class="alert alert-info" style="display: none;">Загрузка данных...</div>
+                <div id="loading" class="alert alert-info" style="display: none;">Loading data...</div>
                 <div id="error" class="alert alert-danger" style="display: none;"></div>
                 <div id="dataContainer">
-                    <!-- Данные будут загружены сюда -->
+                    <!-- Data will be loaded here -->
                 </div>
             </div>
             
@@ -68,7 +62,7 @@
                 <div class="row mb-3">
                     <div class="col-md-12">
                         <div class="chart-controls mb-3">
-                            <label for="chartMetricSelect" class="form-label">Метрика:</label>
+                            <label for="chartMetricSelect" class="form-label">Metric:</label>
                             <select id="chartMetricSelect" class="form-select" style="width: auto; display: inline-block;">
                                 <option value="budget">Budget</option>
                                 <option value="lostCpu">Lost CPU</option>
@@ -80,13 +74,13 @@
                         </div>
                         
                         <div class="mt-4">
-                            <h4>Пулы процессора</h4>
+                            <h4>Processor Pools</h4>
                             <div class="chart-controls mb-3">
-                                <label for="poolSelect" class="form-label">Пул:</label>
+                                <label for="poolSelect" class="form-label">Pool:</label>
                                 <select id="poolSelect" class="form-select" style="width: auto; display: inline-block;">
-                                    <!-- Будет заполнено пулами из данных -->
+                                    <!-- Will be filled with pools from data -->
                                 </select>
-                                <label for="poolMetricSelect" class="form-label ms-3">Метрика:</label>
+                                <label for="poolMetricSelect" class="form-label ms-3">Metric:</label>
                                 <select id="poolMetricSelect" class="form-select" style="width: auto; display: inline-block;">
                                     <option value="avgPingUs">Avg Ping (us)</option>
                                     <option value="currentThreadCount">Thread Count</option>
@@ -105,23 +99,23 @@
                 <div class="row mb-3">
                     <div class="col-md-12">
                         <div class="chart-controls mb-3">
-                            <label for="cpuMetricSelect" class="form-label">Тип данных:</label>
+                            <label for="cpuMetricSelect" class="form-label">Data type:</label>
                             <select id="cpuMetricSelect" class="form-select" style="width: auto; display: inline-block;">
                                 <option value="elapsedCpu">Elapsed CPU</option>
                                 <option value="usedCpu">Used CPU</option>
                             </select>
-                            <label for="cpuValueSelect" class="form-label ms-3">Значение:</label>
+                            <label for="cpuValueSelect" class="form-label ms-3">Value:</label>
                             <select id="cpuValueSelect" class="form-select" style="width: auto; display: inline-block;">
-                                <option value="cpu">Общее</option>
-                                <option value="lastSecondCpu">За последнюю секунду</option>
+                                <option value="cpu">Total</option>
+                                <option value="lastSecondCpu">Last second</option>
                             </select>
                         </div>
                         
                         <div class="chart-container">
-                            <h5>Потребление CPU по пулам</h5>
+                            <h5>CPU Consumption by Pools</h5>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="showAllPools" checked>
-                                <label class="form-check-label" for="showAllPools">Показать все пулы</label>
+                                <label class="form-check-label" for="showAllPools">Show all pools</label>
                             </div>
                             <div id="poolSelectorContainer" class="mb-2" style="display: none;">
                                 <div id="poolCheckboxes" class="d-flex flex-wrap"></div>
@@ -130,12 +124,12 @@
                         </div>
                         
                         <div class="chart-container mt-4">
-                            <h5>Количество потоков по пулам</h5>
+                            <h5>Thread Count by Pools</h5>
                             <svg id="threadsChart" width="100%" height="300"></svg>
                         </div>
                         
                         <div class="chart-container mt-4">
-                            <h5>Budget и загрузка системы</h5>
+                            <h5>Budget and System Load</h5>
                             <svg id="budgetChart" width="100%" height="300"></svg>
                         </div>
                     </div>
@@ -144,20 +138,20 @@
         </div>
     </div>
 
-    <!-- Подключаем jQuery, Bootstrap и D3.js -->
+    <!-- Load jQuery, Bootstrap, and D3.js -->
     <script src="/lwtrace/mon/static/js/jquery.min.js"></script>
     <script src="/actor_system_mon/static/js/bootstrap.bundle.min.js"></script>
-    <script src="/actor_system_mon/static/js/d3.v5.min.js"></script>
+    <script src="/actor_system_mon/static/js/d3.v5.min.js"></script>          
     <script src="/lwtrace/mon/static/js/d3-tip-0.8.0-alpha.1.js"></script>
 
-    <!-- Подключаем разделенные JS файлы -->
+    <!-- Load modular JS files -->
     <script src="/actor_system_mon/static/js/utils.js"></script>
     <script src="/actor_system_mon/static/js/renderUtils.js"></script>
     <script src="/actor_system_mon/static/js/data.js"></script>
     <script src="/actor_system_mon/static/js/charts.js"></script>
     <script src="/actor_system_mon/static/js/ui.js"></script>
 
-    <!-- Основной файл приложения (инициализация и обработчики) -->
+    <!-- Main application file (initialization and handlers) -->
     <script src="/actor_system_mon/static/app.js"></script>
 </body>
 </html> 

@@ -44,11 +44,11 @@ Example of the `account_lockout` section:
 
 ```yaml
 auth_config:
-  ...
+  #...
   account_lockout:
     attempt_threshold: 4
     attempt_reset_duration: "1h"
-  ...
+  #...
 ```
 
 #|
@@ -56,14 +56,27 @@ auth_config:
 || attempt_threshold
 | Specifies the number of failed attempts to enter the correct password for a user account, after which the account is blocked for a period specified by the `attempt_reset_duration` parameter.
 
-If `attempt_threshold = 0`, the number of attempts to enter the correct password is unlimited.
+If `attempt_threshold = 0`, the number of attempts to enter the correct password is unlimited. After successful authentication (correct username and password), the counter for failed attempts is reset to 0.
 
 Default value: `4`
     ||
 || attempt_reset_duration
 | Specifies the period that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt.
 
-If this parameter is set to the equivalent of `0s`, user accounts will be locked indefinitely. In this case you can unlock the account using the [ALTER USER ...  LOGIN](../../yql/reference/syntax/alter-user.md) command.
+During this period, the user will not be able to authenticate in the system even if the correct username and password are entered.
+
+If this parameter is set to zero ("0s" - a notation equivalent of 0 seconds), user accounts will be locked indefinitely. In this case you can unlock the account using the [ALTER USER ...  LOGIN](../../yql/reference/syntax/alter-user.md) command.
+
+The minimum lockout duration is 1 second.
+
+Supported time units:
+
+- Seconds: `30s`
+- Minutes: `20m`
+- Hours: `5h`
+- Days: `3d`
+
+It is not allowed to combine time units in one entry. For example, the entry `1d12h` is incorrect. It should be replaced with an equivalent, such as `36h`.
 
 Default value: `1h`
     ||
@@ -77,7 +90,7 @@ Example of the `password_complexity` section:
 
 ```yaml
 auth_config:
-  ...
+  #...
   password_complexity:
     min_length: 8
     min_lower_case_count: 1
@@ -86,7 +99,7 @@ auth_config:
     min_special_chars_count: 1
     special_chars: "!@#$%^&*()_+{}|<>?="
     can_contain_username: false
-  ...
+  #...
 ```
 
 #|
@@ -129,6 +142,12 @@ Default value: empty (any of the `!@#$%^&*()_+{}\|<>?=` characters are allowed)
 Default value: `false`
     ||
 |#
+
+{% note info %}
+
+Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+
+{% endnote %}
 
 ## Configuring LDAP authentication {#ldap-auth-config}
 

@@ -1,7 +1,7 @@
 name: Collect-analytics-fast-run
 on:
   schedule:
-    - cron: "*/15 * * * *"  # Every 15 min
+    - cron: "*/30 * * * *"  # Every 30 min
   workflow_dispatch:
     inputs:
       commit_sha:

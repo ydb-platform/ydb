@@ -70,7 +70,7 @@ struct TRequest : public TSimpleRefCount<TRequest> {
     }
 
     void EnsureResponded() const {
-        Y_VERIFY_S(!Sender, "All dropping requests should be responded first but request with"
+        Y_ENSURE(!Sender, "All dropping requests should be responded first but request with"
             << " owner " << Sender
             << " page collection " << PageCollection->Label()
             << " has pending pages " << PagesToRequest);
@@ -412,7 +412,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Counters.Owners->Inc();
             }
             bool inserted = ownerCollections.insert(&collection).second;
-            Y_ABORT_UNLESS(inserted);
+            Y_ENSURE(inserted);
         }
 
         return collection;
@@ -811,7 +811,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         for (auto* collection : ownerIt->second) {
             bool erased = collection->Owners.erase(ev->Sender);
-            Y_ABORT_UNLESS(erased);
+            Y_ENSURE(erased);
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregistered page collection " << collection->Id
                 << " owner " << ev->Sender);
             Counters.PageCollectionOwners->Dec();
@@ -840,9 +840,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
         auto ownerIt = Owners.find(ev->Sender);
-        Y_ABORT_IF(ownerIt == Owners.end());
+        Y_ENSURE(ownerIt != Owners.end());
         bool erased = ownerIt->second.erase(collection);
-        Y_ABORT_UNLESS(erased);
+        Y_ENSURE(erased);
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detached page collection " << collection->Id
             << " owner " << ev->Sender);
         Counters.PageCollectionOwners->Dec();
@@ -1021,7 +1021,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
         for (auto &[request, index] : pendingRequestsIt->second) {
-            Y_ABORT_UNLESS(request->Sender);
+            Y_ENSURE(request->Sender);
             auto &readyPage = request->ReadyPages[index];
             Y_ENSURE(readyPage.PageId == page->PageId);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
@@ -1033,7 +1033,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendReadyBlocks(TRequest &request) {
-        Y_ABORT_UNLESS(request.Sender);
+        Y_ENSURE(request.Sender);
         /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
 
         TAutoPtr<NSharedCache::TEvResult> result =
@@ -1054,7 +1054,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
-        Y_ABORT_UNLESS(request.Sender);
+        Y_ENSURE(request.Sender);
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);

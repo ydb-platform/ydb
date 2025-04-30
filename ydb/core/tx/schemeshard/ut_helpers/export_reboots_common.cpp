@@ -16,7 +16,7 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         const TVector<TExpectedResult>&, const TApplyIf&);
 
     static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
-        {EPathTypeTable, &TestSimpleCreateTable},
+        {EPathTypeTable, &TestCreateIndexedTable},
         {EPathTypeView, &TestCreateView},
         {EPathTypeCdcStream, &TestCreateCdcStream},
         {EPathTypePersQueueGroup, &TestCreatePQGroup}

@@ -1760,6 +1760,8 @@ message TEvKqpScan {
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
     optional NKikimrDataEvents.ELockMode LockMode = 28;
+    optional double CpuGroupThreadsLimit = 29;
+    optional string CpuGroupName = 30;
 }
 
 message TEvCompactTable {

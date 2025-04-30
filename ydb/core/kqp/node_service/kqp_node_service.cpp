@@ -318,7 +318,7 @@ private:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), TCPULimits(msg)));
             }
         }
 

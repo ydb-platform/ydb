@@ -126,6 +126,17 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
         maxInFlight = ProtoConfig.GetScanLimit();
     }
 }
+
+TCPULimits::TCPULimits(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    if (const auto share = config.GetPoolMaxCpuShare(); share > 0) {
+        NActors::TExecutorPoolStats poolStats;
+        TVector<NActors::TExecutorThreadStats> threadsStats;
+        TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
+        CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+        CPUGroupName = config.GetSchedulerGroup();
+    }
+}
+
 }
 } // namespace NKikimr
 
@@ -146,8 +157,10 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId) {
-    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta, shardsScanningPolicy, counters, std::move(traceId));
+    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode,
+    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
+    const TCPULimits& cpuLimits) {
+    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
 }
 
 }

@@ -12,39 +12,39 @@ class TestVectorIndex(VectoreBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync, vector_type",
         [
-            ("table_index_4_UNIQUE_SYNC", pk_types, {},
+            ("table_index_4_UNIQUE_SYNC_float", pk_types, {},
              index_four_sync, "", "UNIQUE", "SYNC", "float"),
-            ("table_index_3_UNIQUE_SYNC", pk_types, {},
+            ("table_index_3_UNIQUE_SYNC_float", pk_types, {},
              index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "float"),
-            ("table_index_2_UNIQUE_SYNC", pk_types, {},
+            ("table_index_2_UNIQUE_SYNC_float", pk_types, {},
              index_second_sync, "", "UNIQUE", "SYNC", "float"),
-            ("table_index_1_UNIQUE_SYNC", pk_types, {},
+            ("table_index_1_UNIQUE_SYNC_float", pk_types, {},
              index_first_sync, "", "UNIQUE", "SYNC", "float"),
-            ("table_index_0_UNIQUE_SYNC", pk_types, {},
+            ("table_index_0_UNIQUE_SYNC_float", pk_types, {},
              index_zero_sync, "", "UNIQUE", "SYNC", "float"),
-            ("table_index_4__SYNC", pk_types, {},
+            ("table_index_4__SYNC_float", pk_types, {},
              index_four_sync, "", "", "SYNC", "float"),
-            ("table_index_3__SYNC", pk_types, {},
+            ("table_index_3__SYNC_float", pk_types, {},
              index_three_sync, "", "", "SYNC", "float"),
-            ("table_index_2__SYNC", pk_types, {},
+            ("table_index_2__SYNC_float", pk_types, {},
              index_second_sync, "", "", "SYNC", "float"),
-            ("table_index_1__SYNC", pk_types, {},
+            ("table_index_1__SYNC_float", pk_types, {},
              index_first_sync, "", "", "SYNC", "float"),
-            ("table_index_0__SYNC", pk_types, {},
+            ("table_index_0__SYNC_float", pk_types, {},
              index_zero_sync, "", "", "SYNC", "float"),
-            ("table_index_1__ASYNC", pk_types, {},
+            ("table_index_1__ASYNC_float", pk_types, {},
              index_second, "", "", "ASYNC", "float"),
-            ("table_index_0__ASYNC", pk_types, {},
+            ("table_index_0__ASYNC_float", pk_types, {},
              index_first, "", "", "ASYNC", "float"),
-            ("table_all_types", pk_types, {
+            ("table_all_types_float", pk_types, {
              **pk_types, **non_pk_types}, {}, "", "", "", "float"),
-            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", "", "float"),
-            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", "", "float"),
-            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", "", "float"),
-            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", "", "float"),
-            ("table_ttl_Timestamp", pk_types, {},
+            ("table_ttl_DyNumber_float", pk_types, {}, {}, "DyNumber", "", "", "float"),
+            ("table_ttl_Uint32_float", pk_types, {}, {}, "Uint32", "", "", "float"),
+            ("table_ttl_Uint64_float", pk_types, {}, {}, "Uint64", "", "", "float"),
+            ("table_ttl_Datetime_float", pk_types, {}, {}, "Datetime", "", "", "float"),
+            ("table_ttl_Timestamp_float", pk_types, {},
              {}, "Timestamp", "", "", "float"),
-            ("table_ttl_Date", pk_types, {}, {}, "Date", "", "", "float"),
+            ("table_ttl_Date_float", pk_types, {}, {}, "Date", "", "", "float"),
             
             ("table_index_4_UNIQUE_SYNC", pk_types, {},
              index_four_sync, "", "UNIQUE", "SYNC", "uint8"),
@@ -89,9 +89,10 @@ class TestVectorIndex(VectoreBase):
         self.vectors = []
         self.insert(table_name, all_types, pk_types, index, ttl, vector_type)
         sql_create_vector_index = create_vector_index_sql_request(
-            table_name, "col_String", vector_type, 10)
+            table_name, "col_String", vector_type, 2)
+        print(sql_create_vector_index)
         dml.query(sql_create_vector_index)
-        self.select(table_name, "col_String")
+        self.select(table_name, "col_String", vector_type)
 
     def get_vector(self, type, size, numb):
         if type == "float":
@@ -112,7 +113,7 @@ class TestVectorIndex(VectoreBase):
                                pk_types, index, ttl, vector_type)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
-        vector = self.get_vector(vector_type, 10, value)
+        vector = self.get_vector(vector_type, 2, value)
         self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
@@ -139,11 +140,24 @@ class TestVectorIndex(VectoreBase):
         print(insert_sql)
         self.query(insert_sql)
         
-    def select(self, table_name, col_name):
+    def select(self, table_name, col_name, vector_type):
+        knn_type = {
+            "float": "ToBinaryStringFloat",
+            "uint8": "ToBinaryStringUint8"
+        }
         for vector in self.vectors:
-            rows = self.query(f"""select col_String
+            print(f"""
+                              $Target = Knn::{knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                              select col_String
                               from {table_name} view idx_vector_{col_name}
-                              order by Knn::CosineDistance(col_String, "{vector}")
-                              limit 10
+                              order by Knn::CosineDistance(col_String, $Target)
+                              limit 10;
+                              """)
+            rows = self.query(f"""
+                              $Target = Knn::{knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                              select col_String
+                              from {table_name} view idx_vector_{col_name}
+                              order by Knn::CosineDistance(col_String, $Target)
+                              limit 10;
                               """)
             print(rows)

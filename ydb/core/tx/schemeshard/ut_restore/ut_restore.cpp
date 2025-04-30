@@ -117,6 +117,11 @@ namespace {
         {}
 
         TDataWithChecksum& operator=(const TString& data) {
+            *this = data.data();
+            return *this;
+        }
+
+        TDataWithChecksum& operator=(const char* data) {
             Data = data;
             Checksum = NBackup::ComputeChecksum(Data);
             return *this;
@@ -5514,6 +5519,62 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(ChangefeedsExportRestoreUnhappyPropose) {
         ChangefeedsExportRestore(false);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedRestoreTableWithUniqueIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+                name: "UniqueIndex"
+                index_columns: "value"
+                global_unique_index { }
+            }
+        )");
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("", data);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/UniqueIndex", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeGlobalUnique),
+            NLs::IndexState(EIndexStateReady)
+        });
     }
 
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {

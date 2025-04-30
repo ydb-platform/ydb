@@ -2082,6 +2082,7 @@ message TExternalDataSourceDescription {
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
     optional bool ReplaceIfExists = 9;
+    optional TExternalTableReferences References = 10;
 }
 
 message TViewDescription {

@@ -16,6 +16,7 @@ private:
     TMaybe<NMonitoring::TTableBody> TableBody;
 public:
     TControlBoardTableHtmlRenderer();
+    void AddNewTable(const TString& caption);
     void AddTableItem(const TString& name, TIntrusivePtr<TControl> control);
     TString GetHtml();
 };

@@ -73,6 +73,15 @@
 
 ## Клиенты gRPC-сервисов YDB
 
+### Discovery
+
+| Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| ListEndpoints  | [![issue 502 status](https://github.ydb.tech/issues/ydb-cpp-sdk/502)](https://github.com/ydb-platform/ydb-cpp-sdk/issues/502) | [![issue 662 status](https://github.ydb.tech/issues/ydb-python-sdk/662)](https://github.com/ydb-platform/ydb-python-sdk/issues/662) | [![issue 1782 status](https://github.ydb.tech/issues/ydb-go-sdk/1782)](https://github.com/ydb-platform/ydb-go-sdk/issues/1782) | [![issue 471 status](https://github.ydb.tech/issues/ydb-java-sdk/471)](https://github.com/ydb-platform/ydb-java-sdk/issues/471) | [![issue 524 status](https://github.ydb.tech/issues/ydb-js-sdk/524)](https://github.com/ydb-platform/ydb-js-sdk/issues/524) | [![issue 412 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/412)](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/412) | [![issue 342 status](https://github.ydb.tech/issues/ydb-rs-sdk/342)](https://github.com/ydb-platform/ydb-rs-sdk/issues/342) | [![issue 249 status](https://github.ydb.tech/issues/ydb-php-sdk/249)](https://github.com/ydb-platform/ydb-php-sdk/issues/249) |
+| WhoAmI  | [![issue 503 status](https://github.ydb.tech/issues/ydb-cpp-sdk/503)](https://github.com/ydb-platform/ydb-cpp-sdk/issues/503) | [![issue 663 status](https://github.ydb.tech/issues/ydb-python-sdk/663)](https://github.com/ydb-platform/ydb-python-sdk/issues/663) | [![issue 1783 status](https://github.ydb.tech/issues/ydb-go-sdk/1783)](https://github.com/ydb-platform/ydb-go-sdk/issues/1783) | [![issue 472 status](https://github.ydb.tech/issues/ydb-java-sdk/472)](https://github.com/ydb-platform/ydb-java-sdk/issues/472) | [![issue 525 status](https://github.ydb.tech/issues/ydb-js-sdk/525)](https://github.com/ydb-platform/ydb-js-sdk/issues/525) | [![issue 413 status](https://github.ydb.tech/issues/ydb-dotnet-sdk/413)](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/413) | [![issue 343 status](https://github.ydb.tech/issues/ydb-rs-sdk/343)](https://github.com/ydb-platform/ydb-rs-sdk/issues/343) | [![issue 250 status](https://github.ydb.tech/issues/ydb-php-sdk/250)](https://github.com/ydb-platform/ydb-php-sdk/issues/250) |
+
+{wide-content}
+
 ### Query
 
 | Feature | C\+\+ | Python | Go | Java | NodeJS | C# | Rust | PHP |

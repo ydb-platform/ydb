@@ -93,7 +93,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "precompute_0_0",
+                                                        "CTE Name": "precompute",
                                                         "Node Type": "InnerJoin (MapJoin)-ConstantExpr-Filter",
                                                         "Operators": [
                                                             {
@@ -111,7 +111,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "ToFlow",
-                                                                "ToFlow": "precompute_0_0"
+                                                                "ToFlow": "precompute"
                                                             },
                                                             {
                                                                 "Inputs": [
@@ -141,7 +141,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "precompute_0_0",
+                                                                        "CTE Name": "precompute",
                                                                         "Node Type": "ConstantExpr-Aggregate",
                                                                         "Operators": [
                                                                             {
@@ -154,7 +154,7 @@
                                                                                 "Name": "Iterator"
                                                                             },
                                                                             {
-                                                                                "Input": "precompute_0_0",
+                                                                                "Input": "precompute",
                                                                                 "Inputs": [],
                                                                                 "Name": "PartitionByKey"
                                                                             }
@@ -238,7 +238,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE precompute_0_0"
+                "Subplan Name": "CTE precompute"
             }
         ],
         "Stats": {

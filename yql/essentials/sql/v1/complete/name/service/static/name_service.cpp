@@ -3,6 +3,7 @@
 #include "name_index.h"
 
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 #include <yql/essentials/sql/v1/complete/text/case.h>
 
 namespace NSQLComplete {
@@ -40,113 +41,188 @@ namespace NSQLComplete {
         }
     }
 
-    TString Prefixed(const TStringBuf requestPrefix, const TStringBuf delimeter, const TNamespaced& namespaced) {
-        TString prefix;
-        if (!namespaced.Namespace.empty()) {
-            prefix += namespaced.Namespace;
-            prefix += delimeter;
+    template <class T>
+    void NameIndexScan(
+        const TNameIndex& index,
+        const TString& prefix,
+        const TNameConstraints& constraints,
+        TVector<TGenericName>& out) {
+        T name;
+        name.Indentifier = prefix;
+        name = std::get<T>(constraints.Qualified(std::move(name)));
+
+        AppendAs<T>(out, FilteredByPrefix(name.Indentifier, index));
+        out = constraints.Unqualified(std::move(out));
+    }
+
+    class IRankingNameService: public INameService {
+    private:
+        auto Ranking(TNameRequest request) const {
+            return [request = std::move(request), this](auto f) {
+                TNameResponse response = f.ExtractValue();
+                Ranking_->CropToSortedPrefix(
+                    response.RankedNames,
+                    request.Constraints,
+                    request.Limit);
+                return response;
+            };
         }
-        prefix += requestPrefix;
-        return prefix;
-    }
 
-    void FixPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
-        if (namespaced.Namespace.empty()) {
-            return;
-        }
-        name.remove(0, namespaced.Namespace.size() + delimeter.size());
-    }
-
-    void FixPrefix(TGenericName& name, const TNameRequest& request) {
-        std::visit([&](auto& name) -> size_t {
-            using T = std::decay_t<decltype(name)>;
-            if constexpr (std::is_same_v<T, TPragmaName>) {
-                FixPrefix(name.Indentifier, ".", *request.Constraints.Pragma);
-            }
-            if constexpr (std::is_same_v<T, TFunctionName>) {
-                FixPrefix(name.Indentifier, "::", *request.Constraints.Function);
-            }
-            return 0;
-        }, name);
-    }
-
-    class TStaticNameService: public INameService {
     public:
-        explicit TStaticNameService(TNameSet names, IRanking::TPtr ranking)
-            : Pragmas_(BuildNameIndex(std::move(names.Pragmas), NormalizeName))
-            , Types_(BuildNameIndex(std::move(names.Types), NormalizeName))
-            , Functions_(BuildNameIndex(std::move(names.Functions), NormalizeName))
-            , Hints_([hints = std::move(names.Hints)] {
+        explicit IRankingNameService(IRanking::TPtr ranking)
+            : Ranking_(std::move(ranking))
+        {
+        }
+
+        NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+            return LookupAllUnranked(request).Apply(Ranking(request));
+        }
+
+        virtual NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const = 0;
+
+    private:
+        IRanking::TPtr Ranking_;
+    };
+
+    class TKeywordNameService: public IRankingNameService {
+    public:
+        explicit TKeywordNameService(IRanking::TPtr ranking)
+            : IRankingNameService(std::move(ranking))
+        {
+        }
+
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+            TNameResponse response;
+            Sort(request.Keywords, NoCaseCompare);
+            AppendAs<TKeyword>(
+                response.RankedNames,
+                FilteredByPrefix(request.Prefix, request.Keywords));
+            return NThreading::MakeFuture<TNameResponse>(std::move(response));
+        }
+    };
+
+    class TPragmaNameService: public IRankingNameService {
+    public:
+        explicit TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
+            : IRankingNameService(std::move(ranking))
+            , Pragmas_(BuildNameIndex(std::move(pragmas), NormalizeName))
+        {
+        }
+
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+            TNameResponse response;
+            if (request.Constraints.Pragma) {
+                NameIndexScan<TPragmaName>(
+                    Pragmas_,
+                    request.Prefix,
+                    request.Constraints,
+                    response.RankedNames);
+            }
+            return NThreading::MakeFuture<TNameResponse>(std::move(response));
+        }
+
+    private:
+        TNameIndex Pragmas_;
+    };
+
+    class TTypeNameService: public IRankingNameService {
+    public:
+        explicit TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
+            : IRankingNameService(std::move(ranking))
+            , Types_(BuildNameIndex(std::move(types), NormalizeName))
+        {
+        }
+
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+            TNameResponse response;
+            if (request.Constraints.Type) {
+                NameIndexScan<TTypeName>(
+                    Types_,
+                    request.Prefix,
+                    request.Constraints,
+                    response.RankedNames);
+            }
+            return NThreading::MakeFuture<TNameResponse>(std::move(response));
+        }
+
+    private:
+        TNameIndex Types_;
+    };
+
+    class TFunctionNameService: public IRankingNameService {
+    public:
+        explicit TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
+            : IRankingNameService(std::move(ranking))
+            , Functions_(BuildNameIndex(std::move(functions), NormalizeName))
+        {
+        }
+
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
+            TNameResponse response;
+            if (request.Constraints.Function) {
+                NameIndexScan<TFunctionName>(
+                    Functions_,
+                    request.Prefix,
+                    request.Constraints,
+                    response.RankedNames);
+            }
+            return NThreading::MakeFuture<TNameResponse>(std::move(response));
+        }
+
+    private:
+        TNameIndex Functions_;
+    };
+
+    class THintNameService: public IRankingNameService {
+    public:
+        explicit THintNameService(
+            IRanking::TPtr ranking,
+            THashMap<EStatementKind, TVector<TString>> hints)
+            : IRankingNameService(std::move(ranking))
+            , Hints_([hints = std::move(hints)] {
                 THashMap<EStatementKind, TNameIndex> index;
                 for (auto& [k, hints] : hints) {
                     index.emplace(k, BuildNameIndex(std::move(hints), NormalizeName));
                 }
                 return index;
             }())
-            , Ranking_(std::move(ranking))
         {
         }
 
-        TFuture<TNameResponse> Lookup(TNameRequest request) const override {
+        NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
             TNameResponse response;
-
-            Sort(request.Keywords, NoCaseCompare);
-            AppendAs<TKeyword>(
-                response.RankedNames,
-                FilteredByPrefix(request.Prefix, request.Keywords));
-
-            if (request.Constraints.Pragma) {
-                auto prefix = Prefixed(request.Prefix, ".", *request.Constraints.Pragma);
-                auto names = FilteredByPrefix(prefix, Pragmas_);
-                AppendAs<TPragmaName>(response.RankedNames, names);
-            }
-
-            if (request.Constraints.Type) {
-                AppendAs<TTypeName>(
-                    response.RankedNames,
-                    FilteredByPrefix(request.Prefix, Types_));
-            }
-
-            if (request.Constraints.Function) {
-                auto prefix = Prefixed(request.Prefix, "::", *request.Constraints.Function);
-                auto names = FilteredByPrefix(prefix, Functions_);
-                AppendAs<TFunctionName>(response.RankedNames, names);
-            }
-
             if (request.Constraints.Hint) {
                 const auto stmt = request.Constraints.Hint->Statement;
                 if (const auto* hints = Hints_.FindPtr(stmt)) {
-                    AppendAs<THintName>(
-                        response.RankedNames,
-                        FilteredByPrefix(request.Prefix, *hints));
+                    NameIndexScan<THintName>(
+                        *hints,
+                        request.Prefix,
+                        request.Constraints,
+                        response.RankedNames);
                 }
             }
-
-            Ranking_->CropToSortedPrefix(response.RankedNames, request.Limit);
-
-            for (auto& name : response.RankedNames) {
-                FixPrefix(name, request);
-            }
-
-            return NThreading::MakeFuture(std::move(response));
+            return NThreading::MakeFuture<TNameResponse>(std::move(response));
         }
 
     private:
-        TNameIndex Pragmas_;
-        TNameIndex Types_;
-        TNameIndex Functions_;
         THashMap<EStatementKind, TNameIndex> Hints_;
-        IRanking::TPtr Ranking_;
     };
 
     INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
-        return INameService::TPtr(new TStaticNameService(
+        return MakeStaticNameService(
             Pruned(std::move(names), frequency),
-            MakeDefaultRanking(std::move(frequency))));
+            MakeDefaultRanking(std::move(frequency)));
     }
 
     INameService::TPtr MakeStaticNameService(TNameSet names, IRanking::TPtr ranking) {
-        return MakeIntrusive<TStaticNameService>(std::move(names), std::move(ranking));
+        TVector<INameService::TPtr> children = {
+            new TKeywordNameService(ranking),
+            new TPragmaNameService(ranking, std::move(names.Pragmas)),
+            new TTypeNameService(ranking, std::move(names.Types)),
+            new TFunctionNameService(ranking, std::move(names.Functions)),
+            new THintNameService(ranking, std::move(names.Hints)),
+        };
+        return MakeUnionNameService(std::move(children), ranking);
     }
 
 } // namespace NSQLComplete

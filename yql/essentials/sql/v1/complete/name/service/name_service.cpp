@@ -1,0 +1,64 @@
+#include "name_service.h"
+
+namespace NSQLComplete {
+
+    namespace {
+
+        void SetPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+            if (namespaced.Namespace.empty()) {
+                return;
+            }
+
+            name.prepend(delimeter);
+            name.prepend(namespaced.Namespace);
+        }
+
+        void FixPrefix(TString& name, const TStringBuf delimeter, const TNamespaced& namespaced) {
+            if (namespaced.Namespace.empty()) {
+                return;
+            }
+
+            name.remove(0, namespaced.Namespace.size() + delimeter.size());
+        }
+
+    } // namespace
+
+    TGenericName TNameConstraints::Qualified(TGenericName unqualified) const {
+        return std::visit([&](auto&& name) -> TGenericName {
+            using T = std::decay_t<decltype(name)>;
+            if constexpr (std::is_same_v<T, TPragmaName>) {
+                SetPrefix(name.Indentifier, ".", *Pragma);
+            } else if constexpr (std::is_same_v<T, TFunctionName>) {
+                SetPrefix(name.Indentifier, "::", *Function);
+            }
+            return name;
+        }, std::move(unqualified));
+    }
+
+    TGenericName TNameConstraints::Unqualified(TGenericName qualified) const {
+        return std::visit([&](auto&& name) -> TGenericName {
+            using T = std::decay_t<decltype(name)>;
+            if constexpr (std::is_same_v<T, TPragmaName>) {
+                FixPrefix(name.Indentifier, ".", *Pragma);
+            } else if constexpr (std::is_same_v<T, TFunctionName>) {
+                FixPrefix(name.Indentifier, "::", *Function);
+            }
+            return name;
+        }, std::move(qualified));
+    }
+
+    TVector<TGenericName> TNameConstraints::Qualified(TVector<TGenericName> unqualified) const {
+        for (auto& name : unqualified) {
+            name = Qualified(std::move(name));
+        }
+        return unqualified;
+    }
+
+    TVector<TGenericName> TNameConstraints::Unqualified(TVector<TGenericName> qualified) const {
+        for (auto& name : qualified) {
+            name = Unqualified(std::move(name));
+        }
+        return qualified;
+    }
+
+} // namespace NSQLComplete

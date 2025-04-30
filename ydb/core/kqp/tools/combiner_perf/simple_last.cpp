@@ -26,14 +26,13 @@ namespace {
 TDuration MeasureGeneratorTime(IComputationGraph& graph, const IDataSampler& sampler)
 {
     const auto devnullStream = sampler.MakeStream(graph.GetHolderFactory());
-    const auto devnullStart = TInstant::Now();
+    const auto devnullStart = GetThreadCPUTime();
     {
         NUdf::TUnboxedValue columns[2];
         while (devnullStream->WideFetch(columns, 2) == NUdf::EFetchStatus::Ok) {
         }
     }
-    const auto devnullTime = TInstant::Now() - devnullStart;
-    return devnullTime;
+    return GetThreadCPUTimeDelta(devnullStart);
 }
 
 template<bool LLVM, bool Spilling>

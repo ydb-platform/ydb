@@ -78,18 +78,32 @@ THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
     Y_ENSURE(params.RandomSeed.has_value());
 
     switch (params.SamplerType) {
-    case ESamplerType::StringKeysUI64Values:
-        return DispatchByMap<std::string, ui64, IDataSampler>(params.ReferenceHashType, [&](auto&& impl) {
+    case ESamplerType::StringKeysUI64Values: {
+        auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = TString64DataSampler<MapImpl>;
+            using SamplerType = TString64DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
             return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
-        });
-    case ESamplerType::UI64KeysUI64Values:
-        return DispatchByMap<ui64, ui64, IDataSampler>(params.ReferenceHashType, [&](auto&& impl) {
+        };
+        if (params.NumAggregations == 1) {
+            return DispatchByMap<std::string, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
+        } else {
+            // TODO: support other NumAggregations values?
+            return DispatchByMap<std::string, TValueWrapper<ui64, 3>, IDataSampler>(params.ReferenceHashType, next);
+        }
+    }
+    case ESamplerType::UI64KeysUI64Values: {
+        auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = T6464DataSampler<MapImpl>;
+            using SamplerType = T6464DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
             return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
-        });
+        };
+        if (params.NumAggregations == 1) {
+            return DispatchByMap<ui64, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
+        } else {
+            // TODO: support other NumAggregations values?
+            return DispatchByMap<ui64, TValueWrapper<ui64, 3>, IDataSampler>(params.ReferenceHashType, next);
+        }
+    }
     }
 }
 
@@ -104,7 +118,6 @@ struct TUpdateMapFromBlocks<TMapImpl, ui64>
 {
     static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result)
     {
-
         auto datumKey = TArrowBlock::From(key).GetDatum();
         auto datumValue = TArrowBlock::From(value).GetDatum();
         UNIT_ASSERT(datumKey.is_array());

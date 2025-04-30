@@ -642,7 +642,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " cookie " << ev->Cookie
                 << " class " << msg->Priority
                 <<  " from cache " << msg->Fetch->Pages);
-            SendReadyBlocks(*request);
+            SendResult(*request);
         }
 
         DoGC();
@@ -841,7 +841,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto collection = Collections.FindPtr(pageCollectionId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detach page collection " << pageCollectionId
-            << (collection ? "" : " unknown")
             << " owner " << ev->Sender);
 
         if (!collection || !collection->Owners.erase(ev->Sender)) {
@@ -886,7 +885,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         auto collection = Collections.FindPtr(msg->Fetch->PageCollection->Label());
         if (!collection) {
-            // TODO: is it possible?
             if (queue) {
                 RequestFromQueue(*queue);
             }
@@ -1031,12 +1029,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--request->PendingBlocks == 0)
-                SendReadyBlocks(*request);
+                SendResult(*request);
         }
         collection.PendingRequests.erase(pendingRequestsIt);
     }
 
-    void SendReadyBlocks(TRequest &request) {
+    void SendResult(TRequest &request) {
         Y_ENSURE(!request.IsResponded());
         /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
 
@@ -1079,7 +1077,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << collection.Id);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << collection.Id
+            << " error " << blobStorageError);
 
         // decline all pending requests
         for (auto &[_, requests] : collection.PendingRequests) {

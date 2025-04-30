@@ -64,6 +64,7 @@
 #include <util/stream/str.h>
 #include <util/stream/input.h>
 #include <util/stream/file.h>
+#include <util/string/type.h>
 #include <util/system/execpath.h>
 #include <util/system/guard.h>
 #include <util/system/shellcommand.h>
@@ -214,46 +215,50 @@ TString DebugPath(NYT::TRichYPath path) {
     return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
 }
 
-void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
-    EDataSlot toType = column->GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
+void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs, bool& isOptional) {
+    const TDataExprType* dataType = nullptr;
+    const bool columnHasDataType = IsDataOrOptionalOfData(column->GetTypeAnn(), isOptional, dataType);
+    YQL_ENSURE(columnHasDataType, "YtQLFilter: unsupported type of column " << column->Dump());
+    YQL_ENSURE(dataType);
+    const EDataSlot dataSlot = dataType->Cast<TDataExprType>()->GetSlot();
 
-    // AllowIntegralConversion (may consider some refactoring)
-    if (toType == EDataSlot::Uint8) {
+    // looks like AllowIntegralConversion (may consider some refactoring)
+    if (dataSlot == EDataSlot::Uint8) {
         isSigned = false;
         minValueAbs = 0;
         maxValueAbs = Max<ui8>();
     }
-    else if (toType == EDataSlot::Uint16) {
+    else if (dataSlot == EDataSlot::Uint16) {
         isSigned = false;
         minValueAbs = 0;
         maxValueAbs = Max<ui16>();
     }
-    else if (toType == EDataSlot::Uint32) {
+    else if (dataSlot == EDataSlot::Uint32) {
         isSigned = false;
         minValueAbs = 0;
         maxValueAbs = Max<ui32>();
     }
-    else if (toType == EDataSlot::Uint64) {
+    else if (dataSlot == EDataSlot::Uint64) {
         isSigned = false;
         minValueAbs = 0;
         maxValueAbs = Max<ui64>();
     }
-    else if (toType == EDataSlot::Int8) {
+    else if (dataSlot == EDataSlot::Int8) {
         isSigned = true;
         minValueAbs = (ui64)Max<i8>() + 1;
         maxValueAbs = (ui64)Max<i8>();
     }
-    else if (toType == EDataSlot::Int16) {
+    else if (dataSlot == EDataSlot::Int16) {
         isSigned = true;
         minValueAbs = (ui64)Max<i16>() + 1;
         maxValueAbs = (ui64)Max<i16>();
     }
-    else if (toType == EDataSlot::Int32) {
+    else if (dataSlot == EDataSlot::Int32) {
         isSigned = true;
         minValueAbs = (ui64)Max<i32>() + 1;
         maxValueAbs = (ui64)Max<i32>();
     }
-    else if (toType == EDataSlot::Int64) {
+    else if (dataSlot == EDataSlot::Int64) {
         isSigned = true;
         minValueAbs = (ui64)Max<i64>() + 1;
         maxValueAbs = (ui64)Max<i64>();
@@ -286,51 +291,102 @@ void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
     }
 }
 
-void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, TStringBuilder& result) {
+void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, const std::optional<bool>& nullValue, TStringBuilder& result) {
+    if (TMaybeNode<TCoNull>(intValue) || TMaybeNode<TCoNothing>(intValue)) {
+        YQL_ENSURE(nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
+        if (nullValue.value()) {
+            result << "TRUE";
+        } else {
+            result << "FALSE";
+        }
+        return;
+    }
+
+    TMaybeNode<TCoIntegralCtor> maybeIntValue;
+    if (auto maybeJustValue = TMaybeNode<TCoJust>(intValue)) {
+        maybeIntValue = TMaybeNode<TCoIntegralCtor>(maybeJustValue.Cast().Input().Ptr());
+    } else {
+        maybeIntValue = TMaybeNode<TCoIntegralCtor>(intValue);
+    }
+    YQL_ENSURE(maybeIntValue);
+
     bool columnsIsSigned;
     ui64 minValueAbs;
     ui64 maxValueAbs;
-    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs);
+    bool columnIsOptional;
+    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs, columnIsOptional);
+    YQL_ENSURE(!columnIsOptional || columnIsOptional && nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
 
-    const auto maybeInt = TMaybeNode<TCoIntegralCtor>(intValue);
-    YQL_ENSURE(maybeInt);
     bool hasSign;
     bool isSigned;
     ui64 valueAbs;
-    ExtractIntegralValue(maybeInt.Ref(), false, hasSign, isSigned, valueAbs);
+    ExtractIntegralValue(maybeIntValue.Ref(), false, hasSign, isSigned, valueAbs);
 
+    std::optional<bool> constantFilter;
     if (!hasSign && valueAbs > maxValueAbs) {
-        // value is greater than maximum
+        // Value is greater than maximum.
         if (opName == ">" || opName == ">=" || opName == "==") {
-            result << "FALSE";
+            constantFilter = false;
         } else {
-            result << "TRUE";
+            constantFilter = true;
         }
     } else if (hasSign && valueAbs > minValueAbs) {
-        // value is less than minimum
+        // Value is less than minimum.
         if (opName == "<" || opName == "<=" || opName == "==") {
-            result << "FALSE";
+            constantFilter = false;
+        } else {
+            constantFilter = true;
+        }
+    }
+
+    const auto columnName = intColumn->ChildPtr(1)->Content();
+    if (!constantFilter.has_value()) {
+        // Value is in the range, comparison is not constant.
+        if (columnIsOptional) {
+            const bool isLess = opName == "<" || opName == "<=";
+            if (isLess && !nullValue.value()) {
+                // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
+                QuoteColumnForQL(columnName, result);
+                result << " != NULL AND ";
+            } else if (!isLess && nullValue.value()) {
+                // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
+                QuoteColumnForQL(columnName, result);
+                result << " = NULL OR ";
+            }
+        }
+        QuoteColumnForQL(columnName, result);
+        result << " ";
+        ConvertComparisonForQL(opName, result);
+        const auto valueStr = maybeIntValue.Cast().Literal().Value();
+        result << " " << valueStr;
+    } else if (constantFilter.value()) {
+        // Value is out of the range, comparison is always TRUE.
+        if (columnIsOptional && !nullValue.value()) {
+            // Handle comparison with NULL as FALSE.
+            QuoteColumnForQL(columnName, result);
+            result << " IS NOT NULL";
         } else {
             result << "TRUE";
         }
     } else {
-        // value is in the range
-        const auto columnName = intColumn->ChildPtr(1)->Content();
-        const auto valueStr = maybeInt.Cast().Literal().Value();
-        QuoteColumnForQL(columnName, result);
-        result << " ";
-        ConvertComparisonForQL(opName, result);
-        result << " " << valueStr;
+        // Value is out of the range, comparison is always FALSE.
+        if (columnIsOptional && nullValue.value()) {
+            // Handle comparison with NULL as TRUE.
+            QuoteColumnForQL(columnName, result);
+            result << " IS NULL";
+        } else {
+            result << "FALSE";
+        }
     }
 }
 
-void GenerateInputQueryComparison(const TCoCompare& op, TStringBuilder& result) {
+void GenerateInputQueryComparison(const TCoCompare& op, const std::optional<bool>& nullValue, TStringBuilder& result) {
     YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
     const auto left = op.Left().Ptr();
     const auto right = op.Right().Ptr();
 
     if (left->IsCallable("Member")) {
-        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, result);
+        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, nullValue, result);
     } else {
         YQL_ENSURE(right->IsCallable("Member"));
         auto invertedOp = op.CallableName();
@@ -343,17 +399,29 @@ void GenerateInputQueryComparison(const TCoCompare& op, TStringBuilder& result) 
         } else if (invertedOp == ">=") {
             invertedOp = "<=";
         }
-        GenerateInputQueryIntegerComparison(invertedOp, right, left, result);
+        GenerateInputQueryIntegerComparison(invertedOp, right, left, nullValue, result);
     }
 }
 
 void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
     if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
-        GenerateInputQueryComparison(maybeCompare.Cast(), result);
+        GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
     } else if (node->IsCallable("Not")) {
-        result << "NOT (";
+        const auto child = node->ChildPtr(0);
+        if (child->IsCallable("Exists")) {
+            // Do not generate NOT (x IS NOT NULL).
+            result << "(";
+            GenerateInputQueryWhereExpression(child->ChildPtr(0), result);
+            result << ") IS NULL";
+        } else {
+            result << "NOT (";
+            GenerateInputQueryWhereExpression(child, result);
+            result << ")";
+        }
+    } else if (node->IsCallable("Exists")) {
+        result << "(";
         GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
-        result << ")";
+        result << ") IS NOT NULL";
     } else if (node->IsCallable({"And", "Or"})) {
         const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
 
@@ -367,6 +435,17 @@ void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuild
             GenerateInputQueryWhereExpression(node->Child(i), result);
             result << ")";
         };
+    } else if (node->IsCallable("Coalesce")) {
+        YQL_ENSURE(node->ChildrenSize() == 2);
+        const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();
+        const auto nullValueStr = TMaybeNode<TCoBool>(node->Child(1)).Cast().Literal().Value();
+        const std::optional<bool> nullValue(IsTrue(nullValueStr));
+        GenerateInputQueryComparison(op, nullValue, result);
+    } else if (const auto maybeBool = TMaybeNode<TCoBool>(node)) {
+        result << maybeBool.Cast().Literal().Value();
+    } else if (node->IsCallable("Member")) {
+        const auto columnName = node->ChildPtr(1)->Content();
+        QuoteColumnForQL(columnName, result);
     } else {
         YQL_ENSURE(false, "unexpected node type");
     }
@@ -2773,6 +2852,7 @@ private:
                 }
 
                 FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
+                CheckSpecForSecrets(spec, execCtx);
 
                 if (combineChunks) {
                     mergeSpec.CombineChunks(true);
@@ -3179,6 +3259,7 @@ private:
         NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
         FillSpec(spec, *execCtx, entry, 0., Nothing(), EYtOpProp::WithMapper);
         spec["job_count"] = 1;
+        CheckSpecForSecrets(spec, execCtx);
 
         TOperationOptions opOpts;
         FillOperationOptions(opOpts, execCtx, entry);
@@ -3244,7 +3325,13 @@ private:
         bool ref = NCommon::HasResOrPullOption(pull.Ref(), "ref");
         bool autoRef = NCommon::HasResOrPullOption(pull.Ref(), "autoref");
 
-        auto cluster = TString{GetClusterName(pull.Input())};
+        TString cluster = options.UsedCluster();
+        if (cluster.empty()) {
+            cluster = options.Config()->DefaultCluster.Get().GetOrElse(TString());
+        }
+        if (cluster.empty()) {
+            cluster = Clusters_->GetDefaultClusterName();
+        }
         auto execCtx = MakeExecCtx(std::move(options), session, cluster, pull.Raw(), &ctx);
 
         if (auto read = pull.Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
@@ -3383,12 +3470,14 @@ private:
                     }
                 }
             } else  if (auto limiter = TTableLimiter(range)) {
-                auto entry = execCtx->GetEntry();
                 bool stop = false;
                 const bool useNativeDyntableRead = execCtx->Options_.Config()->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
                 for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
                     TString srcTableName = execCtx->InputTables_[i].Name;
                     NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
+                    srcTable.Cluster_.Clear();
+                    TString srcTableCluster = execCtx->InputTables_[i].Cluster;
+                    YQL_ENSURE(srcTableCluster);
                     const bool isDynamic = execCtx->InputTables_[i].Dynamic;
                     if (!isDynamic || useNativeDyntableRead) {
                         if (const auto recordsCount = execCtx->InputTables_[i].Records; recordsCount || !isDynamic) {
@@ -3400,6 +3489,7 @@ private:
                         limiter.NextDynamicTable();
                     }
 
+                    auto entry = execCtx->GetEntryForCluster(srcTableCluster);
                     if (isDynamic && !useNativeDyntableRead) {
                         YQL_ENSURE(srcTable.GetRanges().Empty());
                         stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
@@ -3655,6 +3745,7 @@ private:
                 if (hasNonStrict) {
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
+                CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, sortOpSpec = std::move(sortOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Sort(sortOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3739,6 +3830,7 @@ private:
                 }
 
                 PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr, execCtx->Options_.Config());
+                CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3930,6 +4022,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4141,6 +4234,7 @@ private:
             if (maxDataSizePerJob) {
                 spec["max_data_size_per_job"] = static_cast<i64>(*maxDataSizePerJob);
             }
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4437,6 +4531,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4587,6 +4682,7 @@ private:
             }
 
             PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4919,6 +5015,7 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, extraUsage.Cpu, Nothing(),
                 EYtOpProp::TemporaryAutoMerge | EYtOpProp::WithMapper | EYtOpProp::WithUserJobs);
+            CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -5541,6 +5638,7 @@ private:
                 }
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
                 FillSpec(spec, *execCtx, entry, extraUsage.Cpu, Nothing(), EYtOpProp::WithMapper);
+                CheckSpecForSecrets(spec, execCtx);
 
                 PrepareTempDestination(tmpTable, execCtx, entry, entry->Tx);
 

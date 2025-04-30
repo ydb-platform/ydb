@@ -875,6 +875,20 @@
             "uri": "file://test.test_lambda-list_aggregate_flatmap-default.txt-Results_/extracted"
         }
     ],
+    "test.test[like-ilike-Ansi-Debug]": [
+        {
+            "checksum": "2bf3a064a80a62b0d1e57b4fc19f85aa",
+            "size": 4198,
+            "uri": "https://{canondata_backend}/1871102/cf0bf303bf8ddaa5f80dc41d0b1079fd931793f8/resource.tar.gz#test.test_like-ilike-Ansi-Debug_/opt.yql"
+        }
+    ],
+    "test.test[like-ilike-Ansi-Results]": [
+        {
+            "checksum": "4f140efd3491b22880e294dce1c735c2",
+            "size": 9773,
+            "uri": "https://{canondata_backend}/1871102/cf0bf303bf8ddaa5f80dc41d0b1079fd931793f8/resource.tar.gz#test.test_like-ilike-Ansi-Results_/results.txt"
+        }
+    ],
     "test.test[match_recognize-alerts_without_order-default.txt-Debug]": [
         {
             "checksum": "617ad997b55cab0792da8c20f2fdeb07",

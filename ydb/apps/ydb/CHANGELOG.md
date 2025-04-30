@@ -1,3 +1,4 @@
+* Brackets are now inserted in pairs in YDB CLI interactive mode
 * Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands. Sets the percentage of the benchmark's data size and workload to use, relative to full scale.
 * Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
@@ -8,6 +9,9 @@
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 * Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
 * Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
+* Added `--min-inflight` to `ydb debug latency` command.
+* Added support for multiple `-p` (percentile) params in `ydb debug latency` command.
+* `ydb debug latency` outputs additional measurements for GRPC ping.
 
 ## 2.20.0 ##
 

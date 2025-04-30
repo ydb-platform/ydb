@@ -52,14 +52,14 @@ def _set_node_errors(test_info: dict[str, str], node_errors: list[NodeErrors]) -
         return
     html = '<ul>'
     for node in node_errors:
-        html += f'<li>{node.node.ic_port}@{node.node.host}'
+        html += f'<li>{node.node.slot}'
         if node.message:
             html += f'<p>Node {node.message}</p>'
         if node.was_oom:
             html += '<p>Node was killed by OOM</p>'
         for core_id, core_hash in node.core_hashes:
-            color = hex(0xFF0000 + hash(core_hash) % 0xFFFF).split('x')[-1]
-            html += f'<p>There was coredump <a target="_blank" href="https://coredumps.yandex-team.ru/v3/cores/{core_id}" style="background-color: #{color}">{core_hash}</a></p>'
+            color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
+            html += f'<p>There was coredump <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></p>'
         html += '</li>'
     html += '</ul>'
     test_info['<span style="background-color: #FF8888">node errors</span>'] = html

@@ -20,6 +20,7 @@ int Run(int argc, char* argv[]) {
     TString syntaxStr = "YQL";
     TString clusterModeStr = "Many";
     TString clusterSystem;
+    NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
@@ -39,6 +40,13 @@ int Run(int argc, char* argv[]) {
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([&](const TString& str) {
+            if (!NYql::ParseLangVersion(str, langver)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
 
@@ -77,6 +85,7 @@ int Run(int argc, char* argv[]) {
     int errors = 0;
     TString queryFile("query");
 
+    checkReq.LangVer = langver;
     checkReq.IsAnsiLexer = res.Has("ansi-lexer");
     checkReq.Program = queryString;
     checkReq.Syntax = NYql::NFastCheck::ESyntax::YQL;
@@ -118,7 +127,7 @@ int main(int argc, char* argv[]) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {
-        Cerr << "Caught exception:" << e.what() << Endl;
+        Cerr << "Caught exception: " << e.what() << Endl;
         return 1;
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;

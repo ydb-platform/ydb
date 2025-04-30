@@ -155,6 +155,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         auto prefix = ReadShardedTable(server, kPrefixTable);
         auto level = ReadShardedTable(server, kLevelTable);
         auto posting = ReadShardedTable(server, kPostingTable);
+        Cerr << "Prefix:" << Endl;
+        Cerr << prefix << Endl;
+        Cerr << "Level:" << Endl;
+        Cerr << level << Endl;
+        Cerr << "Posting:" << Endl;
+        Cerr << posting << Endl;
         return {std::move(prefix), std::move(level), std::move(posting)};
     }
 

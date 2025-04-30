@@ -109,6 +109,12 @@ struct TEvNodeBroker {
         EvGracefulShutdownRequest,
         EvGracefulShutdownResponse,
 
+        // delta protocol
+        EvSubscribeNodesRequest,
+        EvUpdateNodes,
+        EvSyncNodesRequest,
+        EvSyncNodesResponse,
+
         // TODO: remove
         // internal
         //EvNodeExpire = EvListNodes + 512,
@@ -203,6 +209,31 @@ struct TEvNodeBroker {
     struct TEvSetConfigResponse : public TEventPB<TEvSetConfigResponse,
                                                   NKikimrNodeBroker::TSetConfigResponse,
                                                   EvSetConfigResponse> {
+    };
+
+    struct TEvSubscribeNodesRequest : public TEventPB<TEvSubscribeNodesRequest,
+                                                      NKikimrNodeBroker::TSubscribeNodesRequest,
+                                                      EvSubscribeNodesRequest> {
+    };
+
+    struct TEvUpdateNodes : public TEventPreSerializedPB<TEvUpdateNodes,
+                                                         NKikimrNodeBroker::TUpdateNodes,
+                                                         EvUpdateNodes> {
+        TEvUpdateNodes() = default;
+        TEvUpdateNodes(const NKikimrNodeBroker::TUpdateNodes &record)
+            : TEventPreSerializedPB(record)
+        {
+        }
+    };
+
+    struct TEvSyncNodesRequest : public TEventPB<TEvSyncNodesRequest,
+                                                 NKikimrNodeBroker::TSyncNodesRequest,
+                                                 EvSyncNodesRequest> {
+    };
+
+    struct TEvSyncNodesResponse : public TEventPB<TEvSyncNodesResponse,
+                                                  NKikimrNodeBroker::TSyncNodesResponse,
+                                                  EvSyncNodesResponse> {
     };
 };
 

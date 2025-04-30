@@ -649,6 +649,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
     kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
+    kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
     kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();

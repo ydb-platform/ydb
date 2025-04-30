@@ -358,6 +358,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init_topics("test_filters_non_optional_field")
 
         sql = Rf'''
+            PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL, nested Json NOT NULL)) WHERE '''
@@ -387,6 +388,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        filter = 'event LIKE "event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -396,6 +403,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.init_topics("test_filters_optional_field")
 
         sql = Rf'''
+            PRAGMA AnsiLike;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64, nested Json)) WHERE '''
@@ -441,6 +449,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
+        filter = 'event LIKE "event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        filter = 'event LIKE "%event2%"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

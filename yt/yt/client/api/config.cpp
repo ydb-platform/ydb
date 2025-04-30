@@ -153,6 +153,8 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_checksums", &TThis::EnableChecksums)
         .Default(false);
+    registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Default(false);
 
     registrar.Parameter("dont_close", &TThis::DontClose)
         .Default(false);

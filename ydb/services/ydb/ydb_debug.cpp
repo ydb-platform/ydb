@@ -39,6 +39,8 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 [this](NYdbGrpc::IRequestContextBase* ctx) {
                     NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
                     PlainGrpcResponse response;
+                    auto ts = TInstant::Now();
+                    response.SetCallBackTs(ts.MicroSeconds());
                     ctx->Reply(&response, 0);
                 }, &Ydb::Debug::V1::DebugService::AsyncService::RequestPingPlainGrpc,
                 "PingPlainGrpc", logger, getCounterBlock("ping", "PingPlainGrpc"))->Run();

@@ -298,7 +298,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
 }
 
 THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>
-ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprContext& ctx, bool optional) {
+ParseJoinInputType(const TStructExprType& rowType, const THashSet<TStringBuf>& tableLabels, TExprContext& ctx, bool optional) {
     THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>> result;
     for (auto member : rowType.GetItems()) {
         TStringBuf label, column;
@@ -308,7 +308,7 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
             column = member->GetName();
         }
         const bool isSystemKeyColumn = column.starts_with("_yql_dq_key_");
-        if (label.empty() && tableLabel.empty() && !isSystemKeyColumn) {
+        if (label.empty() && (tableLabels.size() == 1 && tableLabels.begin()->empty()) && !isSystemKeyColumn) {
             ctx.AddError(TIssue(TStringBuilder() << "Invalid join input type " << FormatType(&rowType)));
             result.clear();
             return result;
@@ -317,10 +317,17 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
         if (optional && !memberType->IsOptionalOrNull()) {
             memberType = ctx.MakeType<TOptionalExprType>(memberType);
         }
-        if (!tableLabel.empty()) {
-            result[tableLabel][member->GetName()] = memberType;
-        } else {
+        if (tableLabels.size() > 1) {
+            YQL_ENSURE(label);
+            YQL_ENSURE(column);
             result[label][column] = memberType;
+        } else {
+            YQL_ENSURE(tableLabels.size() == 1);
+            if (!(tableLabels.begin())->empty()) {
+                result[*(tableLabels.begin())][member->GetName()] = memberType;
+            } else {
+                result[label][column] = memberType;
+            }
         }
     }
     return result;
@@ -328,12 +335,12 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExprType& leftRowType,
-    const TStringBuf& leftLabel, const TStructExprType& rightRowType, const TStringBuf& rightLabel,
+    const THashSet<TStringBuf>& leftLabels, const TStructExprType& rightRowType, const THashSet<TStringBuf>& rightLabels,
     const TStringBuf& joinType, const TDqJoinKeyTupleList& joinKeys, TExprContext& ctx)
 {
     // check left
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
-    auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
+    auto leftType = ParseJoinInputType(leftRowType, leftLabels, ctx, isLeftOptional);
     if (leftType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse left join input type: ";
         leftRowType.Out(str);
@@ -343,7 +350,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
     // check right
     bool isRightOptional = IsRightJoinSideOptional(joinType);
-    auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
+    auto rightType = ParseJoinInputType(rightRowType, rightLabels, ctx, isRightOptional);
     if (rightType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse right join input type: ";
         rightRowType.Out(str);
@@ -371,11 +378,11 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         auto rightKeyLabel = key.RightLabel().Value();
         auto rightKeyColumn = key.RightColumn().Value();
 
-        if (leftLabel && leftLabel != leftKeyLabel) {
+        if ((leftLabels.size() && !leftLabels.begin()->empty()) && !leftLabels.contains(leftKeyLabel)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for left table"));
             return nullptr;
         }
-        if (rightLabel && rightLabel != rightKeyLabel) {
+        if ((rightLabels.size() && !rightLabels.begin()->empty()) && !rightLabels.contains(rightKeyLabel)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "different labels for right table"));
             return nullptr;
         }
@@ -442,14 +449,26 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     }
 
     if (!input->Child(TDqJoin::idx_LeftLabel)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
-            return nullptr;
+        if ((input->Child(TDqJoin::idx_LeftLabel)->IsAtom())) {
+            if (!EnsureAtom(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
+                return nullptr;
+            }
+        } else {
+            if (!EnsureTupleOfAtoms(*input->Child(TDqJoin::idx_LeftLabel), ctx)) {
+                return nullptr;
+            }
         }
     }
 
     if (!input->Child(TDqJoin::idx_RightLabel)->IsCallable("Void")) {
-        if (!EnsureAtom(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
-            return nullptr;
+        if ((input->Child(TDqJoin::idx_RightLabel)->IsAtom())) {
+            if (!EnsureAtom(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
+                return nullptr;
+            }
+        } else {
+            if (!EnsureTupleOfAtoms(*input->Child(TDqJoin::idx_RightLabel), ctx)) {
+                return nullptr;
+            }
         }
     }
 
@@ -499,18 +518,32 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         return nullptr;
     }
     auto leftStructType = leftInputItemType.Cast<TStructExprType>();
-    auto leftTableLabel = join.LeftLabel().Maybe<TCoAtom>()
-        ? join.LeftLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+    THashSet<TStringBuf> leftTableLabels;
+    if (join.LeftLabel().Maybe<TCoAtom>()) {
+        leftTableLabels.emplace(join.LeftLabel().Cast<TCoAtom>().Value());
+    } else if (join.LeftLabel().Maybe<TCoAtomList>()) {
+        for (auto label : join.LeftLabel().Cast<TCoAtomList>())  {
+            leftTableLabels.emplace(label.Value());
+        }
+    } else {
+        leftTableLabels.emplace("");
+    }
 
     const auto& rightInputItemType = GetSeqItemType(*rightInputType);
     if (!EnsureStructType(join.Pos(), rightInputItemType, ctx)) {
         return nullptr;
     }
     auto rightStructType = rightInputItemType.Cast<TStructExprType>();
-    auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
-        ? join.RightLabel().Cast<TCoAtom>().Value()
-        : TStringBuf("");
+    THashSet<TStringBuf> rightTableLabels;
+    if (join.RightLabel().Maybe<TCoAtom>()) {
+        rightTableLabels.emplace(join.RightLabel().Cast<TCoAtom>().Value());
+    } else if (join.RightLabel().Maybe<TCoAtomList>()) {
+        for (auto label : join.RightLabel().Cast<TCoAtomList>()) {
+            rightTableLabels.emplace(label.Value());
+        }
+    } else {
+        rightTableLabels.emplace("");
+    }
 
     if (input->ChildrenSize() > TDqJoin::idx_JoinAlgoOptions) {
         const auto& joinAlgo = *input->Child(TDqJoin::idx_JoinAlgo);
@@ -551,9 +584,9 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         }
     }
 
-    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
-        rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
-}
+    return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
+        rightTableLabels, join.JoinType(), join.JoinKeys(), ctx);
+    }
 
 } // unnamed
 
@@ -689,12 +722,31 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
         return TStatus::Error;
     }
+
+    THashSet<TStringBuf> leftLabels;
+    if (cnStreamLookup.LeftLabel().Maybe<TCoAtom>()) {
+        leftLabels.emplace(cnStreamLookup.LeftLabel().Cast<TCoAtom>().Value());
+    } else {
+        for (auto label : cnStreamLookup.LeftLabel().Cast<TCoAtomList>()) {
+            leftLabels.emplace(label.Value());
+        }
+    }
+
+    THashSet<TStringBuf> rightLabels;
+    if (cnStreamLookup.RightLabel().Maybe<TCoAtom>()) {
+        rightLabels.emplace(cnStreamLookup.RightLabel().Cast<TCoAtom>().Value());
+    } else {
+        for (auto label : cnStreamLookup.RightLabel().Cast<TCoAtomList>()) {
+            rightLabels.emplace(label.Value());
+        }
+    }
+
     const auto outputRowType = GetDqJoinResultType<true>(
         input->Pos(),
         *leftRowType.Cast<TStructExprType>(),
-        cnStreamLookup.LeftLabel().Cast<TCoAtom>().StringValue(),
+        leftLabels,
         *rightRowType.Cast<TStructExprType>(),
-        cnStreamLookup.RightLabel().StringValue(),
+        rightLabels,
         cnStreamLookup.JoinType().StringValue(),
         cnStreamLookup.JoinKeys(),
         ctx

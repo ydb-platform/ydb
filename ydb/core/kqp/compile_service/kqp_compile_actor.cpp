@@ -656,6 +656,14 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
     }
+
+    kqpConfig.FilterPushdownOverJoinOptionalSide = serviceConfig.GetFilterPushdownOverJoinOptionalSide();
+    if (serviceConfig.GetFuseEquiJoinsInputMultiLabels())
+        kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
+    if (serviceConfig.GetPullUpFlatMapOverJoinMultipleLabels())
+        kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+    if (serviceConfig.GetEqualityFilterOverJoin())
+        kqpConfig.YqlCoreOptimizerFlags.insert("equalityfilteroverjoin");
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

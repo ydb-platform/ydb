@@ -55,6 +55,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
     specialTypes["date_type"] = Params.GetDateType();
+    specialTypes["datetime_type"] = Params.GetDatetimeType();
     specialTypes["timestamp_type"] = Params.GetTimestampType();
 
     const auto& tableName = table["name"].GetString();
@@ -115,7 +116,6 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     const auto json = GetTablesJson();
 
     TStringBuilder result;
-    result << "--!syntax_v1" << Endl;
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << "CREATE EXTERNAL DATA SOURCE `" << Params.GetFullTableName(nullptr) << "_s3_external_source` WITH (" << Endl
             << "    SOURCE_TYPE=\"ObjectStorage\"," << Endl
@@ -135,6 +135,9 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
 
 NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
     const auto tablesYaml = GetTablesYaml();
+    if (!tablesYaml) {
+        return NJson::JSON_NULL;
+    }
     const auto yaml = YAML::Load(tablesYaml.c_str());
     return NKikimr::NYaml::Yaml2Json(yaml, true);
 }
@@ -186,7 +189,7 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
-            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp").StoreValue(&DatetimeType, "Datetime");
         opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;

@@ -849,11 +849,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto ownerIt = Owners.find(ev->Sender);
         Y_ENSURE(ownerIt != Owners.end());
 
-        // DropRequests(*collection, ev->Sender);
+        auto collectionIt = ownerIt->second.find(collection);
+        Y_ENSURE(collectionIt != ownerIt->second.end());
+
+        for (auto& request : collectionIt->second) {
+            SendError(request, NKikimrProto::RACE);
+        }
+
         DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
-        bool erased = ownerIt->second.erase(collection);
-        Y_ENSURE(erased);
+        ownerIt->second.erase(collectionIt);
         Counters.PageCollectionOwners->Dec();
 
         TryDropExpiredCollection(*collection);
@@ -1023,7 +1028,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
         for (auto &[request, index] : pendingRequestsIt->second) {
-            Y_ENSURE(!request->IsResponded());
+            Y_ENSURE(!request->IsResponded()); // TODO
             auto &readyPage = request->ReadyPages[index];
             Y_ENSURE(readyPage.PageId == page->PageId);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);

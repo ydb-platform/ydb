@@ -881,7 +881,36 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     }
 
     Y_UNIT_TEST(Detach_InFly) {
-        // TODO
+        TSharedPageCacheMock sharedCache;
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1});
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {2});
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection1, {1});
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection1, {1, 3});
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{10, sharedCache.Collection1, {1}},
+            NPageCollection::TFetch{10, sharedCache.Collection2, {2}},
+            NPageCollection::TFetch{10, sharedCache.Collection1, {3}},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 3);
+
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{1, sharedCache.Collection1, {}}
+        }, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+
+        // TODO: check remaining requests
     }
 
     Y_UNIT_TEST(Unregister_Basics) {

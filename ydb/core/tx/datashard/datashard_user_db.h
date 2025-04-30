@@ -176,6 +176,10 @@ public:
     NMiniKQL::TEngineHostCounters& GetCounters();
     const NMiniKQL::TEngineHostCounters& GetCounters() const;
 
+    bool PrechargeRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key);    
+
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 

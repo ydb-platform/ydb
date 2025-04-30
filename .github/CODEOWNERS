@@ -1,3 +1,4 @@
+/CHANGELOG.md @ydb-platform/changelog-reviewers
 /*.md @ydb-platform/docs
 
 /build @ydb-platform/ci

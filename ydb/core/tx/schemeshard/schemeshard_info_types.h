@@ -3384,7 +3384,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
@@ -3822,6 +3822,7 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
+        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
     }
 };
 

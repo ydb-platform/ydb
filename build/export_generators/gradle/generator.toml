@@ -16,6 +16,11 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
+[targets.jar_test]
+template="build.gradle.kts.jinja"
+is_test = true
+is_extra_target = true
+
 [targets.junit4]
 template="build.gradle.kts.jinja"
 is_test = true

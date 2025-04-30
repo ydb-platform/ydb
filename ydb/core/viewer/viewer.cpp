@@ -83,6 +83,18 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/whoami",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "viewer/json/whoami",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),

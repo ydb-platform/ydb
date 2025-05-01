@@ -33,8 +33,8 @@ class IDataSource: public NCommon::IDataSource {
 private:
     using TBase = NCommon::IDataSource;
     YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
-    NArrow::TReplaceKey StartReplaceKey;
-    NArrow::TReplaceKey FinishReplaceKey;
+    NArrow::TSimpleRow StartReplaceKey;
+    NArrow::TSimpleRow FinishReplaceKey;
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
     YDB_READONLY(ui32, IntervalsCount, 0);
@@ -107,10 +107,10 @@ public:
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    const NArrow::TReplaceKey& GetStartReplaceKey() const {
+    const NArrow::TSimpleRow& GetStartReplaceKey() const {
         return StartReplaceKey;
     }
-    const NArrow::TReplaceKey& GetFinishReplaceKey() const {
+    const NArrow::TSimpleRow& GetFinishReplaceKey() const {
         return FinishReplaceKey;
     }
 
@@ -164,17 +164,16 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const NArrow::TReplaceKeyView& start, const NArrow::TReplaceKeyView& finish, const TSnapshot& recordSnapshotMin,
+    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin,
         const TSnapshot& recordSnapshotMax, const ui32 recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
-        , StartReplaceKey(start.GetToStore())
-        , FinishReplaceKey(finish.GetToStore())
+        , StartReplaceKey(start)
+        , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey))
     {
-        UsageClass =
-            GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
@@ -401,7 +400,7 @@ public:
     }
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase((ui64)committed.GetInsertWriteId(), sourceIdx, context, committed.GetFirst().GetView(), committed.GetLast().GetView(),
+        : TBase((ui64)committed.GetInsertWriteId(), sourceIdx, context, committed.GetFirst(), committed.GetLast(),
               committed.GetCommittedSnapshotDef(TSnapshot::Zero()), committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
               committed.GetRecordsCount(), {}, committed.GetIsDelete())
         , CommittedBlob(committed) {

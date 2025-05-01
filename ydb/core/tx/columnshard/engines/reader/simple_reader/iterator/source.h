@@ -48,26 +48,21 @@ public:
 class TReplaceKeyAdapter {
 private:
     bool Reverse = false;
-    NArrow::TComparablePosition Value;
+    NArrow::TSimpleRow Value;
 
 public:
-    const NArrow::TComparablePosition& GetValue() const {
+    const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
 
-    TReplaceKeyAdapter(const NArrow::TReplaceKeyView& rk, const bool reverse)
+    TReplaceKeyAdapter(const NArrow::TSimpleRow& rk, const bool reverse)
         : Reverse(reverse)
         , Value(rk) {
     }
 
-    TReplaceKeyAdapter(const NArrow::TComparablePosition& pos, const bool reverse)
-        : Reverse(reverse)
-        , Value(pos) {
-    }
-
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
         AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.Compare(item.Value);
+        const std::partial_ordering result = Value.CompareNotNull(item.Value);
         if (result == std::partial_ordering::equivalent) {
             return std::partial_ordering::equivalent;
         } else if (result == std::partial_ordering::less) {
@@ -246,7 +241,7 @@ public:
         };
     };
 
-    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
@@ -288,8 +283,8 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKeyView& start,
-        const NArrow::TReplaceKeyView& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
@@ -405,12 +400,11 @@ public:
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
 
-    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            AFL_VERIFY(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows());
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows() - 1, 1);
+            return Portion->IndexKeyEnd();
         } else {
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(0, 1);
+            return Portion->IndexKeyStart();
         }
     }
 

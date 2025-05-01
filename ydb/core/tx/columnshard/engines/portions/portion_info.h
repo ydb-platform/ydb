@@ -380,11 +380,11 @@ public:
         return visible;
     }
 
-    NArrow::TReplaceKeyView IndexKeyStart() const {
+    NArrow::TSimpleRow IndexKeyStart() const {
         return Meta.IndexKeyStart();
     }
 
-    NArrow::TReplaceKeyView IndexKeyEnd() const {
+    NArrow::TSimpleRow IndexKeyEnd() const {
         return Meta.IndexKeyEnd();
     }
 

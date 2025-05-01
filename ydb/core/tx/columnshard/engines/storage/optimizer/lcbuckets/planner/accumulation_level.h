@@ -12,11 +12,11 @@ private:
     std::set<TOrderedPortion> Portions;
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TReplaceKeyView& /*from*/, const NArrow::TReplaceKeyView& /*to*/) const override {
+        const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
         return std::nullopt;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKeyView& /*from*/, const NArrow::TReplaceKeyView& /*to*/) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
         return 0;
     }
 

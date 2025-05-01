@@ -29,8 +29,7 @@ private:
         return result;
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TReplaceKeyView& from, const NArrow::TReplaceKeyView& to) const override {
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -98,7 +97,7 @@ public:
         return false;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKeyView& from, const NArrow::TReplaceKeyView& to) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return 0;
         }
@@ -122,12 +121,12 @@ public:
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
-        const auto& sortingColumns = pkSchema->field_names();
-        for (auto&& i : Portions) {
-            result.AddPosition(i.GetStartPosition(), false);
-        }
+//        const auto& sortingColumns = pkSchema->field_names();
+//        for (auto&& i : Portions) {
+//            result.AddPosition(i.GetStartPosition(), false);
+//        }
         return result;
     }
 };

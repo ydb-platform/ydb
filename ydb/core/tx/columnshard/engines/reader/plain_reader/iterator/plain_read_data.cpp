@@ -30,8 +30,8 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         if (GetReadMetadata()->IsMyUncommitted(i.GetInsertWriteId())) {
             continue;
         }
-        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst().GetView()) ||
-            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast().GetView())) {
+        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
+            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
             GetReadMetadata()->SetConflictedWriteId(i.GetInsertWriteId());
         }
     }
@@ -41,7 +41,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
                 continue;
             }
-        } else if (!GetReadMetadata()->GetPKRangesFilter().IsUsed(i.GetFirst().GetView(), i.GetLast().GetView())) {
+        } else if (!GetReadMetadata()->GetPKRangesFilter().IsUsed(i.GetFirst(), i.GetLast())) {
             continue;
         }
         sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));

@@ -12,6 +12,7 @@ namespace NKikimr::NOlap {
 std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     AFL_VERIFY(!Constructed);
     Constructed = true;
+    TMemoryProfileGuard mGuard("portion_construct");
 
     std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
     AFL_VERIFY(PathId);
@@ -50,11 +51,6 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
         AFL_VERIFY(MinSnapshotDeprecated);
         return index.GetSchemaVerified(*MinSnapshotDeprecated);
     }
-}
-
-void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
-    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
-        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 
 }   // namespace NKikimr::NOlap

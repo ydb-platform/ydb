@@ -46,4 +46,18 @@ TProtoRequest MakeOperationRequest(const TRequestSettings& settings) {
     return request;
 }
 
+
+template <typename TProtoRequest>
+TProtoRequest* MakeRequestOnArena(google::protobuf::Arena* arena) {
+    assert(arena != nullptr);
+    return google::protobuf::Arena::CreateMessage<TProtoRequest>(arena);
+}
+
+template <typename TProtoRequest, typename TRequestSettings>
+TProtoRequest* MakeOperationRequestOnArena(const TRequestSettings& settings, google::protobuf::Arena* arena) {
+    auto request = MakeRequestOnArena<TProtoRequest>(arena);
+    FillOperationParams(settings, *request);
+    return request;
+}
+
 } // namespace NYdb

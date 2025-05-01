@@ -1463,6 +1463,14 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryable(const std::string& ta
     return Impl_->BulkUpsertUnretryable(table, std::move(rows), settings);
 }
 
+TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryableArenaAllocated(const std::string& table,
+    std::pair<TType, Ydb::Value*>&& rows,
+    google::protobuf::Arena* arena,
+    const TBulkUpsertSettings& settings)
+{
+    return Impl_->BulkUpsertUnretryableArenaAllocated(table, std::move(rows), arena, settings);
+}
+
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {

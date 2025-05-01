@@ -71,13 +71,18 @@ public:
 
     template <class TResponseType>
     TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res) {
+        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS);
+    }
+
+    template <class TResponseType>
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status) {
         if (res.Ready()) {
-            UNIT_ASSERT_C(res.Status().IsSuccess(), res.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, "Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
         } else {
             TMaybe<NYdb::TOperation> op = res;
             WaitOp<TResponseType>(op);
-            UNIT_ASSERT_C(op->Status().IsSuccess(), "Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(op->Status().GetStatus(), status, "Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }
     }

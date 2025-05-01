@@ -705,6 +705,14 @@ public:
         SendResult(status, errorMsg, issues);
     }
 
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
+        return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
+    }
+
     void PassAway() override {
         Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
@@ -720,6 +728,9 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             hFunc(TEvDataShard::TEvReadResult, Handle);
+
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleTimeout);
         }

@@ -1027,7 +1027,11 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareAutoDropping(Self, exportInfo, db);
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    EndExport(exportInfo, EState::Done, db);
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1156,7 +1160,12 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareAutoDropping(Self, exportInfo, db);
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    exportInfo->State = EState::Done;
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);

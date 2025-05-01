@@ -111,7 +111,7 @@ Ydb::Type& TType::GetProto()
     return Impl_->ProtoType_;
 }
 
-Ydb::Type TType::ExtractProto() && {
+Ydb::Type&& TType::ExtractProto() && {
     return std::move(Impl_->ProtoType_);
 }
 
@@ -1084,7 +1084,7 @@ Ydb::Value& TValue::GetProto() {
     return Impl_->ProtoValue_;
 }
 
-Ydb::Value TValue::ExtractProto() && {
+Ydb::Value&& TValue::ExtractProto() && {
     return std::move(Impl_->ProtoValue_);
 }
 

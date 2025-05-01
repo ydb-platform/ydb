@@ -143,6 +143,14 @@ public:
     * therefore, it is not retryable with the same `rows` object.
     */
     TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
+
+    TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocated(
+        const std::string& table,
+        std::pair<TType, Ydb::Value*>&& rows,
+        google::protobuf::Arena* arena,
+        const TBulkUpsertSettings& settings
+    );
+
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);

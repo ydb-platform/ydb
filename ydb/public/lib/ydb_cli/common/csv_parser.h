@@ -68,9 +68,17 @@ public:
 
     void BuildParams(TString& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
     void BuildValue(TString& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const;
+
     TValue BuildList(const std::vector<TString>& lines, const TString& filename,
-                     std::optional<ui64> row = std::nullopt,
-                     google::protobuf::Arena* arena = nullptr) const;
+                     std::optional<ui64> row = std::nullopt) const;
+
+    std::pair<TType, Ydb::Value*> BuildListOnArena(
+        const std::vector<TString>& lines,
+        const TString& filename,
+        google::protobuf::Arena* arena,
+        std::optional<ui64> row = std::nullopt
+    ) const;
+
     void BuildLineType();
     const TVector<TString>& GetHeader();
     void ParseLineTypes(TString& line, TPossibleTypes& possibleTypes, const TParseMetadata& meta);

@@ -1267,6 +1267,13 @@ public:
     TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows,
         const TBulkUpsertSettings& settings);
 
+    TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocated(
+        const std::string& table,
+        std::pair<TType, Ydb::Value*>&& rows,
+        google::protobuf::Arena* arena,
+        const TBulkUpsertSettings& settings
+    );
+
     //! Non-transactional fast bulk write.
     //! Interanlly it uses an implicit session and thus doesn't need a session to be passed.
     //! "rows" parameter must be a list of structs where each stuct represents one row.

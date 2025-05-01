@@ -558,45 +558,63 @@ void TCsvParser::BuildValue(TString& data, TValueBuilder& builder, const TType& 
     builder.EndStruct();
 }
 
-TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& filename, std::optional<ui64> row, google::protobuf::Arena* arena) const {
+TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& filename, std::optional<ui64> row) const {
     std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
     columnTypeParsers.reserve(ResultColumnCount);
     for (const TType* type : ResultLineTypesSorted) {
         columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
     }
 
-    if (arena) {
-        // Arena allocation path
-        Ydb::Value* valuePtr = google::protobuf::Arena::CreateMessage<Ydb::Value>(arena);
-        auto* listItems = valuePtr->mutable_items();
-        listItems->Reserve(lines.size());
+    // Original path with local value object
+    Ydb::Value valueProto;
+    auto* listItems = valueProto.mutable_items();
+    listItems->Reserve(lines.size());
 
-        for (const auto& line : lines) {
-            ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
-            if (row.has_value()) {
-                ++row.value();
-            }
+    for (const auto& line : lines) {
+        ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
+        if (row.has_value()) {
+            ++row.value();
         }
-
-        // Return a TValue that references the arena-allocated message
-        return TValue(ResultListType.value(), std::move(*valuePtr));
-    } else {
-        // Original path with local value object
-        Ydb::Value valueProto;
-        auto* listItems = valueProto.mutable_items();
-        listItems->Reserve(lines.size());
-
-        for (const auto& line : lines) {
-            ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
-            if (row.has_value()) {
-                ++row.value();
-            }
-        }
-
-        // Return a TValue that takes ownership via move
-        return TValue(ResultListType.value(), std::move(valueProto));
     }
+
+    // Return a TValue that takes ownership via move
+    return TValue(ResultListType.value(), std::move(valueProto));
 }
+
+
+
+// TODO: std::pair<TType, Ydb::Value*> -> ArenaAllocatedTValue
+std::pair<TType, Ydb::Value*> TCsvParser::BuildListOnArena(
+    const std::vector<TString>& lines,
+    const TString& filename,
+    google::protobuf::Arena* arena,
+    std::optional<ui64> row
+) const {
+    assert(arena != nullptr);
+
+    std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
+    columnTypeParsers.reserve(ResultColumnCount);
+    for (const TType* type : ResultLineTypesSorted) {
+        columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
+    }
+
+    // allocate Ydb::Value on arena
+    Ydb::Value* value = google::protobuf::Arena::CreateMessage<Ydb::Value>(arena);
+    auto* listItems = value->mutable_items();
+    listItems->Reserve(lines.size());
+
+    for (const auto& line : lines) {
+        ProcessCsvLine(line, listItems, columnTypeParsers, row, filename);
+        if (row.has_value()) {
+            ++row.value();
+        }
+    }
+
+    // Return a TValue that references the arena-allocated message
+    return std::make_pair(ResultListType.value(), value);
+}
+
+
 
 // Helper method to process a single CSV line
 void TCsvParser::ProcessCsvLine(

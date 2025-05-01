@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
 
         TCsvParser parser(std::move(header), ',', "", &columnTypes, nullptr);
         parser.BuildLineType();
-        TValue builtResult = parser.BuildList(data, "testFile.csv", 0, nullptr);
+        TValue builtResult = parser.BuildList(data, "testFile.csv", 0);
         AssertValuesEqual(builtResult, estimatedResult);
     }
 
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
 
         TCsvParser parser(std::move(csvHeader), ',', "", &tableColumnTypes, nullptr);
         parser.BuildLineType();
-        TValue builtResult = parser.BuildList(data, "testFile.csv", 0, nullptr);
+        TValue builtResult = parser.BuildList(data, "testFile.csv", 0);
 
         TValue expexctedResult = TValueBuilder().BeginList()
             .AddListItem().BeginStruct()

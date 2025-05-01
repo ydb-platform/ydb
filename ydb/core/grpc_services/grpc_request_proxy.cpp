@@ -181,6 +181,7 @@ private:
 
         TString databaseName;
         const TDatabaseInfo* database = nullptr;
+        TVector<std::pair<TString, TString>> rootAttributes;
         bool skipResourceCheck = false;
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
@@ -223,6 +224,18 @@ private:
                     return;
                 }
                 return;
+            }
+
+            auto rootIt = Databases.find(RootDatabase);
+            if (rootIt != Databases.end() && rootIt->second.IsDatabaseReady()) {
+                const TDatabaseInfo* rootDb = &it->second;
+                if (rootDb && rootDb->SchemeBoardResult) {
+                    auto& schemeData = rootDb->SchemeBoardResult->DescribeSchemeResult;
+                    rootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+                    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+                        rootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+                    }
+                }
             }
         }
 
@@ -272,6 +285,7 @@ private:
                 event.Release(),
                 Counters,
                 skipCheckConnectRigths,
+                rootAttributes,
                 this));
             return;
         }

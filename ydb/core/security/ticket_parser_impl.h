@@ -482,6 +482,7 @@ private:
 
         // Use attribute "gizmo_id" as container id that contains cluster access resource
         // IAM can link roles for cluster access resource
+        // Note: "gizmo_id" and "folder_id" are always sent in separate TEvAuthorizeTicket requests.
         if (const auto gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             AddNebiusContainerId(pathsContainer, gizmoId);
         }

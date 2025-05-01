@@ -22,9 +22,9 @@ std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, con
     AFL_VERIFY(columnsCount <= item.GetColumnsCount());
 #ifndef NDEBUG
     for (ui32 i = 0; i < columnsCount; ++i) {
-        AFL_VERIFY(Schema->field(i)->type()->Equals(item.Schema->field(i)->type))("self", Schema->field(i)->ToString())(
+        AFL_VERIFY(Schema->field(i)->type()->Equals(item.Schema->field(i)->type()))("self", Schema->field(i)->ToString())(
             "item", item.Schema->field(i)->ToString());
-        AFL_VERIFY(Schema->field(i)->name() = item.Schema->field(i)->name())("self", Schema->field(i)->ToString())("item", item.Schema->field(i)->ToString());
+        AFL_VERIFY(Schema->field(i)->name() == item.Schema->field(i)->name())("self", Schema->field(i)->ToString())("item", item.Schema->field(i)->ToString());
     }
 #endif
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema, columnsCount).GetResult();

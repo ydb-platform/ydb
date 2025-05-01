@@ -138,6 +138,11 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
+    /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model,
+    * therefore, it is not retryable with the same `rows` object.
+    */
+    TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);

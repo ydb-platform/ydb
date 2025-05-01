@@ -85,7 +85,7 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True):
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None):
         del pretty_plan
 
         res_dir = self.res_dir
@@ -176,7 +176,10 @@ class YQLRun(object):
         if ansi_lexer:
             cmd += '--ansi-lexer '
 
-        if self.langver is not None:
+        if not langver:
+            langver = self.langver
+
+        if langver:
             cmd += '--langver=%s ' % (self.langver,)
 
         if self.keep_temp and prov != 'pure':

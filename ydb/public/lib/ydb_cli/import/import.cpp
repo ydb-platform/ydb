@@ -1304,7 +1304,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
                 auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
                     try {
-                        return parser.BuildList(buffer, filePath, std::nullopt);
+                        return parser.BuildList(buffer, filePath);
                     } catch (const std::exception& e) {
                         if (!Failed.exchange(true)) {
                             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));

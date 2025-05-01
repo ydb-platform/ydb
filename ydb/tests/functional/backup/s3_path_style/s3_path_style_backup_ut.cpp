@@ -4,8 +4,6 @@
 
 using namespace NYdb;
 
-#define DISABLE if (false)
-
 Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
 {
     Y_UNIT_TEST(DisableVirtualAddressing)
@@ -400,10 +398,16 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
 
             {
                 NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix8", "");
+                auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+                WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+            }
+
+            {
+                NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix8", "");
                 importSettings
                     .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored8/Table1", .SrcPath = "/local/RecursiveFolderProcessingRestored8/Table1"});
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+                WaitOpStatus(res, NYdb::EStatus::CANCELLED);
             }
         }
 
@@ -411,7 +415,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         {
             NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing/unexisting", "Prefix");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SCHEME_ERROR, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            WaitOpStatus(res, NYdb::EStatus::SCHEME_ERROR);
         }
 
         // Export unexisting explicit path
@@ -420,7 +424,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
             exportSettings
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "unexisting"});
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SCHEME_ERROR, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            WaitOpStatus(res, NYdb::EStatus::SCHEME_ERROR);
         }
 
         // Explicitly specify duplicated items (error)
@@ -431,7 +435,7 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/dir2"})
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir2/"});
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+            WaitOpStatus(res, NYdb::EStatus::BAD_REQUEST);
         }
 
         // Export directory with encryption
@@ -471,14 +475,13 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         }
 
         // Export with encryption with explicitly specifying destination path (not recommended, opens explicit path with table name)
-        DISABLE
         {
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing", "RecursiveFolderProcessingPrefix10");
                 exportSettings
                     .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
                     .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "Table0", .Dst = "UnsafeTableNameShownInEncryptedBackup"})
-                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1", .Dst = "UnusedDir1Name"});
+                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1", .Dst = "Dir1Prefix"}); // Recursive proparation
                 auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
                 WaitOpSuccess(res);
 
@@ -489,12 +492,12 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                     "RecursiveFolderProcessingPrefix10/UnsafeTableNameShownInEncryptedBackup/metadata.json.enc",
                     "RecursiveFolderProcessingPrefix10/UnsafeTableNameShownInEncryptedBackup/scheme.pb.enc",
                     "RecursiveFolderProcessingPrefix10/UnsafeTableNameShownInEncryptedBackup/data_00.csv.enc",
-                    "RecursiveFolderProcessingPrefix10/002/metadata.json.enc",
-                    "RecursiveFolderProcessingPrefix10/002/scheme.pb.enc",
-                    "RecursiveFolderProcessingPrefix10/002/data_00.csv.enc",
-                    "RecursiveFolderProcessingPrefix10/003/metadata.json.enc",
-                    "RecursiveFolderProcessingPrefix10/003/scheme.pb.enc",
-                    "RecursiveFolderProcessingPrefix10/003/data_00.csv.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/Table1/metadata.json.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/Table1/scheme.pb.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/Table1/data_00.csv.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/dir2/Table2/metadata.json.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/dir2/Table2/scheme.pb.enc",
+                    "RecursiveFolderProcessingPrefix10/Dir1Prefix/dir2/Table2/data_00.csv.enc",
                 }, bucketName, S3Client(), "RecursiveFolderProcessingPrefix10");
             }
 
@@ -642,7 +645,6 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         }
 
         // Filter import by prefix
-        DISABLE
         {
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing", "RecursiveFolderProcessingPrefix14");
@@ -687,14 +689,13 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
         }
 
         // Filter import by YDB object path
-        DISABLE
         {
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("/local/RecursiveFolderProcessing", "RecursiveFolderProcessingPrefix15");
                 exportSettings
                     .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
                     .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
-                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1/dir2/Table2", .Dst = "Table2_Prefix"});
+                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/local/RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2_Prefix"});
                 auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
                 WaitOpSuccess(res);
 
@@ -717,16 +718,19 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
             {
                 NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix15", "/local/RecursiveFolderProcessingRestored15");
                 importSettings
-                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored15/Table0", .SrcPath = "dir1/dir2/Table2"});
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored15/Table123", .SrcPath = "dir1/dir2//Table2"})
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/local/RecursiveFolderProcessingRestored15/Table321", .SrcPath = "Table0"});
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
                 WaitOpSuccess(res);
 
                 ValidateHasYdbTables({
-                    "/local/RecursiveFolderProcessingRestored15/dir1/dir2/Table2",
+                    "/local/RecursiveFolderProcessingRestored15/Table123",
+                    "/local/RecursiveFolderProcessingRestored15/Table321",
                 });
                 ValidateDoesNotHaveYdbTables({
                     "/local/RecursiveFolderProcessingRestored15/Table0",
                     "/local/RecursiveFolderProcessingRestored15/dir1/Table1",
+                    "/local/RecursiveFolderProcessingRestored15/dir1/dir2/Table2",
                 });
             }
 
@@ -744,17 +748,17 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
             {
                 NExport::TExportToS3Settings exportSettings = makeExportSettings("", "");
                 exportSettings
-                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1", .Dst = "RecursiveFolderProcessingPrefix16"});
+                    .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/local/RecursiveFolderProcessing/dir1", .Dst = "RecursiveFolderProcessingPrefix16"});
                 auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
                 WaitOpSuccess(res);
 
                 ValidateS3FileList({
-                    "RecursiveFolderProcessingPrefix16/dir1/Table1/metadata.json",
-                    "RecursiveFolderProcessingPrefix16/dir1/Table1/scheme.pb",
-                    "RecursiveFolderProcessingPrefix16/dir1/Table1/data_00.csv",
-                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/metadata.json",
-                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/scheme.pb",
-                    "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2/data_00.csv",
+                    "RecursiveFolderProcessingPrefix16/Table1/metadata.json",
+                    "RecursiveFolderProcessingPrefix16/Table1/scheme.pb",
+                    "RecursiveFolderProcessingPrefix16/Table1/data_00.csv",
+                    "RecursiveFolderProcessingPrefix16/dir2/Table2/metadata.json",
+                    "RecursiveFolderProcessingPrefix16/dir2/Table2/scheme.pb",
+                    "RecursiveFolderProcessingPrefix16/dir2/Table2/data_00.csv",
                 }, bucketName, S3Client(), "RecursiveFolderProcessingPrefix16");
             }
 
@@ -762,15 +766,15 @@ Y_UNIT_TEST_SUITE_F(S3PathStyleBackup, TBackupTestFixture)
                 // Impossible to import with common prefix
                 NImport::TImportFromS3Settings importSettings = makeImportSettings("RecursiveFolderProcessingPrefix16", "");
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-                UNIT_ASSERT_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+                WaitOpStatus(res, NYdb::EStatus::CANCELLED);
             }
 
             {
                 // Possible to import in old style with explicit paths
                 NImport::TImportFromS3Settings importSettings = makeImportSettings("", "");
                 importSettings
-                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/dir1/Table1", .Dst = "/local/RecursiveFolderProcessingRestored16/Table11"})
-                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/dir1/dir2/Table2", .Dst = "/local/RecursiveFolderProcessingRestored16/Table12"});
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/Table1", .Dst = "/local/RecursiveFolderProcessingRestored16/Table11"})
+                    .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "RecursiveFolderProcessingPrefix16/dir2/Table2", .Dst = "/local/RecursiveFolderProcessingRestored16/Table12"});
                 auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
                 WaitOpSuccess(res);
 

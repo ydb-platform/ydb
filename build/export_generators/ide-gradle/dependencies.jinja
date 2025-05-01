@@ -13,9 +13,9 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro AddFileDeps(file_deps) -%}
-{%-     for file_dep in file_deps %}
-        "$arcadia_root/{{ file_dep.jar }}"{%- if not loop.last -%},{%- endif -%}
+{%- macro AddFileJars(file_jars) -%}
+{%-     for file_jar in file_jars %}
+        "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
 {%-     endfor -%}
 {%- endmacro -%}
 
@@ -56,13 +56,15 @@
 {%- if not build_contribs -%}
 {%-     set file_deps = file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set file_classpaths = file_deps|map(attribute='classpath') -%}
+{%- set file_classpaths = file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set file_jars = file_deps|map(attribute='jar')|unique|sort -%}
 
 {%- set test_file_deps = extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
 {%- if not build_contribs -%}
 {%-     set test_file_deps = test_file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set test_file_classpaths = test_file_deps|map(attribute='classpath') -%}
+{%- set test_file_classpaths = test_file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
 
 dependencies {
 {%- if has_errorprone -%}
@@ -86,15 +88,15 @@ dependencies {
 {{ AddNonFileDeps(extra_target, test_file_classpaths, "testImplementation", "testImplementation") }}
 {%- endfor -%}
 
-{%- if file_deps|length %}
+{%- if file_jars|length %}
     implementation(files(listOf({#- glue -#}
-{{ AddFileDeps(file_deps) }}
+{{ AddFileJars(file_jars) }}
     )))
 {%- endif -%}
 
-{%- if test_file_deps|length %}
+{%- if test_file_jars|length %}
     testImplementation(files(listOf({#- glue -#}
-{{ AddFileDeps(test_file_deps) }}
+{{ AddFileJars(test_file_jars) }}
     )))
 {%- endif %}
 }

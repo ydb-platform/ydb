@@ -52,7 +52,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TNameSet names = {
             .Pragmas = {"yson.CastToString"},
             .Types = {"Uint64"},
-            .Functions = {"StartsWith", "DateTime::Split"},
+            .Functions = {
+                "StartsWith",
+                "DateTime::Split",
+                "Python::__private",
+            },
             .Hints = {
                 {EStatementKind::Select, {"XLOCK"}},
                 {EStatementKind::Insert, {"EXPIRATION"}},
@@ -303,6 +307,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {PragmaName, "yson.CastToString"}};
+            auto completion = engine->CompleteAsync({"PRAGMA ys"}).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "ys");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {PragmaName, "yson.CastToString"}};
             auto completion = engine->CompleteAsync({"PRAGMA yson"}).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
             UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");
@@ -348,6 +359,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "NOT"},
             {Keyword, "NULL"},
             {Keyword, "OPTIONAL<"},
+            {FunctionName, "Python::__private("},
             {Keyword, "RESOURCE<"},
             {Keyword, "SET<"},
             {Keyword, "STREAM"},
@@ -407,6 +419,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "NOT"},
             {Keyword, "NULL"},
             {Keyword, "OPTIONAL<"},
+            {FunctionName, "Python::__private("},
             {Keyword, "RESOURCE<"},
             {Keyword, "SET<"},
             {Keyword, "STREAM<"},

@@ -1,6 +1,6 @@
 #include "frequency.h"
 
-#include <yql/essentials/core/sql_types/normalize_name.h>
+#include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
@@ -100,7 +100,7 @@ namespace NSQLComplete {
 
     TFrequencyData Pruned(const TFrequencyData& data) {
         return PrunedBy(data, [](TStringBuf s) {
-            return NYql::NormalizeName(s);
+            return NormalizeName(s);
         });
     }
 

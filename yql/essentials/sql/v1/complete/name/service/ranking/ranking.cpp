@@ -2,8 +2,6 @@
 
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 
-#include <yql/essentials/core/sql_types/normalize_name.h>
-
 #include <util/charset/utf8.h>
 
 namespace NSQLComplete {
@@ -21,12 +19,16 @@ namespace NSQLComplete {
         {
         }
 
-        void CropToSortedPrefix(TVector<TGenericName>& names, size_t limit) const override {
+        void CropToSortedPrefix(
+            TVector<TGenericName>& names,
+            const TNameConstraints& constraints,
+            size_t limit) const override {
             limit = std::min(limit, names.size());
 
             TVector<TRow> rows;
             rows.reserve(names.size());
             for (TGenericName& name : names) {
+                name = constraints.Qualified(std::move(name));
                 size_t weight = Weight(name);
                 rows.emplace_back(std::move(name), weight);
             }
@@ -48,7 +50,7 @@ namespace NSQLComplete {
             rows.crop(limit);
 
             for (size_t i = 0; i < limit; ++i) {
-                names[i] = std::move(rows[i].Name);
+                names[i] = constraints.Unqualified(std::move(rows[i].Name));
             }
         }
 
@@ -57,7 +59,7 @@ namespace NSQLComplete {
             return std::visit([this](const auto& name) -> size_t {
                 using T = std::decay_t<decltype(name)>;
 
-                auto content = NYql::NormalizeName(ContentView(name));
+                auto content = NormalizeName(ContentView(name));
 
                 if constexpr (std::is_same_v<T, TKeyword>) {
                     if (auto weight = Frequency_.Keywords.FindPtr(content)) {

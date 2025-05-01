@@ -2,6 +2,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_json/yaml_to_json.h>
 #include "cli.h"
 #include "cli_cmds.h"
 #include "proto_common.h"
@@ -108,42 +109,141 @@ public:
             return EXIT_FAILURE;
         }
 
-        TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
+        auto ephemeralFields = NKikimr::NYaml::ReadEphemeralInputFields(data);
 
-        NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
-        request.SetDomain(AvailabilityDomain);
-        if (config.SecurityToken) {
-            request.SetSecurityToken(config.SecurityToken);
+        auto initCmdParser = [&ephemeralFields]() {
+            return std::make_optional(NKikimr::NYaml::BuildInitDistributedStorageCommand(ephemeralFields));
+        };
+
+        auto updateSettingsParser = [&ephemeralFields]() -> std::optional<NKikimrBlobStorage::TConfigRequest> {
+            if (!ephemeralFields.HasBscSettings()) {
+                return {};
+            }
+
+            NKikimrBlobStorage::TConfigRequest result;
+            auto* command = result.AddCommand();
+            
+            auto newBscSettings = ephemeralFields.GetBscSettings();
+
+            auto updateSettings = command->MutableUpdateSettings();
+
+            if (newBscSettings.HasDefaultMaxSlots()) {
+                updateSettings->AddDefaultMaxSlots(newBscSettings.GetDefaultMaxSlots());
+            }
+
+            if (newBscSettings.HasEnableSelfHeal()) {
+                updateSettings->AddEnableSelfHeal(newBscSettings.GetEnableSelfHeal());
+            }
+            
+            if (newBscSettings.HasEnableDonorMode()) {
+                updateSettings->AddEnableDonorMode(newBscSettings.GetEnableDonorMode());
+            }
+
+            if (newBscSettings.HasScrubPeriodicitySeconds()) {
+                updateSettings->AddScrubPeriodicitySeconds(newBscSettings.GetScrubPeriodicitySeconds());
+            }
+
+            if (newBscSettings.HasPDiskSpaceMarginPromille()) {
+                updateSettings->AddPDiskSpaceMarginPromille(newBscSettings.GetPDiskSpaceMarginPromille());
+            }
+
+            if (newBscSettings.HasGroupReserveMin()) {
+                updateSettings->AddGroupReserveMin(newBscSettings.GetGroupReserveMin());
+            }
+
+            if (newBscSettings.HasGroupReservePartPPM()) {
+                updateSettings->AddGroupReservePartPPM(newBscSettings.GetGroupReservePartPPM());
+            }
+
+            if (newBscSettings.HasMaxScrubbedDisksAtOnce()) {
+                updateSettings->AddMaxScrubbedDisksAtOnce(newBscSettings.GetMaxScrubbedDisksAtOnce());
+            }
+
+            if (newBscSettings.HasPDiskSpaceColorBorder()) {
+                updateSettings->AddPDiskSpaceColorBorder(newBscSettings.GetPDiskSpaceColorBorder());
+            }
+
+            if (newBscSettings.HasEnableGroupLayoutSanitizer()) {
+                updateSettings->AddEnableGroupLayoutSanitizer(newBscSettings.GetEnableGroupLayoutSanitizer());
+            }
+
+            if (newBscSettings.HasAllowMultipleRealmsOccupation()) {
+                updateSettings->AddAllowMultipleRealmsOccupation(newBscSettings.GetAllowMultipleRealmsOccupation());
+            }
+
+            if (newBscSettings.HasUseSelfHealLocalPolicy()) {
+                updateSettings->AddUseSelfHealLocalPolicy(newBscSettings.GetUseSelfHealLocalPolicy());
+            }
+
+            if (newBscSettings.HasTryToRelocateBrokenDisksLocallyFirst()) {
+                updateSettings->AddTryToRelocateBrokenDisksLocallyFirst(newBscSettings.GetTryToRelocateBrokenDisksLocallyFirst());
+            }
+
+            return result;
+        };
+
+        std::vector<std::function<std::optional<NKikimrBlobStorage::TConfigRequest>()>> commandProviders = {
+            initCmdParser,
+            updateSettingsParser
+        };
+
+        bool atLeastOneCommandExecuted = false;
+
+        for (const auto& fn : commandProviders) {
+            TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> msg(new NMsgBusProxy::TBusBlobStorageConfigRequest);
+    
+            NKikimrClient::TBlobStorageConfigRequest& request = msg->Record;
+            request.SetDomain(AvailabilityDomain);
+            if (config.SecurityToken) {
+                request.SetSecurityToken(config.SecurityToken);
+            }
+
+            try {
+                auto parsedRequest = fn();
+                if (!parsedRequest) {
+                    continue;
+                }
+                request.MutableRequest()->CopyFrom(*parsedRequest);
+            } catch (const yexception& ex) {
+                Cerr << "failed to parse config from file: " << ex.what() << Endl;
+                return EXIT_FAILURE;
+            }
+
+            if (DryRun) {
+                request.MutableRequest()->SetRollback(true);
+            }
+    
+            auto callback = [](const NMsgBusProxy::TBusResponse& response) {
+                const auto& record = response.Record;
+                if (record.HasBlobStorageConfigResponse()) {
+                    TString data;
+                    const auto& response = record.GetBlobStorageConfigResponse();
+                    if (google::protobuf::TextFormat::PrintToString(response, &data)) {
+                        Cout << data;
+                    } else {
+                        Cerr << "failed to print protobuf" << Endl;
+                        return EXIT_FAILURE;
+                    }
+                    return response.GetSuccess() ? EXIT_SUCCESS : 2;
+                }
+                return record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? EXIT_SUCCESS : EXIT_FAILURE;
+            };
+
+            int retCode = MessageBusCall<NMsgBusProxy::TBusBlobStorageConfigRequest, NMsgBusProxy::TBusResponse>(config, msg, callback);
+
+            atLeastOneCommandExecuted = true;
+
+            if (retCode != EXIT_SUCCESS) {
+                return retCode;
+            }
         }
 
-        try {
-            request.MutableRequest()->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(data));
-        } catch (const yexception& ex) {
-            Cerr << "failed to parse config from file: " << ex.what() << Endl;
+        if (!atLeastOneCommandExecuted) {
+            Cerr << "no commands to execute based on yaml file" << Endl;
             return EXIT_FAILURE;
         }
 
-        if (DryRun) {
-            request.MutableRequest()->SetRollback(true);
-        }
-
-        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
-            const auto& record = response.Record;
-            if (record.HasBlobStorageConfigResponse()) {
-                TString data;
-                const auto& response = record.GetBlobStorageConfigResponse();
-                if (google::protobuf::TextFormat::PrintToString(response, &data)) {
-                    Cout << data;
-                } else {
-                    Cerr << "failed to print protobuf" << Endl;
-                    return EXIT_FAILURE;
-                }
-                return response.GetSuccess() ? EXIT_SUCCESS : 2;
-            }
-            return record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? EXIT_SUCCESS : EXIT_FAILURE;
-        };
-
-        return MessageBusCall<NMsgBusProxy::TBusBlobStorageConfigRequest, NMsgBusProxy::TBusResponse>(config, msg, callback);
+        return EXIT_SUCCESS;
     }
 };
 

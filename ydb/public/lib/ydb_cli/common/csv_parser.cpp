@@ -640,6 +640,8 @@ void TCsvParser::ProcessCsvLine(
         }
         TStringBuf nextField = Consume(splitter, meta, *headerIt);
         if (!*skipIt) {
+            // TODO: create Ydb::Value on the arena to avoid copying here
+            // TODO: (despite std::move, we copy from non-arena allocated Ydb::Value into arena-allocated structItems)
             TValue builtValue = FieldToValue(*typeParserIt->get(), nextField, NullValue, meta, *headerIt);
             *structItems->Add() = std::move(builtValue).ExtractProto();
             ++typeParserIt;

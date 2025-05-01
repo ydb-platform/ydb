@@ -1158,6 +1158,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             }
         };
 
+        // TODO: create arena here and pass it to UpsertTValueBufferOnArena?
         // UpsertTValueBuffer(dbPath, std::move(buildFunc))
         UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
             .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {

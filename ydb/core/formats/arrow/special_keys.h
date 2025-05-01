@@ -93,6 +93,9 @@ public:
     explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), schema) {
     }
+    explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow::Schema>& schema)
+        : TBase(std::vector<TString>({ firstRow, lastRow }), schema) {
+    }
     explicit TFirstLastSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(data, schema) {
     }

@@ -69,12 +69,6 @@ private:
     TPortionInfo(const TPortionInfo&) = default;
     TPortionInfo& operator=(const TPortionInfo&) = default;
 
-    TPortionInfo(TPortionMeta&& meta)
-        : Meta(std::move(meta)) {
-        if (HasInsertWriteId()) {
-            AFL_VERIFY(!Meta.GetTierName());
-        }
-    }
     std::optional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
 
@@ -98,6 +92,12 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
 public:
+    TPortionInfo(TPortionMeta&& meta)
+        : Meta(std::move(meta)) {
+        if (HasInsertWriteId()) {
+            AFL_VERIFY(!Meta.GetTierName());
+        }
+    }
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 

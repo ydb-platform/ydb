@@ -46,13 +46,13 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const
 
 TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
-//    TMemoryProfileGuard mGuard1("meta_pk_construct");
+    TMemoryProfileGuard mGuard1("meta_pk_construct");
     static TAtomicCounter sumValues = 0;
     static TAtomicCounter countValues = 0;
-//    FirstAndLastPK->Reallocate();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
+    FirstAndLastPK->Reallocate();
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
         "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
-//    TMemoryProfileGuard mGuard("meta_construct");
+    TMemoryProfileGuard mGuard("meta_construct");
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
@@ -110,8 +110,13 @@ bool TPortionMetaConstructor::LoadMetadata(
         return false;
     }
     AFL_VERIFY(Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    AFL_VERIFY(portionMeta.HasPrimaryKeyBorders());
-    FirstAndLastPK = NArrow::TFirstLastSpecialKeys(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
+    if (portionMeta.HasPrimaryKeyBordersV1()) {
+        FirstAndLastPK = NArrow::TFirstLastSpecialKeys(
+            portionMeta.GetPrimaryKeyBordersV1().GetFirst(), portionMeta.GetPrimaryKeyBordersV1().GetLast(), indexInfo.GetReplaceKey());
+    } else {
+        AFL_VERIFY(portionMeta.HasPrimaryKeyBorders());
+        FirstAndLastPK = NArrow::TFirstLastSpecialKeys(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
+    }
 
     AFL_VERIFY(portionMeta.HasRecordSnapshotMin());
     RecordSnapshotMin = TSnapshot(portionMeta.GetRecordSnapshotMin().GetPlanStep(), portionMeta.GetRecordSnapshotMin().GetTxId());

@@ -12,7 +12,7 @@ void TRowsCollection::Initialize(const std::shared_ptr<arrow::RecordBatch>& data
     AFL_VERIFY(data->num_rows());
     rawData.resize(data->num_rows());
     for (ui32 i = 0; i < (ui32)data->num_rows(); ++i) {
-        rawData[i] = TSimpleRowView::BuildString(data, i);
+        rawData[i] = TSimpleRowViewV0::BuildString(data, i);
     }
     RawData = std::move(rawData);
 }
@@ -21,7 +21,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> TRowsCollection::BuildBatch(con
     auto builders = NArrow::MakeBuilders(schema, RawData.size());
     TString errorMessage;
     for (auto&& s : RawData) {
-        auto conclusion = TSimpleRowView(s).AddToBuilders(builders, schema);
+        auto conclusion = TSimpleRowViewV0(s).AddToBuilders(builders, schema);
         if (conclusion.IsFail()) {
             return conclusion;
         }

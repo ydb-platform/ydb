@@ -12,33 +12,39 @@ namespace NKikimr::NOlap {
 std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     AFL_VERIFY(!Constructed);
     Constructed = true;
-    TMemoryProfileGuard mGuard("portion_construct");
-
-    std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
-    AFL_VERIFY(PathId);
-    result->PathId = PathId;
-    result->PortionId = GetPortionIdVerified();
-
-    AFL_VERIFY(MinSnapshotDeprecated);
-    AFL_VERIFY(MinSnapshotDeprecated->Valid());
-    result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
-    if (RemoveSnapshot) {
-        AFL_VERIFY(RemoveSnapshot->Valid());
-        result->RemoveSnapshot = *RemoveSnapshot;
+    std::shared_ptr<TPortionInfo> result;
+    {
+        TMemoryProfileGuard mGuard0("portion_construct_meta1");
+        auto meta = MetaConstructor.Build();
+        TMemoryProfileGuard mGuard("portion_construct1");
+        result = std::make_shared<TPortionInfo>(std::move(meta));
     }
-    result->SchemaVersion = SchemaVersion;
-    result->ShardingVersion = ShardingVersion;
-    result->CommitSnapshot = CommitSnapshot;
-    result->InsertWriteId = InsertWriteId;
-    AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
+    {
+        TMemoryProfileGuard mGuard1("pc_after");
+        AFL_VERIFY(PathId);
+        result->PathId = PathId;
+        result->PortionId = GetPortionIdVerified();
 
-    if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-//        AFL_VERIFY(!!InsertWriteId);
-    } else {
-        AFL_VERIFY(!CommitSnapshot);
-        AFL_VERIFY(!InsertWriteId);
+        AFL_VERIFY(MinSnapshotDeprecated);
+        AFL_VERIFY(MinSnapshotDeprecated->Valid());
+        result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
+        if (RemoveSnapshot) {
+            AFL_VERIFY(RemoveSnapshot->Valid());
+            result->RemoveSnapshot = *RemoveSnapshot;
+        }
+        result->SchemaVersion = SchemaVersion;
+        result->ShardingVersion = ShardingVersion;
+        result->CommitSnapshot = CommitSnapshot;
+        result->InsertWriteId = InsertWriteId;
+        AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
+
+        if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+            //        AFL_VERIFY(!!InsertWriteId);
+        } else {
+            AFL_VERIFY(!CommitSnapshot);
+            AFL_VERIFY(!InsertWriteId);
+        }
     }
-
     return result;
 }
 

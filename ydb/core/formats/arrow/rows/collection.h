@@ -16,15 +16,17 @@ private:
 
 public:
     void Reallocate() {
+        std::vector<TString> rows;
         for (auto&& r : RawData) {
-            r = TString(r.data(), r.size());
+            rows.emplace_back(r.data(), r.size());
         }
+        RawData = std::move(rows);
     }
 
     ui32 GetMemorySize() const {
         ui32 result = 0;
         for (auto&& i : RawData) {
-            result += i.capacity();
+            result += i.capacity() + sizeof(TString);
         }
         return result;
     }

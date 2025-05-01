@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     view.cpp
+    view_v0.cpp
     collection.cpp
 )
 

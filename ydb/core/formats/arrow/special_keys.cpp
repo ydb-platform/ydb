@@ -48,6 +48,8 @@ std::shared_ptr<arrow::RecordBatch> TSpecialKeys::BuildBatch() const {
 }
 
 void TSpecialKeys::Reallocate() {
+    std::shared_ptr<arrow::Schema> schema = Schema;
+    Schema = std::move(schema);
     Rows.Reallocate();
 }
 

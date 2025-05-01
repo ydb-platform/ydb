@@ -1457,6 +1457,12 @@ NThreading::TFuture<void> TTableClient::Stop() {
     return Impl_->Stop();
 }
 
+TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryable(const std::string& table, TValue&& rows,
+    const TBulkUpsertSettings& settings)
+{
+    return Impl_->BulkUpsertUnretryable(table, std::move(rows), settings);
+}
+
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {

@@ -1260,6 +1260,13 @@ public:
     //! Using the client after call this method causes UB
     NThreading::TFuture<void> Stop();
 
+    /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model,
+    * therefore, it is not retryable with the same `rows` object.
+    */
+    TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows,
+        const TBulkUpsertSettings& settings);
+
     //! Non-transactional fast bulk write.
     //! Interanlly it uses an implicit session and thus doesn't need a session to be passed.
     //! "rows" parameter must be a list of structs where each stuct represents one row.

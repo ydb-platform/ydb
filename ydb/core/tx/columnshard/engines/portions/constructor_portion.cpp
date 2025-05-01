@@ -14,13 +14,13 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     Constructed = true;
     std::shared_ptr<TPortionInfo> result;
     {
-        TMemoryProfileGuard mGuard0("portion_construct_meta1");
+        TMemoryProfileGuard mGuard0("portion_construct_meta");
         auto meta = MetaConstructor.Build();
-        TMemoryProfileGuard mGuard("portion_construct1");
+        TMemoryProfileGuard mGuard("portion_construct_main");
         result = std::make_shared<TPortionInfo>(std::move(meta));
     }
     {
-        TMemoryProfileGuard mGuard1("pc_after");
+        TMemoryProfileGuard mGuard1("portion_construct_after");
         AFL_VERIFY(PathId);
         result->PathId = PathId;
         result->PortionId = GetPortionIdVerified();

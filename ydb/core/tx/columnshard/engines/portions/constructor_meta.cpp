@@ -49,7 +49,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
     TMemoryProfileGuard mGuard1("meta_pk_construct");
     static TAtomicCounter sumValues = 0;
     static TAtomicCounter countValues = 0;
-    FirstAndLastPK->Reallocate();
+//    FirstAndLastPK->Reallocate();
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
         "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
     TMemoryProfileGuard mGuard("meta_construct");

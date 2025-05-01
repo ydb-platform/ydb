@@ -4,7 +4,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

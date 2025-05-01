@@ -1119,7 +1119,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             line.erase(line.size() - Settings.Delimiter_.size());
         }
 
-        buffer.push_back(line);
+        buffer.push_back(std::move(line));
 
         if (readBytes >= nextReadBorder && Settings.Verbose_) {
             nextReadBorder += VerboseModeStepSize;

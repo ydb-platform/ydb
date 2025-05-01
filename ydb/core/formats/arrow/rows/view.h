@@ -19,7 +19,11 @@ private:
 
 public:
     ui32 GetMemorySize() const {
-        return Data.capacity() + sizeof(std::shared_ptr<arrow::Schema>);
+        return Data.capacity();
+    }
+
+    ui32 GetDataSize() const {
+        return Data.size();
     }
 
     TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
@@ -78,17 +82,9 @@ public:
         return TSimpleRowViewV0(Data).DebugString(Schema).GetResult();
     }
 
-    std::partial_ordering ComparePartNotNull(const TSimpleRow& item, const ui32 columnsCount) const {
-        AFL_VERIFY(columnsCount <= GetColumnsCount());
-        AFL_VERIFY(columnsCount <= item.GetColumnsCount());
-        return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema, columnsCount).GetResult();
-    }
+    std::partial_ordering ComparePartNotNull(const TSimpleRow& item, const ui32 columnsCount) const;
 
-    std::partial_ordering CompareNotNull(const TSimpleRow& item) const {
-        AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema));
-        AFL_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
-        return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema).GetResult();
-    }
+    std::partial_ordering CompareNotNull(const TSimpleRow& item) const;
 
     std::partial_ordering operator<=>(const TSimpleRow& item) const;
 };

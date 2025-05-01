@@ -92,6 +92,14 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
 public:
+    ui64 GetMemorySize() const {
+        return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
+    }
+
+    ui64 GetDataSize() const {
+        return sizeof(TPortionInfo) + Meta.GetDataSize() - sizeof(TPortionMeta);
+    }
+
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
         if (HasInsertWriteId()) {

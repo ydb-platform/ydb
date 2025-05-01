@@ -45,6 +45,10 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
             AFL_VERIFY(!InsertWriteId);
         }
     }
+    static TAtomicCounter countValues = 0;
+    static TAtomicCounter sumValues = 0;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result->GetMemorySize())("data_size", result->GetDataSize())(
+        "sum", sumValues.Add(result->GetMemorySize()))("count", countValues.Inc())("size_of_portion", sizeof(TPortionInfo));
     return result;
 }
 

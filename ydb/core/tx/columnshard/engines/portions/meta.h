@@ -52,6 +52,10 @@ public:
     }
 
     ui64 GetMetadataMemorySize() const {
+        return GetBlobIds().capacity() * sizeof(TUnifiedBlobId);
+    }
+
+    ui64 GetMetadataDataSize() const {
         return GetBlobIds().size() * sizeof(TUnifiedBlobId);
     }
 
@@ -115,7 +119,15 @@ public:
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
+        return GetMemorySize();
+    }
+
+    ui64 GetMemorySize() const {
         return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize() + TBase::GetMetadataMemorySize();
+    }
+
+    ui64 GetDataSize() const {
+        return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize() + TBase::GetMetadataDataSize();
     }
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;

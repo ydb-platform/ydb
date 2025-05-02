@@ -28,9 +28,9 @@ target_link_libraries(sql-v1-complete PUBLIC
   sql-v1-lexer
   v1-complete-antlr4
   complete-name-service
-  name-service-static
   v1-complete-syntax
   v1-complete-text
+  name-service-static
 )
 
 target_sources(sql-v1-complete PRIVATE

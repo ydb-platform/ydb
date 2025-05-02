@@ -26,7 +26,6 @@ target_link_libraries(name-service-ranking PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  essentials-core-sql_types
   complete-name-service
   library-cpp-resource
 )
@@ -45,7 +44,6 @@ target_link_libraries(name-service-ranking.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  essentials-core-sql_types
   complete-name-service
   library-cpp-resource
 )

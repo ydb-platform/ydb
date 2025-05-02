@@ -14,13 +14,19 @@
 
 add_subdirectory(static)
 add_subdirectory(ranking)
+add_subdirectory(union)
 
-add_library(complete-name-service INTERFACE)
+add_library(complete-name-service)
 
 
-target_link_libraries(complete-name-service INTERFACE
+target_link_libraries(complete-name-service PUBLIC
   contrib-libs-cxxsupp
   yutil
+  essentials-core-sql_types
   v1-complete-core
+)
+
+target_sources(complete-name-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/name_service.cpp
 )
 

@@ -1016,10 +1016,9 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryable(const std::str
 }
 
 
-// TODO: std::pair<TType, Ydb::Value*> -> ArenaAllocatedTValue
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
     const std::string& table,
-    std::pair<TType, Ydb::Value*>&& rows,
+    TArenaAllocatedValue&& rows,
     google::protobuf::Arena* arena,
     const TBulkUpsertSettings& settings
 ) {
@@ -1031,8 +1030,9 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
     // assert(request->GetArena() == arena);
     // assert(request->mutable_rows()->GetArena() == arena);
     request->set_table(TStringType{table});
-    *request->mutable_rows()->mutable_type() = std::move(rows.first).ExtractProto();
-    *request->mutable_rows()->mutable_value() = std::move(*rows.second);
+    // TODO: Ydb::Type still gets copied because request is arena-allocated and rows' Type is not
+    *request->mutable_rows()->mutable_type() = std::move(rows.GetType()).ExtractProto();
+    *request->mutable_rows()->mutable_value() = std::move(rows).ExtractProto();
 
     auto promise = NewPromise<TBulkUpsertResult>();
 

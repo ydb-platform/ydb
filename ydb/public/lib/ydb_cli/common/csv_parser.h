@@ -72,7 +72,7 @@ public:
     TValue BuildList(const std::vector<TString>& lines, const TString& filename,
                      std::optional<ui64> row = std::nullopt) const;
 
-    std::pair<TType, Ydb::Value*> BuildListOnArena(
+    TArenaAllocatedValue BuildListOnArena(
         const std::vector<TString>& lines,
         const TString& filename,
         google::protobuf::Arena* arena,

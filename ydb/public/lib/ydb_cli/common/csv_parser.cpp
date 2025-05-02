@@ -583,14 +583,13 @@ TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& f
 
 
 
-// TODO: std::pair<TType, Ydb::Value*> -> ArenaAllocatedTValue
-std::pair<TType, Ydb::Value*> TCsvParser::BuildListOnArena(
+TArenaAllocatedValue TCsvParser::BuildListOnArena(
     const std::vector<TString>& lines,
     const TString& filename,
     google::protobuf::Arena* arena,
     std::optional<ui64> row
 ) const {
-    assert(arena != nullptr);
+    Y_ASSERT(arena != nullptr);
 
     std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
     columnTypeParsers.reserve(ResultColumnCount);
@@ -611,7 +610,7 @@ std::pair<TType, Ydb::Value*> TCsvParser::BuildListOnArena(
     }
 
     // Return a TValue that references the arena-allocated message
-    return std::make_pair(ResultListType.value(), value);
+    return TArenaAllocatedValue(ResultListType.value(), value);
 }
 
 

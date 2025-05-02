@@ -19,13 +19,15 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
+[targets.jar_test]
+is_test = true
+is_extra_target = true
+
 [targets.junit4]
-template="build.gradle.kts.jinja"
 is_test = true
 is_extra_target = true
 
 [targets.junit5]
-template="build.gradle.kts.jinja"
 is_test = true
 is_extra_target = true
 
@@ -111,14 +113,3 @@ consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"
 consumer-prebuilt="flag"
-
-[merge]
-test=[
-    "/ut",
-    "/src/test",
-    "/src/test/java",
-    "/src/test-integration",
-    "/src/integration-test",
-    "/src/testFixtures",
-    "/src/intTest",
-]

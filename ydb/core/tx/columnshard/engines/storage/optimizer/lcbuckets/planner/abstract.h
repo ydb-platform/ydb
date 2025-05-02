@@ -233,7 +233,7 @@ public:
     }
 
     NArrow::NMerger::TIntervalPositions GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved);
-    std::vector<NArrow::TReplaceKeyView> GetFinishPoints(const bool withMoved);
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetFinishPoints(const bool withMoved);
 
     void AddCurrentLevelPortion(const TPortionInfo::TConstPtr& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
         AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);

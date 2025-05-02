@@ -689,7 +689,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     auto start = TInstant::Now();
 
 
-    TThreadPool jobPool;
+    TThreadPool jobPool(IThreadPool::TParams().SetThreadNamePrefix("FileWorker"));
     jobPool.Start(filePathsSize);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
@@ -709,6 +709,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
         const auto& filePath = filePaths[fileOrderNumber];
         std::shared_ptr<TProgressFile> progressFile = LoadOrStartImportProgress(filePath);
+
         auto func = [&, fileOrderNumber, progressFile, this] {
             std::unique_ptr<TFileInput> fileInput;
             std::optional<ui64> fileSizeHint;

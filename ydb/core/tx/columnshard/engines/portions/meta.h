@@ -82,7 +82,7 @@ private:
     YDB_READONLY(ui32, IndexBlobBytes, 0);
 
     friend class TPortionMetaConstructor;
-    friend class TPortionInfo;
+    friend class TCompactedPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
         : PKSchema(pk.GetSchema())
         , FirstPKRow(pk.GetFirst().GetContent())
@@ -94,6 +94,8 @@ private:
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
 
+public:
+
     void FullValidation() const {
         TBase::FullValidation();
         AFL_VERIFY(RecordsCount);
@@ -101,7 +103,6 @@ private:
         AFL_VERIFY(ColumnBlobBytes);
     }
 
-public:
     NArrow::TSimpleRow IndexKeyStart() const {
         return FirstPKRow.Build(PKSchema);
     }

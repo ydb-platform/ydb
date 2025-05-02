@@ -115,10 +115,10 @@ public:
         AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
     virtual bool LoadPortions(const std::optional<TInternalPathId> pathId,
-        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            if (!pathId || *pathId == i.second.GetPathId()) {
-                callback(NOlap::TPortionInfoConstructor(i.second, false, false), i.second.GetMeta().SerializeToProto());
+            if (!pathId || *pathId == i.second->GetPathId()) {
+                callback(i.second->BuildConstructor(false, false), i.second->GetMeta().SerializeToProto());
             }
         }
         return true;
@@ -133,7 +133,7 @@ public:
         auto& data = Indices[0].Columns[portion.GetPathId()];
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, true, true)).first;
+            it = data.emplace(portion.GetPortionId(), portion.BuildConstructor(true, true)).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.MutablePortionConstructor().GetPathId() &&
                            portion.GetPortionId() == it->second.MutablePortionConstructor().GetPortionIdVerified());
@@ -182,8 +182,8 @@ public:
                 continue;
             }
             for (auto& [portionId, portionLocal] : portions) {
-                auto copy = portionLocal.MakeCopy();
-                copy.TestMutableRecords().clear();
+//                auto copy = portionLocal.MakeCopy();
+//                copy->TestMutableRecords().clear();
                 auto it = LoadContexts.find(portionLocal.GetPortionConstructor().GetAddress());
                 AFL_VERIFY(it != LoadContexts.end());
                 callback(std::move(it->second));
@@ -219,7 +219,7 @@ private:
     THashMap<TInsertWriteId, TInsertedData> Inserted;
     THashMap<TInternalPathId, TSet<TCommittedData>> Committed;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
-    THashMap<ui64, NOlap::TPortionInfo> Portions;
+    THashMap<ui64, std::shared_ptr<NOlap::TPortionInfo>> Portions;
     THashMap<ui32, TIndex> Indices;
 };
 

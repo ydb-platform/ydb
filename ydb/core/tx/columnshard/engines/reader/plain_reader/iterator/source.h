@@ -165,14 +165,13 @@ public:
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
     IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
-        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin,
-        const TSnapshot& recordSnapshotMax, const ui32 recordsCount, const std::optional<ui64> shardingVersion, const bool hasDeletions)
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
-        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey))
-    {
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey)) {
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
@@ -203,8 +202,6 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
-        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
@@ -243,16 +240,7 @@ public:
         return !HasStageData() || !GetStageData().HasPortionAccessor();
     }
 
-    virtual bool DoAddTxConflict() override {
-        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
-            return true;
-        }
-        return false;
-    }
+    virtual bool DoAddTxConflict() override;
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Schema->GetIndexInfo().HasIndexes(indexIds);

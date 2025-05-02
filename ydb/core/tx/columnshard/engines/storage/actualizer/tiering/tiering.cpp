@@ -68,7 +68,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         } else {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_eviction")(
                 "portion", portion.GetPortionId())("skip_eviction", skipEviction)("optimized",
-                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.HasInsertWriteId());
+                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.GetPortionType());
             return {};
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {

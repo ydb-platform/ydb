@@ -1,4 +1,6 @@
+#include "compacted.h"
 #include "constructor_portion.h"
+#include "written.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -14,13 +16,13 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     Constructed = true;
     std::shared_ptr<TPortionInfo> result;
     {
-        TMemoryProfileGuard mGuard0("portion_construct_meta");
+        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()));
         auto meta = MetaConstructor.Build();
-        TMemoryProfileGuard mGuard("portion_construct_main");
-        result = std::make_shared<TPortionInfo>(std::move(meta));
+        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()));
+        result = BuildPortionImpl(std::move(meta));
     }
     {
-        TMemoryProfileGuard mGuard1("portion_construct_after");
+        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()));
         AFL_VERIFY(PathId);
         result->PathId = PathId;
         result->PortionId = GetPortionIdVerified();
@@ -32,18 +34,9 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
             AFL_VERIFY(RemoveSnapshot->Valid());
             result->RemoveSnapshot = *RemoveSnapshot;
         }
-        result->SchemaVersion = SchemaVersion;
+        AFL_VERIFY(SchemaVersion && *SchemaVersion);
+        result->SchemaVersion = *SchemaVersion;
         result->ShardingVersion = ShardingVersion;
-        result->CommitSnapshot = CommitSnapshot;
-        result->InsertWriteId = InsertWriteId;
-        AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
-
-        if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-            //        AFL_VERIFY(!!InsertWriteId);
-        } else {
-            AFL_VERIFY(!CommitSnapshot);
-            AFL_VERIFY(!InsertWriteId);
-        }
     }
     static TAtomicCounter countValues = 0;
     static TAtomicCounter sumValues = 0;
@@ -53,14 +46,26 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 }
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
-    if (SchemaVersion) {
-        auto schema = index.GetSchemaVerified(SchemaVersion.value());
-        AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
-        return schema;
-    } else {
-        AFL_VERIFY(MinSnapshotDeprecated);
-        return index.GetSchemaVerified(*MinSnapshotDeprecated);
+    AFL_VERIFY(SchemaVersion);
+    auto schema = index.GetSchemaVerified(SchemaVersion.value());
+    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
+    return schema;
+}
+
+std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
+    auto result = std::make_shared<TWrittenPortionInfo>(std::move(meta));
+    if (CommitSnapshot) {
+        result->CommitSnapshot = *CommitSnapshot;
     }
+    AFL_VERIFY(InsertWriteId);
+    result->InsertWriteId = *InsertWriteId;
+
+    AFL_VERIFY(result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED);
+    return result;
+}
+
+std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
+    return std::make_shared<TCompactedPortionInfo>(std::move(meta));
 }
 
 }   // namespace NKikimr::NOlap

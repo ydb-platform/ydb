@@ -342,8 +342,6 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
-        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
@@ -385,17 +383,6 @@ public:
         return Schema;
     }
 
-    virtual std::optional<TSnapshot> GetDataSnapshot() const override {
-        if (Portion->HasInsertWriteId()) {
-            if (Portion->HasCommitSnapshot()) {
-                return Portion->GetCommitSnapshotVerified();
-            } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-                return GetContext()->GetReadMetadata()->GetRequestSnapshot();
-            }
-        }
-        return std::nullopt;
-    }
-
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
@@ -408,16 +395,7 @@ public:
         }
     }
 
-    virtual bool DoAddTxConflict() override {
-        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
-            return true;
-        }
-        return false;
-    }
+    virtual bool DoAddTxConflict() override;
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Schema->GetIndexInfo().HasIndexes(indexIds);

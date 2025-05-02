@@ -1447,7 +1447,7 @@ public:
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("consumer", Consumer)("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
             for (auto&& p : i.second) {
                 auto itPortionConstructor = Constructors.find(p->GetAddress());
                 if (itPortionConstructor == Constructors.end()) {
@@ -1498,7 +1498,7 @@ public:
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
         return true;
     }

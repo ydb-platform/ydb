@@ -211,7 +211,7 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
 }
 
 TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
-    TString result;
+    std::string result;
     const ui8 ver = 0;
     result.append((const char*)&ver, sizeof(ui8));
     for (ui32 i = 0; i < (ui32)batch->num_columns(); ++i) {
@@ -248,6 +248,7 @@ TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow::RecordBatch>&
             return false;
         });
     }
+    result.shrink_to_fit();
     return result;
 }
 

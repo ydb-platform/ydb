@@ -123,10 +123,9 @@ public:
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
-//        const auto& sortingColumns = pkSchema->field_names();
-//        for (auto&& i : Portions) {
-//            result.AddPosition(i.GetStartPosition(), false);
-//        }
+        for (auto&& i : Portions) {
+            result.AddPosition(i.GetStartPosition().BuildSortablePosition(), false);
+        }
         return result;
     }
 };

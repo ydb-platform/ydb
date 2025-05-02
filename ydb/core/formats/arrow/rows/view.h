@@ -12,12 +12,39 @@
 
 namespace NKikimr::NArrow {
 
+class TSimpleRow;
+
+class TSimpleRowContent {
+private:
+    YDB_READONLY_DEF(TString, Data);
+
+public:
+    TSimpleRowContent(const TString& data)
+        : Data(data) {
+    }
+
+    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema) const;
+    ui64 GetMemorySize() const {
+        return Data.capacity();
+    }
+    ui64 GetDataSize() const {
+        return Data.size();
+    }
+};
+namespace NMerger {
+class TSortableBatchPosition;
+}
+
 class TSimpleRow {
 private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
 
 public:
+    TSimpleRowContent GetContent() const {
+        return TSimpleRowContent(Data);
+    }
+
     ui32 GetMemorySize() const {
         return Data.capacity();
     }
@@ -25,6 +52,8 @@ public:
     ui32 GetDataSize() const {
         return Data.size();
     }
+
+    NMerger::TSortableBatchPosition BuildSortablePosition(const bool reverse = false) const;
 
     TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
         AFL_VERIFY(batch);

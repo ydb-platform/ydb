@@ -44,8 +44,9 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
 
     portionMeta.MutablePrimaryKeyBordersV1()->SetFirst(FirstPKRow.GetData());
     portionMeta.MutablePrimaryKeyBordersV1()->SetLast(LastPKRow.GetData());
-    if (AppDataVerified().ColumnShardConfig.GetPortionMetaV0Usage()) {
-        portionMeta.SetPrimaryKeyBorders(NArrow::TFirstLastSpecialKeys(FirstPKRow, LastPKRow, LastPKRow.GetSchema()).SerializePayloadToString());
+    if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetPortionMetaV0Usage()) {
+        portionMeta.SetPrimaryKeyBorders(
+            NArrow::TFirstLastSpecialKeys(FirstPKRow.GetData(), LastPKRow.GetData(), PKSchema).SerializePayloadToString());
     }
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());

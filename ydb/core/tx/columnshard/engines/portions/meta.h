@@ -69,8 +69,9 @@ public:
 class TPortionMeta: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;
-    NArrow::TSimpleRow FirstPKRow;
-    NArrow::TSimpleRow LastPKRow;
+    std::shared_ptr<arrow::Schema> PKSchema;
+    NArrow::TSimpleRowContent FirstPKRow;
+    NArrow::TSimpleRowContent LastPKRow;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -83,8 +84,9 @@ private:
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-        : FirstPKRow(pk.GetFirst())
-        , LastPKRow(pk.GetLast())
+        : PKSchema(pk.GetSchema())
+        , FirstPKRow(pk.GetFirst().GetContent())
+        , LastPKRow(pk.GetLast().GetContent())
         , RecordSnapshotMin(min)
         , RecordSnapshotMax(max) {
         AFL_VERIFY(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
@@ -101,11 +103,11 @@ private:
 
 public:
     NArrow::TSimpleRow IndexKeyStart() const {
-        return FirstPKRow;
+        return FirstPKRow.Build(PKSchema);
     }
 
     NArrow::TSimpleRow IndexKeyEnd() const {
-        return LastPKRow;
+        return LastPKRow.Build(PKSchema);
     }
 
     void ResetCompactionLevel(const ui32 level) {

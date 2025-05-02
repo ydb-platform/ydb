@@ -36,7 +36,7 @@ struct TOperation {
 
 void MakeSlice(const std::string_view& where, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, const i64 revision = 0LL) {
     if (revision) {
-        sql << "select * from (select max_by(TableRow(), `modified`) from `history`" << where;
+        sql << "select * from (select max_by(TableRow(), `modified`) from `history` view `revision`" << where;
         sql << " and " << AddParam("Rev", params, revision, paramsCounter) << " >= `modified`";
         sql << " group by `key`) flatten columns where 0L < `version`";
     } else {
@@ -1102,7 +1102,7 @@ private:
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         sql << "$Trash = select c.key as key, c.modified as modified from `history` as c inner join (" << std::endl;
-        sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
+        sql << "select max_by((`key`, `modified`), `modified`) as pair from `history` view `revision`" << std::endl;
         sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
         sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
         sql << "delete from `history` on select * from $Trash;" << std::endl;

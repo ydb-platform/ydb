@@ -172,7 +172,7 @@ private:
         std::ostringstream sql;
         sql << Stuff->TablePrefix;
         if (WithPrevious) {
-            sql << "select * from (select max_by(TableRow(), `modified`) from `history` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
+            sql << "select * from (select max_by(TableRow(), `modified`) from `history` view `revision` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
         }
         sql << "select * from `history` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;

@@ -1060,6 +1060,24 @@ public:
     Ydb::Value ProtoValue_;
 };
 
+/**
+* Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
+*/
+class TArenaAllocatedValue::TImpl {
+public:
+    TImpl(const TType& type, Ydb::Value* value)
+        : Type_(type)
+        , ArenaAllocatedProtoValue_(value) {
+        // assert that the value is indeed arena-allocated
+        Y_ASSERT(ArenaAllocatedProtoValue_ != nullptr);
+        Y_ASSERT(ArenaAllocatedProtoValue_->GetArena() != nullptr);
+    }
+
+    // TODO: make Ydb::Type also arena-allocated?
+    TType Type_;
+    Ydb::Value* ArenaAllocatedProtoValue_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TValue::TValue(const TType& type, const Ydb::Value& valueProto)
@@ -1086,6 +1104,30 @@ Ydb::Value& TValue::GetProto() {
 
 Ydb::Value&& TValue::ExtractProto() && {
     return std::move(Impl_->ProtoValue_);
+}
+
+
+TArenaAllocatedValue::TArenaAllocatedValue(const TType& type, Ydb::Value* value)
+    : Impl_(new TImpl(type, value)) {}
+
+const TType& TArenaAllocatedValue::GetType() const {
+    return Impl_->Type_;
+}
+
+TType& TArenaAllocatedValue::GetType() {
+    return Impl_->Type_;
+}
+
+const Ydb::Value* TArenaAllocatedValue::GetProto() const {
+    return Impl_->ArenaAllocatedProtoValue_;
+}
+
+Ydb::Value* TArenaAllocatedValue::GetProto() {
+    return Impl_->ArenaAllocatedProtoValue_;
+}
+
+Ydb::Value&& TArenaAllocatedValue::ExtractProto() && {
+    return std::move(*Impl_->ArenaAllocatedProtoValue_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

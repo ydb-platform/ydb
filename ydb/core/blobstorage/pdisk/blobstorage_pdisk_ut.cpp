@@ -1508,7 +1508,7 @@ Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
 
 
 Y_UNIT_TEST_SUITE(WilsonTrace) {
-    Y_UNIT_TEST(Smoke) {
+    Y_UNIT_TEST(LogWriteChunkWriteChunkRead) {
         TActorTestContext testCtx{{}};
         auto* uploader = testCtx.WilsonUploader;
 
@@ -1539,9 +1539,15 @@ Y_UNIT_TEST_SUITE(WilsonTrace) {
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT(uploader->Traces.size() > 0);
 
+        TStringStream str;
         for (auto& [_, trace] : uploader->Traces) {
-            Cerr << trace.ToString() << Endl;
+            str << trace.ToString() << Endl;
         }
+        auto string = str.Str();
+        UNIT_ASSERT(string.Contains("LogWrite"));
+        UNIT_ASSERT(string.Contains("LogRead"));
+        UNIT_ASSERT(string.Contains("ChunkWrite"));
+        UNIT_ASSERT(string.Contains("ChunkRead"));
     }
 }
 

@@ -2927,7 +2927,6 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
         << " lsn# " << logWrite->Lsn;
     P_LOG(PRI_ERROR, BPD01, err.Str());
 
-    logWrite->Span.EndError(err.Str());
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
         GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str(),
         Keeper.GetLogChunkCount()));
@@ -3164,7 +3163,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             };
             ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PCtx->PDiskId,
                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
-                    ev.Span.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkWrite"));
+                    ev.Span.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkWrite", NWilson::EFlags::AUTO_END));
             ev.Completion->Parts = ev.PartsPtr;
 
             return true;
@@ -3437,11 +3436,9 @@ void TPDisk::AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind)
                 && static_cast<TRequestBase *>(job->Payload)->GetType() == ERequestType::RequestLogWrite) {
             TLogWrite &batch = *static_cast<TLogWrite*>(job->Payload);
 
-            if (request->Span) {
-                request->Span.Event("PDisk.InScheduler.InLogWriteBatch", {
-                    {"Batch.ReqId", static_cast<i64>(batch.ReqId.Id)}
-                });
-            }
+            request->Span.Event("PDisk.InScheduler.InLogWriteBatch", {
+                {"Batch.ReqId", static_cast<i64>(batch.ReqId.Id)}
+            });
             batch.AddToBatch(static_cast<TLogWrite*>(request));
             ui64 prevCost = job->Cost;
             job->Cost += request->Cost;

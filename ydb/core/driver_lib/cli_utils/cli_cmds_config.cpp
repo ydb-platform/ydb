@@ -109,13 +109,16 @@ public:
             return EXIT_FAILURE;
         }
 
-        auto ephemeralFields = NKikimr::NYaml::ReadEphemeralInputFields(data);
+        NKikimrConfig::TEphemeralInputFields ephemeralFields = NKikimr::NYaml::ReadEphemeralInputFields(data);
 
-        auto initCmdParser = [&ephemeralFields]() {
+        auto initCmdParser = [ephemeralFields]() mutable {
+            // mutable because BuildInitDistributedStorageCommand changes ephemeralFields.
+            // It doesn't really matter, since these lambdas touch different fields, however to be absolutely safe let's capture ephemeralFields
+            // by value here.
             return std::make_optional(NKikimr::NYaml::BuildInitDistributedStorageCommand(ephemeralFields));
         };
 
-        auto updateSettingsParser = [&ephemeralFields]() -> std::optional<NKikimrBlobStorage::TConfigRequest> {
+        auto updateSettingsParser = [ephemeralFields]() -> std::optional<NKikimrBlobStorage::TConfigRequest> {
             if (!ephemeralFields.HasBscSettings()) {
                 return {};
             }

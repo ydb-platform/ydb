@@ -119,6 +119,11 @@ public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
 
+    const TSnapshot& GetMinSnapshotDeprecated() const {
+        AFL_VERIFY(MinSnapshotDeprecated.Valid());
+        return MinSnapshotDeprecated;
+    }
+
     ui64 GetMemorySize() const {
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
     }

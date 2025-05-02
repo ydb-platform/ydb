@@ -27,8 +27,9 @@ SRCS(
     kqp_write_table.cpp
 
     scheduler/new/kqp_compute_scheduler_service.cpp
-    scheduler/new/kqp_compute_tree.cpp
     scheduler/new/kqp_schedulable_actor.cpp
+    scheduler/new/tree/dynamic.cpp
+    scheduler/new/tree/snapshot.cpp
 )
 
 PEERDIR(

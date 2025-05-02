@@ -27,14 +27,14 @@ public:
     void UpdateFairShare();
 
 private:
-    NHdrf::TQueryPtr GetQuery(const NHdrf::TQueryId& queryId);
+    NHdrf::NDynamic::TQueryPtr GetQuery(const NHdrf::TQueryId& queryId);
 
 private:
     TRWMutex Mutex;
-    NHdrf::TRootPtr Root;                                        // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::TQueryPtr> Queries;         // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::TQueryPtr> DetachedQueries; // protected by Mutex
-    NHdrf::TPoolPtr DetachedPool;                                // protected by Mutex
+    NHdrf::NDynamic::TRootPtr Root;                                        // protected by Mutex
+    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries;         // protected by Mutex
+    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> DetachedQueries; // protected by Mutex
+    NHdrf::NDynamic::TPoolPtr DetachedPool;                                // protected by Mutex
 
     TIntrusivePtr<TKqpCounters> KqpCounters;
 

@@ -1,12 +1,14 @@
 #include "kqp_schedulable_actor.h"
 
-#include "kqp_compute_tree.h"
+#include "tree/dynamic.h"
 
 namespace NKikimr::NKqp::NScheduler {
 
+using namespace NHdrf::NDynamic;
+
 // class TSchedulableTask
 
-TSchedulableTask::TSchedulableTask(const NHdrf::TQueryPtr& query)
+TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
     : Query(query)
 {
     Y_ENSURE(query);
@@ -19,14 +21,14 @@ TSchedulableTask::~TSchedulableTask() {
 
 void TSchedulableTask::IncreaseUsage(const TDuration& burstThrottle) {
     Y_ENSURE(Query);
-    for (NHdrf::TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         ++parent->Usage;
         parent->BurstThrottle += burstThrottle.MicroSeconds();
     }
 }
 
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
-    for (NHdrf::TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
+    for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         --parent->Usage;
         parent->BurstUsage += burstUsage.MicroSeconds();
     }
@@ -61,8 +63,26 @@ void TSchedulableActorHelper::StopExecution() {
     SchedulableTask->DecreaseUsage(TDuration::MicroSeconds(Timer.Passed() * 1'000'000));
 }
 
-std::optional<TDuration> TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
-    // TODO: no delays for now
+std::optional<TDuration> TSchedulableActorHelper::CalculateDelay(TMonotonic now) const {
+    // const auto usage = SchedulableTask->Query->BurstUsage.load();
+    // const auto limit = SchedulableTask->Query->FairShare * (now - LastNowRecalc + SMOOTH_PERIOD) + TrackedBefore;
+
+    // if (current_limit > usage) {
+    //     return {};
+    // }
+
+    // if (current->FairShare < MinCapacity) {
+    //     return MaxDelay;
+    // }
+
+    // return Min(
+    //     MaxDelay,
+    //     (usage + current->TrackedBefore +
+    //      Max<i64>(0, pool->DelayedSumBatches) +
+    //      BatchTime + ActivationPenalty * (pool->DelayedCount + 1)
+    //     ) / current->FairShare - (now - current->LastNowRecalc)
+    // );
+    Y_UNUSED(now);
     return {};
 }
 

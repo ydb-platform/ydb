@@ -11,13 +11,13 @@ namespace NKikimr::NKqp::NScheduler {
 
 // The proxy-object between any schedulable actor and the scheduler itself
 struct TSchedulableTask {
-    explicit TSchedulableTask(const NHdrf::TQueryPtr& query);
+    explicit TSchedulableTask(const NHdrf::NDynamic::TQueryPtr& query);
     ~TSchedulableTask();
 
     void IncreaseUsage(const TDuration& burstThrottle);
     void DecreaseUsage(const TDuration& burstUsage);
 
-    NHdrf::TQueryPtr Query;
+    NHdrf::NDynamic::TQueryPtr Query;
 };
 
 class TSchedulableActorHelper {

@@ -1,6 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "kqp_compute_tree.h"
+#include "tree/dynamic.h"
 #include "kqp_schedulable_actor.h"
 
 #include <ydb/core/kqp/common/events/workload_service.h>
@@ -10,6 +10,7 @@
 
 using namespace NKikimr::NKqp;
 using namespace NKikimr::NKqp::NScheduler;
+using namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic;
 
 namespace {
 
@@ -192,10 +193,10 @@ namespace NKikimr::NKqp {
 namespace NScheduler {
 
 TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters)
-    : Root(std::make_shared<NHdrf::TRoot>(counters))
+    : Root(std::make_shared<TRoot>(counters))
     , KqpCounters(counters)
 {
-    DetachedPool = std::make_shared<NHdrf::TPool>("(detached)", counters);
+    DetachedPool = std::make_shared<TPool>("(detached)", counters);
 
     auto group = counters->GetKqpCounters();
     Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);
@@ -221,7 +222,7 @@ void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHd
     if (auto database = Root->GetDatabase(databaseId)) {
         database->Update(attrs);
     } else {
-        Root->AddDatabase(std::make_shared<NHdrf::TDatabase>(databaseId, attrs));
+        Root->AddDatabase(std::make_shared<TDatabase>(databaseId, attrs));
     }
 }
 
@@ -235,7 +236,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
     } else {
-        database->AddPool(std::make_shared<NHdrf::TPool>(poolId, KqpCounters, attrs));
+        database->AddPool(std::make_shared<TPool>(poolId, KqpCounters, attrs));
     }
 }
 
@@ -248,7 +249,7 @@ void TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TStrin
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool);
 
-    NHdrf::TQueryPtr query;
+    TQueryPtr query;
     if (auto queryIt = DetachedQueries.find(queryId); queryIt != DetachedQueries.end()) {
         query = queryIt->second;
         query->Update(attrs);
@@ -261,7 +262,7 @@ void TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TStrin
     }
 
     if (!query) {
-        query = std::make_shared<NHdrf::TQuery>(queryId, attrs);
+        query = std::make_shared<TQuery>(queryId, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
     }
@@ -279,10 +280,10 @@ void TComputeScheduler::RemoveQuery(const TString& databaseId, const TString& po
 void TComputeScheduler::UpdateFairShare() {
     auto startTime = TMonotonic::Now();
 
-    NHdrf::TRootPtr snapshot;
+    NHdrf::NSnapshot::TRootPtr snapshot;
     {
         TReadGuard lock(Mutex);
-        snapshot = std::shared_ptr<NHdrf::TRoot>(Root->TakeSnapshot());
+        snapshot = NHdrf::NSnapshot::TRootPtr(Root->TakeSnapshot());
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
@@ -296,7 +297,7 @@ void TComputeScheduler::UpdateFairShare() {
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());
 }
 
-NHdrf::TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
+TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
     {
         TReadGuard lock(Mutex);
         if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
@@ -307,7 +308,7 @@ NHdrf::TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
         }
     }
 
-    auto query = std::make_shared<NHdrf::TQuery>(queryId);
+    auto query = std::make_shared<TQuery>(queryId);
     {
         TWriteGuard lock(Mutex);
         DetachedQueries.emplace(queryId, query);

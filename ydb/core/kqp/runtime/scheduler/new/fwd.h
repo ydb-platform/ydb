@@ -7,21 +7,39 @@
 namespace NKikimr::NKqp::NScheduler {
 
     namespace NHdrf {
-        struct TStaticAttributes;
-        struct TTreeElementBase;
-
         using TQueryId = ui64;
 
-        class TQuery;
-        class TPool;
-        class TDatabase;
-        class TRoot;
+        struct TStaticAttributes;
 
-        using TTreeElementPtr = std::shared_ptr<TTreeElementBase>;
-        using TQueryPtr = std::shared_ptr<TQuery>;
-        using TPoolPtr = std::shared_ptr<TPool>;
-        using TDatabasePtr = std::shared_ptr<TDatabase>;
-        using TRootPtr = std::shared_ptr<TRoot>;
+        namespace NDynamic {
+            struct TTreeElementBase;
+
+            class TQuery;
+            class TPool;
+            class TDatabase;
+            class TRoot;
+
+            using TTreeElementPtr = std::shared_ptr<TTreeElementBase>;
+            using TQueryPtr = std::shared_ptr<TQuery>;
+            using TPoolPtr = std::shared_ptr<TPool>;
+            using TDatabasePtr = std::shared_ptr<TDatabase>;
+            using TRootPtr = std::shared_ptr<TRoot>;
+        } // namespace NDynamic
+
+        namespace NSnapshot {
+            struct TTreeElementBase;
+
+            class TQuery;
+            class TPool;
+            class TDatabase;
+            class TRoot;
+
+            using TTreeElementPtr = std::shared_ptr<TTreeElementBase>;
+            using TQueryPtr = std::shared_ptr<TQuery>;
+            using TPoolPtr = std::shared_ptr<TPool>;
+            using TDatabasePtr = std::shared_ptr<TDatabase>;
+            using TRootPtr = std::shared_ptr<TRoot>;
+        } // namespace NSnapshot
     }
 
     struct TSchedulableTask;

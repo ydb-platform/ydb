@@ -68,6 +68,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
             (*evLog.LogCallback)(actorSystem, *evLog.Result);
         }
         if (evLog.Result->Status == NKikimrProto::OK) {
+            evLog.Span.EndOk();
             if (batch) {
                 if (batch->Sender == evLog.Sender && batch->Result->Results.size() < MAX_RESULTS_PER_BATCH) {
                     batch->Result->Results.push_back(std::move(evLog.Result->Results[0]));
@@ -79,6 +80,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
                 batch = &evLog;
             }
         } else {
+            evLog.Span.EndError(evLog.Result->ErrorReason);
             // Send all previous successes...
             if (batch) {
                 sendResponse(batch);
@@ -277,7 +279,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
     }
 
     if (Read->ChunkEncrypted) {
-        auto span = Span.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkRead.Unencryption");
+        auto span = Span.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkRead.Decryption");
         UnencryptData(actorSystem);
     }
 
@@ -345,7 +347,7 @@ TCompletionChunkRead::~TCompletionChunkRead() {
 }
 
 void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
-    Read->Span.Event("PDisk.CompletionChunkRead.Exec"); // ???
+    Read->Span.Event("PDisk.CompletionChunkRead.Exec");
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
 

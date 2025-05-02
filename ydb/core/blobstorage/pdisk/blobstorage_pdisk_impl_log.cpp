@@ -654,7 +654,7 @@ void TPDisk::ProcessLogReadQueue() {
             if (auto ptr = read->CompletionAction.lock()) {
                 ptr->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize, TDriveModel::OP_TYPE_READ);
                 auto traceId = read->Span.GetTraceId();
-                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId); // ??? TraceId
+                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId);
             }
             break;
         }

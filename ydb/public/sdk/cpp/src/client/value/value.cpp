@@ -2024,6 +2024,7 @@ void TValueParser::CloseTagged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO: if TValueArenaBuilderImpl implemented, we can avoid copying Ydb::Value in TCsvParser::BuildListOnArena when FieldToValue is called
 class TValueBuilderImpl {
     using ETypeKind = TTypeParser::ETypeKind;
     using TMembersMap = std::map<std::string, size_t>;

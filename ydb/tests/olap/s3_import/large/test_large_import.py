@@ -119,9 +119,13 @@ class TestLargeS3Import:
         cls.session_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
         cls.results = cls.Results(suite="TestLargeS3Import")
 
-    def query(self, statement):
+    def query(self, statement, max_retries=10):
         logger.info(f"running query:\n{statement}")
-        return self.session_pool.execute_with_retries(statement)
+        return self.session_pool.execute_with_retries(
+            statement,
+            settings=ydb.BaseRequestSettings().with_timeout(6000),
+            retry_settings=ydb.RetrySettings(max_retries=max_retries)
+        )
 
     def cleanup_tables(self):
         logger.info(f"cleaning up table `{self.olap_table_path}`...")
@@ -236,7 +240,7 @@ class TestLargeS3Import:
                 ) WITH (
                     STORE = COLUMN
                 ) AS SELECT * FROM `{self.external_table_path}`
-            """)
+            """, max_retries=0)
 
     def run_export_to_s3(self):
         with self.ReportTime(self.results, "export"):
@@ -244,7 +248,7 @@ class TestLargeS3Import:
             self.query(f"""
                 INSERT INTO `{self.external_sink_table_path}`
                 SELECT * FROM `{self.olap_table_path}`
-            """)
+            """, max_retries=0)
 
     def test_import_and_export(self):
         self.results.setup(f"test_import_and_export[scale={self.scale}]")

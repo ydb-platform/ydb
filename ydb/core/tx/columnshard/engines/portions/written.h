@@ -18,15 +18,7 @@ private:
         return EPortionType::Written;
     }
 
-    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const override {
-        if (CommitSnapshot) {
-            return *CommitSnapshot <= snapshot;
-        } else if (!checkCommitSnapshot) {
-            return true;
-        } else {
-            return false;
-        }
-    }
+    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const override;
 
     virtual std::shared_ptr<TPortionInfo> MakeCopy() const override {
         return std::make_shared<TWrittenPortionInfo>(*this);

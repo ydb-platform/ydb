@@ -59,4 +59,15 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
     }
 }
 
+bool TWrittenPortionInfo::DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const {
+    if (!checkCommitSnapshot) {
+        return true;
+    }
+    if (CommitSnapshot) {
+        return *CommitSnapshot <= snapshot;
+    } else {
+        return false;
+    }
+}
+
 }   // namespace NKikimr::NOlap

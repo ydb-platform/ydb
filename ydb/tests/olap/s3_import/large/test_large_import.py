@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import traceback
 import time
 import ydb
 from typing import Optional
@@ -79,7 +80,7 @@ class TestLargeS3Import:
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             if exc_type is not None:
-                error = f"exception[{exc_type}]: {exc_val}, traceback:\n{exc_tb}"
+                error = f"exception[{exc_type}]: {exc_val}, traceback:\n{traceback.format_exc()}"
                 logger.error(f"{self.stage} failed, {error}")
                 self.results.report_fail(error)
                 return

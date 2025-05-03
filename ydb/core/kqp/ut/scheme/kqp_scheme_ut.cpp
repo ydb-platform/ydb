@@ -2845,7 +2845,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         constexpr ui64 readReplicasCount = 1;
         {
             const auto result = session.ExecuteSchemeQuery(Sprintf(R"(
-                        ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET READ_REPLICAS_SETTINGS "%s:%)" PRIu64 R"(;
+                        ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET READ_REPLICAS_SETTINGS "%s:%)" PRIu64 R"(";
                     )", readReplicasModeAsString.data(), readReplicasCount
                 )
             ).ExtractValueSync();

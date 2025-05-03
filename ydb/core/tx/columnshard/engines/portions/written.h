@@ -38,7 +38,7 @@ private:
             sb << "cs:" << CommitSnapshot->DebugString() << ";";
         }
         if (InsertWriteId) {
-            sb << "wi:" << *InsertWriteId << ";";
+            sb << "wi:" << (ui64)*InsertWriteId << ";";
         }
         return sb;
     }

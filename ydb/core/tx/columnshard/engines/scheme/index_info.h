@@ -239,6 +239,7 @@ public:
         result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
         result.Validate();
+        result.Version = 1;
         return result;
     }
 

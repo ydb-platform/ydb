@@ -117,7 +117,7 @@ class TestLargeS3Import:
         assert health_errors is None, f"ydb is not alive: {health_errors}"
 
         cls.session_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
-        cls.results = cls.Results(suite=cls.__class__.__name__)
+        cls.results = cls.Results(suite="TestLargeS3Import")
 
     def query(self, statement):
         logger.info(f"running query:\n{statement}")

@@ -14,5 +14,5 @@
 
 add_subdirectory(yql)
 add_subdirectory(cpp)
-add_subdirectory(yt_proto)
 add_subdirectory(yt)
+add_subdirectory(yt_proto)

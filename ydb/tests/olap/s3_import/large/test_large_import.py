@@ -197,8 +197,8 @@ class TestLargeS3Import:
             )
         """)
 
-    def validate_tables(self, first_table, second_table):
-        with self.ReportTime(self.results, f"validate[{first_table}, {second_table}]"):
+    def validate_tables(self, first_table, second_table, stage_name):
+        with self.ReportTime(self.results, stage_name):
             logger.info(f"validating tables {first_table} and {second_table}...")
             result_sets = self.query(f"""
                 SELECT
@@ -254,10 +254,10 @@ class TestLargeS3Import:
             self.setup_datasink()
 
             self.run_import_from_s3()
-            self.validate_tables(self.external_table_path, self.olap_table_path)
+            self.validate_tables(self.external_table_path, self.olap_table_path, "validate_import")
 
             self.run_export_to_s3()
-            self.validate_tables(self.olap_table_path, self.external_sink_table_path)
+            self.validate_tables(self.olap_table_path, self.external_sink_table_path, "validate_export")
 
             self.cleanup_tables()
 

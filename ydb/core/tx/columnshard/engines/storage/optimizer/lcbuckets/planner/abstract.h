@@ -45,7 +45,12 @@ public:
     }
 
     friend bool operator<(const NArrow::TSimpleRow& item, const TOrderedPortion& portion) {
-        return portion < item;
+        auto cmp = item.CompareNotNull(portion.Start);
+        if (cmp == std::partial_ordering::equivalent) {
+            return false;
+        } else {
+            return cmp == std::partial_ordering::less;
+        }
     }
 
     bool operator<(const NArrow::TSimpleRow& item) const {

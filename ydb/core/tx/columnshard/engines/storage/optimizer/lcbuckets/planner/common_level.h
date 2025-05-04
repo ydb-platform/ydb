@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-class TLevelPortions: public IPortionsLevel {
+class TOneLayerPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
 
@@ -72,7 +72,7 @@ private:
     }
 
 public:
-    TLevelPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
+    TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
         const TLevelCounters& levelCounters, const bool strictOneLayer = true)
         : TBase(levelId, nextLevel)
@@ -101,6 +101,8 @@ public:
         if (Portions.empty()) {
             return 0;
         }
+        AFL_VERIFY(from <= to);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
         ui64 result = 0;
         auto itFrom = Portions.upper_bound(from);
         auto itTo = Portions.upper_bound(to);
@@ -111,6 +113,7 @@ public:
                 result += it->GetPortion()->GetTotalRawBytes();
             }
         }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end());
         for (auto it = itFrom; it != itTo; ++it) {
             result += it->GetPortion()->GetTotalRawBytes();
         }

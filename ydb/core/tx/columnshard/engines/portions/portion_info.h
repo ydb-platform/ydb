@@ -101,7 +101,6 @@ private:
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
         AFL_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
@@ -120,7 +119,6 @@ public:
     virtual bool IsCommitted() const = 0;
 
     const TSnapshot& GetMinSnapshotDeprecated() const {
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
         return MinSnapshotDeprecated;
     }
 
@@ -321,7 +319,7 @@ public:
     }
 
     bool ValidSnapshotInfo() const {
-        return MinSnapshotDeprecated.Valid() && PathId && PortionId;
+        return SchemaVersion && PathId && PortionId;
     }
 
     TString DebugString(const bool withDetails = false) const;
@@ -399,28 +397,6 @@ public:
 
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
-
-    class TSchemaCursor {
-        const NOlap::TVersionedIndex& VersionedIndex;
-        ISnapshotSchema::TPtr CurrentSchema;
-        TSnapshot LastSnapshot = TSnapshot::Zero();
-
-    public:
-        TSchemaCursor(const NOlap::TVersionedIndex& versionedIndex)
-            : VersionedIndex(versionedIndex) {
-        }
-
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
-
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
-            if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
-                CurrentSchema = portion.GetSchema(VersionedIndex);
-                LastSnapshot = portion.MinSnapshotDeprecated;
-            }
-            AFL_VERIFY(!!CurrentSchema)("portion", portion.DebugString());
-            return CurrentSchema;
-        }
-    };
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 

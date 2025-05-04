@@ -51,6 +51,7 @@ std::vector<NArrow::NMerger::TSortableBatchPosition> TCompactionTaskData::GetFin
         points.emplace_back(StopSeparation->BuildSortablePosition());
     }
     std::sort(points.begin(), points.end());
+    points.erase(std::unique(points.begin(), points.end()), points.end());
     return points;
 }
 

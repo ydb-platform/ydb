@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    backup_path_ut.cpp
     ydb_backup_ut.cpp
 )
 

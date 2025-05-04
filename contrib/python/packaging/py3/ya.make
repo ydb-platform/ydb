@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.2)
+VERSION(25.0)
 
 LICENSE(BSD-2-Clause AND Apache-2.0)
 

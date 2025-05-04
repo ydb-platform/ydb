@@ -527,8 +527,14 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountLimit = 4;
     }
 
+    message TOneLayer {
+        optional uint32 ExpectedPortionSize = 1;
+        optional float BytesLimitFraction = 2;
+    }
+
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
+        TOneLayer OneLayer = 11;
     }
 
 }

@@ -58,11 +58,11 @@ public:
         return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
     }
 
-    bool IsUsed(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+    bool IsUsed(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
-    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
-    bool CheckPoint(const NArrow::TReplaceKey& point) const;
+    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    bool CheckPoint(const NArrow::TSimpleRow& point) const;
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
@@ -122,7 +122,7 @@ class IScanCursor {
 private:
     YDB_ACCESSOR_DEF(std::optional<ui64>, TabletId);
 
-    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const = 0;
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) = 0;
@@ -133,7 +133,7 @@ public:
 
     virtual ~IScanCursor() = default;
 
-    const std::shared_ptr<arrow::RecordBatch>& GetPKCursor() const {
+    const std::shared_ptr<NArrow::TSimpleRow>& GetPKCursor() const {
         return DoGetPKCursor();
     }
 
@@ -166,7 +166,7 @@ public:
 
 class TSimpleScanCursor: public IScanCursor {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TSimpleRow>, PrimaryKey);
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, RecordIndex, 0);
 
@@ -175,7 +175,7 @@ private:
         proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
     }
 
-    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
         return PrimaryKey;
     }
 
@@ -219,7 +219,7 @@ private:
 public:
     TSimpleScanCursor() = default;
 
-    TSimpleScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk, const ui64 portionId, const ui32 recordIndex)
+    TSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui64 portionId, const ui32 recordIndex)
         : PrimaryKey(pk)
         , SourceId(portionId)
         , RecordIndex(recordIndex) {
@@ -237,8 +237,8 @@ private:
         data.SetStartRecordIndex(RecordIndex);
     }
 
-    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
-        return Default<std::shared_ptr<arrow::RecordBatch>>();
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
+        return Default<std::shared_ptr<NArrow::TSimpleRow>>();
     }
 
     virtual bool IsInitialized() const override {
@@ -290,7 +290,7 @@ public:
 
 class TPlainScanCursor: public IScanCursor {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TSimpleRow>, PrimaryKey);
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
         *proto.MutableColumnShardPlain() = {};
@@ -300,7 +300,7 @@ private:
         return !!PrimaryKey;
     }
 
-    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
         AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
@@ -321,7 +321,7 @@ private:
 public:
     TPlainScanCursor() = default;
 
-    TPlainScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk)
+    TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
         : PrimaryKey(pk) {
         AFL_VERIFY(PrimaryKey);
     }

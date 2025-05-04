@@ -27,7 +27,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
        << MinSnapshotDeprecated.DebugString()
        << ");"
           "schema_version:"
-       << SchemaVersion.value_or(0)
+       << SchemaVersion
        << ";"
           "level:"
        << GetMeta().GetCompactionLevel() << ";";
@@ -37,6 +37,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
            << "from:" << IndexKeyStart().DebugString() << ";"
            << "to:" << IndexKeyEnd().DebugString() << ";";
     }
+    sb << DoDebugString(withDetails) << ";";
     sb << "column_size:" << GetColumnBlobBytes() << ";"
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
@@ -70,6 +71,9 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     PathId = TInternalPathId::FromRawValue(proto.GetPathId());
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
+    if (!SchemaVersion) {
+        return TConclusionStatus::Fail("portion's schema version cannot been equals to zero");
+    }
     {
         auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {
@@ -85,35 +89,11 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     return TConclusionStatus::Success();
 }
 
-const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
-}
-
-const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
-}
-
-const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetIndexStorageId(indexId);
-}
-
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
-    if (SchemaVersion) {
-        auto schema = index.GetSchemaVerified(SchemaVersion.value());
-        AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
-        return schema;
-    }
-    return index.GetSchemaVerified(MinSnapshotDeprecated);
+    auto schema = index.GetSchemaVerified(SchemaVersion);
+    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
+    return schema;
 }
 
 ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
@@ -130,21 +110,6 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
         return false;
     }
     return true;
-}
-
-NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
-    const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
-        return groups;
-    } else {
-        return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);
-    }
-}
-
-void TPortionInfo::SaveMetaToDatabase(IDbWrapper& db) const {
-    FullValidation();
-    db.WritePortion(*this);
 }
 
 }   // namespace NKikimr::NOlap

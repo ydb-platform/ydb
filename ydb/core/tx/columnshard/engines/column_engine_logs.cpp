@@ -438,12 +438,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     }
 
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        AFL_VERIFY(portionInfo->HasInsertWriteId());
-        if (withUncommitted) {
-            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
-                continue;
-            }
-        } else if (!portionInfo->HasCommitSnapshot()) {
+        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
         const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);

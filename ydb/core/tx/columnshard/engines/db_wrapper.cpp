@@ -162,10 +162,8 @@ bool TDbWrapper::LoadPortions(const std::optional<TInternalPathId> pathId,
                 portion->SetShardingVersion(rowset.template GetValue<IndexPortions::ShardingVersion>());
             }
             portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
-            if (rowset.template GetValue<IndexPortions::MinSnapshotPlanStep>()) {
-                portion->SetMinSnapshotDeprecated(TSnapshot(
-                    rowset.template GetValue<IndexPortions::MinSnapshotPlanStep>(), rowset.template GetValue<IndexPortions::MinSnapshotTxId>()));
-            }
+            portion->SetMinSnapshotDeprecated(TSnapshot(
+                rowset.template GetValue<IndexPortions::MinSnapshotPlanStep>(), rowset.template GetValue<IndexPortions::MinSnapshotTxId>()));
 
             NKikimrTxColumnShard::TIndexPortionMeta metaProto;
             const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();

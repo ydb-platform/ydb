@@ -15,7 +15,6 @@
 add_subdirectory(abstract)
 add_subdirectory(lbuckets)
 add_subdirectory(lcbuckets)
-add_subdirectory(sbuckets)
 
 add_library(engines-storage-optimizer INTERFACE)
 
@@ -26,6 +25,5 @@ target_link_libraries(engines-storage-optimizer INTERFACE
   storage-optimizer-abstract
   storage-optimizer-lbuckets
   storage-optimizer-lcbuckets
-  storage-optimizer-sbuckets
 )
 

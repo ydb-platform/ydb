@@ -22,6 +22,7 @@ add_subdirectory(dictionary)
 add_subdirectory(accessor)
 add_subdirectory(save_load)
 add_subdirectory(transformer)
+add_subdirectory(rows)
 add_subdirectory(program)
 add_subdirectory(ut)
 
@@ -42,6 +43,7 @@ target_link_libraries(core-formats-arrow PUBLIC
   formats-arrow-dictionary
   formats-arrow-transformer
   formats-arrow-reader
+  formats-arrow-rows
   formats-arrow-save_load
   formats-arrow-splitter
   formats-arrow-hash

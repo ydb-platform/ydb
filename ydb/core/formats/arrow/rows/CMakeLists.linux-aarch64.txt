@@ -12,19 +12,22 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(lbuckets)
-add_subdirectory(lcbuckets)
-
-add_library(engines-storage-optimizer INTERFACE)
+add_library(formats-arrow-rows)
 
 
-target_link_libraries(engines-storage-optimizer INTERFACE
+target_link_libraries(formats-arrow-rows PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-lbuckets
-  storage-optimizer-lcbuckets
+  ydb-library-conclusion
+  libs-apache-arrow
+  library-actors-core
+  formats-arrow-reader
+)
+
+target_sources(formats-arrow-rows PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/rows/view.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/rows/view_v0.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/rows/collection.cpp
 )
 

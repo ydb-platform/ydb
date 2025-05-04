@@ -33,8 +33,8 @@ target_link_libraries(engines-storage-granule PUBLIC
   columnshard-hooks-abstract
   ydb-core-base
   formats-arrow-reader
-  optimizer-sbuckets-optimizer
   optimizer-lbuckets-planner
+  optimizer-lcbuckets-planner
   tools-enum_parser-enum_serialization_runtime
 )
 

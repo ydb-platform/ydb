@@ -88,67 +88,64 @@ class TestFollowersCompatibility(object):
         return True, "ok"
 
     def test_followers_compatability(self):
-        session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
+        with ydb.QuerySessionPool(self.driver, size=1) as pool:
+            pool.execute_with_retries(
+                """create table `sample_table` (
+                    id Uint64,
+                    value Uint64,
+                    payload Utf8,
+                    PRIMARY KEY(id)
+                    )
+                    WITH (
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
+                    READ_REPLICAS_SETTINGS = \"PER_AZ:1\"
+                    );"""
+            )
+            id_ = 0
 
-        with ydb.SessionPool(self.driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    """create table `sample_table` (
-                        id Uint64,
-                        value Uint64,
-                        payload Utf8,
-                        PRIMARY KEY(id)
-                      )
-                      WITH (
-                        AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                        AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
-                        READ_REPLICAS_SETTINGS = \"PER_AZ:1\"
-                      );"""
-                )
-                id_ = 0
+            upsert_count = 4  # per iteration
+            iteration_count = 20
+            # Simulate some load with dc outages, so that:
+            # - Hive restarts and runs on different ydb versions
+            # - Tablets are splitting
+            # - Number of followers is changing
+            for i in range(iteration_count):
+                for node_id, node in self.cluster.nodes.items():
+                    if node.data_center == self.datacenters[i % len(self.datacenters)]:
+                        node.stop()
+                rows = []
+                for j in range(upsert_count):
+                    row = {}
+                    row["id"] = id_
+                    row["value"] = 1
+                    row["payload"] = "DEADBEEF" * 1024 * 256
+                    rows.append(row)
+                    id_ += 1
 
-                upsert_count = 4  # per iteration
-                iteration_count = 20
-                # Simulate some load with dc outages, so that:
-                # - Hive restarts and runs on different ydb versions
-                # - Tablets are splitting
-                # - Number of followers is changing
-                for i in range(iteration_count):
-                    for node_id, node in self.cluster.nodes.items():
-                        if node.data_center == self.datacenters[i % len(self.datacenters)]:
-                            node.stop()
-                    rows = []
-                    for j in range(upsert_count):
-                        row = {}
-                        row["id"] = id_
-                        row["value"] = 1
-                        row["payload"] = "DEADBEEF" * 1024 * 256
-                        rows.append(row)
-                        id_ += 1
+                column_types = ydb.BulkUpsertColumns()
+                column_types.add_column("id", ydb.PrimitiveType.Uint64)
+                column_types.add_column("value", ydb.PrimitiveType.Uint64)
+                column_types.add_column("payload", ydb.PrimitiveType.Utf8)
+                try:
+                    self.driver.table_client.bulk_upsert(
+                        "Root/sample_table", rows, column_types
+                    )
+                except Exception as e:
+                    logger.error(e)
 
-                    column_types = ydb.BulkUpsertColumns()
-                    column_types.add_column("id", ydb.PrimitiveType.Uint64)
-                    column_types.add_column("value", ydb.PrimitiveType.Uint64)
-                    column_types.add_column("payload", ydb.PrimitiveType.Utf8)
-                    try:
-                        self.driver.table_client.bulk_upsert(
-                            "Root/sample_table", rows, column_types
-                        )
-                    except Exception as e:
-                        logger.error(e)
-
-                    for node_id, node in self.cluster.nodes.items():
-                        if node.data_center == self.datacenters[i % len(self.datacenters)]:
-                            node.start()
-                    retry_count = 0
-                    backoff = .1
-                    while True:
-                        retry_count += 1
-                        logger.info(f"check_followers: iteration {i}, try {retry_count}")
-                        ok, msg = self.check_followers()
-                        if retry_count == 5:
-                            assert ok, msg
-                        if ok:
-                            break
-                        time.sleep(backoff)
-                        backoff *= 2
+                for node_id, node in self.cluster.nodes.items():
+                    if node.data_center == self.datacenters[i % len(self.datacenters)]:
+                        node.start()
+                retry_count = 0
+                backoff = .1
+                while True:
+                    retry_count += 1
+                    logger.info(f"check_followers: iteration {i}, try {retry_count}")
+                    ok, msg = self.check_followers()
+                    if retry_count == 5:
+                        assert ok, msg
+                    if ok:
+                        break
+                    time.sleep(backoff)
+                    backoff *= 2

@@ -240,31 +240,29 @@ class TestCompatibility(object):
             assert result[0]['sum_value'] == upsert_count * iteration_count + start_index
 
         def create_table_column(self):
-            with ydb.SessionPool(self.driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
-                        """create table `sample_table` (
-                            id Uint64 NOT NULL, value Uint64,
-                            payload Utf8, income Decimal(22,9),
-                            PRIMARY KEY(id)
-                            ) WITH (
-                            STORE = COLUMN,
-                            AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
-                    )
+            with ydb.QuerySessionPool(self.driver, size=1) as pool:
+                pool.execute_with_retries(
+                    """create table `sample_table` (
+                        id Uint64 NOT NULL, value Uint64,
+                        payload Utf8, income Decimal(22,9),
+                        PRIMARY KEY(id)
+                        ) WITH (
+                        STORE = COLUMN,
+                        AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                        AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
+                )
 
         def create_table_row(self):
-            with ydb.SessionPool(self.driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
-                        """create table `sample_table` (
-                            id Uint64, value Uint64,
-                            payload Utf8, income Decimal(22,9),
-                            PRIMARY KEY(id)
-                            ) WITH (
-                            AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
-                    )
+            with ydb.QuerySessionPool(self.driver, size=1) as pool:
+                pool.execute_with_retries(
+                    """create table `sample_table` (
+                        id Uint64, value Uint64,
+                        payload Utf8, income Decimal(22,9),
+                        PRIMARY KEY(id)
+                        ) WITH (
+                        AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                        AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);"""
+                )
 
         create_table_row(self) if store_type == "row" else create_table_column(self)
         read_update_data(self)
@@ -351,23 +349,20 @@ class TestCompatibility(object):
     def test_export(self):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 
-        with ydb.SessionPool(self.driver, size=1) as pool:
-            with pool.checkout() as session:
-                for table_num in range(1, 6):
-                    table_name = f"sample_table_{table_num}"
-                    session.execute_scheme(
-                        f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
-                    )
+        with ydb.QuerySessionPool(self.driver, size=1) as pool:
+            for table_num in range(1, 6):
+                table_name = f"sample_table_{table_num}"
+                pool.execute_with_retries(
+                    f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
+                )
 
-                    query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
-                        (1, 'Payload 1 for table {table_num}'),
-                        (2, 'Payload 2 for table {table_num}'),
-                        (3, 'Payload 3 for table {table_num}'),
-                        (4, 'Payload 4 for table {table_num}'),
-                        (5, 'Payload 5 for table {table_num}');"""
-                    session.transaction().execute(
-                        query, commit_tx=True
-                    )
+                query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
+                    (1, 'Payload 1 for table {table_num}'),
+                    (2, 'Payload 2 for table {table_num}'),
+                    (3, 'Payload 3 for table {table_num}'),
+                    (4, 'Payload 4 for table {table_num}'),
+                    (5, 'Payload 5 for table {table_num}');"""
+                pool.execute_with_retries(query)
 
         export_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),

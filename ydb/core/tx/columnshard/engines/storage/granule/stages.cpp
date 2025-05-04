@@ -29,7 +29,6 @@ bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionCo
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    TPortionInfo::TSchemaCursor schema(*VersionedIndex);
     Context->ClearRecords();
     return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV2&& loadContext) {
         Context->Add(std::move(loadContext));

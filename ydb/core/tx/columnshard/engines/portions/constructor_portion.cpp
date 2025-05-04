@@ -28,7 +28,6 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
         result->PortionId = GetPortionIdVerified();
 
         AFL_VERIFY(MinSnapshotDeprecated);
-        AFL_VERIFY(MinSnapshotDeprecated->Valid());
         result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
         if (RemoveSnapshot) {
             AFL_VERIFY(RemoveSnapshot->Valid());

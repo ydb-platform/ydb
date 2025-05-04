@@ -122,13 +122,17 @@ public:
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
 
     void SetMinSnapshotDeprecated(const TSnapshot& snap) {
-        Y_ABORT_UNLESS(snap.Valid());
         MinSnapshotDeprecated = snap;
     }
 
     void SetSchemaVersion(const ui64 version) {
-        //        AFL_VERIFY(version);
+        AFL_VERIFY(version);
         SchemaVersion = version;
+    }
+
+    ui64 GetSchemaVersionVerified() const {
+        AFL_VERIFY(SchemaVersion);
+        return *SchemaVersion;
     }
 
     void SetShardingVersion(const ui64 version) {

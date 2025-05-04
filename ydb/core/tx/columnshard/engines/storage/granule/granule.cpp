@@ -245,7 +245,6 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     }
 
     {
-        TPortionInfo::TSchemaCursor schema(versionedIndex);
         if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 for (auto&& i : loadContext.BuildRecordsV1()) {

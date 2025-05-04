@@ -59,7 +59,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     proto.SetPathId(PathId.GetRawValue());
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
-    *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
@@ -73,12 +72,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     SchemaVersion = proto.GetSchemaVersion();
     if (!SchemaVersion) {
         return TConclusionStatus::Fail("portion's schema version cannot been equals to zero");
-    }
-    {
-        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
-        if (!parse) {
-            return parse;
-        }
     }
     if (proto.HasRemoveSnapshot()) {
         auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
@@ -94,15 +87,6 @@ ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) cons
     auto schema = index.GetSchemaVerified(SchemaVersion);
     AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
     return schema;
-}
-
-ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
-    if (!CurrentSchema || portion.GetMinSnapshotDeprecatedVerified() != LastSnapshot) {
-        CurrentSchema = portion.GetSchema(VersionedIndex);
-        LastSnapshot = portion.GetMinSnapshotDeprecatedVerified();
-    }
-    AFL_VERIFY(!!CurrentSchema);
-    return CurrentSchema;
 }
 
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {

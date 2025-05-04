@@ -138,7 +138,7 @@ public:
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.MutablePortionConstructor().GetPathId() &&
                            portion.GetPortionId() == it->second.MutablePortionConstructor().GetPortionIdVerified());
         }
-        it->second.MutablePortionConstructor().SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
+        it->second.MutablePortionConstructor().SetSchemaVersion(portion.GetSchemaVersionVerified());
         if (portion.HasRemoveSnapshot()) {
             if (!it->second.MutablePortionConstructor().HasRemoveSnapshot()) {
                 it->second.MutablePortionConstructor().SetRemoveSnapshot(portion.GetRemoveSnapshotVerified());

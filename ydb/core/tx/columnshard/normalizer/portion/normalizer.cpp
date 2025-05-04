@@ -57,9 +57,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
             return conclusion;
         }
     }
-    TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
     for (auto&& [_, p] : portions) {
-        (*schemas)[p.GetPortionConstructor().GetPortionIdVerified()] = schema.GetSchema(p.GetPortionConstructor());
+        (*schemas)[p.GetPortionConstructor().GetPortionIdVerified()] =
+            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(p.GetPortionConstructor().GetSchemaVersionVerified());
     }
 
     std::vector<TPortionDataAccessor> package;
@@ -116,7 +116,6 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
     auto initPortion = [&](TColumnChunkLoadContextV1&& loadContext) {
         if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
             return;

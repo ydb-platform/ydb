@@ -101,7 +101,6 @@ private:
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
         AFL_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
@@ -120,7 +119,6 @@ public:
     virtual bool IsCommitted() const = 0;
 
     const TSnapshot& GetMinSnapshotDeprecated() const {
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
         return MinSnapshotDeprecated;
     }
 
@@ -321,7 +319,7 @@ public:
     }
 
     bool ValidSnapshotInfo() const {
-        return MinSnapshotDeprecated.Valid() && PathId && PortionId;
+        return SchemaVersion && PathId && PortionId;
     }
 
     TString DebugString(const bool withDetails = false) const;

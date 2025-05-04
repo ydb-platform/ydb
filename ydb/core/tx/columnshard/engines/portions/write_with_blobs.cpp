@@ -30,7 +30,7 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
     const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
-    const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type) {
+    const TSnapshot& /*snapshot*/, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type) {
     TPortionAccessorConstructor constructor = [&]() {
         switch (type) {
             case EPortionType::Written:
@@ -39,6 +39,7 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
                 return TPortionAccessorConstructor(std::make_unique<TCompactedPortionInfoConstructor>(granule));
         }
     }();
+    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(TSnapshot(0, 0));
     constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
     return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }

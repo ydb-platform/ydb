@@ -199,4 +199,5 @@ message TFeatureFlags {
     optional bool EnableChangefeedsExport = 174 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
+    optional bool EnableExportAutoDropping = 183 [default = false];
 }

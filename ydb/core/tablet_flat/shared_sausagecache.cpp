@@ -481,11 +481,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui32 pagesToRequestCount = 0;
 
         TVector<TEvResult::TLoaded> readyPages(::Reserve(msg->Fetch->Pages.size()));
-        TVector<ui32> traceLogPagesToWait;
-        if (doTraceLog) {
-            traceLogPagesToWait.reserve(msg->Fetch->Pages.size());
-        }
-
+        TVector<TPageId> pagesFromCacheTraceLog;
+        
         TRequestQueue *queue = nullptr;
         switch (msg->Priority) {
             case NBlockIO::EPriority::None:
@@ -526,7 +523,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Counters.CacheHitBytes->Add(page->Size);
                 readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
                 if (doTraceLog) {
-                    traceLogPagesToWait.emplace_back(pageId);
+                    pagesFromCacheTraceLog.push_back(pageId);
                 }
                 Evict(Cache.Touch(page));
                 break;
@@ -553,11 +550,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.PendingRequests->Inc();
 
         if (pendingPages) {
-            TVector<ui32> pagesToKeep;
-            TVector<ui32> pagesToRequest(::Reserve(pagesToRequestCount));
+            TVector<TPageId> pagesToRequest(::Reserve(pagesToRequestCount));
+            TVector<TPageId> pagesToWaitTraceLog;
             ui64 pagesToRequestBytes = 0;
             if (doTraceLog) {
-                traceLogPagesToWait.reserve(pendingPages.size() - pagesToRequestCount);
+                pagesToWaitTraceLog.reserve(pendingPages.size() - pagesToRequestCount);
             }
 
             TRequestQueue::TPagesToRequest *qpages = nullptr;
@@ -598,7 +595,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     break;
                 case PageStateRequested:
                     if (doTraceLog) {
-                        traceLogPagesToWait.emplace_back(pageId);
+                        pagesToWaitTraceLog.emplace_back(pageId);
                     }
                     break;
                 case PageStateRequestedAsync:
@@ -608,7 +605,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         pagesToRequestBytes += page->Size;
                         page->State = PageStateRequested;
                     } else if (doTraceLog) {
-                        traceLogPagesToWait.emplace_back(pageId);
+                        pagesToWaitTraceLog.emplace_back(pageId);
                     }
                     break;
                 default:
@@ -620,8 +617,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " owner " << ev->Sender
                 << " cookie " << ev->Cookie
                 << " class " << request->Priority
-                << " from cache " << pagesToKeep
-                << " already requested " << traceLogPagesToWait
+                << " from cache " << pagesFromCacheTraceLog
+                << " already requested " << pagesToWaitTraceLog
                 << " to request " << pagesToRequest);
             
             Owners[ev->Sender][&collection].PushBack(request.Get());
@@ -1014,7 +1011,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto msg = MakeHolder<NSharedCache::TEvUpdated>();
         msg->DroppedPages = std::move(droppedPages_);
         for (auto& [pageCollectionId, droppedPages] : msg->DroppedPages) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropp page collection " << pageCollectionId
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << pageCollectionId
                 << " pages " << droppedPages
                 << " owner " << owner);
         }

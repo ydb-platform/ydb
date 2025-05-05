@@ -102,13 +102,15 @@ class Platform(object):
         self.is_x86_64 = self.arch in ('x86_64', 'amd64')
         self.is_intel = self.is_x86 or self.is_x86_64
 
+        self.is_armv6 = self.arch in ('armv6hf',)
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
-        self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
+        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
 
@@ -123,6 +125,8 @@ class Platform(object):
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
         self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
+
+        self.armv6_float_abi = 'hard'
 
         self.armv7_float_abi = None
         if self.is_armv7:
@@ -148,7 +152,11 @@ class Platform(object):
         self.is_wasm64 = self.arch == 'wasm64'
         self.is_wasm = self.is_wasm32 or self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32 or self.is_wasm32
+        self.is_32_bit = (
+            self.is_x86 or
+            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
+        )
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -216,6 +224,7 @@ class Platform(object):
             (self.is_i386 or self.is_i686, 'ARCH_I386'),
             (self.is_i686, 'ARCH_I686'),
             (self.is_x86_64, 'ARCH_X86_64'),
+            (self.is_armv6, 'ARCH_ARM6'),
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
@@ -827,6 +836,9 @@ class System(object):
         for variable in self.platform.os_variables:
             emit(variable, 'yes')
 
+        if self.platform.is_armv6:
+            emit('ARM6_FLOAT_ABI', self.platform.armv6_float_abi)
+
         if self.platform.is_armv7:
             emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi)
 
@@ -1195,6 +1207,7 @@ class GnuToolchain(Toolchain):
                 target_triple = select(default=None, selectors=[
                     (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
                     (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
                     (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
                     (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
@@ -1258,13 +1271,16 @@ class GnuToolchain(Toolchain):
         elif target.is_cortex_m33:
             self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')
 
+        elif target.is_armv6hf:
+            self.c_flags_platform.append('-march=armv6 -mfpu=vfp')
+
         elif target.is_armv7_neon:
             self.c_flags_platform.append('-mfpu=neon')
 
         elif target.is_arm968e_s:
             self.c_flags_platform.append('-march=armv5te -mcpu=arm968e-s -mthumb-interwork -mlittle-endian')
 
-        if (target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
+        if (target.is_armv6 or target.is_armv7 or target.is_armv8m or target.is_armv7em or target.is_armv5te) and build.is_size_optimized:
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')

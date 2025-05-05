@@ -4,11 +4,11 @@
         "text": "1\n"
     },
     "test.test_operations_list": {
-        "next_page_token": "1",
+        "next_page_token": "0",
         "status": "SUCCESS"
     },
     "test.test_operations_list_page": {
-        "next_page_token": "1",
+        "next_page_token": "0",
         "status": "SUCCESS"
     },
     "test.test_operations_list_page_bad": {

@@ -1,15 +1,17 @@
 ## Права доступа {#permissions-list}
 
 В качестве имён прав доступа можно использовать имена {{ ydb-short-name }} прав или соответствующие им ключевые слова YQL.
-В таблице ниже перечислены возможные имена прав.
+
+[//]: # (TODO: не получается поставить ссылку на concepts/glossary.md#access-right)
 
 {{ ydb-short-name }} право | Ключевое слово YQL | Описание
 --- | --- | ---
-Права уровня баз данных
-`ydb.database.connect` | `CONNECT` | Право подключаться к базе данных
+*Права уровня кластера*
 `ydb.database.create` | `CREATE` | Право создавать новые базы данных в кластере
 `ydb.database.drop` | `DROP` | Право удалять базы данных в кластере
-Элементарные права на объекты базы данных
+*Права уровня базы данных*
+`ydb.database.connect` | `CONNECT` | Право подключаться к базе данных
+*Элементарные права уровня объектов схемы*
 `ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения сообщения из топиков
 `ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, upsert, replace), писать сообщения в топики
 `ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы (delete)
@@ -19,9 +21,9 @@
 `ydb.granular.remove_schema` | `REMOVE SCHEMA` | Право удалять объекты (директории, таблицы, топики), которые были созданы посредством использования прав
 `ydb.granular.describe_schema` | `DESCRIBE SCHEMA` | Право просмотра имеющихся прав доступа (ACL) на объект доступа, просмотра описания объектов доступа (директории, таблицы, топики)
 `ydb.granular.alter_schema` | `ALTER SCHEMA` | Право изменять объекты доступа (директории, таблицы, топики), в том числе права пользователей на объекты доступа
-Дополнительные флаги
-`ydb.access.grant` | `GRANT` | Право предоставлять или отзывать права у других пользователей в объёме, не превышающем текущий объём прав пользователя на объекте доступа
-Права, основанные на других правах
+*Право передачи прав*
+`ydb.access.grant` | `GRANT` | Флаг, помечающий другие выдаваемые права, что эти права пользователь может также выдать другим пользователям (аналог `WITH GRANT OPTION`)
+*Группы прав*
 `ydb.tables.modify` | `MODIFY TABLES` | `ydb.granular.update_row` + `ydb.granular.erase_row`
 `ydb.tables.read` | `SELECT TABLES` | Синоним `ydb.granular.select_row`
 `ydb.generic.list` | `LIST` | Синоним `ydb.granular.describe_schema`
@@ -37,15 +39,45 @@
 
 {% note info %}
 
-Права `ydb.database.connect`, `ydb.granular.describe_schema`, `ydb.granular.select_row`, `ydb.granular.update_row` необходимо рассматривать как слои прав.
-
-```mermaid
-graph TD;
-    ydb.database.connect --> ydb.granular.describe_schema;
-    ydb.granular.describe_schema --> ydb.granular.select_row;
-    ydb.granular.select_row --> ydb.granular.update_row;
-```
-
-Например, для изменения строк необходимо не только право `ydb.granular.update_row`, но и все вышележащие права.
+Права доступа следует рассматривать как слои дополнительных разрешений: для изменения объекта помимо права на изменение требуются права на доступ к базе и на чтение.
 
 {% endnote %}
+
+```mermaid
+---
+config:
+  flowchart:
+  # guard long node labels from wrapping or clipping
+  - wrappingWidth: 500  # default is 200
+---
+graph BT
+    ydb.database.connect --> ydb.granular.describe_schema
+
+    ydb.granular.describe_schema --> ydb.granular.select_row & create_schema & ydb.granular.remove_schema & ydb.granular.alter_schema
+
+    ydb.granular.select_row --> ydb.granular.update_row & ydb.granular.erase_row
+
+    ydb.database.connect["`ydb.database.connect`"]
+    ydb.granular.describe_schema["`ydb.granular.describe_schema`"]
+    create_schema["`ydb.granular.create_{directory,table,queue}`"]
+    ydb.granular.remove_schema["`ydb.granular.remove_schema`"]
+    ydb.granular.alter_schema["`ydb.granular.alter_schema`"]
+    ydb.granular.select_row["`ydb.granular.select_row`"]
+    ydb.granular.update_row["`ydb.granular.update_row`"]
+    ydb.granular.erase_row["`ydb.granular.erase_row`"]
+```
+
+Например:
+
+1. для изменения данных в таблицах нужны права:
+
+    + `ydb.granular.update_row`
+    + `ydb.granular.select_row`
+    + `ydb.granular.describe_schema`
+    + `ydb.database.connect`
+
+2. для изменения объекта схемы нужны права:
+
+    + `ydb.granular.alter_schema`
+    + `ydb.granular.describe_schema`
+    + `ydb.database.connect`

@@ -15,7 +15,6 @@ project_path = yatest.common.context.project_path
 SOURCE_PATH = yql_utils.yql_source_path((project_path + '/cases').replace('\\', '/'))
 DATA_PATH = yatest.common.output_path('cases')
 ASTDIFF_PATH = yql_utils.yql_binary_path(os.getenv('YQL_ASTDIFF_PATH') or 'yql/essentials/tools/astdiff/astdiff')
-DEFAULT_LANG_VER = '2025.01'
 
 
 def pytest_generate_tests(metafunc):
@@ -79,8 +78,7 @@ def test(case):
     if yql_utils.get_param('TARGET_PLATFORM') and xfail:
         pytest.skip('xfail is not supported on non-default target platform')
     langver = yql_utils.get_langver(cfg)
-    if langver is None:
-        langver = DEFAULT_LANG_VER
+    # no default version, because UDFs may have different release cycles
 
     extra_env = dict(os.environ)
     extra_env["YQL_UDF_RESOLVER"] = "1"

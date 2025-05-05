@@ -71,7 +71,7 @@ struct TExecutionOptions {
     }
 
     TString GetScope(size_t index) const {
-        return GetValue<TString>(index, Scopes, "");
+        return GetValue<TString>(index, Scopes, "fqrun");
     }
 
     TRequestOptions GetQueryOptions(size_t index, ui64 queryId) const {
@@ -175,6 +175,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     std::unordered_set<TString> scopes;
+    scopes.reserve(executionOptions.Scopes.size());
     for (size_t i = 0; i < executionOptions.Queries.size(); ++i){
         scopes.emplace(executionOptions.GetScope(i));
     }

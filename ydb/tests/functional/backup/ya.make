@@ -31,7 +31,6 @@ ENDIF()
 END()
 
 RECURSE(
-    encrypted_backup
     helpers
     s3_path_style
 )

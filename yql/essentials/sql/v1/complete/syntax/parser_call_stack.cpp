@@ -101,7 +101,7 @@ namespace NSQLComplete {
                Contains({RULE(External_call_param), RULE(An_id)}, stack);
     }
 
-    std::optional<EStatementKind> StatementKindOf(const TParserCallStack& stack) {
+    TMaybe<EStatementKind> StatementKindOf(const TParserCallStack& stack) {
         for (TRuleId rule : std::ranges::views::reverse(stack)) {
             if (rule == RULE(Process_core) || rule == RULE(Reduce_core) || rule == RULE(Select_core)) {
                 return EStatementKind::Select;
@@ -110,7 +110,7 @@ namespace NSQLComplete {
                 return EStatementKind::Insert;
             }
         }
-        return std::nullopt;
+        return Nothing();
     }
 
     std::unordered_set<TRuleId> GetC3PreferredRules() {

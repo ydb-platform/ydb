@@ -85,8 +85,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
-          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), info->TabletID)
+    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr), nullptr,
+          Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
@@ -362,6 +362,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
     if (proto.HasOwnerPathId()) {
         OwnerPathId = proto.GetOwnerPathId();
         Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
+        TablesManager.SetSchemaObjectsCache(NOlap::TSchemaCachesManager::GetCache(OwnerPathId, Info()->TenantPathId));
     }
 
     if (proto.HasOwnerPath()) {
@@ -1447,7 +1448,7 @@ public:
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("consumer", Consumer)("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
             for (auto&& p : i.second) {
                 auto itPortionConstructor = Constructors.find(p->GetAddress());
                 if (itPortionConstructor == Constructors.end()) {
@@ -1498,7 +1499,7 @@ public:
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
         return true;
     }

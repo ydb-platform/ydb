@@ -120,6 +120,10 @@ public:
         return nullptr;
     }
 
+    TTestActorRuntime* GetRuntime() {
+        return Runtime.Get();
+    }
+
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg, bool reformat = false) {
         if (PDiskActor) {
             TestResponse<NPDisk::TEvYardControlResult>(

@@ -75,6 +75,12 @@ namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
 
+namespace NKikimr::TEvKeyValue {
+    struct TEvCleanUpDataResponse;
+    using TEvCleanUpDataResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvCleanUpDataResponse>>;
+}
+
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1056,8 +1062,11 @@ public:
     struct TTxRunTenantDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
 
+    template <typename TEvType>
     struct TTxCompleteDataErasureShard;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
+
+    template <typename TEvType>
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvType& ev);
 
     struct TTxCompleteDataErasureTenant;
     NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureTenant(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
@@ -1173,6 +1182,7 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
@@ -1245,7 +1255,7 @@ public:
     // } // NLongRunningCommon
 
     // namespace NExport {
-    THashMap<ui64, TExportInfo::TPtr> Exports;
+    TMap<ui64, TExportInfo::TPtr> Exports;
     THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
@@ -1298,7 +1308,7 @@ public:
     // } // NExport
 
     // namespace NImport {
-    THashMap<ui64, TImportInfo::TPtr> Imports;
+    TMap<ui64, TImportInfo::TPtr> Imports;
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
     THashSet<TActorId> RunningImportSchemeGetters;
@@ -1369,7 +1379,7 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
 
-    THashMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
+    TMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
     THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 

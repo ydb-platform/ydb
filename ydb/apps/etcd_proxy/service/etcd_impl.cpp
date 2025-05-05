@@ -823,7 +823,7 @@ private:
 
     virtual std::ostream& Dump(std::ostream& out) const = 0;
 
-    void SendDatabaseRequest(const TActorContext& ctx) {
+    TQueryClient::TQueryResultFunc GetQueryResultFunc() {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
@@ -832,21 +832,24 @@ private:
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
-        TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
-            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
+        return [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
+            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args, TExecuteQuerySettings().StatsMode(EStatsMode::Basic));
         };
+    }
+
+    void SendDatabaseRequest(const TActorContext& ctx) {
         if (this->ExecuteAsync()) {
-            Stuff->Client->RetryQuery(std::move(callback)).Subscribe([name = GetRequestName()](const auto& future) {
-                if (const auto res = future.GetValueSync(); res.IsSuccess())
+            Stuff->Client->RetryQuery(GetQueryResultFunc()).Subscribe([name = GetRequestName()](const auto& future) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
                     std::cout << name << " finished succesfully." << std::endl;
                 else
                     std::cout << name << " finished with errors: " << res.GetIssues().ToString() << std::endl;
             });
             ctx.Send(this->SelfId(), new NEtcd::TEvQueryResult);
         } else {
-            Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            Stuff->Client->RetryQuery(GetQueryResultFunc()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
                 if (const auto lock = stuff.lock()) {
-                    if (const auto res = future.GetValueSync(); res.IsSuccess())
+                    if (const auto res = future.GetValue(); res.IsSuccess())
                         lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
                     else
                         lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
@@ -1199,7 +1202,7 @@ private:
 
         sql << "select count(*) > 0UL from `leases` where " << leaseParamName << " = `id`;" << std::endl;
 
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` where " << leaseParamName << " = `lease`;" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` where " << leaseParamName << " = `lease`;" << std::endl;
 
         if constexpr (NotifyWatchtower) {
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;

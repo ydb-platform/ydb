@@ -47,7 +47,7 @@
 +DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 --- contrib/python/google-auth/py3/tests/oauth2/test_id_token.py	(index)
 +++ contrib/python/google-auth/py3/tests/oauth2/test_id_token.py	(working tree)
-@@ -24,8 +24,9 @@ import google.auth.compute_engine._metadata
+@@ -24,12 +24,13 @@ import google.auth.compute_engine._metadata
  from google.oauth2 import id_token
  from google.oauth2 import service_account
  
@@ -56,7 +56,12 @@
 -    os.path.dirname(__file__), "../data/service_account.json"
 +    os.path.dirname(yc.source_path(__file__)), "../data/service_account.json"
  )
- ID_TOKEN_AUDIENCE = "https://pubsub.googleapis.com"
+ 
+ IMPERSONATED_SERVICE_ACCOUNT_FILE = os.path.join(
+-    os.path.dirname(__file__),
++    os.path.dirname(yc.source_path(__file__)),
+     "../data/impersonated_service_account_authorized_user_source.json",
+ )
  
 @@ -265,1 +266,1 @@ def test_fetch_id_token_no_cred_exists(monkeypatch):
 -        os.path.dirname(__file__), "../data/authorized_user.json"

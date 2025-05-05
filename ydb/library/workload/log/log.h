@@ -24,6 +24,8 @@ public:
     ui64 IntColumnsCnt = 0;
     ui64 KeyColumnsCnt = 0;
     ui64 TimestampStandardDeviationMinutes = 0;
+    std::optional<ui64> TimestampDateFrom{std::nullopt};
+    std::optional<ui64> TimestampDateTo{std::nullopt};
     ui64 TimestampTtlMinutes = 0;
     ui64 TimestampSubtract = 0;
     ui64 RowsCnt = 1;

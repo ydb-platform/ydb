@@ -1,4 +1,6 @@
 #include "log.h"
+#include <util/random/entropy.h>
+#include <util/random/mersenne.h>
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/resource/resource.h>
@@ -252,6 +254,11 @@ class TRandomLogGenerator {
         return result.str();
     }
 
+    TInstant UniformInstant(ui64 from, ui64 to) const {
+        TMersenne<ui64> rnd(Seed());
+        return TInstant::FromValue(rnd.Uniform(from, to));
+    }
+
     TInstant RandomInstant() const {
         auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
         i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
@@ -279,7 +286,7 @@ public:
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
-            result.back().Ts = RandomInstant();
+            result.back().Ts = Params.TimestampDateFrom.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
             result.back().Component = RandomWord(true);
@@ -419,9 +426,25 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
+                // .DefaultValue(TimestampStandardDeviationMinutes)
+                .Optional()
+                .StoreResult(&TimestampStandardDeviationMinutes);
+            
+            opts.AddLongOption("date-from", "Left boundary of the interval to generate "
+                "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
+                "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+                .Optional().StoreResult(&TimestampDateFrom);
+            opts.AddLongOption("date-to", "Right boundary of the interval to generate "
+                "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
+                "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+                .Optional().StoreResult(&TimestampDateTo);
+
+            opts.MutuallyExclusive("timestamp_deviation", "date-from");
+            opts.MutuallyExclusive("timestamp_deviation", "date-to");
+    
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);
+
             opts.AddLongOption("null-percent", "Percent of nulls in generated data")
                 .DefaultValue(NullPercent).StoreResult(&NullPercent);
             break;

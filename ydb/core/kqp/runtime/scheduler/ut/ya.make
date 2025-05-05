@@ -1,14 +1,7 @@
-UNITTEST_FOR(ydb/core/kqp/runtime)
+UNITTEST_FOR(ydb/core/kqp/runtime/scheduler)
 
 FORK_SUBTESTS()
-
 SIZE(MEDIUM)
-
-SRCS(
-    kqp_scan_data_ut.cpp
-)
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/testing/unittest
@@ -16,5 +9,11 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
 )
+
+SRCS(
+    kqp_compute_scheduler_ut.cpp
+)
+
+YQL_LAST_ABI_VERSION()
 
 END()

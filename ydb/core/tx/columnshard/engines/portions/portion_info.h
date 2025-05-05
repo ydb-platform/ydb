@@ -90,7 +90,6 @@ private:
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero();
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
@@ -117,10 +116,6 @@ private:
 public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
-
-    const TSnapshot& GetMinSnapshotDeprecated() const {
-        return MinSnapshotDeprecated;
-    }
 
     ui64 GetMemorySize() const {
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);

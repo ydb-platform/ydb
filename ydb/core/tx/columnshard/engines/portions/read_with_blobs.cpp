@@ -117,7 +117,6 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     }
 
     TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
-    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(TSnapshot(0, 0));
     constructor.MutablePortionConstructor().SetSchemaVersion(to->GetVersion());
     constructor.MutablePortionConstructor().MutableMeta().ResetTierName(targetTier);
 

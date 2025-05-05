@@ -23,9 +23,6 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "(portion_id:" << PortionId << ";"
        << "path_id:" << PathId << ";records_count:" << GetRecordsCount()
        << ";"
-          "min_schema_snapshot:("
-       << MinSnapshotDeprecated.DebugString()
-       << ");"
           "schema_version:"
        << SchemaVersion
        << ";"

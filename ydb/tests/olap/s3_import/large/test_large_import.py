@@ -108,9 +108,21 @@ class TestLargeS3Import:
             "1000": 5999989709,
         }[cls.scale]
 
-        logger.info(f"test configuration, scale: {cls.scale}, external source: {cls.external_source_path}, external table: {cls.external_table_path}, olap table: {cls.olap_table_path}, external sink: {cls.external_sink_path}, external sink table: {cls.external_sink_table_path}")
-        logger.info(f"target claster info, endpoint: {YdbCluster.ydb_endpoint}, database: {YdbCluster.ydb_database}, tables path: {YdbCluster.tables_path}, has key {'YES' if os.getenv('OLAP_YDB_OAUTH', None) else 'NO'}")
-        logger.info(f"results info, send-results: {ResultsProcessor.send_results}, endpoints: {get_external_param('results-endpoint', '-')}, dbs: {get_external_param('results-db', '-')}, tables: {get_external_param('results-table', '-')}, has key {'YES' if os.getenv('RESULT_YDB_OAUTH', None) else 'NO'}")
+        logger.info(f"test configuration, scale: {cls.scale}, "
+                    f"external source: {cls.external_source_path}, "
+                    f"external table: {cls.external_table_path}, "
+                    f"olap table: {cls.olap_table_path}, "
+                    f"external sink: {cls.external_sink_path}, "
+                    f"external sink table: {cls.external_sink_table_path}")
+        logger.info(f"target claster info, endpoint: {YdbCluster.ydb_endpoint}, "
+                    f"database: {YdbCluster.ydb_database}, "
+                    f"tables path: {YdbCluster.tables_path}, "
+                    f"has key {'YES' if os.getenv('OLAP_YDB_OAUTH', None) else 'NO'}")
+        logger.info(f"results info, send-results: {ResultsProcessor.send_results}, "
+                    f"endpoints: {get_external_param('results-endpoint', '-')}, "
+                    f"dbs: {get_external_param('results-db', '-')}, "
+                    f"tables: {get_external_param('results-table', '-')}, "
+                    f"has key {'YES' if os.getenv('RESULT_YDB_OAUTH', None) else 'NO'}")
 
         health_errors, health_warnings = YdbCluster.check_if_ydb_alive()
         logger.info(f"ydb health warnings: {health_warnings}")
@@ -233,7 +245,6 @@ class TestLargeS3Import:
     def run_import_from_s3(self):
         with self.ReportTime(self.results, "import"):
             self.cleanup_tables()
-            logger.info(f"running import from s3...")
             self.query(f"""
                 CREATE TABLE `{self.olap_table_path}` (
                     PRIMARY KEY (l_orderkey, l_linenumber)
@@ -244,7 +255,6 @@ class TestLargeS3Import:
 
     def run_export_to_s3(self):
         with self.ReportTime(self.results, "export"):
-            logger.info(f"running export to s3...")
             self.query(f"""
                 INSERT INTO `{self.external_sink_table_path}`
                 SELECT * FROM `{self.olap_table_path}`

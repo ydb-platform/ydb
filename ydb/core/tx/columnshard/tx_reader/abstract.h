@@ -8,16 +8,17 @@ namespace NKikimr {
 
 class ITxReader {
 private:
+    const bool IsAsync;
     YDB_READONLY_DEF(TString, StageName);
-    bool IsReady = false;
     bool IsStarted = false;
-    std::shared_ptr<ITxReader> NextReaderAfterLoad;
+    bool IsFinishedItself = false;
+    std::shared_ptr<ITxReader> NextReader;
     NColumnShard::TLoadTimeSignals PrechargeCounters;
     NColumnShard::TLoadTimeSignals ReaderCounters;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) = 0;
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) = 0;
 
-    virtual std::shared_ptr<ITxReader> BuildNextReaderAfterLoad() {
+    virtual std::shared_ptr<ITxReader> BuildNextReader() {
         return nullptr;
     }
 
@@ -27,18 +28,27 @@ public:
         StageName = prefix + StageName;
     }
 
-    ITxReader(const TString& stageName)
-        : StageName(stageName)
+    ITxReader(const TString& stageName, const bool isAsync = false)
+        : IsAsync(isAsync)
+        , StageName(stageName)
         , PrechargeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("PRECHARGE:" + stageName))
         , ReaderCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("EXECUTE:" + stageName)) {
         AFL_VERIFY(StageName);
+    }
+
+    bool GetIsAsync() const {
+        return IsAsync;
     }
 
     bool GetIsStarted() const {
         return IsStarted;
     }
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
+    virtual bool GetIsFinished() const {
+        return IsFinishedItself && (!NextReader || NextReader->GetIsFinished());
+    }
+
+    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
 };
 
 }   // namespace NKikimr

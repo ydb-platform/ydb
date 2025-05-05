@@ -7,18 +7,22 @@ class TTxCompositeReader: public ITxReader {
 private:
     using TBase = ITxReader;
     std::vector<std::shared_ptr<ITxReader>> Children;
+    size_t Pos = 0;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        AFL_VERIFY(false);
         return true;
     }
 
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
-        for (auto&& i : Children) {
-            if (!i->Execute(txc, ctx)) {
-                return false;
-            }
-        }
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        AFL_VERIFY(false);
         return true;
+    }
+
+    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
+
+    virtual bool GetIsFinished() const override {
+        return Children.size() == Pos;
     }
 
 public:

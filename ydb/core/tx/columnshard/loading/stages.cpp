@@ -223,7 +223,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     return true;
 }
 
-std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReaderAfterLoad() {
+std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReader() {
     if (Self->TablesManager.HasPrimaryIndex()) {
         return Self->TablesManager.MutablePrimaryIndex().BuildLoader(std::make_shared<TBlobGroupSelector>(Self->Info()));
     } else {

@@ -223,18 +223,12 @@ runs:
             params+=(
               --build "release" --sanitize="thread"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           *)

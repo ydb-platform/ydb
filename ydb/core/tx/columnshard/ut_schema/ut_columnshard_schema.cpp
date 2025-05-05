@@ -287,7 +287,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
     SetupSchema(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 2, spec),
+                         TTestSchema::AlterTableTxBody(tableId, 2, ydbSchema, testYdbPk, spec),
                          NOlap::TSnapshot(++planStep, ++txId));
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
@@ -315,7 +315,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
     // Disable TTL
     auto ok = ProposeSchemaTx(runtime, sender,
-                         TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
+                         TTestSchema::AlterTableTxBody(tableId, 3, ydbSchema, testYdbPk, ydbSchema, testYdbPk, TTestSchema::TTableSpecials()),
                          NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
@@ -347,7 +347,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 
-    if (spec.NeedTestStatistics(ydbPk)) {
+    if (spec.NeedTestStatistics(testYdbPk)) {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
         AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
@@ -631,7 +631,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         if (i) {
             const ui32 version = 2 * i + 1;
             SetupSchema(runtime, sender,
-                TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
+                TTestSchema::AlterTableTxBody(tableId, version, ydbSchema, testYdbPk, specs[i]),
                 NOlap::TSnapshot(++planStep, ++txId));
         }
         if (specs[i].HasTiers() || reboots) {
@@ -1097,7 +1097,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     spec.Tiers.back().EvictAfter = allow;
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
+    SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, ydbSchema, testYdbPk, spec),
                             NOlap::TSnapshot(++planStep, ++txId));
     csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
 
@@ -1176,7 +1176,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         ui64 txId = 100;
         ui64 generation = 0;
 
-        planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId++, schema, pk), txId++);
+        SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId++, schema, pk), NOlap::TSnapshot(++planStep, ++txId));
         for (auto& ydbType : intTypes) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));

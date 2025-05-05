@@ -635,6 +635,11 @@ public:
         }
     }
 
+    struct TStorageUnitStats {
+        ui32 BadStatus = 0;
+        ui32 Disks = 0;
+    };
+
     TString FilterDatabase;
     THashMap<TSubDomainKey, TString> FilterDomainKey;
     TVector<TActorId> PipeClients;
@@ -661,6 +666,8 @@ public:
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfig;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
     THashSet<TNodeId> UnknownStaticGroups;
+    THashMap<TString, TStorageUnitStats> DataCenterStats;
+    THashMap<TString, TStorageUnitStats> RackStats;
 
     const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
 
@@ -1712,6 +1719,47 @@ public:
         }
     }
 
+    TString GetDataCenterId(TNodeId nodeId) {
+        auto it = MergedNodeInfo.find(nodeId);
+        if (it != MergedNodeInfo.end()) {
+            return it->second->Location.GetDataCenterId();
+        }
+        return {};
+    }
+
+    TString GetRackId(TNodeId nodeId) {
+        auto it = MergedNodeInfo.find(nodeId);
+        if (it != MergedNodeInfo.end()) {
+            if (it->second->Location.GetDataCenterId() && it->second->Location.GetRackId()) {
+                return it->second->Location.GetRackId() + " [" + it->second->Location.GetDataCenterId() + "]";
+            }
+        }
+        return {};
+    }
+
+    void AggregateStorageUnitStats() {
+        for (const auto& it : PDisksMap) {
+            auto nodeId = it.second->GetKey().GetNodeId();
+            auto dataCenter = GetDataCenterId(nodeId);
+            auto rack = GetRackId(nodeId);
+
+            if (dataCenter && rack) {
+                rack = dataCenter + "/" + rack;
+                DataCenterStats[dataCenter].Disks++;
+                RackStats[rack].Disks++;
+
+                const auto& statusString = it.second->GetInfo().GetStatusV2();
+                const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+                auto status = descriptor->FindValueByName(statusString);
+
+                if (status->number() != NKikimrBlobStorage::ACTIVE) {
+                    DataCenterStats[dataCenter].BadStatus++;
+                    RackStats[rack].BadStatus++;
+                }
+            }
+        }
+    }
+
     void AggregateBSControllerState() {
         if (!HaveAllBSControllerInfo()) {
             return;
@@ -1740,6 +1788,7 @@ public:
         for (const auto& pDisk : PDisks->Get()->Record.GetEntries()) {
             auto pDiskId = GetPDiskId(pDisk.GetKey());
             PDisksMap.emplace(pDiskId, &pDisk);
+
         }
     }
 
@@ -2128,6 +2177,27 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
+    TString OverrideMessageIfZoneDown(const TNodeId nodeId, const TString& defaultMessage) {
+        auto dataCenter = GetDataCenterId(nodeId);
+        auto rack = GetRackId(nodeId);
+
+        if (dataCenter && rack) {
+            auto itDataCenter = DataCenterStats.find(dataCenter);
+            if (itDataCenter != DataCenterStats.end() && itDataCenter->second.Disks > 0
+                && itDataCenter->second.BadStatus * 95 / 100 > itDataCenter->second.Disks) {
+                return TStringBuilder() << "95% of Zone " << dataCenter << " is unavailable";
+            }
+
+            rack = dataCenter + "/" + rack;
+            auto itRack = RackStats.find(rack);
+            if (itRack != RackStats.end() && itRack->second.Disks > 0
+                && itRack->second.BadStatus * 95 / 100 > itRack->second.Disks) {
+                return TStringBuilder() << "95% of Rack " << rack << " is unavailable";
+            }
+        }
+        return defaultMessage;
+    }
+
     void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
@@ -2153,7 +2223,7 @@ public:
         auto status = descriptor->FindValueByName(statusString);
         if (!status) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                 TStringBuilder() << "Unknown PDisk state: " << statusString,
+                                 OverrideMessageIfZoneDown(itPDisk->second->GetKey().GetNodeId(), TStringBuilder() << "Unknown PDisk state: " << statusString),
                                  ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
@@ -2167,14 +2237,14 @@ public:
             }
             case NKikimrBlobStorage::FAULTY: {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW,
-                                     TStringBuilder() << "PDisk state is " << statusString,
+                                     OverrideMessageIfZoneDown(itPDisk->second->GetKey().GetNodeId(), TStringBuilder() << "PDisk state is " << statusString),
                                      ETags::PDiskState);
                 break;
             }
             case NKikimrBlobStorage::BROKEN:
             case NKikimrBlobStorage::TO_BE_REMOVED: {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                     TStringBuilder() << "PDisk state is " << statusString,
+                                     OverrideMessageIfZoneDown(itPDisk->second->GetKey().GetNodeId(), TStringBuilder() << "PDisk state is " << statusString),
                                      ETags::PDiskState);
                 break;
             }
@@ -2273,7 +2343,7 @@ public:
 
         if (status->number() == NKikimrBlobStorage::ERROR) {
             // the disk is not operational at all
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "VDisk is not available", ETags::VDiskState,{ETags::PDiskState});
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, OverrideMessageIfZoneDown(nodeId, TStringBuilder() << "VDisk is not available"), ETags::VDiskState,{ETags::PDiskState});
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -2282,7 +2352,7 @@ public:
             // throttling is active
             auto message = TStringBuilder() << "VDisk is being throttled, rate "
                 << vSlotInfo.GetThrottlingRate() << " per mille";
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, message, ETags::VDiskState);
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, OverrideMessageIfZoneDown(nodeId, message), ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -3196,6 +3266,7 @@ public:
         AggregateHiveInfo();
         AggregateHiveNodeStats();
         AggregateStoragePools();
+        AggregateStorageUnitStats();
 
         for (auto& [requestId, request] : TabletRequests.RequestsInFlight) {
             auto tabletId = request.TabletId;

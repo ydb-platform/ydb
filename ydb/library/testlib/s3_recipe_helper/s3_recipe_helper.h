@@ -29,8 +29,8 @@ namespace NTestUtils {
     TString GetObject(const TString& bucket, const TString& object, Aws::S3::S3Client& s3Client);
     TString GetObject(const TString& bucket, const TString& object);
 
-    std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client, const TString& prefix = {});
-    std::vector<TString> GetObjectKeys(const TString& bucket, const TString& prefix = {});
+    std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client);
+    std::vector<TString> GetObjectKeys(const TString& bucket);
 
     TString GetAllObjects(const TString& bucket, TStringBuf separator, Aws::S3::S3Client& s3Client);
     TString GetAllObjects(const TString& bucket, TStringBuf separator = {});

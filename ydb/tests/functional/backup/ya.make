@@ -31,6 +31,5 @@ ENDIF()
 END()
 
 RECURSE(
-    helpers
     s3_path_style
 )

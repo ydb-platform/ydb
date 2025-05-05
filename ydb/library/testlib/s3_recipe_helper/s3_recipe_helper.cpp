@@ -89,12 +89,9 @@ namespace NTestUtils {
         return GetObject(bucket, object, s3Client);
     }
 
-    std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client, const TString& prefix) {
+    std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client) {
         Aws::S3::Model::ListObjectsRequest listReq;
         listReq.WithBucket(bucket);
-        if (prefix) {
-            listReq.WithPrefix(prefix);
-        }
 
         Aws::S3::Model::ListObjectsOutcome outcome = s3Client.ListObjects(listReq);
         UNIT_ASSERT(outcome.IsSuccess());
@@ -107,10 +104,10 @@ namespace NTestUtils {
         return keys;
     }
 
-    std::vector<TString> GetObjectKeys(const TString& bucket, const TString& prefix) {
+    std::vector<TString> GetObjectKeys(const TString& bucket) {
         Aws::S3::S3Client s3Client = MakeS3Client();
 
-        return GetObjectKeys(bucket, s3Client, prefix);
+        return GetObjectKeys(bucket, s3Client);
     }
 
     TString GetAllObjects(const TString& bucket, TStringBuf separator, Aws::S3::S3Client& s3Client) {

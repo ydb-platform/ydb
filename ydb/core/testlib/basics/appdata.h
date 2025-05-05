@@ -109,6 +109,7 @@ namespace NKikimr {
         NKikimrConfig::TGraphConfig GraphConfig;
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
         NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
+        NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
 
     private:

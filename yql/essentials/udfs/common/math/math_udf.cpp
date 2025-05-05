@@ -3,8 +3,6 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
-namespace {
-
 extern const char TagRoundingMode[] = "MathRoundingMode";
 using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
 
@@ -91,6 +89,7 @@ using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
 using namespace NKikimr;
 using namespace NUdf;
 
+namespace {
     extern const char epsilon[] = "Epsilon";
     using TEpsilon = TNamedArg<double, epsilon>;
 

@@ -312,8 +312,13 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
-    if (PredicateRecipients.contains(event.GetTabletConsumer())) {
-        PredicateRecipients[event.GetTabletConsumer()] = true;
+    OnReadSetAck(event.GetTabletConsumer());
+}
+
+void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
+{
+    if (PredicateRecipients.contains(tabletId)) {
+        PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
         PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());

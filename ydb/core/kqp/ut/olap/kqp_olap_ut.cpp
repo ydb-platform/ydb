@@ -1566,30 +1566,30 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
-            //R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
 
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
             // TPCH Q6:
-            //R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))", // - Not pushed down
+            R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            //R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
             R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
             R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
-            //R"(CAST(dt as Timestamp) <= dt - inter64)", // - Not pushed down
-            //R"(CAST(dt as Timestamp64) <= dt - inter64)",// - Not pushed down
-            //R"(CAST(dt as Timestamp64) <= dt32 - inter64)",// - Not pushed down
-            //R"(dt <= dt - inter64)", // - Not pushed down
-            //R"(dt32 <= dt - inter64)", // - Not pushed down
-            //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
-            //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
+            R"(CAST(dt as Timestamp) <= dt - inter64)",
+            R"(CAST(dt as Timestamp64) <= dt - inter64)",
+            R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
+            R"(dt <= dt - inter64)", 
+            R"(dt32 <= dt - inter64)",
+            R"(CAST(dt32 as Date) <= dt - inter64)",
+            R"(dt <= dt - CAST(inter64 as Interval))",
             R"(dt32 <= dt32 - inter64)",
             R"(dt32 <= ts64 - inter64)",
 
@@ -1609,14 +1609,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
+            //if (result.GetStatus() != EStatus::SUCCESS) {
+            //    Cout << "Error in query planning: " << query << "\n";
+            //    continue;
+            //}
+
             TString plan = *result.GetStats()->GetPlan();
             auto ast = *result.GetStats()->GetAst();
     
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                               TStringBuilder() << "Predicate not pushed down. Query: " << query);
+            //if (ast.find("KqpOlapFilter") != std::string::npos) {
+            //    Cout << "Predicate not pushed, Query: " << query << "\n";
+            //    continue;
+            //}
 
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            //if (result.GetStatus() != EStatus::SUCCESS) {
+            //    Cout << "Error in query: " << query << "\n";
+            //    continue;
+            //}
         }
     }
 
@@ -1668,30 +1681,30 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
-            //R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
+            R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
 
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
-            //R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", // - Not pushed down
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
             // TPCH Q6:
-            //R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))", // - Not pushed down
+            R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            //R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", // - ERROR: Function local_function has no kernel matching input types (scalar[timestamp[us]]), code: 2013 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
             R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
             R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
 
-            //R"(CAST(dt as Timestamp) <= dt - inter64)", // - Not pushed down
-            //R"(CAST(dt as Timestamp64) <= dt - inter64)",// - Not pushed down
-            //R"(CAST(dt as Timestamp64) <= dt32 - inter64)",// - Not pushed down
-            //R"(dt <= dt - inter64)", // - Not pushed down
-            //R"(dt32 <= dt - inter64)", // - Not pushed down
-            //R"(CAST(dt32 as Date) <= dt - inter64)", // - Not pushed down
-            //R"(dt <= dt - CAST(inter64 as Interval))", // - Not pushed down
+            R"(CAST(dt as Timestamp) <= dt - inter64)",
+            R"(CAST(dt as Timestamp64) <= dt - inter64)",
+            R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
+            R"(dt <= dt - inter64)", 
+            R"(dt32 <= dt - inter64)",
+            R"(CAST(dt32 as Date) <= dt - inter64)",
+            R"(dt <= dt - CAST(inter64 as Interval))",
             R"(dt32 <= dt32 - inter64)",
             R"(dt32 <= ts64 - inter64)",
 

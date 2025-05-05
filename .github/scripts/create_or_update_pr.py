@@ -41,12 +41,8 @@ def create_or_update_pr(args, repo):
         print(f"PR #{current_pr.number} updated successfully.")
     else:
         print(f"No existing PR found. Creating a new PR from '{args.branch_for_pr}' to '{args.base_branch}'.")
-        try:
-            current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
-            print(f"New PR #{current_pr.number} created successfully.")
-        except Exception as e:
-            print(f"Error creating PR: {str(e)}")
-            raise
+        current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
+        print(f"New PR #{current_pr.number} created successfully.")
 
     pr_number = current_pr.number
     github_output = os.environ.get('GITHUB_OUTPUT')

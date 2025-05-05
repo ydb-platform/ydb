@@ -103,7 +103,7 @@ private:
     void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
         const auto checker = [numberQueries = Queries.size()](size_t checkSize, const TString& optionName) {
             if (checkSize > numberQueries) {
-                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of script queries is " << numberQueries;
+                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is " << numberQueries;
             }
         };
 

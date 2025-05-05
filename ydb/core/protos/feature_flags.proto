@@ -200,4 +200,5 @@ message TFeatureFlags {
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = false];
+    optional bool EnableThrottlingReport = 184 [default = false];
 }

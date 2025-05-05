@@ -3947,6 +3947,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_join-join_comp_inmem_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-left_join_predicate_push_parent_cross_join]": [
+        {
+            "checksum": "eb6c8e932205c67c28d8cc4911a15296",
+            "size": 3432,
+            "uri": "https://{canondata_backend}/1917492/f04a661c7e1e505e399b5906ce21e2c2a28c04d3/resource.tar.gz#test_sql2yql.test_join-left_join_predicate_push_parent_cross_join_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-left_join_with_self_aggr]": [
         {
             "checksum": "5ae7a0cc9f3c5302ca5e6631df5b6650",
@@ -10293,6 +10300,11 @@
     "test_sql_format.test[join-join_comp_inmem]": [
         {
             "uri": "file://test_sql_format.test_join-join_comp_inmem_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-left_join_predicate_push_parent_cross_join]": [
+        {
+            "uri": "file://test_sql_format.test_join-left_join_predicate_push_parent_cross_join_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-left_join_with_self_aggr]": [

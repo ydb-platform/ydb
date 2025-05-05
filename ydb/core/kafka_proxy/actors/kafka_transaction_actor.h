@@ -11,9 +11,9 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TKafkaTransactionActor : public NActors::TActor<TKafkaTransactionActor> {
+    class TTransactionActor : public NActors::TActor<TTransactionActor> {
 
-        using TBase = NActors::TActor<TKafkaTransactionActor>;
+        using TBase = NActors::TActor<TTransactionActor>;
         
         public:
             struct TTopicPartition {
@@ -48,8 +48,8 @@ namespace NKafka {
             };
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
-            TKafkaTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
-                TActor<TKafkaTransactionActor>(&TKafkaTransactionActor::StateFunc),
+            TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
+                TActor<TTransactionActor>(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerInstanceId({producerId, producerEpoch}),
                 DatabasePath(DatabasePath),

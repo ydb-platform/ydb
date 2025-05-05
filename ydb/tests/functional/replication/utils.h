@@ -25,7 +25,7 @@ namespace NUnitTest::NPrivate {
 }
 
 template<>
-inline void Out<NYdb::Dev::TUuidValue>(IOutputStream& os, const NYdb::Dev::TUuidValue& value) {
+inline void Out<NYdb::TUuidValue>(IOutputStream& os, const NYdb::TUuidValue& value) {
     os << value.ToString();
 }
 

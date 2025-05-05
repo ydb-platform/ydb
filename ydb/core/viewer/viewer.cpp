@@ -69,86 +69,103 @@ public:
                     monitoringAllowedSIDs.emplace_back(sid);
                 }
             }
-            mon->RegisterActorPage({
+
+            TVector<TMon::TRegisterActorPageFields> pagesFields;
+            pagesFields.push_back({
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "viewer/capabilities",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "operation",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "query",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "scheme",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
-            mon->RegisterActorPage({
+            pagesFields.push_back({
                 .RelPath = "storage",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
+            for (const auto& pageField : pagesFields) {
+                mon->RegisterActorPage(pageField);
+
+                // temporary handling of old paths
+                auto oldPath = TStringBuf(pageField.RelPath);
+                auto newPath = TString(oldPath.Before('/')) + "/json/" + TString(oldPath.After('/'));
+                mon->RegisterActorPage({
+                    .Title = pageField.Title,
+                    .RelPath = newPath,
+                    .ActorSystem = pageField.ActorSystem,
+                    .ActorId = pageField.ActorId,
+                    .UseAuth = pageField.UseAuth,
+                    .AllowedSIDs = pageField.AllowedSIDs,
+                });
+            }
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
                 auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
                 ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(

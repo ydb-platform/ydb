@@ -347,7 +347,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 
-    if (spec.NeedTestStatistics(testYdbPk)) {
+    if (spec.NeedTestStatistics(ydbPk)) {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
         AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
@@ -1176,6 +1176,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         ui64 txId = 100;
         ui64 generation = 0;
 
+        planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId++, schema, pk), txId++);
         for (auto& ydbType : intTypes) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));

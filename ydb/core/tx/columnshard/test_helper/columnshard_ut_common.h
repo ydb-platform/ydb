@@ -295,9 +295,18 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
-        InitSchema(columns, pk, specials, table->MutableSchema());
+        {   // preset
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+
+            // schema
+            InitSchema(columns, pk, specials, preset->MutableSchema());
+        }
+
         InitTiersAndTtl(specials, table->MutableTtlSettings());
 
         Cerr << "CreateInitShard: " << tx << "\n";
@@ -308,9 +317,11 @@ struct TTestSchema {
     }
 
     static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableEnsureTables()->AddTables();
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(path);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
@@ -323,11 +334,17 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
+    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         table->SetPathId(pathId);
         tx.MutableSeqNo()->SetRound(version);
+
+        auto* preset = table->MutableSchemaPreset();
+        preset->SetId(1);
+        preset->SetName("default");
+        InitSchema(columns, pk, specials, preset->MutableSchema());
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {
@@ -568,8 +585,8 @@ struct TestTableDescription {
     }
 };
 
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed = true);
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none", const ui64 txId = 10);
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed = true, const ui64 txId = 10);
 
 void PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);

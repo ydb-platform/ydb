@@ -22,7 +22,6 @@ protected:
 
     TPortionMetaConstructor MetaConstructor;
 
-    std::optional<TSnapshot> MinSnapshotDeprecated;
     std::optional<TSnapshot> RemoveSnapshot;
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
@@ -33,7 +32,6 @@ protected:
     TPortionInfoConstructor(TPortionInfo&& portion)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
@@ -55,7 +53,6 @@ public:
     TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
@@ -114,16 +111,7 @@ public:
         AFL_VERIFY(PathId);
     }
 
-    const TSnapshot& GetMinSnapshotDeprecatedVerified() const {
-        AFL_VERIFY(!!MinSnapshotDeprecated);
-        return *MinSnapshotDeprecated;
-    }
-
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
-
-    void SetMinSnapshotDeprecated(const TSnapshot& snap) {
-        MinSnapshotDeprecated = snap;
-    }
 
     void SetSchemaVersion(const ui64 version) {
         AFL_VERIFY(version);

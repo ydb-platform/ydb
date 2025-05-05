@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     backup_path_ut.cpp
+    encrypted_backup_ut.cpp
     ydb_backup_ut.cpp
 )
 

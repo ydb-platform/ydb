@@ -97,6 +97,8 @@ class TestCompatibility(object):
     def change_cluster_version(self, new_binary_paths):
         self.config.set_binary_paths(new_binary_paths)
         self.cluster.update_configurator_and_restart(self.config)
+        # TODO: replace with `self.driver.wait()`
+        time.sleep(60)
 
     def execute_scan_query(self, query_body):
         query = ydb.ScanQuery(query_body, {})
@@ -156,7 +158,7 @@ class TestCompatibility(object):
                             AUTO_PARTITIONING_BY_SIZE = ENABLED,
                             AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);""".format(store_type=store_type.upper())
                     )
-        
+
         create_table(self, store_type)
         upsert_and_check_sum(self)
         self.change_cluster_version(self.all_binary_paths[1])

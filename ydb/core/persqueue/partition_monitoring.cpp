@@ -56,12 +56,12 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
                     PROPERTIES("Information") {
                         PROPERTY("Total partition size, bytes", Size());
-                        PROPERTY("Total message count", (WorkZone.Head.GetNextOffset() - WorkZone.StartOffset));
-                        PROPERTY("StartOffset", WorkZone.StartOffset);
-                        PROPERTY("EndOffset", WorkZone.EndOffset);
-                        PROPERTY("LastOffset", WorkZone.Head.GetNextOffset());
+                        PROPERTY("Total message count", (Writer.Head.GetNextOffset() - Writer.StartOffset));
+                        PROPERTY("StartOffset", Writer.StartOffset);
+                        PROPERTY("EndOffset", Writer.EndOffset);
+                        PROPERTY("LastOffset", Writer.Head.GetNextOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
-                        PROPERTY("HeadOffset", WorkZone.Head.Offset << ", count: " << WorkZone.Head.GetCount());
+                        PROPERTY("HeadOffset", Writer.Head.Offset << ", count: " << Writer.Head.GetCount());
                     }
                 }
 
@@ -72,15 +72,15 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("OwnerPipes", OwnerPipes.size());
                         PROPERTY("Owners", Owners.size());
                         PROPERTY("Currently writing", Responses.size());
-                        PROPERTY("MaxCurrently writing", WorkZone.MaxWriteResponsesSize);
-                        PROPERTY("DataKeysBody size", WorkZone.DataKeysBody.size());
+                        PROPERTY("MaxCurrently writing", Writer.MaxWriteResponsesSize);
+                        PROPERTY("DataKeysBody size", Writer.DataKeysBody.size());
                     }
 
                     PROPERTIES("DataKeysHead size") {
-                        for (ui32 i = 0; i < WorkZone.DataKeysHead.size(); ++i) {
-                            PROPERTY(TStringBuilder() << i, WorkZone.DataKeysHead[i].KeysCount() << " sum: " << WorkZone.DataKeysHead[i].Sum()
-                                << " border: " << WorkZone.DataKeysHead[i].Border() << " recs: " << WorkZone.DataKeysHead[i].RecsCount()
-                                << " intCount: " << WorkZone.DataKeysHead[i].InternalPartsCount());
+                        for (ui32 i = 0; i < Writer.DataKeysHead.size(); ++i) {
+                            PROPERTY(TStringBuilder() << i, Writer.DataKeysHead[i].KeysCount() << " sum: " << Writer.DataKeysHead[i].Sum()
+                                << " border: " << Writer.DataKeysHead[i].Border() << " recs: " << Writer.DataKeysHead[i].RecsCount()
+                                << " intCount: " << Writer.DataKeysHead[i].InternalPartsCount());
                         }
                     }
 
@@ -115,7 +115,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         }
                         TABLEBODY() {
                             ui32 i = 0;
-                            for (const auto& d : WorkZone.DataKeysBody) {
+                            for (const auto& d : Writer.DataKeysBody) {
                                 TABLER() {
                                     TABLED() {out << "DataBody";}
                                     TABLED() {out << i++;}
@@ -128,19 +128,19 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 }
                             }
                             ui32 currentLevel = 0;
-                            for (ui32 p = 0; p < WorkZone.HeadKeys.size(); ++p) {
-                                ui32 size  = WorkZone.HeadKeys[p].Size;
+                            for (ui32 p = 0; p < Writer.HeadKeys.size(); ++p) {
+                                ui32 size  = Writer.HeadKeys[p].Size;
                                 while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                                     ++currentLevel;
                                 Y_ABORT_UNLESS(size < CompactLevelBorder[currentLevel]);
                                 TABLER() {
                                     TABLED() {out << "DataHead[" << currentLevel << "]";}
                                     TABLED() {out << i++;}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(WorkZone.HeadKeys[p].Timestamp);}
-                                    TABLED() {out << WorkZone.HeadKeys[p].Key.GetOffset();}
-                                    TABLED() {out << WorkZone.HeadKeys[p].Key.GetPartNo();}
-                                    TABLED() {out << WorkZone.HeadKeys[p].Key.GetCount();}
-                                    TABLED() {out << WorkZone.HeadKeys[p].Key.GetInternalPartsCount();}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(Writer.HeadKeys[p].Timestamp);}
+                                    TABLED() {out << Writer.HeadKeys[p].Key.GetOffset();}
+                                    TABLED() {out << Writer.HeadKeys[p].Key.GetPartNo();}
+                                    TABLED() {out << Writer.HeadKeys[p].Key.GetCount();}
+                                    TABLED() {out << Writer.HeadKeys[p].Key.GetInternalPartsCount();}
                                     TABLED() {out << size;}
                                 }
                             }
@@ -167,11 +167,11 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     TABLED() {out << (i++);}
                                 }
                             }
-                            if (!WorkZone.DataKeysBody.empty() && WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount() < WorkZone.Head.Offset) {
+                            if (!Writer.DataKeysBody.empty() && Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount() < Writer.Head.Offset) {
                                 TABLER() {
-                                    TABLED() {out << (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount());}
-                                    TABLED() {out << WorkZone.Head.Offset;}
-                                    TABLED() {out << (WorkZone.Head.Offset - (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount()));}
+                                    TABLED() {out << (Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount());}
+                                    TABLED() {out << Writer.Head.Offset;}
+                                    TABLED() {out << (Writer.Head.Offset - (Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount()));}
                                     TABLED() {out << (i++);}
                                 }
 
@@ -237,7 +237,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}
                                     TABLED() {out << userInfo.Offset;}
-                                    TABLED() {out << (WorkZone.EndOffset - userInfo.Offset);}
+                                    TABLED() {out << (Writer.EndOffset - userInfo.Offset);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}

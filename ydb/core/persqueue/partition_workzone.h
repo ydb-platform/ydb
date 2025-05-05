@@ -8,8 +8,8 @@ namespace NKikimr::NPQ {
 
 class TKeyLevel;
 
-struct TPartitionWorkZone {
-    explicit TPartitionWorkZone(const TPartitionId& partition);
+struct TPartitionWriter {
+    explicit TPartitionWriter(const TPartitionId& partition);
 
     void CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
                               const ui32 totalLevels,
@@ -100,19 +100,19 @@ struct TPartitionWorkZone {
 };
 
 inline
-ui64 TPartitionWorkZone::GetSize() const
+ui64 TPartitionWriter::GetSize() const
 {
     return BodySize + Head.PackedSize;
 }
 
 inline
-ui64 TPartitionWorkZone::GetHeadGapSize() const
+ui64 TPartitionWriter::GetHeadGapSize() const
 {
     return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
 }
 
 inline
-bool TPartitionWorkZone::IsNothingWritten() const
+bool TPartitionWriter::IsNothingWritten() const
 {
     return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }

@@ -65,8 +65,7 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
         using IndexColumns = NColumnShard::Schema::IndexColumns;
         auto removeSnapshot = portion.GetRemoveSnapshotOptional();
         db.Table<IndexColumns>()
-            .Key(0, 0, row.ColumnId, portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(),
-                portion.GetPortionId(), row.Chunk)
+            .Key(0, 0, row.ColumnId, 1, 1, portion.GetPortionId(), row.Chunk)
             .Update(NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
                 NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
                 NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
@@ -96,7 +95,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         using IndexColumns = NColumnShard::Schema::IndexColumns;
         db.Table<IndexColumns>()
-            .Key(0, 0, row.ColumnId, portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(),
+            .Key(0, 0, row.ColumnId, 1, 1,
                 portion.GetPortionId(), row.Chunk)
             .Delete();
     }
@@ -162,8 +161,6 @@ bool TDbWrapper::LoadPortions(const std::optional<TInternalPathId> pathId,
                 portion->SetShardingVersion(rowset.template GetValue<IndexPortions::ShardingVersion>());
             }
             portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
-            portion->SetMinSnapshotDeprecated(TSnapshot(
-                rowset.template GetValue<IndexPortions::MinSnapshotPlanStep>(), rowset.template GetValue<IndexPortions::MinSnapshotTxId>()));
 
             NKikimrTxColumnShard::TIndexPortionMeta metaProto;
             const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
@@ -211,8 +208,8 @@ void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row)
     db.Table<IndexIndexes>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), 0).Delete();
 }
 
-bool TDbWrapper::LoadIndexes(
-    const std::optional<TInternalPathId> pathId, const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) {
+bool TDbWrapper::LoadIndexes(const std::optional<TInternalPathId> pathId,
+    const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     const auto pred = [&](auto& rowset) {
@@ -222,8 +219,8 @@ bool TDbWrapper::LoadIndexes(
 
         while (!rowset.EndOfSet()) {
             NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-            callback(TInternalPathId::FromRawValue(rowset.template GetValue<IndexIndexes::PathId>()), rowset.template GetValue<IndexIndexes::PortionId>(),
-                std::move(chunkLoadContext));
+            callback(TInternalPathId::FromRawValue(rowset.template GetValue<IndexIndexes::PathId>()),
+                rowset.template GetValue<IndexIndexes::PortionId>(), std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
                 return false;
@@ -263,8 +260,8 @@ TConclusion<THashMap<TInternalPathId, std::map<NOlap::TSnapshot, TGranuleShardin
         snapshot.DeserializeFromString(rowset.GetValue<Schema::ShardingInfo::Snapshot>()).Validate();
         NSharding::TGranuleShardingLogicContainer logic;
         logic.DeserializeFromString(rowset.GetValue<Schema::ShardingInfo::Logic>()).Validate();
-        TGranuleShardingInfo gShardingInfo(
-            logic, snapshot, rowset.GetValue<Schema::ShardingInfo::VersionId>(), TInternalPathId::FromRawValue(rowset.GetValue<Schema::ShardingInfo::PathId>()));
+        TGranuleShardingInfo gShardingInfo(logic, snapshot, rowset.GetValue<Schema::ShardingInfo::VersionId>(),
+            TInternalPathId::FromRawValue(rowset.GetValue<Schema::ShardingInfo::PathId>()));
         AFL_VERIFY(result[gShardingInfo.GetPathId()].emplace(gShardingInfo.GetSinceSnapshot(), gShardingInfo).second);
 
         if (!rowset.Next()) {

@@ -451,7 +451,6 @@ namespace NKikimr::NColumnShard {
     }
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
-
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
         while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
             runtime.SimulateSleep(TDuration::Seconds(1));
@@ -465,8 +464,7 @@ namespace NKikimr::NColumnShard {
         }
     }
 
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec, const ui64 txId) {
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec) {
         using namespace NTxUT;
         NOlap::TSnapshot snapshot(10, 10);
         TString txBody;
@@ -478,7 +476,6 @@ namespace NKikimr::NColumnShard {
         }
         SetupSchema(runtime, sender, txBody, snapshot, true);
     }
-
 
     void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;

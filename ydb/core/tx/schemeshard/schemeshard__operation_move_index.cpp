@@ -596,14 +596,17 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcIndexPath, dstIndexPath)));
 
-    TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-    TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+    for(const auto& implTable : srcIndexPath.Base()->GetChildren()) {
+        TString srcImplTableName = implTable.first;
+        TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
 
-    Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
+        Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTable.second);
 
-    TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+        TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-    result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+        result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+    }
+
     return result;
 }
 

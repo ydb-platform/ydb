@@ -39,7 +39,6 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
                 return TPortionAccessorConstructor(std::make_unique<TCompactedPortionInfoConstructor>(granule));
         }
     }();
-    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(TSnapshot(0, 0));
     constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
     return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
 }

@@ -20,8 +20,8 @@ void TWrittenPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
             NIceDb::TUpdate<IndexPortions::InsertWriteId>((ui64)*InsertWriteId),
             NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(GetMinSnapshotDeprecated().GetPlanStep()),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(GetMinSnapshotDeprecated().GetTxId()),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
             NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
 }
 

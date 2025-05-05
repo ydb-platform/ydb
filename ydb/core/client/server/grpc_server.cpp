@@ -303,7 +303,7 @@ private:
         if (Server->IncRequest()) {
 
             RequestSize = Request.ByteSize();
-            Counters->StartProcessing(RequestSize);
+            Counters->StartProcessing(RequestSize, TInstant::Max());
             RequestTimer.Reset();
             InProgress_ = true;
 

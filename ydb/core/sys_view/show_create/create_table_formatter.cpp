@@ -441,7 +441,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     if (!tableDesc.GetTableIndexes().empty()) {
         try {
             for (const auto& indexDesc: tableDesc.GetTableIndexes()) {
-                if (indexDesc.GetIndexImplTableDescriptions().size() == 1) {
+                if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
                     FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
                 }
             }

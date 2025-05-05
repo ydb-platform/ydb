@@ -33,6 +33,5 @@ END()
 RECURSE(
     encrypted_backup
     helpers
-    parallel_backup_database
     s3_path_style
 )

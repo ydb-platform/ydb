@@ -15,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/core/testlib/default
     ydb/core/util
     ydb/core/wrappers/ut_helpers

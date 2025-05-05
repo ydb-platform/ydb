@@ -161,6 +161,22 @@ protected:
         }
     }
 
+    TString DebugListDir(const TString& path) { // Debug listing for specified dir
+        auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
+        TStringBuilder l;
+        if (res.IsSuccess()) {
+            for (const auto& entry : res.GetChildren()) {
+                if (l) {
+                    l << ", ";
+                }
+                l << "\"" << entry.Name << "\"";
+            }
+        } else {
+            l << "List dir \"" << path << "\" failed: " << res.GetIssues().ToOneLineString();
+        }
+        return l;
+    }
+
 protected:
     TDataShardExportFactory DataShardExportFactory;
     NYdb::TKikimrWithGrpcAndRootSchema Server;

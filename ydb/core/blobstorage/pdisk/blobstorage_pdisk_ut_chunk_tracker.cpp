@@ -106,6 +106,35 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetSpaceColor(owner1, &occupancy), TColor::YELLOW);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetSpaceColor(owner2, &occupancy), TColor::LIGHT_YELLOW);
     }
+
+    Y_UNIT_TEST(AddOwnerWithWeight) {
+        using namespace NPDisk;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 80,
+            .ExpectedOwnerCount = 4,
+        };
+
+        TString errorReason;
+        bool ok;
+
+        ok = chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason);
+        UNIT_ASSERT_C(ok, errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 80);
+        
+        chunkTracker.AddOwner(101, TVDiskID(), 1);
+        chunkTracker.AddOwner(102, TVDiskID(), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 20);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 40);
+
+        // Despite odd weights don't occur in real,
+        // TChunkTracker still handles in correctly 
+        chunkTracker.AddOwner(103, TVDiskID(), 5);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 10);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 20);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(103), 50);
+    }
 }
 
 #undef UNIT_ASSERT_EQUAL_X

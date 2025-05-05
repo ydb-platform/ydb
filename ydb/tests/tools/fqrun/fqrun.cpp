@@ -304,9 +304,7 @@ protected:
 
         options.AddLongOption('s', "sql", "Query SQL text to execute")
             .RequiredArgument("str")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                ExecutionOptions.Queries.emplace_back(LoadFile(option->CurVal()));
-            });
+            .AppendTo(&ExecutionOptions.Queries);
 
         options.AddLongOption('c', "connection", "External datasource connection protobuf FederatedQuery::ConnectionContent")
             .RequiredArgument("file")

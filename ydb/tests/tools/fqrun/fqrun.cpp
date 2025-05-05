@@ -494,9 +494,7 @@ protected:
 
         options.AddLongOption('S', "scope-id", "Query scope id")
             .RequiredArgument("scope")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                ExecutionOptions.Scopes.emplace_back(option->CurValOrDef());
-            });
+            .AppendTo(&ExecutionOptions.Scopes);
 
         // Cluster settings
 

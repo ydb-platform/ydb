@@ -1,5 +1,7 @@
 #pragma once
+
 #include "worker.h"
+
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/library/signals/owner.h>
@@ -8,8 +10,6 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <queue>
 
 namespace NKikimr::NConveyor {
 

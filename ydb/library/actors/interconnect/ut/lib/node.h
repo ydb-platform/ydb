@@ -18,11 +18,13 @@ class TNode {
     THolder<TActorSystem> ActorSystem;
 
 public:
+    static constexpr ui32 DefaultInflight() { return 512 * 1024; }
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
           TChannelsConfig channelsSettings = TChannelsConfig(),
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
-          TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = 512 * 1024) {
+          TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
+          ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -45,6 +47,7 @@ public:
         common->Settings.SendBufferDieLimitInMB = 512;
         common->Settings.TotalInflightAmountOfData = inflight;
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
+        common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);

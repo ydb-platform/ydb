@@ -462,6 +462,11 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
+    if (specials.UseLegacyCompaction) {
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer legacyOptimizer;
+        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = legacyOptimizer;
+        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
+    }
 }
 
 }
@@ -509,7 +514,7 @@ namespace NKikimr::NColumnShard {
         TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec, const ui64 txId) {
         using namespace NTxUT;
         TString txBody;
-        auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
+        auto specials = TTestSchema::TTableSpecials().WithCodec(codec).WithLegacyCompactionOptimizer(table.UseLegacyCompaction);
         if (table.InStore) {
             txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
         } else {

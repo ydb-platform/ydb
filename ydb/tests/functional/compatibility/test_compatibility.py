@@ -15,21 +15,20 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 from decimal import Decimal
 
-
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+ydbd_24_4 = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-24-4")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
-    [last_stable_binary_path, current_binary_path],
-    [last_stable_binary_path, [last_stable_binary_path, current_binary_path]],
-    [current_binary_path, last_stable_binary_path],
     [current_binary_path, current_binary_path],
+    [ydbd_24_4, current_binary_path],
+    [ydbd_24_4, [ydbd_24_4, current_binary_path]],
+    [current_binary_path, ydbd_24_4],
 ]
 all_binary_combinations_ids = [
-    "last_stable_to_current",
-    "last_stable_to_current_mixed",
-    "current_to_last_stable",
     "current_to_current",
+    "stable_24_4_to_current",
+    "stable_24_4_to_current_mixed",
+    "current_to_stable_24_4",
 ]
 
 logger = logging.getLogger(__name__)
@@ -290,7 +289,7 @@ class TestCompatibility(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
-            "--partition-size=25",
+            # "--partition-size=25", # not supported in stable yet
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -318,16 +317,17 @@ class TestCompatibility(object):
             "tpch",
             "run",
             "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
             "--check-canonical",
-            "--retries",
-            "5",  # in row tables we have to retry query by design
+            # "--retries", # not supported in stable yet
+            # "5",  # in row tables we have to retry query by design
             "--json",
             result_json_path,
             "--output",
             query_output_path,
         ]
+        if store_type == "row":
+            run_command.append("--exclude=12,17")
+            
         clean_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

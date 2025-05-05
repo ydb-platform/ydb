@@ -8,8 +8,12 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
+    NArrow::TGeneralContainer batch(1);
+    IIndexInfo::AddSnapshotColumns(batch, GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max());
+    auto maxVersion = NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+
     return std::make_unique<NArrow::NMerger::TMergePartialStream>(GetReadMetadata()->GetReplaceKey(), GetProgramInputColumns()->GetSchema(),
-        GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames());
+        GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames(), maxVersion);
 }
 
 ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources) {

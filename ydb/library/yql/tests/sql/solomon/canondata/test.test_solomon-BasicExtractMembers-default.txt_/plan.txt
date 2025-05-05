@@ -1,0 +1,86 @@
+{
+    "Detailed" = {
+        "Operations" = [
+            {
+                "Id" = 8u;
+                "Name" = "DqStage";
+                "Streams" = {
+                    "Program" = []
+                }
+            };
+            {
+                "Id" = 6u;
+                "Name" = "DqStage";
+                "Streams" = {
+                    "Program" = []
+                };
+                "DependsOn" = [
+                    8u
+                ]
+            };
+            {
+                "Id" = 3u;
+                "Name" = "ResPull!";
+                "DependsOn" = [
+                    6u
+                ]
+            };
+            {
+                "Id" = 1u;
+                "Name" = "Commit!";
+                "DependsOn" = [
+                    3u
+                ]
+            }
+        ];
+        "OperationRoot" = 1u;
+        "Providers" = [];
+        "OperationStats" = {
+            "Commit!" = 1u;
+            "DqStage" = 2u;
+            "ResPull!" = 1u
+        }
+    };
+    "Basic" = {
+        "nodes" = [
+            {
+                "id" = 8u;
+                "level" = 1u;
+                "name" = "DqStage #8";
+                "type" = "op"
+            };
+            {
+                "id" = 6u;
+                "level" = 2u;
+                "name" = "DqStage #6";
+                "type" = "op"
+            };
+            {
+                "id" = 3u;
+                "level" = 3u;
+                "name" = "ResPull!";
+                "type" = "op"
+            };
+            {
+                "id" = 1u;
+                "level" = 4u;
+                "name" = "Commit!";
+                "type" = "op"
+            }
+        ];
+        "links" = [
+            {
+                "source" = 8u;
+                "target" = 6u
+            };
+            {
+                "source" = 6u;
+                "target" = 3u
+            };
+            {
+                "source" = 3u;
+                "target" = 1u
+            }
+        ]
+    }
+}

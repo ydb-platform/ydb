@@ -566,6 +566,8 @@ private:
 
     void AddPendingEvent(IEventHandle* ev);
     void ProcessPendingEvents();
+
+    void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
 };
 
 

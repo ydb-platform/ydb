@@ -68,7 +68,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const TString& transactionalId = "");
 
-        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToPartions);
+        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToConsumerOffsets);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 

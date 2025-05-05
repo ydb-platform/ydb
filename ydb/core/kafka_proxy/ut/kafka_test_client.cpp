@@ -84,7 +84,7 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToPartions) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToConsumerOffsets) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -92,15 +92,15 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
     TOffsetCommitRequestData request;
     request.GroupId = groupId;
 
-    for (const auto& topicToPartitions : topicsToPartions) {
+    for (const auto& topicToConsumerOffsets : topicsToConsumerOffsets) {
         NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic topic;
-        topic.Name = topicToPartitions.first;
+        topic.Name = topicToConsumerOffsets.first;
 
-        for (auto partitionAndOffset : topicToPartitions.second) {
+        for (auto consumerOffset : topicToConsumerOffsets.second) {
             NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
-            partition.PartitionIndex = partitionAndOffset.PartitionIndex;
-            partition.CommittedOffset = partitionAndOffset.Offset;
-            partition.CommittedMetadata = partitionAndOffset.Metadata;
+            partition.PartitionIndex = consumerOffset.PartitionIndex;
+            partition.CommittedOffset = consumerOffset.Offset;
+            partition.CommittedMetadata = consumerOffset.Metadata;
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);

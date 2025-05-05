@@ -1087,6 +1087,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
+            // ToDo: return here to change ASSERT to check that metadata is transfered correctly
+            // after realization of metadata saving is completed.
             for (auto p = partitions.begin(); p != partitions.end(); p++) {
                 UNIT_ASSERT_VALUES_EQUAL(p->Metadata, "");
             }

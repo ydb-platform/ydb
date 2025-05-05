@@ -2316,6 +2316,8 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
 
     const ui64 alignedPartSize = Max<ui64>(alignedLastPartSize, (firstSmallPartIdx ? largePartSize : smallPartSize));
 
+    const size_t crcTail = crcMode == TErasureType::ECrcMode::CrcModeWholePart ? 4 : 0;
+
     outRange->BeginPartIdx = Max<ui64>();
     outRange->EndPartIdx = Max<ui64>();
     outRange->PartRanges.resize(dataParts);
@@ -2355,8 +2357,8 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
                     out.WholeEnd = wholeEnd;
                 } else {
                     // not last part
-                    out.End = largePartSize;
-                    out.AlignedEnd = largePartSize;
+                    out.End = largePartSize + crcTail;
+                    out.AlignedEnd = largePartSize + crcTail;
                     out.WholeEnd = partEndWholeOffset;
                 }
             } else {
@@ -2398,9 +2400,9 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
                     out.WholeEnd = wholeEnd;
                 } else {
                     // not last part
-                    out.End = smallPartSize;
+                    out.End = smallPartSize + crcTail;
                     // Align up to the large part size for restoration purposes
-                    out.AlignedEnd = alignedPartSize;
+                    out.AlignedEnd = alignedPartSize + crcTail;
                     out.WholeEnd = partEndWholeOffset;
                 }
             } else {
@@ -2442,8 +2444,8 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
                     out.WholeEnd = wholeEnd;
                 } else {
                     // up to the end
-                    out.End = lastPartSize;
-                    out.AlignedEnd = alignedPartSize;
+                    out.End = lastPartSize + crcTail;
+                    out.AlignedEnd = alignedPartSize + crcTail;
                     out.WholeEnd = partEndWholeOffset;
                 }
                 // It IS the LAST data part of the blob

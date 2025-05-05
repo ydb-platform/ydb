@@ -234,6 +234,7 @@ public:
 
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
+                Cerr << "put; " << ptr->Id << " buffSize# " << ptr->Buffer.size() << " partSize# " << Info->Type.PartSize(ptr->Id) << Endl;
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, Info->GetVDiskId(orderNumber),
                     false, nullptr, Blobs[ptr->BlobIdx].Deadline, Blackboard.PutHandleClass);
 

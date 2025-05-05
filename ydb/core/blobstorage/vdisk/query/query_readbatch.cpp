@@ -59,6 +59,7 @@ namespace NKikimr {
                     tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
+                    Cerr << __PRETTY_FUNCTION__ << " partId# " << partId << " dataSize# " << size << Endl;
                     Y_VERIFY_DEBUG_S(size, Ctx->VCtx->VDiskLogPrefix);
                     tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
                 }
@@ -81,6 +82,7 @@ namespace NKikimr {
                 const TLogoBlobID blobId(CurID, partId);
                 const ui32 partSize = diskBlob.GetPartSize(partId - 1);
                 Y_VERIFY_S(partSize == Ctx->VCtx->Top->GType.PartSize(blobId), Ctx->VCtx->VDiskLogPrefix);
+                Cerr << "TREAdBatcher " << CurID << " partSize# " << partSize << " PartSize# " << Ctx->VCtx->Top->GType.PartSize(blobId) << Endl;
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];

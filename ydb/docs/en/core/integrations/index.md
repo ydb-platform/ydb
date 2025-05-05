@@ -17,6 +17,10 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% include notitle [Table of contents](visualization/_includes/toc-table.md) %}
 
+## Orchestration {#orchestration}
+
+{% include notitle [Table of contents](orchestration/_includes/toc-table.md) %}
+
 ## Data ingestion {#ingestion}
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table.md) %}
@@ -32,6 +36,10 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 ## Object–relational mapping (ORM) {#orm}
 
 {% include notitle [Table of contents](orm/_includes/toc-table.md) %}
+
+## Vector search {#vectorsearch}
+
+{% include notitle [Table of contents](vectorsearch/_includes/toc-table.md) %}
 
 ## See also
 

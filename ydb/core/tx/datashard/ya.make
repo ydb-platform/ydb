@@ -8,7 +8,6 @@ SRCS(
     build_and_wait_dependencies_unit.cpp
     build_data_tx_out_rs_unit.cpp
     build_distributed_erase_tx_out_rs_unit.cpp
-    build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
     build_write_out_rs_unit.cpp
@@ -168,11 +167,9 @@ SRCS(
     key_conflicts.cpp
     key_conflicts.h
     key_validator.cpp
-    kmeans_helper.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
-    local_kmeans.cpp
     make_scan_snapshot_unit.cpp
     make_snapshot_unit.cpp
     memory_state_migration.cpp
@@ -200,9 +197,7 @@ SRCS(
     remove_lock_change_records.cpp
     remove_locks.cpp
     remove_schema_snapshots.cpp
-    reshuffle_kmeans.cpp
     restore_unit.cpp
-    sample_k.cpp
     scan_common.cpp
     setup_sys_locks.h
     store_and_send_out_rs_unit.cpp
@@ -220,6 +215,13 @@ SRCS(
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
+
+    build_index/prefix_kmeans.cpp
+    build_index/kmeans_helper.cpp
+    build_index/local_kmeans.cpp
+    build_index/sample_k.cpp
+    build_index/secondary_index.cpp
+    build_index/reshuffle_kmeans.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
@@ -293,8 +295,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        export_s3_buffer_raw.cpp
-        export_s3_buffer_zstd.cpp
+        export_s3_buffer.cpp
         export_s3_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp
@@ -304,14 +305,15 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(
+    build_index/ut
     ut_background_compaction
-    ut_build_index
     ut_change_collector
     ut_change_exchange
     ut_column_stats
     ut_compaction
     ut_data_cleanup
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup
@@ -321,7 +323,6 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
-    ut_local_kmeans
     ut_locks
     ut_minikql
     ut_minstep
@@ -332,9 +333,7 @@ RECURSE_FOR_TESTS(
     ut_read_table
     ut_reassign
     ut_replication
-    ut_reshuffle_kmeans
     ut_rs
-    ut_sample_k
     ut_sequence
     ut_snapshot
     ut_stats

@@ -193,6 +193,7 @@ struct TMetricCollector {
     TLogHistogramBuilder LogHistBuilder;
     TTypedPoint LastPoint;
     TVector<TTypedPoint> TimeSeries;
+    bool IsMemOnly = false;
 
     bool SeenTsOrValue = false;
     bool SeenTimeseries = false;
@@ -207,6 +208,7 @@ struct TMetricCollector {
         HistogramBuilder.Clear();
         SummaryBuilder.Clear();
         LogHistBuilder.Clear();
+        IsMemOnly = false;
     }
 
     void AddLabel(const TLabel& label) {
@@ -220,6 +222,10 @@ struct TMetricCollector {
     template <typename T>
     void SetLastValue(T value) {
         LastPoint.SetValue(value);
+    }
+
+    void SetMemOnly(bool isMemOnly) {
+        IsMemOnly = isMemOnly;
     }
 
     void SaveLastPoint() {
@@ -419,6 +425,10 @@ private:
         Consumer_->OnSummaryDouble(time, std::move(snapshot));
     }
 
+    void OnMemOnly(bool isMemOnly) override{
+        Consumer_->OnMemOnly(isMemOnly);
+    }
+
 private:
     const TCommonParts CommonParts_;
     IMetricConsumer* Consumer_;
@@ -442,6 +452,7 @@ class TDecoderJson final: public NJson::TJsonCallbacks {
             METRIC_LABELS,
             METRIC_TYPE,
             METRIC_MODE, // TODO: must be deleted
+            METRIC_MEMONLY,
             METRIC_TIMESERIES,
             METRIC_TS,
             METRIC_VALUE,
@@ -858,7 +869,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 } else if (key == TStringBuf("log_hist")) {
                     State_.ToNext(TState::METRIC_LOG_HIST);
                 } else if (key == TStringBuf("memOnly")) {
-                    // deprecated. Skip it without errors for backward compatibility
+                    State_.ToNext(TState::METRIC_MEMONLY);
                 } else {
                     ErrorMsg_ = TStringBuilder() << "unexpected key \"" << key << "\" in a metric schema";
                     return false;
@@ -1033,6 +1044,18 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
         return true;
     }
 
+    bool OnBoolean(bool value) override {
+        switch (State_.Current()) {
+            case TState::METRIC_MEMONLY:
+                LastMetric_.IsMemOnly = value;
+                State_.ToPrev();
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+
     void ConsumeMetric() {
         // for backwad compatibility all unknown metrics treated as gauges
         if (LastMetric_.Type == EMetricType::UNKNOWN) {
@@ -1055,7 +1078,12 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
             MetricConsumer_->OnLabelsEnd();
         }
 
-        // (3) values
+        // (3) flags
+        if (LastMetric_.IsMemOnly) {
+            MetricConsumer_->OnMemOnly(true);
+        }
+
+        // (4) values
         switch (LastMetric_.Type) {
             case EMetricType::GAUGE:
                 LastMetric_.Consume([this](TInstant time, EMetricValueType valueType, TMetricValue value) {

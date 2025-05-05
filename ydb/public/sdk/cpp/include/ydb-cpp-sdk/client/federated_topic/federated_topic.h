@@ -1,23 +1,27 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #include <unordered_set>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 using NTopic::TPrintable;
 using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
 
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 
+using TAsyncDescribeTopicResult = NTopic::TAsyncDescribeTopicResult;
+
 //! Federated partition session.
 struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFederatedPartitionSession> {
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
+
+    friend class TDeferredCommit;
 
 public:
     TFederatedPartitionSession(const NTopic::TPartitionSession::TPtr& partitionSession,
@@ -221,10 +225,10 @@ public:
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
     //! Add offsets range to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
 
     //! Add offset to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 offset);
 
     //! Commit all added offsets.
     void Commit();
@@ -397,7 +401,7 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! See description in TFederatedEventHandlers class.
     FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
 
-    
+
 
     //! Read policy settings
 
@@ -516,6 +520,32 @@ public:
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
+    struct TClusterInfo {
+        enum class EStatus : int {
+            STATUS_UNSPECIFIED,
+            AVAILABLE,
+            READ_ONLY,
+            UNAVAILABLE,
+        };
+        std::string Name;
+        std::string Endpoint;
+        std::string Path;
+        EStatus Status;
+        // TODO: Id, Weight, ...?
+        //! Replaces Endpoint and Database for federated clusters
+        void AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const;
+        //! Prepend Database for federated clusters
+        void AdjustTopicPath(std::string& path) const;
+        //! Usable for at least read operations
+        bool IsAvailableForRead() const;
+        bool IsAvailableForWrite() const;
+    };
+
+    //! Discover all clusters for federated topic.
+    // Will return single cluster with empty name for non-federated clusters.
+    // May return empty list if FederatedTopicClient was destroyed when future fired.
+    NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
+
 protected:
     void OverrideCodec(NTopic::ECodec codecId, std::unique_ptr<NTopic::ICodec>&& codecImpl);
 
@@ -525,7 +555,7 @@ private:
 
 } // namespace NYdb::NFederatedTopic
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using namespace NFederatedTopic;
 

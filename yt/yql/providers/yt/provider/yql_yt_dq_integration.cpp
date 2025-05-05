@@ -157,7 +157,7 @@ public:
     {
     }
 
-    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TString& cluster, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
+    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
         TVector<TVector<ui64>> groupIdColumnarStats;
         groupIdColumnarStats.reserve(groupIdPathInfos.size());
         TVector<bool> lookupsInfo;
@@ -175,7 +175,7 @@ public:
                 flattenPaths.push_back(pathInfo);
             }
         }
-        auto result = EstimateDataSize(cluster, flattenPaths, Nothing(), *State_, ctx);
+        auto result = EstimateDataSize(flattenPaths, Nothing(), *State_, ctx);
         size_t statIdx = 0;
         size_t pathIdx = 0;
         for (const auto& [idx, pathInfos]: Enumerate(groupIdPathInfos)) {
@@ -302,7 +302,7 @@ public:
         } else {
             TVector<TVector<std::tuple<ui64, ui64, NYT::TRichYPath>>> partitionTuplesArr;
             ui64 sumAllTableSizes = 0;
-            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
+            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (settings.CanFallback && hasErasure && parts > maxTasks) {
                 auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
@@ -420,6 +420,7 @@ public:
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
                 if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
@@ -466,6 +467,9 @@ public:
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
+                            return false;
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddMessage(ctx, "dynamic store read", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -587,6 +591,7 @@ public:
                 auto& groupIdPathInfo = clusterToGroups[cluster];
 
                 const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+                const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
 
                 auto input = maybeRead.Cast().Input();
                 for (auto section: input) {
@@ -602,6 +607,9 @@ public:
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");
+                            return Nothing();
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
                             return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
@@ -626,7 +634,7 @@ public:
         }
         ui64 dataSize = 0;
         for (auto& [cluster, info]: clusterToNodesAndErasure) {
-            auto res = EstimateColumnStats(ctx, cluster, clusterToGroups[cluster], dataSize);
+            auto res = EstimateColumnStats(ctx, clusterToGroups[cluster], dataSize);
             auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(cluster);
             if (!codecCpu) {
                 continue;

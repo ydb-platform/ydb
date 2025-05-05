@@ -102,7 +102,7 @@ namespace {
             requestContext.SetPathPattern(handlerWithParamsO->PathPattern);
 
             try {
-                ctx.ExecutorThread.RegisterActor(handlerWithParamsO->Handler(requestContext));
+                ctx.Register(handlerWithParamsO->Handler(requestContext));
             } catch (const std::exception& e) {
                 requestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Error in request processing: " << e.what());
                 return;

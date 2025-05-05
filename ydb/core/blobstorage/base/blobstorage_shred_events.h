@@ -19,6 +19,12 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvControllerShredResponse : TEventPB<TEvControllerShredResponse,
             NKikimrBlobStorage::TEvControllerShredResponse, TEvBlobStorage::EvControllerShredResponse> {
         TEvControllerShredResponse() = default;
+
+        TEvControllerShredResponse(ui64 generation, bool completed, ui32 progress) {
+            Record.SetCurrentGeneration(generation);
+            Record.SetCompleted(completed);
+            Record.SetProgress10k(progress);
+        }
     };
 
 }

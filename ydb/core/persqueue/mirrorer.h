@@ -11,7 +11,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 
@@ -91,7 +91,7 @@ private:
 private:
     template<class TEvent>
     void ScheduleWithIncreasingTimeout(const TActorId& recipient, TDuration& timeout, const TDuration& maxTimeout, const TActorContext &ctx) {
-        ctx.ExecutorThread.ActorSystem->Schedule(timeout, new IEventHandle(recipient, SelfId(), new TEvent()));
+        ctx.Schedule(timeout, std::make_unique<IEventHandle>(recipient, SelfId(), new TEvent()));
         timeout = Min(timeout * 2, maxTimeout);
     }
 

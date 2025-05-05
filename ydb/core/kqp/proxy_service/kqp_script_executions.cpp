@@ -14,9 +14,9 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -68,6 +68,30 @@ NYql::TIssues DeserializeIssues(const TString& issuesSerialized) {
         issues.AddIssue(*issuePtr);
     }
     return issues;
+}
+
+template <typename TProto>
+void SerializeBinaryProto(const TProto& proto, NJson::TJsonValue& value) {
+    value.SetType(NJson::EJsonValueType::JSON_MAP);
+
+    const auto config = NProtobufJson::TProto2JsonConfig()
+        .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64EncodeBytesTransform>());
+
+    NProtobufJson::Proto2Json(proto, value["encoded_proto"], config);
+}
+
+template <typename TProto>
+void DeserializeBinaryProto(const NJson::TJsonValue& value, TProto& proto) {
+    const auto& valueMap = value.GetMap();
+    const auto encodedProto = valueMap.find("encoded_proto");
+    if (encodedProto == valueMap.end()) {
+        return NProtobufJson::Json2Proto(value, proto, NProtobufJson::TJson2ProtoConfig());
+    }
+
+    const auto config = NProtobufJson::TJson2ProtoConfig()
+        .AddStringTransform(MakeIntrusive<NProtobufJson::TBase64DecodeBytesTransform>());
+
+    NProtobufJson::Json2Proto(encodedProto->second, proto, config);
 }
 
 
@@ -316,8 +340,19 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
             resultsTtl = Min(operationTtl, resultsTtl);
         }
 
+        const auto& eventProto = Event->Get()->Record;
+        const TKqpRunScriptActorSettings settings = {
+            .Database = eventProto.GetRequest().GetDatabase(),
+            .ExecutionId = ExecutionId,
+            .LeaseGeneration = 1,
+            .LeaseDuration = LeaseDuration,
+            .ResultsTtl = resultsTtl,
+            .ProgressStatsPeriod = Event->Get()->ProgressStatsPeriod,
+            .Counters = Counters,
+        };
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto, settings, QueryServiceConfig));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
@@ -2272,7 +2307,7 @@ private:
         NJson::TJsonValue::TArray& jsonArray = value.GetArraySafe();
         jsonArray.resize(sinks.size());
         for (size_t i = 0; i < sinks.size(); ++i) {
-            NProtobufJson::Proto2Json(sinks[i], jsonArray[i], NProtobufJson::TProto2JsonConfig());
+            SerializeBinaryProto(sinks[i], jsonArray[i]);
         }
 
         NJsonWriter::TBuf serializedSinks;
@@ -2416,7 +2451,7 @@ public:
                 value.GetValuePointer(i, &serializedSink);
 
                 NKqpProto::TKqpExternalSink sink;
-                NProtobufJson::Json2Proto(*serializedSink, sink);
+                DeserializeBinaryProto(*serializedSink, sink);
                 Response->Sinks.push_back(sink);
             }
         }

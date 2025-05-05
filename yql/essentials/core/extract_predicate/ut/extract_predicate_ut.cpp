@@ -6,6 +6,11 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
@@ -53,7 +58,20 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         NSQLTranslation::TTranslationSettings settings;
         settings.SyntaxVersion = 1;
 
-        TAstParseResult astRes = SqlToYql(program, settings);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+            nullptr
+        );
+
+        TAstParseResult astRes = SqlToYql(translators, program, settings);
         UNIT_ASSERT(astRes.IsOk());
         TExprNode::TPtr exprRoot;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));

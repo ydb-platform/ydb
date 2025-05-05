@@ -387,7 +387,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
-            actorSystem = ctx.ExecutorThread.ActorSystem,
+            actorSystem = ctx.ActorSystem(),
             selfId = SelfId()
         ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
             THolder<TEvPQ::TEvCredentialsCreated> ev;
@@ -572,7 +572,7 @@ void TMirrorer::StartWaitNextReaderEvent(const TActorContext& ctx) {
 
     future.Subscribe(
         [
-            actorSystem = ctx.ExecutorThread.ActorSystem,
+            actorSystem = ctx.ActorSystem(),
             selfId = SelfId(),
             futureId=futureId
         ](const NThreading::TFuture<void>&) {

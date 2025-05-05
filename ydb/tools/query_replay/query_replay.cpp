@@ -1,8 +1,8 @@
 #include "query_replay.h"
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -114,7 +114,7 @@ public:
         PartIterator.reset();
 
         TActorId self = SelfId();
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         const TString& path = QueryTablePath;
         Client->GetSession().Subscribe([path, self, actorSystem](NTable::TAsyncCreateSessionResult asyncResult) {
             const NTable::TCreateSessionResult& result = asyncResult.GetValue();
@@ -138,7 +138,7 @@ public:
 
     void Continue() {
         TActorId self = SelfId();
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         PartIterator->ReadNext().Subscribe([self, actorSystem](NTable::TAsyncSimpleStreamPart<TResultSet> asyncResult) {
             NTable::TSimpleStreamPart<TResultSet> tablePart = asyncResult.ExtractValue();
             if (tablePart.EOS()) {

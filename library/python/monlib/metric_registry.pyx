@@ -74,6 +74,12 @@ cdef class MetricRegistry:
         return native_labels
 
     @staticmethod
+    cdef TMetricOpts _py_to_native_opts(dict kwargs) except *:
+        cdef TMetricOpts native_opts = TMetricOpts()
+        native_opts.MemOnly = kwargs.get('mem_only', False)
+        return native_opts
+
+    @staticmethod
     cdef _native_to_py_labels(const TLabels& native_labels):
         result = dict()
 
@@ -94,6 +100,7 @@ cdef class MetricRegistry:
 
     def _histogram(self, labels, is_rate, hist_type, **kwargs):
         cdef TLabels native_labels = MetricRegistry._py_to_native_labels(labels)
+        cdef TMetricOpts native_opts = MetricRegistry._py_to_native_opts(kwargs)
         cdef IHistogramCollectorPtr collector
         cdef TVector[double] native_buckets
 
@@ -117,9 +124,9 @@ cdef class MetricRegistry:
 
         cdef THistogram* native_hist
         if is_rate:
-            native_hist = self.__wrapped.Get().HistogramRate(native_labels, move(collector))
+            native_hist = self.__wrapped.Get().HistogramRateWithOpts(native_labels, move(collector), native_opts)
         else:
-            native_hist = self.__wrapped.Get().HistogramCounter(native_labels, move(collector))
+            native_hist = self.__wrapped.Get().HistogramCounterWithOpts(native_labels, move(collector), native_opts)
 
         return Histogram.from_ptr(native_hist)
 
@@ -135,52 +142,72 @@ cdef class MetricRegistry:
 
         return labels
 
-    def gauge(self, labels):
+    def gauge(self, labels, **kwargs):
         """
         Gets a gauge counter or creates a new one in case counter with the specified labels
         does not exist
 
         :param labels: A dict of labels which identifies counter
+
+        Keyword arguments:
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
+
         :returns: Gauge counter
         """
         cdef TLabels native_labels = MetricRegistry._py_to_native_labels(labels)
-        native_gauge = self.__wrapped.Get().Gauge(native_labels)
+        cdef TMetricOpts native_opts = MetricRegistry._py_to_native_opts(kwargs)
+        native_gauge = self.__wrapped.Get().GaugeWithOpts(native_labels, native_opts)
         return Gauge.from_ptr(native_gauge)
 
-    def int_gauge(self, labels):
+    def int_gauge(self, labels, **kwargs):
         """
         Gets a gauge counter or creates a new one in case counter with the specified labels
         does not exist
 
         :param labels: A dict of labels which identifies counter
+
+        Keyword arguments:
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
+
         :returns: IntGauge counter
         """
         cdef TLabels native_labels = MetricRegistry._py_to_native_labels(labels)
-        native_gauge = self.__wrapped.Get().IntGauge(native_labels)
+        cdef TMetricOpts native_opts = MetricRegistry._py_to_native_opts(kwargs)
+        native_gauge = self.__wrapped.Get().IntGaugeWithOpts(native_labels, native_opts)
         return IntGauge.from_ptr(native_gauge)
 
-    def counter(self, labels):
+    def counter(self, labels, **kwargs):
         """
         Gets a counter or creates a new one in case counter with the specified labels
         does not exist
 
         :param labels: A dict of labels which identifies counter
+
+        Keyword arguments:
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
+
         :returns: Counter counter
         """
         cdef TLabels native_labels = MetricRegistry._py_to_native_labels(labels)
-        native_counter = self.__wrapped.Get().Counter(native_labels)
+        cdef TMetricOpts native_opts = MetricRegistry._py_to_native_opts(kwargs)
+        native_counter = self.__wrapped.Get().CounterWithOpts(native_labels, native_opts)
         return Counter.from_ptr(native_counter)
 
-    def rate(self, labels):
+    def rate(self, labels, **kwargs):
         """
         Gets a rate counter or creates a new one in case counter with the specified labels
         does not exist
 
         :param labels: A dict of labels which identifies counter
+
+        Keyword arguments:
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
+
         :returns: Rate counter
         """
         cdef TLabels native_labels = MetricRegistry._py_to_native_labels(labels)
-        native_rate = self.__wrapped.Get().Rate(native_labels)
+        cdef TMetricOpts native_opts = MetricRegistry._py_to_native_opts(kwargs)
+        native_rate = self.__wrapped.Get().RateWithOpts(native_labels, native_opts)
         return Rate.from_ptr(native_rate)
 
     def histogram_counter(self, labels, hist_type, **kwargs):
@@ -197,6 +224,7 @@ cdef class MetricRegistry:
         :param base: the exponential growth factor for buckets' width (exponential)
         :param scale: linear scale for the buckets. Must be >= 1.0 (exponential)
         :param start_value: the upper bound of the first bucket (linear)
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
 
         :returns: Histogram counter
 
@@ -236,6 +264,7 @@ cdef class MetricRegistry:
         :param base: the exponential growth factor for buckets' width (exponential)
         :param scale: linear scale for the buckets. Must be >= 1.0 (exponential)
         :param start_value: the upper bound of the first bucket (linear)
+        :param mem_only: flag for memOnly metric (see: https://m.yandex-team.ru/docs/concepts/glossary#memonly)
 
         :returns: Histogram counter
 

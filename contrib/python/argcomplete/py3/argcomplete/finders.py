@@ -515,7 +515,7 @@ class CompletionFinder(object):
             # Bash mangles completions which contain characters in COMP_WORDBREAKS.
             # This workaround has the same effect as __ltrim_colon_completions in bash_completion
             # (extended to characters other than the colon).
-            if last_wordbreak_pos:
+            if last_wordbreak_pos is not None:
                 completions = [c[last_wordbreak_pos + 1 :] for c in completions]
             special_chars += "();<>|&!`$* \t\n\"'"
         elif cword_prequote == '"':

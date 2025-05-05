@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -726,8 +726,8 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
                 DELETE
                 FROM %s
-                WHERE graph_id = "%s";
-            )", prefix.c_str(), StatesTable, graphId.c_str());
+                WHERE graph_id = $graph_id;
+            )", prefix.c_str(), StatesTable);
 
             auto future = session.ExecuteDataQuery(
                 query,

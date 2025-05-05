@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     read_metadata.cpp
+    resolver.cpp
 )
 
 PEERDIR(

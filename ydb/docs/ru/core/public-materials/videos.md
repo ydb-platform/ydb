@@ -10,6 +10,10 @@
 
 - 2024
 
+  {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}
+
+  {% include [HighLoad](./_includes/conferences/2024/HighLoad.md) %}
+
   {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
 
   {% include [Ya_Tech](./_includes/conferences/2024/Yandex_Infrastructure.md) %}

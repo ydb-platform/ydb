@@ -40,25 +40,23 @@ namespace {
 
 void CheckError(const TString& requestId, NHttp::IResponsePtr response)
 {
-    TErrorResponse errorResponse(static_cast<int>(response->GetStatusCode()), requestId);
-
     if (const auto* ytError = response->GetHeaders()->Find("X-YT-Error")) {
-        errorResponse.ParseFromJsonError(*ytError);
-    }
-    if (errorResponse.IsOk()) {
-        return;
-    }
+        TYtError error;
+        error.ParseFrom(*ytError);
 
-    YT_LOG_ERROR("RSP %v - HTTP %v - %v",
+        TErrorResponse errorResponse(std::move(error), requestId);
+        if (errorResponse.IsOk()) {
+            return;
+        }
+
+        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             requestId,
             response->GetStatusCode(),
             errorResponse.AsStrBuf());
 
-    ythrow errorResponse;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
+        ythrow errorResponse;
+    }
+}
 
 void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 {
@@ -71,7 +69,7 @@ void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 
     if (const auto& serviceTicketAuth = tx.GetContext().ServiceTicketAuth) {
         const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
-        headers->Add("X-Ya-Service-Ticket", serviceTicket);
+        headers->Add("X-Ya-Service-Ticket", TString(serviceTicket));
     } else if (const auto& token = tx.GetContext().Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }
@@ -198,91 +196,6 @@ private:
 
     NConcurrency::IThreadPoolPtr PingerPool_;
     NHttp::IClientPtr HttpClient_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TThreadPerTransactionPinger
-    : public ITransactionPinger
-{
-public:
-    ~TThreadPerTransactionPinger() override
-    {
-        if (Running_) {
-            RemoveTransaction(*PingableTx_);
-        }
-    }
-
-    ITransactionPingerPtr GetChildTxPinger() override
-    {
-        return MakeIntrusive<TThreadPerTransactionPinger>();
-    }
-
-    void RegisterTransaction(const TPingableTransaction& pingableTx) override
-    {
-        YT_VERIFY(!Running_);
-        YT_VERIFY(PingableTx_ == nullptr);
-
-        PingableTx_ = &pingableTx;
-        Running_ = true;
-
-        PingerThread_ = std::make_unique<TThread>(
-            TThread::TParams{Pinger, this}.SetName("pingable_tx"));
-        PingerThread_->Start();
-    }
-
-    bool HasTransaction(const TPingableTransaction& pingableTx) override
-    {
-        return PingableTx_ == &pingableTx && Running_;
-    }
-
-    void RemoveTransaction(const TPingableTransaction& pingableTx) override
-    {
-        YT_VERIFY(HasTransaction(pingableTx));
-
-        Running_ = false;
-        if (PingerThread_) {
-            PingerThread_->Join();
-        }
-    }
-
-private:
-    static void* Pinger(void* opaque)
-    {
-        static_cast<TThreadPerTransactionPinger*>(opaque)->Pinger();
-        return nullptr;
-    }
-
-    void Pinger()
-    {
-        auto [minPingInterval, maxPingInterval] = PingableTx_->GetPingInterval();
-        while (Running_) {
-            TDuration waitTime = minPingInterval + (maxPingInterval - minPingInterval) * RandomNumber<float>();
-            try {
-                PingableTx_->Ping();
-            } catch (const std::exception& e) {
-                if (auto* errorResponse = dynamic_cast<const TErrorResponse*>(&e)) {
-                    if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
-                        break;
-                    } else if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::Timeout)) {
-                        waitTime = TDuration::MilliSeconds(0);
-                    }
-                }
-                // Else do nothing, going to retry this error.
-            }
-
-            TInstant t = Now();
-            while (Running_ && Now() - t < waitTime) {
-                NDetail::TWaitProxy::Get()->Sleep(TDuration::MilliSeconds(100));
-            }
-        }
-    }
-
-private:
-    const TPingableTransaction* PingableTx_ = nullptr;
-
-    std::atomic<bool> Running_ = false;
-    std::unique_ptr<TThread> PingerThread_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

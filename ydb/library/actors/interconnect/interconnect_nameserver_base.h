@@ -23,18 +23,17 @@ namespace NActors {
 
         void HandleMissedNodeId(TEvInterconnect::TEvResolveNode::TPtr& ev,
                                 const TActorContext& ctx,
-                                const TInstant&) {
+                                const TMonotonic&) {
             auto reply = new TEvLocalNodeInfo;
-            reply->NodeId = ev->Get()->Record.GetNodeId();
+            reply->NodeId = ev->Get()->NodeId;
             ctx.Send(ev->Sender, reply);
         }
 
         void Handle(TEvInterconnect::TEvResolveNode::TPtr& ev,
                     const TActorContext& ctx) {
             const TEvInterconnect::TEvResolveNode* request = ev->Get();
-            auto& record = request->Record;
-            const ui32 nodeId = record.GetNodeId();
-            const TInstant deadline = record.HasDeadline() ? TInstant::FromValue(record.GetDeadline()) : TInstant::Max();
+            const ui32 nodeId = request->NodeId;
+            const TMonotonic deadline = request->Deadline;
             auto it = NodeTable.find(nodeId);
 
             if (it == NodeTable.end()) {
@@ -50,7 +49,7 @@ namespace NActors {
             const TEvResolveAddress* request = ev->Get();
 
             IActor::RegisterWithSameMailbox(
-                CreateResolveActor(request->Address, request->Port, ev->Sender, this->SelfId(), TInstant::Max()));
+                CreateResolveActor(request->Address, request->Port, ev->Sender, this->SelfId(), TMonotonic::Max()));
         }
 
         void Handle(TEvInterconnect::TEvListNodes::TPtr& ev,

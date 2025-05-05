@@ -1,8 +1,8 @@
 diff --git a/include/__tuple/sfinae_helpers.h b/include/__tuple/sfinae_helpers.h
-index 90e9b1e..c76e7e0 100644
+index a785cec..4a6ff1f 100644
 --- a/include/__tuple/sfinae_helpers.h
 +++ b/include/__tuple/sfinae_helpers.h
-@@ -46,7 +46,7 @@ struct __tuple_sfinae_base {
+@@ -41,7 +41,7 @@ struct __tuple_sfinae_base {
    static auto __do_test(...) -> false_type;
  
    template <class _FromArgs, class _ToArgs>
@@ -11,7 +11,7 @@ index 90e9b1e..c76e7e0 100644
  };
  
  // __tuple_constructible
-@@ -54,11 +54,17 @@ struct __tuple_sfinae_base {
+@@ -49,11 +49,17 @@ struct __tuple_sfinae_base {
  template <class _Tp,
            class _Up,
            bool = __tuple_like_ext<__libcpp_remove_reference_t<_Tp> >::value,
@@ -31,35 +31,3 @@ index 90e9b1e..c76e7e0 100644
      : public __tuple_sfinae_base::__constructible< typename __make_tuple_types<_Tp>::type,
                                                     typename __make_tuple_types<_Up>::type > {};
  
-diff --git a/include/__tuple/tuple_element.h b/include/__tuple/tuple_element.h
-index 2b9ac66..e811a21 100644
---- a/include/__tuple/tuple_element.h
-+++ b/include/__tuple/tuple_element.h
-@@ -63,11 +63,26 @@ __indexed<_Idx, _Tp> __at_index(__indexed<_Idx, _Tp> const&);
- 
- } // namespace __indexer_detail
- 
-+#    if !defined(__CUDACC__) || !defined(_MSC_VER)
- template <size_t _Idx, class... _Types>
- using __type_pack_element _LIBCPP_NODEBUG = typename decltype(__indexer_detail::__at_index<_Idx>(
-     __indexer_detail::__indexer< __tuple_types<_Types...>,
-                                  typename __make_tuple_indices<sizeof...(_Types)>::type >{}))::type;
--#  endif
-+#    else // !defined(__CUDACC__) || !defined(_MSC_VER)
-+template <size_t _Idx, class... _Types>
-+struct __y_type_pack_element {
-+  using __t1 = typename __make_tuple_indices<sizeof...(_Types)>::type;
-+  using __t2 = __indexer_detail::__indexer<__tuple_types<_Types...>, __t1>;
-+  using __t3 = decltype(__indexer_detail::__at_index<_Idx>(__t2{}));
-+  using __t4 = typename __t3::type;
-+};
-+
-+template <size_t _Idx, class... _Types>
-+using __type_pack_element = typename __y_type_pack_element<_Idx, _Types...>::__t4;
-+
-+#    endif // !defined(__CUDACC__) || !defined(_MSC_VER)
-+
-+#  endif // __has_builtin(__type_pack_element)
- 
- template <size_t _Ip, class... _Types>
- struct _LIBCPP_TEMPLATE_VIS tuple_element<_Ip, __tuple_types<_Types...> > {

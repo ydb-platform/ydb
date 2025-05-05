@@ -10,7 +10,6 @@
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
-
 namespace NYT::NDriver {
 
 using namespace NConcurrency;

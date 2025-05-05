@@ -85,7 +85,7 @@ bool TErrorCodeRegistry::TErrorCodeRangeInfo::Contains(int value) const
     return From <= value && value <= To;
 }
 
-void TErrorCodeRegistry::RegisterErrorCodeRange(int from, int to, TString namespaceName, std::function<TString(int)> formatter)
+void TErrorCodeRegistry::RegisterErrorCodeRange(int from, int to, std::string namespaceName, std::function<std::string(int)> formatter)
 {
     YT_VERIFY(from <= to);
 
@@ -117,24 +117,26 @@ void TErrorCodeRegistry::CheckCodesAgainstRanges() const
     }
 }
 
-TString TErrorCodeRegistry::ParseNamespace(const std::type_info& errorCodeEnumTypeInfo)
+std::string TErrorCodeRegistry::ParseNamespace(const std::type_info& errorCodeEnumTypeInfo)
 {
-    TString name;
+    std::string name;
     // Ensures that "EErrorCode" is found as a substring in the type name and stores the prefix before
     // the first occurrence into #name.
     YT_VERIFY(StringSplitter(
         TypeName(errorCodeEnumTypeInfo)).SplitByString("EErrorCode").Limit(2).TryCollectInto(&name, &std::ignore));
 
     // TypeName returns name in form "enum ErrorCode" on Windows
-    if (name.StartsWith("enum ")) {
-        name.remove(0, 5);
+    constexpr TStringBuf enumPrefix = "enum ";
+    if (name.starts_with(enumPrefix)) {
+        name.erase(0, enumPrefix.size());
     }
 
     // If the enum was declared directly in the global namespace, #name should be empty.
     // Otherwise, #name should end with "::".
+    constexpr TStringBuf namespaceSeparator = "::";
     if (!name.empty()) {
-        YT_VERIFY(name.EndsWith("::"));
-        name.resize(name.size() - 2);
+        YT_VERIFY(name.ends_with(namespaceSeparator));
+        name.resize(name.size() - namespaceSeparator.size());
     }
     return name;
 }

@@ -6,8 +6,8 @@
 
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
-* [Право доступа](../concepts/glossary.md#access-right)
-* [Список разрешений](../concepts/glossary.md#access-acl)
+* [Права доступа](../concepts/glossary.md#access-right)
+* [Список доступов](../concepts/glossary.md#access-acl)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
 * [Группа](../concepts/glossary.md#access-group)
@@ -18,7 +18,12 @@
 
 ## Пользователь {#user}
 
-Для создания, изменения и удаления пользователей {{ ydb-short-name }} есть команды:
+Пользователи в {{ ydb-short-name }} могут создаваться в разных источниках:
+
+- локальные пользователи в базах данных {{ ydb-short-name }};
+- внешние пользователи из сторонних служб доступа к каталогам.
+
+Для создания, изменения и удаления [локальных пользователей](../concepts/glossary.md#access-user) {{ ydb-short-name }} есть команды:
 
 * [{#T}](../yql/reference/syntax/create-user.md)
 * [{#T}](../yql/reference/syntax/alter-user.md)
@@ -32,16 +37,19 @@
 
 Подробнее про первоначальное развертывание:
 
-* [Ansible](../devops/ansible/initial-deployment.md)
-* [Kubernetes](../devops/kubernetes/initial-deployment.md)
-* [Вручную](../devops/manual/initial-deployment.md)
+* [Ansible](../devops/deployment-options/ansible/initial-deployment.md)
+* [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
+* [Вручную](../devops/deployment-options/manual/initial-deployment.md)
+* [{#T}](./builtin-security.md)
 
 {% endnote %}
 
+### SID {#sid}
+
 {{ ydb-short-name }} позволяет работать с [пользователями](../concepts/glossary.md#access-user) из разных каталогов и систем, и они отличаются [SID](../concepts/glossary.md#access-sid) с использованием суффикса.
 
-Суффикс `@<subsystem>` идентифицирует «источник пользователя» или «auth-домен», внутри которых гарантируется уникальность всех `login`. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) имена пользователей будут `user1@ldap` и `user2@ldap`.  
-Если указан `login` без суффикса, то имеются в виду пользователи, непосредственно созданные в кластере {{ ydb-short-name }}.
+Суффикс `@<auth-domain>` идентифицирует «источник пользователя», внутри которого гарантируется уникальность всех логинов или идентификаторов пользователей. Например, в случае [аутентификации LDAP](authentication.md#ldap-auth-provider) SID'ы пользователей будут `user1@ldap` и `user2@ldap`.<br/>
+У локальных пользователей пустой auth-domain. Если SID пользователя не содержит суффикса, то имеется в виду локальный пользователь, созданный и существующий непосредственно в кластере {{ ydb-short-name }}.
 
 ## Группа {#group}
 
@@ -62,11 +70,11 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Право {#right}
+## Права доступа {#right}
 
-[Права](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 
-У каждого объекта доступа есть список разрешений — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
+У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 
 По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
 
@@ -96,7 +104,7 @@
 
 {% note info %}
 
-Для владельца не проверяются [списки разрешений](../concepts/glossary.md#access-control-list) на данный [объект доступа](../concepts/glossary.md#access-object).
+Для владельца не проверяются [списки прав](../concepts/glossary.md#access-control-list) на данный [объект доступа](../concepts/glossary.md#access-object).
 
 Он имеет полный набор прав на объект.
 

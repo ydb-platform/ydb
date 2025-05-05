@@ -114,12 +114,12 @@ namespace NPage {
             // N.B. Get Min/Max version and GetDeltaTxId below read from the same record position
             // right after column entries. Up to caller to decide what kind of data is there
 
-            TRowVersion GetMaxVersion(const TPartScheme::TGroupInfo& group) const noexcept {
+            TRowVersion GetMaxVersion(const TPartScheme::TGroupInfo& group) const {
                 Y_DEBUG_ABORT_UNLESS(IsErased());
                 return GetTail<TVersion>(group)->Get();
             }
 
-            TRowVersion GetMinVersion(const TPartScheme::TGroupInfo& group) const noexcept {
+            TRowVersion GetMinVersion(const TPartScheme::TGroupInfo& group) const {
                 Y_DEBUG_ABORT_UNLESS(IsVersioned());
                 auto* v = GetTail<TVersion>(group);
                 if (IsErased()) {
@@ -128,12 +128,12 @@ namespace NPage {
                 return v->Get();
             }
 
-            ui64 GetDeltaTxId(const TPartScheme::TGroupInfo& group) const noexcept {
+            ui64 GetDeltaTxId(const TPartScheme::TGroupInfo& group) const {
                 Y_DEBUG_ABORT_UNLESS(IsDelta());
                 return GetTail<TDelta>(group)->GetTxId();
             }
 
-            const TRecord* GetAltRecord(size_t index) const noexcept {
+            const TRecord* GetAltRecord(size_t index) const {
                 if (index == 0) {
                     return this;
                 }
@@ -170,7 +170,7 @@ namespace NPage {
     public:
         using TIter = TBlock::TIterator;
 
-        TDataPage(const TSharedData *raw = nullptr) noexcept
+        TDataPage(const TSharedData *raw = nullptr)
         {
             Set(raw);
         }
@@ -195,7 +195,7 @@ namespace NPage {
             return BaseRow_;
         }
 
-        TDataPage& Set(const TSharedData *raw = nullptr) noexcept
+        TDataPage& Set(const TSharedData *raw = nullptr)
         {
             Page = { };
 
@@ -203,12 +203,12 @@ namespace NPage {
                 const void* base = raw->data();
                 auto data = NPage::TLabelWrapper().Read(*raw, EPage::DataPage);
 
-                Y_ABORT_UNLESS(data.Version == 1, "Unknown EPage::DataPage version");
+                Y_ENSURE(data.Version == 1, "Unknown EPage::DataPage version");
 
                 if (data.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */
 
-                    Y_ABORT_UNLESS(data == ECodec::LZ4, "Only LZ4 encoding allowed");
+                    Y_ENSURE(data == ECodec::LZ4, "Only LZ4 encoding allowed");
 
                     Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast");
                     auto size = Codec->DecompressedLength(data.Page);
@@ -250,7 +250,7 @@ namespace NPage {
         }
 
         TIter LookupKey(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
+                        ESeek seek, const TKeyCellDefaults *keyDefaults) const
         {
             if (!key) {
                 switch (seek) {
@@ -287,7 +287,7 @@ namespace NPage {
         }
 
         TIter LookupKeyReverse(TCells key, const TPartScheme::TGroupInfo &group,
-                        ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
+                        ESeek seek, const TKeyCellDefaults *keyDefaults) const
         {
             if (!key) {
                 switch (seek) {

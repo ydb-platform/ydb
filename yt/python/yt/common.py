@@ -38,6 +38,7 @@ import socket
 import sys
 import time
 import types
+import typing
 import string
 import warnings
 
@@ -46,6 +47,8 @@ import warnings
 YT_DATETIME_FORMAT_STRING = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 YT_NULL_TRANSACTION_ID = "0-0-0-0"
+
+_T = typing.TypeVar('_T')
 
 
 # Deprecation stuff.
@@ -223,6 +226,10 @@ class YtError(Exception):
         """Already exists."""
         return self.contains_code(501)
 
+    def is_authentication_error(self):
+        """Authentication error."""
+        return self.contains_code(900)
+
     def is_access_denied(self):
         """Access denied."""
         return self.contains_code(901)
@@ -359,6 +366,10 @@ class YtError(Exception):
         """Member is already present in group."""
         return self.contains_code(908)
 
+    def is_prerequisite_check_failed(self):
+        """Prerequisite check failed."""
+        return self.contains_code(1000)
+
     def is_prohibited_cross_cell_copy(self):
         """Cross-cell "copy"/"move" command is explicitly disabled."""
         return self.contains_code(1002)
@@ -366,6 +377,10 @@ class YtError(Exception):
     def is_sequoia_retriable_error(self):
         """Probably lock conflict in Sequoia tables."""
         return self.contains_code(6002)
+
+    def is_backup_checkpoint_rejected(self):
+        """Backup checkpoint rejected."""
+        return self.contains_code(1733)
 
 
 class YtResponseError(YtError):
@@ -608,7 +623,7 @@ def require(condition, exception_func):
         raise exception_func()
 
 
-def update_inplace(object, patch):
+def update_inplace(object: _T, patch) -> _T:
     """Apply patch to object inplace"""
     if isinstance(patch, Mapping) and isinstance(object, Mapping):
         for key, value in iteritems(patch):
@@ -627,7 +642,7 @@ def update_inplace(object, patch):
     return object
 
 
-def update(object, patch):
+def update(object: _T, patch) -> _T:
     """Apply patch to object without modifying original object or patch"""
     if patch is None:
         return copy.deepcopy(object)

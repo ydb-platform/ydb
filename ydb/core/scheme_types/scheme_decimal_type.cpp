@@ -3,6 +3,7 @@
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/rwlock.h>
@@ -16,7 +17,7 @@ TDecimalType::TDecimalType(ui32 precision, ui32 scale)
     , Scale(scale)
 {
     TString error;
-    Y_ABORT_UNLESS(Validate(precision, scale, error), "%s", error.c_str());
+    Y_ENSURE(Validate(precision, scale, error), error);
 }
 
 bool TDecimalType::operator==(const TDecimalType& other) const {

@@ -32,6 +32,8 @@ using namespace NYson;
 using namespace NConcurrency;
 using namespace NBus;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TGrpcCallTracer final
@@ -172,11 +174,13 @@ public:
             responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -258,6 +262,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -633,8 +640,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
-            NYT::ToProto(responseHeader.mutable_service(), Request_->GetService());
-            NYT::ToProto(responseHeader.mutable_method(), Request_->GetMethod());
+            ToProto(responseHeader.mutable_service(), Request_->GetService());
+            ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }

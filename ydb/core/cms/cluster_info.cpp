@@ -725,6 +725,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 
             if (HasPDisk(device))
                 item = &PDiskRef(device);
+            else if (HasPDisk(action.GetHost(), device))
+                item = &PDiskRef(action.GetHost(), device);
             else if (HasVDisk(device))
                 item = &VDiskRef(device);
 

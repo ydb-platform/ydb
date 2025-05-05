@@ -9,7 +9,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

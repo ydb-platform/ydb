@@ -205,6 +205,23 @@ public:
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
                 }
+
+                for (auto prop : topic.Props()) {
+                    const TStringBuf name = Name(prop);
+                    if (name == FederatedClustersProp) {
+                        auto clusterList = prop.Value().Cast<TDqPqFederatedClusterList>();
+                        for (auto cluster : clusterList) {
+                            auto federatedCluster = srcDesc.AddFederatedClusters();
+                            federatedCluster->SetName(cluster.Name().StringValue());
+                            federatedCluster->SetEndpoint(cluster.Endpoint().StringValue());
+                            federatedCluster->SetDatabase(cluster.Database().StringValue());
+                            if (cluster.PartitionsCount()) {
+                                federatedCluster->SetPartitionsCount(FromString<ui32>(cluster.PartitionsCount().Cast().StringValue()));
+                            }
+                        }
+                    }
+                }
+
                 srcDesc.SetFormat(format);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
@@ -234,6 +251,7 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
+                *srcDesc.MutableDisposition() = State_->Disposition;
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));

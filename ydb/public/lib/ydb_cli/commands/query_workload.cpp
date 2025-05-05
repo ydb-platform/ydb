@@ -1,7 +1,7 @@
 #include "query_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
-#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <util/system/thread.h>
 #include <util/system/mutex.h>

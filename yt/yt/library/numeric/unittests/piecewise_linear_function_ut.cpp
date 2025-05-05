@@ -6,7 +6,6 @@
 
 #include <util/string/cast.h>
 
-
 namespace NYT {
 
 using ::ToString;

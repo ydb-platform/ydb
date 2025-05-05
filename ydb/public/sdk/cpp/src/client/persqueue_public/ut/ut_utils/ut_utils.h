@@ -1,11 +1,11 @@
 #pragma once
 
-#include <src/client/persqueue_public/ut/ut_utils/test_utils.h>
-#include <src/client/persqueue_public/ut/ut_utils/sdk_test_setup.h>
-#include <src/client/persqueue_public/include/aliases.h>
-#include <src/client/persqueue_public/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/sdk_test_setup.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 
-#include <src/client/topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NPersQueueTests;

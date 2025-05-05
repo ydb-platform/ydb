@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.8)
+VERSION(2.9)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.9.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -93,6 +93,7 @@ RECURSE(
     test/fd-pass.t
     test/fdinfo.t
     test/fifo-nonblock-read.t
+    test/file-exit-unreg.t
     test/file-register.t
     test/file-update.t
     test/file-verify.t
@@ -162,6 +163,7 @@ RECURSE(
     test/pollfree.t
     test/probe.t
     test/read-before-exit.t
+    test/read-inc-file.t
     test/read-mshot-empty.t
     test/read-mshot-stdin.t
     test/read-mshot.t
@@ -174,10 +176,12 @@ RECURSE(
     test/reg-fd-only.t
     test/reg-hint.t
     test/reg-reg-ring.t
+    test/reg-wait.t
     test/regbuf-clone.t
     test/regbuf-merge.t
     test/register-restrictions.t
     test/rename.t
+    test/resize-rings.t
     test/ring-leak.t
     test/ring-leak2.t
     test/ringbuf-read.t
@@ -196,6 +200,7 @@ RECURSE(
     test/skip-cqe.t
     test/socket-getsetsock-cmd.t
     test/socket-io-cmd.t
+    test/socket-nb.t
     test/socket-rw-eagain.t
     test/socket-rw-offset.t
     test/socket-rw.t

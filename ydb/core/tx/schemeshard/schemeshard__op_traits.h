@@ -173,6 +173,12 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCo
     constexpr inline static bool CreateAdditionalDirs = true;
 };
 
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
+};
 
 namespace NOperation {
 

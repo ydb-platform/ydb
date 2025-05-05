@@ -552,6 +552,28 @@ TKeyBound::TKeyBound(ERelation relation, TKey key)
     , Key_(std::move(key))
 { }
 
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) noexcept
+{
+    return lhs.Key() == rhs.Key() && lhs.Relation() == rhs.Relation();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool operator==(const TReadLimit& lhs, const TReadLimit& rhs) noexcept
+{
+    return lhs.Key_ == rhs.Key_ && lhs.RowIndex_ == rhs.RowIndex_ &&
+           lhs.Offset_ == rhs.Offset_ && lhs.TabletIndex_ == rhs.TabletIndex_ &&
+           lhs.KeyBound_ == rhs.KeyBound_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool operator==(const TReadRange& lhs, const TReadRange& rhs) noexcept
+{
+  return lhs.LowerLimit_ == rhs.LowerLimit_ &&
+         lhs.UpperLimit_ == rhs.UpperLimit_ && lhs.Exact_ == rhs.Exact_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTableSchema CreateTableSchema(

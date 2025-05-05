@@ -1,23 +1,33 @@
 /* syntax version 1 */
-SELECT
-    DateTime::GetYear(tm) as ryear,
-    DateTime::GetDayOfYear(tm) as rdayofyear,
-    DateTime::GetMonth(tm) as rmonth,
-    DateTime::GetMonthName(tm) as rmonthname,
-    DateTime::GetWeekOfYear(tm) as rweekofyear,
-    DateTime::GetWeekOfYearIso8601(tm) as rweekofyeariso8601,
-    DateTime::GetDayOfMonth(tm) as rdayofmonth,
-    DateTime::GetDayOfWeek(tm) as rdayofweek,
-    DateTime::GetDayOfWeekName(tm) as rdayofweekname,
-    DateTime::GetHour(tm) as rhour,
-    DateTime::GetMinute(tm) as rminute,
-    DateTime::GetSecond(tm) as rsecond,
-    DateTime::GetMillisecondOfSecond(tm) as rmsec,
-    DateTime::GetMicrosecondOfSecond(tm) as rusec,
-    DateTime::GetTimezoneId(tm) as rtz,
-    DateTime::GetTimezoneName(tm) as rtzname
-FROM (
-    SELECT
-        DateTime::Split(CAST(ftztimestamp as TzTimestamp)) as tm
-    FROM Input
-);
+$check = ($arg) -> {
+    return <|
+        ryear:              DateTime::GetYear($arg),
+        rdayofyear:         DateTime::GetDayOfYear($arg),
+        rmonth:             DateTime::GetMonth($arg),
+        rmonthname:         DateTime::GetMonthName($arg),
+        rweekofyear:        DateTime::GetWeekOfYear($arg),
+        rweekofyeariso8601: DateTime::GetWeekOfYearIso8601($arg),
+        rdayofmonth:        DateTime::GetDayOfMonth($arg),
+        rdayofweek:         DateTime::GetDayOfWeek($arg),
+        rdayofweekname:     DateTime::GetDayOfWeekName($arg),
+        rhour:              DateTime::GetHour($arg),
+        rminute:            DateTime::GetMinute($arg),
+        rsecond:            DateTime::GetSecond($arg),
+        rmsec:              DateTime::GetMillisecondOfSecond($arg),
+        rusec:              DateTime::GetMicrosecondOfSecond($arg),
+        rtz:                DateTime::GetTimezoneId($arg),
+        rtzname:            DateTime::GetTimezoneName($arg),
+    |>
+};
+
+$typeDispatcher = ($row) -> {
+    $tm = $row.tm;
+    return <|
+        explicit: $check(DateTime::Split($tm)),
+        implicit: $check($tm),
+    |>;
+};
+
+$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
+
+PROCESS $input USING $typeDispatcher(TableRow());

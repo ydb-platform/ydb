@@ -46,6 +46,7 @@ public:
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTableScheme));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableContent));
+        AddHandler({TYtBlockTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleBlockTableContent));
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleLength));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
         AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleYtConfigure));
@@ -692,7 +693,6 @@ public:
             }
         }
 
-        auto cluster = TString{TYtDSource(input->ChildPtr(TYtReadTable::idx_DataSource)).Cluster().Value()};
         TMaybe<bool> yamrFormat;
         TMaybe<TSampleParams> sampling;
         for (size_t i = 0; i < input->Child(TYtReadTable::idx_Input)->ChildrenSize(); ++i) {
@@ -714,14 +714,15 @@ public:
                 if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
+                    auto tableCluster = table.Cluster().StringValue();
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous) || !tableName.StartsWith("tmp/")) {
-                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(cluster,
+                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
                                 TEpochInfo::Parse(table.Epoch().Ref()));
 
-                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), cluster, tableName,
+                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {
                                 return TStatus::Error;
                             }
@@ -739,8 +740,12 @@ public:
             }
         }
 
+        auto cluster = TYtDSource(input->ChildPtr(TYtReadTable::idx_DataSource)).Cluster().StringValue();
         auto readInput = input->ChildPtr(TYtReadTable::idx_Input);
-        auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData, State_->Types->UseTableMetaFromGraph, ctx);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData,
+            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -809,6 +814,10 @@ public:
         auto view = NYql::GetSetting(readScheme.Table().Settings().Ref(), EYtSettingType::View);
         TString viewName = view ? TString{view->Child(1)->Content()} : TString();
 
+        if (!EnsureDataSourceClusterMatchesTable(readScheme.DataSource(), readScheme.Table(), ctx)) {
+            return TStatus::Error;
+        }
+
         TYtTableDescription& tableDesc = State_->TablesData->GetOrAddTable(cluster, tableName,
             TEpochInfo::Parse(readScheme.Table().Epoch().Ref()));
 
@@ -846,7 +855,8 @@ public:
             return TStatus::Error;
         }
 
-        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor
+            | EYtSettingType::Split | EYtSettingType::Small | EYtSettingType::BlockInputReady;
         if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
             return TStatus::Error;
         }
@@ -858,6 +868,61 @@ public:
         if (auto columnOrder = State_->Types->LookupColumnOrder(tableContent.Input().Ref())) {
             return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
         }
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBlockTableContent(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto tableContent = input.Cast<TYtBlockTableContent>();
+
+        if (!tableContent.Input().Ref().IsCallable(TYtReadTable::CallableName())
+            && !tableContent.Input().Ref().IsCallable(TYtOutput::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(tableContent.Input().Pos()), TStringBuilder()
+                << "Expected " << TYtReadTable::CallableName() << " or " << TYtOutput::CallableName()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+            return TStatus::Error;
+        }
+
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto listType = tableContent.Input().Maybe<TYtOutput>()
+            ? tableContent.Input().Ref().GetTypeAnn()
+            : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
+        auto tableStructType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        TVector<const TItemExprType*> outputStructItems;
+        for (auto item : tableStructType->GetItems()) {
+            auto itemType = item->GetItemType();
+            if (itemType->IsBlockOrScalar()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), "Input type should not be a block or scalar"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureSupportedAsBlockType(input.Pos(), *itemType, ctx, *State_->Types)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            outputStructItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(itemType)));
+        }
+        outputStructItems.push_back(ctx.MakeType<TItemExprType>(BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
+
+        auto outputStructType = ctx.MakeType<TStructExprType>(outputStructItems);
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(outputStructType));
+
+        if (auto columnOrder = State_->Types->LookupColumnOrder(tableContent.Input().Ref())) {
+            return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
+        }
+
         return TStatus::Ok;
     }
 
@@ -1016,6 +1081,15 @@ public:
         return TStatus::Repeat;
     }
 private:
+    static bool EnsureDataSourceClusterMatchesTable(const TYtDSource& source, const TYtTable& table, TExprContext& ctx) {
+        if (source.Cluster().Value() != table.Cluster().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(source.Pos()), TStringBuilder() << "Datasource cluster doesn't match table cluster: '"
+                << source.Cluster().Value() << "' != '" << table.Cluster().Value() << "'"));
+            return false;
+        }
+        return true;
+    }
+
     const TYtState::TPtr State_;
 };
 

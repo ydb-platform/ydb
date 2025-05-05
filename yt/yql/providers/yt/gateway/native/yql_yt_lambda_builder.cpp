@@ -6,6 +6,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_output.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_block_table_content.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_table_content.h>
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
@@ -74,6 +75,11 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
             return WrapYtTableContent(*codecCtx, ctx.Mutables, callable, "OFF" /* no LLVM for local exec */, filePrefix);
         }
 
+        if (callable.GetType()->GetName() == "YtBlockTableContentJob") {
+            YQL_ENSURE(codecCtx);
+            return WrapYtBlockTableContent(*codecCtx, ctx.Mutables, callable, filePrefix);
+        }
+
         if (!exprContextObject) {
            exprContextObject = ctx.Mutables.CurValueIndex++;
         }
@@ -94,14 +100,14 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
 
 
 TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const IFunctionRegistry* functionRegistry, const TSession& session,
-    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider)
+    const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider, TLangVersion langver)
     : TLambdaBuilder(functionRegistry, alloc, nullptr,
-        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider)
+        session.RandomProvider_, session.TimeProvider_, nullptr, nullptr, secureParamsProvider, nullptr, langver)
 {
 }
 
-TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session)
-    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session)
+TNativeYtLambdaBuilder::TNativeYtLambdaBuilder(TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session, TLangVersion langver)
+    : TNativeYtLambdaBuilder(alloc, services.FunctionRegistry, session, nullptr, langver)
 {
 }
 

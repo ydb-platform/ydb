@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
     Y_UNIT_TEST(CheckSetConfig) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)
@@ -353,8 +352,10 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         }
     }
 
-    Y_UNIT_TEST(PgDatabase) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(PgDatabase, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
         {

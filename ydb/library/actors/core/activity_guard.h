@@ -1,65 +1,54 @@
 #pragma once
 
-#include "thread_context.h"
-#include "worker_context.h"
-
 #include <ydb/library/actors/actor_type/common.h>
 #include <ydb/library/actors/actor_type/index_constructor.h>
 #include <ydb/library/actors/util/local_process_key.h>
+#include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
 
+
+void ChangeActivity(NHPTimer::STime hpnow, ui32 &prevIndex, ui32 &index);
 
 template <EInternalActorSystemActivity ActivityType, bool IsMainActivity=true>
 class TInternalActorTypeGuard {
 public:
     TInternalActorTypeGuard() {
-        if (Allowed && TlsThreadContext) {
-            NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            NextIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(NextIndex, hpnow - hpprev);
+        if (Allowed) {
+            ChangeActivity(GetCycleCountFast(), NextIndex, Index);
         }
     }
 
     TInternalActorTypeGuard(ui32 nextIndex)
         : NextIndex(nextIndex)
     {
-        if (Allowed && TlsThreadContext) {
-            NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            ui32 prevIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(prevIndex, hpnow - hpprev);
+        if (Allowed) {
+            ChangeActivity(GetCycleCountFast(), NextIndex, Index);
+            NextIndex = nextIndex;
         }
     }
 
     TInternalActorTypeGuard(NHPTimer::STime hpnow) {
-        if (Allowed && TlsThreadContext) {
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            NextIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(NextIndex, hpnow - hpprev);
+        if (Allowed) {
+            ChangeActivity(hpnow, NextIndex, Index);
         }
     }
 
     TInternalActorTypeGuard(NHPTimer::STime hpnow, ui32 nextIndex)
         : NextIndex(nextIndex)
     {
-        if (Allowed && TlsThreadContext) {
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            ui32 prevIndex = TlsThreadContext->ElapsingActorActivity.exchange(Index, std::memory_order_acq_rel);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(prevIndex, hpnow - hpprev);
+        if (Allowed) {
+            ChangeActivity(hpnow, NextIndex, Index);
+            NextIndex = nextIndex;
         }
     }
 
     ~TInternalActorTypeGuard() {
-        if (Allowed && TlsThreadContext) {
-            NHPTimer::STime hpnow = GetCycleCountFast();
-            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-            TlsThreadContext->ElapsingActorActivity.store(NextIndex, std::memory_order_release);
-            TlsThreadContext->WorkerCtx->AddElapsedCycles(Index, hpnow - hpprev);
+        if (Allowed) {
+            ui32 prevIndex = Index;
+            ChangeActivity(GetCycleCountFast(), prevIndex, NextIndex);
         }
     }
-
 
 private:
     static constexpr bool ExtraActivitiesIsAllowed = false;

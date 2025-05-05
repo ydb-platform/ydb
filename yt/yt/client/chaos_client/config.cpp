@@ -7,7 +7,7 @@ namespace NYT::NChaosClient {
 void TReplicationCardCacheConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_watching", &TThis::EnableWatching)
-        .Default(false)
+        .Default(true)
         .DontSerializeDefault();
 }
 

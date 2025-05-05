@@ -14,7 +14,6 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 using TColumnsSet = NCommon::TColumnsSet;
 using TIndexesSet = NCommon::TIndexesSet;
-using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScriptCursor = NCommon::TFetchingScriptCursor;
@@ -57,21 +56,6 @@ public:
     }
 };
 
-class TApplyIndexStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    const NIndexes::TIndexCheckerContainer IndexChecker;
-
-protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-
-public:
-    TApplyIndexStep(const NIndexes::TIndexCheckerContainer& indexChecker)
-        : TBase("APPLY_INDEX")
-        , IndexChecker(indexChecker) {
-    }
-};
-
 class TDetectInMemStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
@@ -105,39 +89,6 @@ protected:
 public:
     TPortionAccessorFetchingStep()
         : TBase("FETCHING_ACCESSOR") {
-    }
-};
-
-class TIndexBlobsFetchingStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    std::shared_ptr<TIndexesSet> Indexes;
-
-protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    virtual TString DoDebugString() const override {
-        return TStringBuilder() << "indexes=" << Indexes->DebugString() << ";";
-    }
-
-public:
-    TIndexBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes)
-        : TBase("FETCHING_INDEXES")
-        , Indexes(indexes) {
-        AFL_VERIFY(Indexes);
-        AFL_VERIFY(Indexes->GetIndexesCount());
-    }
-};
-
-class TFilterProgramStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    std::shared_ptr<NSsa::TProgramStep> Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TFilterProgramStep(const std::shared_ptr<NSsa::TProgramStep>& step)
-        : TBase("PROGRAM")
-        , Step(step) {
     }
 };
 

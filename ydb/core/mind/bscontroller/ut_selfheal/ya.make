@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/blobstorage/pdisk/mock
     ydb/core/mind/bscontroller
     ydb/core/tx/scheme_board
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )

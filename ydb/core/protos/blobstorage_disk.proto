@@ -67,6 +67,8 @@ message TVDiskMetrics {
     optional NKikimrWhiteboard.EVDiskState State = 11;
     optional bool Replicated = 12;
     optional NKikimrWhiteboard.EFlag DiskSpace = 13;
+    optional bool IsThrottling = 14;
+    optional uint32 ThrottlingRate = 15;
 }
 
 message TPDiskMetrics {

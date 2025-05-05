@@ -153,6 +153,46 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
     return pgmBuilder.NewTupleType(blockItemTypes);
 }
 
+TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+    TType* rightListType, const TVector<ui32>& rightKeyDrops
+) {
+    const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
+    const auto rightListItemType = AS_TYPE(TListType, rightListType)->GetItemType();
+    const auto rightPlainStructType = AS_TYPE(TStructType, pgmBuilder.ValidateBlockStructType(AS_TYPE(TStructType, rightListItemType)));
+
+    TVector<TType*> joinReturnItems;
+
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
+    }
+
+    if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+        const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
+        for (size_t i = 0; i < rightPlainStructType->GetMembersCount(); i++) {
+            const auto& memberName = rightPlainStructType->GetMemberName(i);
+            if (rightKeyDropsSet.contains(i) || memberName == NYql::BlockLengthColumnName) {
+                continue;
+            }
+
+            auto memberType = rightPlainStructType->GetMemberType(i);
+            joinReturnItems.push_back(pgmBuilder.NewBlockType(
+                joinKind == EJoinKind::Inner ? memberType
+                    : IsOptionalOrNull(memberType) ? memberType
+                    : pgmBuilder.NewOptionalType(memberType),
+                TBlockType::EShape::Many
+            ));
+        }
+    }
+
+    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
+}
+
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
     const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
 ) {

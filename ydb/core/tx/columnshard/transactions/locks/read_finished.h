@@ -1,11 +1,12 @@
 #pragma once
 #include "abstract.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvReadFinishedWriter: public ITxEventWriter {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     TTxConflicts Conflicts;
 
     virtual bool DoCheckInteraction(
@@ -19,7 +20,7 @@ private:
     }
 
 public:
-    TEvReadFinishedWriter(const ui64 pathId, const TTxConflicts& conflicts)
+    TEvReadFinishedWriter(const TInternalPathId pathId, const TTxConflicts& conflicts)
         : PathId(pathId)
         , Conflicts(conflicts)
     {

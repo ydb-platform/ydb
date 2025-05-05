@@ -1,6 +1,6 @@
 #include "aws.h"
 
-#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #if !defined(_win32_)
 #include <aws/core/Aws.h>

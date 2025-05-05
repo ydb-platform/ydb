@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: Werkzeug
-Version: 2.2.2
+Version: 2.2.3
 Summary: The comprehensive WSGI web application library.
 Home-page: https://palletsprojects.com/p/werkzeug/
 Author: Armin Ronacher

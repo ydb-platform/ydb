@@ -7,6 +7,9 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/public/api/protos/ydb_config.pb.h>
 
 #include <openssl/sha.h>
 
@@ -73,17 +76,55 @@ NKikimrConfig::TAppConfig YamlToProto(
  * Stores intermediate resolve data in resolvedYamlConfig and resolvedJsonConfig if given
  */
 void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
+    const TString& mainYamlConfig,
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseYamlConfig = std::nullopt,
     TString* resolvedYamlConfig = nullptr,
     TString* resolvedJsonConfig = nullptr);
+
+enum class EValidationResult {
+    Ok,
+    Warn,
+    Error,
+};
+
+class IConfigValidator {
+public:
+    virtual ~IConfigValidator() = default;
+
+    virtual EValidationResult ValidateConfig(
+        const NKikimrConfig::TAppConfig& config,
+        std::vector<TString>& msg) const = 0;
+};
 
 /**
  * Replaces kinds not managed by yaml config (e.g. NetClassifierConfig) from config 'from' in config 'to'
  * if corresponding configs are presenet in 'from'
  */
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
+
+using TValidatorsMap = TMap<TString, TSimpleSharedPtr<IConfigValidator>>;
+
+class IConfigSwissKnife {
+public:
+    virtual ~IConfigSwissKnife() = default;
+    virtual bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest& request, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) const = 0;
+    virtual bool VerifyMainConfig(const TString& config) const = 0;
+    virtual bool VerifyStorageConfig(const TString& config) const = 0;
+    virtual EValidationResult ValidateConfig(
+        const NKikimrConfig::TAppConfig& config,
+        std::vector<TString>& msg) const;
+
+    const TMap<TString, TSimpleSharedPtr<IConfigValidator>>& GetValidators() const {
+        return Validators;
+    }
+protected:
+    TMap<TString, TSimpleSharedPtr<IConfigValidator>> Validators;
+};
+
+
+std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife();
 
 } // namespace NKikimr::NYamlConfig

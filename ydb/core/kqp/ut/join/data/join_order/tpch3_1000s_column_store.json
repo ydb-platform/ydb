@@ -1,0 +1,49 @@
+{
+  "op_name":"HashShuffle",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (Grace)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"customer"
+                        },
+                        {
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"orders"
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            },
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
+                  }
+                ]
+            }
+          ]
+      }
+    ]
+}
+

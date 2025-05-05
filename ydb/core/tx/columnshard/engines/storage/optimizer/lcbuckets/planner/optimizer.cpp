@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-TOptimizerPlanner::TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
     : TBase(pathId)
     , Counters(std::make_shared<TCounters>())
@@ -26,15 +26,16 @@ TOptimizerPlanner::TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IS
         ui32 idx = levelConstructors.size();
         for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
             --idx;
-            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, Counters->GetLevelCounters(idx)));
+            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, PortionsInfo, Counters->GetLevelCounters(idx)));
             nextLevel = Levels.back();
         }
     } else {
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10));
-        Levels.emplace_back(
-            std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10));
-        Levels.emplace_back(
-            std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10));
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
+            2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10, std::nullopt));
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
+            1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10, std::nullopt));
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
+            0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10, std::nullopt));
     }
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
@@ -56,7 +57,7 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     //        result->AddMovePortions(data.GetMovePortions());
     //    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    auto levelPortions = std::dynamic_pointer_cast<TLevelPortions>(Levels[data.GetTargetCompactionLevel()]);
+    auto levelPortions = std::dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]);
     if (levelPortions) {
         result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
     }

@@ -332,6 +332,13 @@ void TGetFlowViewCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("view_path", &TThis::ViewPath)
         .Default();
+
+     registrar.ParameterWithUniversalAccessor<bool>(
+        "cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.Cache;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
@@ -341,6 +348,24 @@ void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
         .ValueOrThrow();
 
     context->ProduceOutputValue(result.FlowViewPart);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TFlowExecuteCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("flow_command", &TThis::Command)
+        .Default();
+}
+
+void TFlowExecuteCommand::DoExecute(ICommandContextPtr context)
+{
+    auto argument = context->ConsumeInputValue();
+    auto client = context->GetClient();
+    auto result = WaitFor(client->FlowExecute(PipelinePath, Command, argument, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(result.Result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

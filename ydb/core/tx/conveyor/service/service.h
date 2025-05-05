@@ -2,7 +2,7 @@
 #include "worker.h"
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -34,7 +34,16 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr UseWorkerRate;
 
     const ::NMonitoring::THistogramPtr WaitingHistogram;
-    const ::NMonitoring::THistogramPtr ExecuteHistogram;
+    const ::NMonitoring::THistogramPtr PackHistogram;
+    const ::NMonitoring::THistogramPtr PackExecuteHistogram;
+    const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
+    const ::NMonitoring::THistogramPtr SendBackHistogram;
+    const ::NMonitoring::THistogramPtr SendFwdHistogram;
+    const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
+
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendBackDuration;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
 
     TCounters(const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase("Conveyor/" + conveyorName, baseSignals)
@@ -48,8 +57,17 @@ public:
         , OverlimitRate(TBase::GetDeriviative("Overlimit"))
         , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
         , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
-        , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2)))
-        , ExecuteHistogram(TBase::GetHistogram("Execute", NMonitoring::ExponentialHistogram(20, 2))) {
+        , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , PackHistogram(TBase::GetHistogram("ExecutionPack/Count", NMonitoring::LinearHistogram(25, 1, 1)))
+        , PackExecuteHistogram(TBase::GetHistogram("PackExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , TaskExecuteHistogram(TBase::GetHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , SendBackHistogram(TBase::GetHistogram("SendBack/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , SendFwdHistogram(TBase::GetHistogram("SendForward/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , SendBackDuration(TBase::GetDeriviative("SendBack/Duration/Us"))
+        , SendFwdDuration(TBase::GetDeriviative("SendForward/Duration/Us"))
+        , ExecuteDuration(TBase::GetDeriviative("Execute/Duration/Us"))
+    {
     }
 };
 
@@ -136,6 +154,7 @@ public:
 
 class TDistributor: public TActorBootstrapped<TDistributor> {
 private:
+    ui32 WorkersCount = 0;
     const TConfig Config;
     const TString ConveyorName = "common";
     TPositiveControlInteger WaitingTasksCount;

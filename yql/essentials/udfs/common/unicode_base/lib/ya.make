@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_ABI_VERSION(
     2
-    27
+    37
     0
 )
 
@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/unicode/normalization
     library/cpp/unicode/set
     yql/essentials/public/udf
+    yql/essentials/public/udf/arrow
     yql/essentials/utils
 )
 

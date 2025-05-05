@@ -1,6 +1,8 @@
 import abc
+import asyncio
 import enum
 import functools
+from collections import defaultdict
 
 import typing
 from typing import (
@@ -17,8 +19,13 @@ from .. import issues
 from .. import _utilities
 from .. import _apis
 
+from ydb._topic_common.common import CallFromSyncToAsync, _get_shared_event_loop
+from ydb._grpc.grpcwrapper.common_utils import to_thread
+
+
 if typing.TYPE_CHECKING:
     from .transaction import BaseQueryTxContext
+    from .session import BaseQuerySession
 
 
 class QuerySyntax(enum.IntEnum):
@@ -35,7 +42,7 @@ class QueryExecMode(enum.IntEnum):
     EXECUTE = 50
 
 
-class StatsMode(enum.IntEnum):
+class QueryStatsMode(enum.IntEnum):
     UNSPECIFIED = 0
     NONE = 10
     BASIC = 20
@@ -126,12 +133,13 @@ def create_execute_query_request(
     tx_mode: Optional[BaseQueryTxMode],
     syntax: Optional[QuerySyntax],
     exec_mode: Optional[QueryExecMode],
+    stats_mode: Optional[QueryStatsMode],
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
 ) -> ydb_query.ExecuteQueryRequest:
     syntax = QuerySyntax.YQL_V1 if not syntax else syntax
     exec_mode = QueryExecMode.EXECUTE if not exec_mode else exec_mode
-    stats_mode = StatsMode.NONE  # TODO: choise is not supported yet
+    stats_mode = QueryStatsMode.NONE if stats_mode is None else stats_mode
 
     tx_control = None
     if not tx_id and not tx_mode:
@@ -183,6 +191,7 @@ def wrap_execute_query_response(
     response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
     session_state: IQuerySessionState,
     tx: Optional["BaseQueryTxContext"] = None,
+    session: Optional["BaseQuerySession"] = None,
     commit_tx: Optional[bool] = False,
     settings: Optional[QueryClientSettings] = None,
 ) -> convert.ResultSet:
@@ -192,4 +201,74 @@ def wrap_execute_query_response(
     elif tx and response_pb.tx_meta and not tx.tx_id:
         tx._move_to_beginned(response_pb.tx_meta.id)
 
-    return convert.ResultSet.from_message(response_pb.result_set, settings)
+    if response_pb.HasField("exec_stats"):
+        if tx is not None:
+            tx._last_query_stats = response_pb.exec_stats
+        if session is not None:
+            session._last_query_stats = response_pb.exec_stats
+
+    if response_pb.HasField("result_set"):
+        return convert.ResultSet.from_message(response_pb.result_set, settings)
+
+    return None
+
+
+class TxEvent(enum.Enum):
+    BEFORE_COMMIT = "BEFORE_COMMIT"
+    AFTER_COMMIT = "AFTER_COMMIT"
+    BEFORE_ROLLBACK = "BEFORE_ROLLBACK"
+    AFTER_ROLLBACK = "AFTER_ROLLBACK"
+
+
+class CallbackHandlerMode(enum.Enum):
+    SYNC = "SYNC"
+    ASYNC = "ASYNC"
+
+
+def _get_sync_callback(method: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]):
+    if asyncio.iscoroutinefunction(method):
+        if loop is None:
+            loop = _get_shared_event_loop()
+
+        def async_to_sync_callback(*args, **kwargs):
+            caller = CallFromSyncToAsync(loop)
+            return caller.safe_call_with_result(method(*args, **kwargs), 10)
+
+        return async_to_sync_callback
+    return method
+
+
+def _get_async_callback(method: typing.Callable):
+    if asyncio.iscoroutinefunction(method):
+        return method
+
+    async def sync_to_async_callback(*args, **kwargs):
+        return await to_thread(method, *args, **kwargs, executor=None)
+
+    return sync_to_async_callback
+
+
+class CallbackHandler:
+    def _init_callback_handler(self, mode: CallbackHandlerMode) -> None:
+        self._callbacks = defaultdict(list)
+        self._callback_mode = mode
+
+    def _execute_callbacks_sync(self, event_name: str, *args, **kwargs) -> None:
+        for callback in self._callbacks[event_name]:
+            callback(self, *args, **kwargs)
+
+    async def _execute_callbacks_async(self, event_name: str, *args, **kwargs) -> None:
+        tasks = [asyncio.create_task(callback(self, *args, **kwargs)) for callback in self._callbacks[event_name]]
+        if not tasks:
+            return
+        await asyncio.gather(*tasks)
+
+    def _prepare_callback(
+        self, callback: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]
+    ) -> typing.Callable:
+        if self._callback_mode == CallbackHandlerMode.SYNC:
+            return _get_sync_callback(callback, loop)
+        return _get_async_callback(callback)
+
+    def _add_callback(self, event_name: str, callback: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]):
+        self._callbacks[event_name].append(self._prepare_callback(callback, loop))

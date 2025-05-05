@@ -240,6 +240,9 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path) {
             }
         }
     }
+    while (richYPath.Path_.EndsWith('&')) {
+        richYPath.Path_.pop_back();
+    }
     return {
         richYPath.Path_,
         richYPath.Columns_.Defined() ? richYPath.Columns_->Parts_ : TMaybe<TVector<TString>>(),
@@ -369,7 +372,7 @@ static bool IterateRows(NYT::ITransactionPtr tx,
     } else {
         auto format = specsCache.GetSpecs().MakeInputFormat(tableIndex);
         auto rawReader = tx->CreateRawReader(path, format, readerOptions);
-        TMkqlReaderImpl reader(*rawReader, 0, 4 << 10, tableIndex);
+        TMkqlReaderImpl reader(*rawReader, 0, 4 << 10, tableIndex, true);
         reader.SetSpecs(specsCache.GetSpecs(), specsCache.GetHolderFactory());
 
         for (reader.Next(); reader.IsValid(); reader.Next()) {

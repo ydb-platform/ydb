@@ -122,6 +122,7 @@ public:
         const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;
         const bool WithSpilling;
         const NYql::NDqProto::EDqStatsMode StatsMode;
+        const bool WithProgressStats;
         const TInstant& Deadline;
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
@@ -130,6 +131,8 @@ public:
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
         TComputeActorSchedulingOptions SchedulingOptions = {};
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        TString Database;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

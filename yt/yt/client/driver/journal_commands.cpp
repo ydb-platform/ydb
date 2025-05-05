@@ -107,6 +107,7 @@ void TReadJournalCommand::DoExecute(ICommandContextPtr context)
         }
 
         if (std::ssize(buffer) > context->GetConfig()->ReadBufferSize) {
+            consumer->Flush();
             flushBuffer();
         }
     }

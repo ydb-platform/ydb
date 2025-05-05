@@ -1,12 +1,12 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
 #include <format>
-#include <src/library/persqueue/topic_parser_public/topic_parser.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <src/client/persqueue_public/persqueue.h>
-#include <src/client/topic/common/log_lazy.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

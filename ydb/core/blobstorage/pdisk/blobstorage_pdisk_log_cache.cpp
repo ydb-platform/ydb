@@ -66,7 +66,7 @@ size_t TLogCache::Erase(ui64 offset) {
 }
 
 size_t TLogCache::EraseRange(ui64 begin, ui64 end) {
-    Y_DEBUG_ABORT_UNLESS(begin <= end);
+    Y_VERIFY_DEBUG(begin <= end);
     auto beginIt = Index.lower_bound(begin);
     auto endIt = Index.lower_bound(end);
     size_t dist = std::distance(beginIt, endIt);

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -16,7 +17,7 @@ namespace {
 
 struct IStrategy {
     virtual TPathElement::EPathType GetPathType() const = 0;
-    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -24,7 +25,7 @@ struct TReplicationStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeReplication;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -43,7 +44,7 @@ struct TTransferStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeTransfer;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
             return true;
@@ -54,6 +55,36 @@ struct TTransferStrategy : public IStrategy {
         }
         if (desc.HasState()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create transfer with explicit state");
+            return true;
+        }
+
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
+        const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
+            return true;
+        }
+
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
             return true;
         }
 
@@ -330,7 +361,7 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result, desc)) {
+        if (Strategy->Validate(*result, desc, context)) {
             return result;
         }
 
@@ -344,7 +375,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                    .FailOnExist(Strategy->GetPathType(), acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -370,10 +401,6 @@ public:
 
                 return result;
             }
-        }
-
-        if (Strategy->Validate(*result.Get(), desc)) {
-            return result;
         }
 
         TString errStr;
@@ -490,6 +517,23 @@ private:
 }; // TCreateReplication
 
 } // anonymous
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy);

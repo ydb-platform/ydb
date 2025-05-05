@@ -2,6 +2,7 @@
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/ydb_convert/compression.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
@@ -248,6 +249,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             }
 
             task.SetEnableChecksums(exportInfo->EnableChecksums);
+            task.SetEnablePermissions(exportInfo->EnablePermissions);
+
+            if (exportSettings.has_encryption_settings()) {
+                auto& encryptionSettings = *task.MutableEncryptionSettings();
+                encryptionSettings.SetEncryptionAlgorithm(exportInfo->ExportMetadata.GetEncryptionAlgorithm());
+                Y_ABORT_UNLESS(itemIdx < exportInfo->ExportMetadata.SchemaMappingSize());
+                encryptionSettings.SetIV(exportInfo->ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+                *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
+            }
         }
         break;
     }
@@ -316,6 +326,40 @@ TString ExportItemPathName(TSchemeShard* ss, const TExportInfo::TPtr exportInfo,
 
 TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
+}
+
+void PrepareDropping(
+        TSchemeShard* ss,
+        TExportInfo::TPtr exportInfo,
+        NIceDb::TNiceDb& db,
+        TExportInfo::EState droppingState,
+        std::function<void(ui64)> func)
+{
+    Y_ABORT_UNLESS(IsIn({TExportInfo::EState::AutoDropping, TExportInfo::EState::Dropping}, droppingState));
+
+    exportInfo->WaitTxId = InvalidTxId;
+    exportInfo->State = droppingState;
+    ss->PersistExportState(db, exportInfo);
+
+    for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+        auto& item = exportInfo->Items.at(itemIdx);
+
+        item.WaitTxId = InvalidTxId;
+        item.State = TExportInfo::EState::Dropped;
+        const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
+        if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
+            item.State = TExportInfo::EState::Dropping;
+            if (exportInfo->State == TExportInfo::EState::AutoDropping) {
+                func(itemIdx);
+            }
+        }
+
+        ss->PersistExportItemState(db, exportInfo, itemIdx);
+    }
+}
+
+void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
+    PrepareDropping(ss, exportInfo, db, TExportInfo::EState::Dropping, [](ui64){});
 }
 
 } // NSchemeShard

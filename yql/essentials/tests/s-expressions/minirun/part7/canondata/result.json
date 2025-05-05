@@ -1,4 +1,18 @@
 {
+    "test.test[Blocks-BlockMapJoinCore-default.txt-Debug]": [
+        {
+            "checksum": "b4e62992f4922bfdc10db8ffd370cfbe",
+            "size": 1952,
+            "uri": "https://{canondata_backend}/1031349/b655b23222eeb79fdf6d4802458aa188f67c1db4/resource.tar.gz#test.test_Blocks-BlockMapJoinCore-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Blocks-BlockMapJoinCore-default.txt-Results]": [
+        {
+            "checksum": "0b92c1a4b6b8f47e4a62aa420c36ee97",
+            "size": 9574,
+            "uri": "https://{canondata_backend}/1936997/67628cc299565ace722746c32bfd5aa5ec155b43/resource.tar.gz#test.test_Blocks-BlockMapJoinCore-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Builtins-ConstraintsOf-default.txt-Debug]": [
         {
             "checksum": "b4766463022fb5885bc259408b01b951",

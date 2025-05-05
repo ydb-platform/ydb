@@ -11,8 +11,8 @@ ENDIF()
 SRCS(
     alloc.proto
     auth.proto
-    base.proto
     backup.proto
+    base.proto
     bind_channel_storage_pool.proto
     blob_depot.proto
     blob_depot_config.proto
@@ -65,6 +65,7 @@ SRCS(
     data_events.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
+    datashard_backup.proto
     datashard_config.proto
     datashard_load.proto
     db_metadata_cache.proto
@@ -84,6 +85,7 @@ SRCS(
     http_config.proto
     import.proto
     index_builder.proto
+    kafka.proto
     kesus.proto
     key.proto
     kqp.proto
@@ -113,6 +115,7 @@ SRCS(
     query_stats.proto
     replication.proto
     resource_broker.proto
+    s3_settings.proto
     scheme_board.proto
     scheme_board_mon.proto
     scheme_log.proto
@@ -148,6 +151,7 @@ SRCS(
     tx_sequenceshard.proto
     whiteboard_disk_states.proto
     whiteboard_flags.proto
+    workload_manager_config.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
     yql_translation_settings.proto

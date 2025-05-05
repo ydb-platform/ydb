@@ -3,6 +3,7 @@
 #include <util/datetime/base.h>
 
 namespace NYdb {
+inline namespace Dev {
 
 struct TJwtParams {
     std::string PrivKey;
@@ -17,4 +18,5 @@ std::string MakeSignedJwt(
     const TDuration& lifetime = TDuration::Hours(1)
 );
 
-} // namespace NYdb
+}
+}

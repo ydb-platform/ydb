@@ -1,15 +1,18 @@
 #include "ydb_sql.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_prettifier.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
+#include <util/string/escape.h>
 #include <google/protobuf/text_format.h>
 
 namespace NYdb {
@@ -25,8 +28,8 @@ void TCommandSql::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
-    config.Opts->AddLongOption('f', "file", "Path to file with script (query) text."
-            " Path \"-\" means reading query text from stdin.").RequiredArgument("PATH")
+    config.Opts->AddLongOption('f', "file", "Path to a file containing the query text to execute. "
+            "The path '-' means reading the query text from stdin.").RequiredArgument("PATH")
         .StoreResult(&QueryFile);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
@@ -40,9 +43,14 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
+        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
-        .Hidden();
+        .RequiredArgument("[String]")
+        .Hidden()
+        .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
+            SetSyntax(arg);
+        });
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -138,13 +146,8 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
-    }
+
+    settings.Syntax(SyntaxType);
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
@@ -183,6 +186,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;
+    std::optional<std::string> meta;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -204,13 +208,16 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
                 }
+                if (queryStats.GetMeta()) {
+                    meta = queryStats.GetMeta();
+                }
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
     if (ExplainAst) {
         Cout << "Query AST:" << Endl << ast << Endl;
-        
+
         if (IsInterrupted()) {
             Cerr << "<INTERRUPTED>" << Endl;
             return EXIT_FAILURE;
@@ -235,6 +242,31 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
         queryPlanPrinter.Print(TString{*plan});
     }
 
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile);
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (stats) {
+            diagnosticsJson.InsertValue("stats", *stats);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (plan) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
+    }
+
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
         return EXIT_FAILURE;
@@ -250,8 +282,14 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
     CollectStatsMode = std::move(collectStatsMode);
 }
 
-void TCommandSql::SetSyntax(TString&& syntax) {
-    Syntax = std::move(syntax);
+void TCommandSql::SetSyntax(const TString& syntax) {
+    if (syntax == "yql") {
+        SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
+    } else if (syntax == "pg") {
+        SyntaxType = NYdb::NQuery::ESyntax::Pg;
+    } else {
+        throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
+    }
 }
 
 }

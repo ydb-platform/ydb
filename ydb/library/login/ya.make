@@ -9,6 +9,7 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/login/password_checker
     ydb/library/login/account_lockout
+    ydb/library/login/cache
 )
 
 SRCS(
@@ -25,4 +26,5 @@ RECURSE_FOR_TESTS(
 RECURSE(
     password_checker
     account_lockout
+    cache
 )

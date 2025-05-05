@@ -9,6 +9,8 @@
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
+#include <yql/essentials/utils/time_provider.h>
+
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/generic/vector.h>
@@ -49,7 +51,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
 
         with_lock(Lock_) {
             bool hasErrors = false;
@@ -66,7 +68,6 @@ public:
                 }
             }
 
-            THoldingFileStorage holdingFileStorage(FileStorage_);
             auto newRegistry = FunctionRegistry_->Clone();
             THashMap<std::pair<TString, TString>, THashSet<TString>> cachedModules;
             for (auto import: imports) {
@@ -89,7 +90,7 @@ public:
                 try {
                     THashSet<TString> modules;
                     if (FileStorage_) {
-                        auto link = holdingFileStorage.FreezeFile(*import->Block);
+                        auto link = storage.FreezeFile(*import->Block);
                         auto path = link->GetPath().GetPath();
                         auto [it, inserted] = cachedModules.emplace(std::make_pair(path, customUdfPrefix), THashSet<TString>());
                         if (inserted) {
@@ -134,13 +135,14 @@ public:
                 }
             }
 
-            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx) || hasErrors;
+            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx, logLevel) || hasErrors;
             return !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage&) const override {
         Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
         ythrow yexception() << "LoadRichMetadata is not supported in SimpleUdfResolver";
     }
 
@@ -167,7 +169,7 @@ IUdfResolver::TPtr CreateSimpleUdfResolver(
 bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-    TExprContext& ctx) {
+    TExprContext& ctx, NUdf::ELogLevel logLevel) {
 
     bool hasErrors = false;
     TScopedAlloc alloc(__LOCATION__);
@@ -178,11 +180,23 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
         try {
             TType* mkqlUserType = nullptr;
             if (udf.UserType) {
+                if (udf.UserType->HasErrors()) {
+                    // scan for error types
+                    TErrorTypeVisitor errorVisitor(ctx);
+                    udf.UserType->Accept(errorVisitor);
+                    if (errorVisitor.HasErrors()) {
+                        hasErrors = true;
+                        continue;
+                    }
+                }
+
                 TStringStream err;
                 mkqlUserType = BuildType(*udf.UserType, {env}, err);//
                 if (!mkqlUserType) {
-                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
-                        << udf.Name << ", error: " << err.Str()));
+                    auto issue = TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
+                        << udf.Name << ", error: " << err.Str());
+                    issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+                    ctx.AddError(issue);
                     hasErrors = true;
                     continue;
                 }
@@ -190,9 +204,16 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(udf.SecureParams);
 
+            auto logProvider = NUdf::MakeLogProvider(
+                [&](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                    udf.Messages.push_back(TStringBuilder() << GetTimeProvider()->Now() << " " << component << " [" << level << "] " << message);
+                },
+                logLevel);
+
             TFunctionTypeInfo funcInfo;
-            auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
-                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(), &funcInfo);
+            auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, env, typeInfoHelper, nullptr,
+                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(),
+                logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name
                     << ", reason: " << status.GetError()));
@@ -215,10 +236,14 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             udf.SupportsBlocks = funcInfo.SupportsBlocks;
             udf.IsStrict = funcInfo.IsStrict;
+            udf.MinLangVer = funcInfo.MinLangVer;
+            udf.MaxLangVer = funcInfo.MaxLangVer;
         } catch (const std::exception& e) {
-            ctx.AddError(TIssue(udf.Pos, TStringBuilder()
+            auto issue = TIssue(udf.Pos, TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.Name
-                << ", reason: " << e.what()));
+                << ", reason: " << e.what());
+            issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+            ctx.AddError(issue);
             hasErrors = true;
         }
     }

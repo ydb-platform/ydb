@@ -187,7 +187,7 @@
       same "printed page" as the copyright notice for easier
       identification within third-party archives.
 
-   Copyright 2018-2023 The simdjson authors
+   Copyright 2018-2025 The simdjson authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -200,6 +200,10 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+====================Apache-2.0====================
+This code is made available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.html) as well as under the MIT License. As a user, you can pick the license you prefer.
+
 
 ====================BSD-3-Clause====================
 Redistribution and use in source and binary forms, with or without
@@ -231,7 +235,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 ====================COPYRIGHT====================
-   Copyright 2018-2023 The simdjson authors
+   Copyright 2018-2025 The simdjson authors
 
 
 ====================COPYRIGHT====================
@@ -255,6 +259,13 @@ ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation,
 PLDI 2010 [2] Burger, Dybvig, "Printing Floating-Point Numbers Quickly and
 Accurately", Proceedings of the ACM SIGPLAN 1996 Conference on Programming
 Language Design and Implementation, PLDI 1996
+
+
+====================File: AUTHORS====================
+# List of authors for copyright purposes, in no particular order
+Daniel Lemire
+Geoff Langdale
+John Keiser
 
 
 ====================File: CONTRIBUTORS====================
@@ -305,5 +316,56 @@ Fangzheng Zhang and Weiqiang Wan (AVX-512 kernel)
 # appear in this list, please let us know!
 
 
+====================File: LICENSE-MIT====================
+Copyright 2018-2025 The simdjson authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+====================MIT====================
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ====================MIT====================
 The code is distributed under the MIT license, Copyright (c) 2009 Florian
+
+
+====================MIT====================
+This code is made available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.html) as well as under the MIT License. As a user, you can pick the license you prefer.
+
+
+====================MIT====================
+[licensemit img]: https://img.shields.io/badge/License-MIT-blue.svg
+
+
+====================MIT====================
+[licensemit]: LICENSE-MIT

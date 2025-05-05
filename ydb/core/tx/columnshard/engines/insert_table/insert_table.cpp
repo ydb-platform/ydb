@@ -19,7 +19,7 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
 }
 
 TInsertionSummary::TCounters TInsertTable::Commit(
-    IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
+    IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(TInternalPathId)> pathExists) {
     Y_ABORT_UNLESS(!writeIds.empty());
 
     TInsertionSummary::TCounters counters;
@@ -36,7 +36,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
 
         dbTable.EraseInserted(*data);
 
-        const ui64 pathId = data->GetPathId();
+        const TInternalPathId pathId = data->GetPathId();
         auto* pathInfo = Summary.GetPathInfoOptional(pathId);
         // There could be commit after drop: propose, drop, plan
         if (pathInfo && pathExists(pathId)) {
@@ -64,7 +64,7 @@ TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, 
     counters.Bytes += data.BlobSize();
 
     AddBlobLink(data.GetBlobRange().BlobId);
-    const ui64 pathId = data.GetPathId();
+    const TInternalPathId pathId = data.GetPathId();
     auto& pathInfo = Summary.GetPathInfoVerified(pathId);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "commit_insertion")("path_id", pathId)("blob_range", data.GetBlobRange().ToString());
     dbTable.Commit(data);
@@ -139,7 +139,7 @@ bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant
     }
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
+std::vector<TCommittedBlob> TInsertTable::Read(TInternalPathId pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
     const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const {
     const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
     if (!pInfo) {
@@ -153,7 +153,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
         if (lockId || data.GetSnapshot() <= reqSnapshot) {
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
-            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+            if (pkRangesFilter && !pkRangesFilter->IsUsed(start, finish)) {
                 continue;
             }
             result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetInsertWriteId(), data.GetSchemaVersion(), data.GetMeta().GetRecordsCount(),
@@ -167,7 +167,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
             }
             auto start = data.GetMeta().GetFirstPK(pkSchema);
             auto finish = data.GetMeta().GetLastPK(pkSchema);
-            if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
+            if (pkRangesFilter && !pkRangesFilter->IsUsed(start, finish)) {
                 continue;
             }
             result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetRecordsCount(), start, finish,

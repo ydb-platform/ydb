@@ -3,6 +3,7 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
+#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/metering/bill_record.h>
 #include <ydb/core/metering/metering.h>
@@ -143,15 +144,15 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
     }
 
     auto now = Now();
-    result.emplace_back(TBillRecord()
+    result.emplace_back(NKikimr::TBillRecord()
         .Id(jobId + "_i")
         .Schema("yq.ingress.v1")
         .FolderId(TScope(scope).ParseFolder())
         .SourceWt(now)
         .SourceId(sourceId)
-        .Usage(TBillRecord::TUsage()
-            .Type(TBillRecord::TUsage::EType::Delta)
-            .Unit(TBillRecord::TUsage::EUnit::MByte)
+        .Usage(NKikimr::TBillRecord::TUsage()
+            .Type(NKikimr::TBillRecord::TUsage::EType::Delta)
+            .Unit(NKikimr::TBillRecord::TUsage::EUnit::MByte)
             .Quantity(ingressMBytes)
             .Start(now)
             .Finish(now)
@@ -311,8 +312,8 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
     PackStatisticsToProtobuf(dest, aggregatedStatistics, executionTime);
 }
 
-StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
-    StatsValuesList statPairs;
+TStatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
+    TStatsValuesList statPairs;
     statPairs.reserve(statsProto.size());
     for (const auto& stat : statsProto) {
         statPairs.emplace_back(stat.name(), stat.value());
@@ -320,7 +321,7 @@ StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPt
     return statPairs;
 }
 
-TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics) {
+TStringBuilder& operator<<(TStringBuilder& builder, const TStatistics& statistics) {
     bool first = true;
     builder << '{';
     for (const auto& [field, value] : statistics.Stats) {

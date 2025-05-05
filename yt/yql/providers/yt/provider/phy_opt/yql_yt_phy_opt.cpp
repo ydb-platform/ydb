@@ -17,6 +17,10 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     , State_(state)
 {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TYtPhysicalOptProposalTransformer::name)
+    if (State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION) != ERuntimeClusterSelectionMode::Disable) {
+        AddHandler(0, &TYtTransientOpBase::Match, HNDL(UpdateDataSinkCluster));
+        AddHandler(0, &TYtReadTable::Match, HNDL(UpdateDataSourceCluster));
+    }
     AddHandler(0, &TCoMux::Match, HNDL(Mux));
     AddHandler(0, &TYtWriteTable::Match, HNDL(Write));
     if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
@@ -27,6 +31,8 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoTopSort::Match, HNDL(Sort<true>));
     AddHandler(0, &TCoTop::Match, HNDL(Sort<true>));
     AddHandler(0, &TYtSort::Match, HNDL(YtSortOverAlreadySorted));
+    AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
+    AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneKeysIntoYtOperation));
     AddHandler(0, &TCoPartitionByKeyBase::Match, HNDL(PartitionByKey));
     AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMap));
     AddHandler(0, &TCoCombineByKey::Match, HNDL(CombineByKey));
@@ -62,6 +68,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
+        if (State_->Configuration->EnableFuseMapToMapReduce.Get().GetOrElse(DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE)) {
+            AddHandler(1, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
+        }
     }
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MapFieldsSubset));
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(ReduceFieldsSubset));

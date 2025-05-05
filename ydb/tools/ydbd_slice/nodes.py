@@ -3,19 +3,21 @@ import sys
 import logging
 import subprocess
 import queue
+import random
 
 
 logger = logging.getLogger(__name__)
 
 
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0):
+    def __init__(self, nodes, dry_run=False, ssh_user=None, queue_size=0, ssh_key_path=None):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
         self._dry_run = bool(dry_run)
         self._ssh_user = ssh_user
+        self._ssh_key_path = ssh_key_path
         self._logger = logger.getChild(self.__class__.__name__)
         self._queue = queue.Queue(queue_size)
         self._qsize = queue_size
@@ -24,19 +26,24 @@ class Nodes(object):
     def nodes_list(self):
         return self._nodes
 
-    def _get_ssh_command_prefix(self):
+    def _get_ssh_command_prefix(self, remote=False):
         command = []
         command.extend(['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A'])
         if (self._ssh_user):
             command.extend(['-l', self._ssh_user])
 
+        if not remote and self._ssh_key_path:
+            command.extend(['-i', self._ssh_key_path])
+
         return command
 
-    def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
+    def _check_async_execution(self, running_jobs, check_retcode=True, results=None, retry_attempts=0):
         if self._dry_run:
             return
 
         assert results is None or isinstance(results, dict)
+
+        new_jobs = []
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
@@ -53,7 +60,7 @@ class Nodes(object):
 
             retcode = process.poll()
             if retcode != 0:
-                status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(
+                status_line = "execution '{cmd}' finished with '{retcode}' retcode\n".format(
                     cmd=cmd,
                     retcode=retcode,
                 )
@@ -69,13 +76,19 @@ class Nodes(object):
                     )
                 )
                 if check_retcode:
-                    sys.exit(status_line)
+                    if retry_attempts > 0:
+                        new_jobs.append((cmd, subprocess.Popen(cmd), host))
+                    else:
+                        sys.exit(status_line)
             if results is not None:
                 results[host] = {
                     'retcode': retcode,
                     'stdout': out,
                     'stderr': err
                 }
+
+            if len(new_jobs) > 0:
+                self._check_async_execution(new_jobs, check_retcode, results, retry_attempts - 1)
 
     def execute_async_ret(self, cmd, check_retcode=True, nodes=None, results=None):
         running_jobs = []
@@ -105,9 +118,9 @@ class Nodes(object):
 
         return running_jobs
 
-    def execute_async(self, cmd, check_retcode=True, nodes=None, results=None):
+    def execute_async(self, cmd, check_retcode=True, nodes=None, results=None, retry_attempts=5):
         running_jobs = self.execute_async_ret(cmd, check_retcode, nodes, results)
-        self._check_async_execution(running_jobs, check_retcode, results)
+        self._check_async_execution(running_jobs, check_retcode, results, retry_attempts=retry_attempts)
 
     def _copy_on_node(self, local_path, host, remote_path):
         self._logger.info(
@@ -144,21 +157,66 @@ class Nodes(object):
             if self._dry_run:
                 continue
             cmd = self._get_ssh_command_prefix() + [dst]
-            rsh = " ".join(self._get_ssh_command_prefix())
+            rsh = " ".join(self._get_ssh_command_prefix(remote=True))
             cmd.extend([
-                "sudo", "SSH_AUTH_SOCK=$SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
+                "sudo", "--preserve-env=SSH_AUTH_SOCK", "rsync", "-avqW", "--del", "--no-o", "--no-g",
                 "--rsh='{}'".format(rsh),
                 src, remote_path
             ])
             process = subprocess.Popen(cmd)
             running_jobs.append((cmd, process, dst))
 
-        self._check_async_execution(running_jobs)
+        self._check_async_execution(running_jobs, retry_attempts=2)
 
-    # copy local_path to remote_path for every node in nodes
-    def copy(self, local_path, remote_path, directory=False, compressed_path=None):
-        if directory:
+    def _download_sky(self, url, remote_path):
+        self._logger.info(f"download from '{url}' to '{remote_path}'")
+        tmp_path = url.split(":")[-1]
+        script = (
+            f'sky get -wu -d {tmp_path} {url} && '
+            f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
+            f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
+        )
+        running_jobs = self.execute_async_ret(script)
+        self._check_async_execution(running_jobs, retry_attempts=2)
+
+    def _download_script(self, script, remote_path):
+        user_script = script[len('script:'):]
+        self._logger.info(f"download by script '{user_script}' to '{remote_path}'")
+        tmp_path = f'tmp_{random.randint(0, 100500)}'
+        full_script = (
+            f'mkdir -p {tmp_path} && cd {tmp_path} && '
+            f'( {user_script} ) && cd - && '
+            f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
+            f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
+        )
+        running_jobs = self.execute_async_ret(full_script)
+        self._check_async_execution(running_jobs, retry_attempts=2)
+
+    def _download_http(self, url, remote_path):
+        self._logger.info(f"download from '{url}' to '{remote_path}'")
+        running_jobs = self.execute_async_ret(f'sudo curl --output {remote_path} {url}')
+        self._check_async_execution(running_jobs, retry_attempts=2)
+
+    def copy(self, local_path: str, remote_path, directory=False, compressed_path=None):
+        """
+        Copies a file or directory from a local path to a remote path, with optional compression.
+        Args:
+            local_path (str): The local path of the file or directory to copy.
+            remote_path (str): The remote path where the file or directory will be copied.
+            directory (bool, optional): If True, treats the remote path as a directory. Defaults to False.
+            compressed_path (str, optional): If provided, compresses the local file or directory to this path before copying. Defaults to None.
+        Raises:
+            subprocess.CalledProcessError: If the compression command fails.
+        Notes:
+            - If `compressed_path` is provided, the method will compress the local file or directory using `zstd` before copying.
+            - The method ensures that the remote directory exists before copying.
+            - The method copies the file or directory to a hub node first, then distributes it to other nodes.
+            - If `compressed_path` is provided, the method will decompress the file on the remote side if necessary.
+        """
+
+        if os.path.isdir(local_path):
             local_path += '/'
+        if directory:
             remote_path += '/'
         if compressed_path is not None:
             self._logger.info('compressing %s to %s' % (local_path, compressed_path))
@@ -169,9 +227,15 @@ class Nodes(object):
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
-
-        hub = self._nodes[0]
-        self._copy_on_node(local_path, hub, remote_path)
-        self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
+        if local_path.startswith('rbtorrent:') or local_path.startswith('sbr:'):
+            self._download_sky(local_path, remote_path)
+        elif local_path.startswith('script:'):
+            self._download_script(local_path, remote_path)
+        elif local_path.startswith('http:') or local_path.startswith('https:'):
+            self._download_http(local_path, remote_path)
+        else:
+            hub = self._nodes[0]
+            self._copy_on_node(local_path, hub, remote_path)
+            self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
         if compressed_path is not None:
             self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))

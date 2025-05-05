@@ -6,6 +6,7 @@
 
 namespace NYql::NS3Util {
 
+TIssues AddParentIssue(const TString& prefix, TIssues&& issues);
 TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 
 // Like UrlEscape with forceEscape = true
@@ -14,5 +15,23 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 TString UrlEscapeRet(const TStringBuf from);
 
 bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx);
+
+class TUrlBuilder {
+    struct TParam {
+        TString Name;
+        TString Value;
+    };
+
+public:
+    explicit TUrlBuilder(const TString& uri);
+
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
+
+    TString Build() const;
+
+private:
+    std::vector<TParam> Params;
+    TString MainUri;
+};
 
 }

@@ -109,6 +109,25 @@ sudo usermod -aG disk ydb
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
+To get a list of available block devices on the server, you can use the `lsblk` command. Example output:
+
+```txt
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0    7:0    0  63.3M  1 loop /snap/core20/1822
+...
+vda    252:0    0    40G  0 disk
+├─vda1 252:1    0     1M  0 part
+└─vda2 252:2    0    40G  0 part /
+vdb    252:16   0   186G  0 disk
+└─vdb1 252:17   0   186G  0 part
+```
+
+The names of block devices depend on the operating system settings provided by the base image or manually configured. Typically, device names consist of up to three parts:
+
+- A fixed prefix or a prefix indicating the device type  
+- A device sequential identifier (which can be a letter or a number)  
+- A partition sequential identifier on the given device (usually a number)  
+
 1. Create partitions on the selected disks:
 
   {% note alert %}
@@ -125,7 +144,7 @@ sudo usermod -aG disk ydb
   sudo partx --u ${DISK}
   ```
 
-  As a result, a disk labeled `/dev/disk/by-partlabel/ydb_disk_ssd_01` will appear on the system.
+  Execute the command `ls -l /dev/disk/by-partlabel/` to ensure that a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01` has appeared in the system.
 
   If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. Disk labels should be unique within each server. They are used in configuration files, see the following guides.
 
@@ -380,7 +399,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -391,7 +410,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://$(hostname -f):2135 \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -497,25 +516,24 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
       yql -s 'ALTER USER root PASSWORD "passw0rd"'
   ```
 
-  Replace the `passw0rd` value with the required password.
+  Replace the value `passw0rd` with the required password. Save the password in a separate file. Subsequent commands as the root user will be executed using the password passed with the `--password-file <path_to_user_password>` option. Additionally, the password can be saved in the connection profile, as described in the [documentation for {{ ydb-short-name }} CLI](../../reference/ydb-cli/profile/index.md).
 
 1. Create additional accounts:
 
   ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
       yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
   ```
 
 1. Set the account rights by including them in the integrated groups:
 
   ```bash
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
   ```
 
-In the command examples above, `<node.ydb.tech>` is the FQDN of the server running any dynamic node that serves the `/Root/testdb` database.
+In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a {{ ydb-short-name }} node, it's convenient to use the `grpcs://$(hostname -f):2136` command to use the current server's FQDN.
 
-When running the account creation and group assignment commands, the {{ ydb-short-name }} CLI client will request the `root` user's password. You can avoid multiple password entries by creating a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../reference/ydb-cli/profile/index.md).
 
 ## Start using the created database {#try-first-db}
 

@@ -107,7 +107,7 @@ void TPDisk::InitLogChunksInfo() {
                 if (!keep && it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
                     TLogChunkInfo::TLsnRange &range = it->OwnerLsnRange[owner];
                     range.IsPresent = false;
-                    Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+                    Y_VERIFY_S(it->CurrentUserCount > 0, PCtx->PDiskLogPrefix);
                     it->CurrentUserCount--;
                     P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner",
                         (ChunkIdx, it->ChunkIdx),
@@ -137,6 +137,7 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
             str << "chunkIdx# " << it->ChunkIdx;
             str << " users# " << it->CurrentUserCount;
             str << " endOfSplice# " << it->IsEndOfSplice;
+            str << " isCommited# " << (ChunkState[it->ChunkIdx].CommitState == TChunkState::LOG_COMMITTED);
 
             for (ui32 owner = 0; owner < it->OwnerLsnRange.size(); ++owner) {
                 auto &range = it->OwnerLsnRange[owner];
@@ -159,9 +160,9 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
 
 bool TPDisk::LogNonceJump(ui64 previousNonce) {
     bool isWhole = CommonLogger->SectorBytesFree >= sizeof(TNonceJumpLogPageHeader2);
-    Y_ABORT_UNLESS(isWhole);
+    Y_VERIFY_S(isWhole, PCtx->PDiskLogPrefix);
 
-    Y_ABORT_UNLESS(CommonLogger->NextChunks.size() == 0);
+    Y_VERIFY_S(CommonLogger->NextChunks.size() == 0, PCtx->PDiskLogPrefix);
     if (!PreallocateLogChunks(CommonLogger->SectorBytesFree, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
         return false;
     }
@@ -254,7 +255,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
     // Parse VDiskOwners
     ui32 ownerCount = sizeof(sysLogRecord->OwnerVDisks) / sizeof(TVDiskID);
-    Y_ABORT_UNLESS(ownerCount <= 256);
+    Y_VERIFY_S(ownerCount <= 256, PCtx->PDiskLogPrefix);
     for (ui32 i = 0; i < ownerCount; ++i) {
         TVDiskID &id = sysLogRecord->OwnerVDisks[i];
         id.GroupGeneration = -1;  // Clear GroupGeneration in sys log record (for compatibility)
@@ -272,9 +273,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
-    Y_DEBUG_ABORT_UNLESS(ChunkState.size() == 0);
+    Y_VERIFY_DEBUG_S(ChunkState.size() == 0, PCtx->PDiskLogPrefix);
     ChunkState = TVector<TChunkState>(chunkCount);
-    Y_ABORT_UNLESS(ChunkState.size() >= Format.SystemChunkCount);
+    Y_VERIFY_S(ChunkState.size() >= Format.SystemChunkCount, PCtx->PDiskLogPrefix);
     for (ui32 i = 0; i < Format.SystemChunkCount; ++i) {
         ChunkState[i].OwnerId = OwnerSystem;
     }
@@ -300,7 +301,34 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
     // Checks are passed, so initialize position
     InitialSysLogWritePosition = writePosition;
-
+    ShredGeneration = 0;
+    for (ui32 i = 0; i < std::min(64u, chunkCount); ++i) {
+        if (chunkOwners[i].IsGenerationBitSet()) {
+            ShredGeneration |= (1ull<<i);
+        }
+    }
+    int firstSetBitIdx = -1;
+    for (ui32 i = 64; i < std::min(64u+8u, chunkCount); ++i) {
+        if (chunkOwners[i].IsGenerationBitSet()) {
+            firstSetBitIdx = i-64;
+            break;
+        }
+    }
+    bool isInconsistentShred = false;
+    switch (firstSetBitIdx) {
+        case (int)EShredStateDefault:
+        case (int)EShredStateSendPreShredCompactVDisk:
+        case (int)EShredStateSendShredVDisk:
+        case (int)EShredStateFinished:
+        case (int)EShredStateFailed:
+            ShredState = (EShredState)firstSetBitIdx;
+            break;
+        default:
+            isInconsistentShred = true;
+            // The state is unexpected or unsupported yet, suppose it is 'just started'
+            break;
+    };
+    bool isNonCurrentGenPresent = false;
     for (ui32 i = Format.SystemChunkCount; i < chunkCount; ++i) {
         TOwner owner = chunkOwners[i].OwnerId;
         ChunkState[i].OwnerId = owner;
@@ -314,11 +342,37 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
                     (OwnerId, (ui32)owner));
             } else {
                 ChunkState[i].CommitState = TChunkState::LOG_COMMITTED;
+                if (TPDisk::IS_SHRED_ENABLED) {
+                    ChunkState[i].IsDirty = true;
+                }
             }
         } else {
             ChunkState[i].CommitState = TChunkState::FREE;
         }
         ChunkState[i].Nonce = chunkOwners[i].Nonce;
+        if (TPDisk::IS_SHRED_ENABLED) {
+            ChunkState[i].IsDirty = chunkOwners[i].IsDirty();
+        }
+        if (chunkOwners[i].IsCurrentShredGeneration()) {
+          ChunkState[i].ShredGeneration = ShredGeneration;
+        } else {
+          ChunkState[i].ShredGeneration = 0;
+          isNonCurrentGenPresent = true;
+        }
+    }
+    if (ShredGeneration == 0) {
+        // No shred ever started
+    } else {
+        // Shred was started somewhen
+        if (isNonCurrentGenPresent || isInconsistentShred) {
+            if (ShredState == EShredStateDefault) {
+                // Shred is not over but is definitely started
+                ShredState = EShredStateSendPreShredCompactVDisk;
+            } else if (ShredState == EShredStateFinished) {
+                // Shred is not over, inconsistency detected!
+                ShredState = EShredStateSendShredVDisk;
+            }
+        }
     }
 
     // TODO: check for log/data chunk intersections while parsing common log, giving priority to syslog as chunks
@@ -353,27 +407,27 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             SysLogFirstNoncesToKeep.Clear();
         } else {
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
-            Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                    "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+            Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                    << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
             memcpy(&SysLogFirstNoncesToKeep, firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
         }
     }
 
     TChunkTrimInfo *trimStateEnd = nullptr;
     if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_4) {
-        Y_ABORT_UNLESS(firstNoncesToKeep);
+        Y_VERIFY_S(firstNoncesToKeep, PCtx->PDiskLogPrefix);
         ui64 *trimInfoBytesPtr = (ui64*)(firstNoncesToKeep + 1);
         ui64 minSize = (ui64)((char*)(trimInfoBytesPtr + 1) - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
         ui64 trimInfoBytes = ReadUnaligned<ui64>(trimInfoBytesPtr);
         TChunkTrimInfo *trimState = (TChunkTrimInfo*)(trimInfoBytesPtr + 1);
         trimStateEnd = trimState + trimInfoBytes / sizeof(TChunkTrimInfo);
         minSize = (ui64)((char*)trimStateEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
         Y_VERIFY_S(trimInfoBytes == 0 || trimInfoBytes == TChunkTrimInfo::SizeForChunkCount(chunkCount),
-                "SysLogRecord's ChunkTrimInfo has size# " << trimInfoBytes
+                PCtx->PDiskLogPrefix << "SysLogRecord's ChunkTrimInfo has size# " << trimInfoBytes
                 << " different from expeceted #" << TChunkTrimInfo::SizeForChunkCount(chunkCount));
         for (ui32 i = 0; i < chunkCount; i++) {
             if (trimState[i / 8].IsChunkTrimmed(i % 8) && ChunkState[i].OwnerId == OwnerUnallocated) {
@@ -387,12 +441,12 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
     ui32 *firstChunkEnd = nullptr;
     if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_6) {
-        Y_ABORT_UNLESS(trimStateEnd);
+        Y_VERIFY_S(trimStateEnd, PCtx->PDiskLogPrefix);
         ui32 *firstChunk = reinterpret_cast<ui32*>(trimStateEnd);
         firstChunkEnd = firstChunk + 1;
         ui64 minSize = (ui64)((char*)firstChunkEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
         FirstLogChunkToParseCommits = ReadUnaligned<ui32>(firstChunk);
     }
 
@@ -400,29 +454,29 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
     char *compatibilityInfoEnd = nullptr;
     if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_7) {
-        Y_ABORT_UNLESS(firstChunkEnd);
+        Y_VERIFY_S(firstChunkEnd, PCtx->PDiskLogPrefix);
         ui32 *protoSizePtr = reinterpret_cast<ui32*>(firstChunkEnd);
         ui32 *protoSizePtrEnd = protoSizePtr + 1;
 
         ui64 minSize = (ui64)((char*)protoSizePtrEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
 
         ui32 protoSize = ReadUnaligned<ui32>(protoSizePtr);
-        Y_ABORT_UNLESS(protoSize > 0);
+        Y_VERIFY_S(protoSize > 0, PCtx->PDiskLogPrefix);
 
         char *compatibilityInfo = reinterpret_cast<char*>(protoSizePtrEnd);
         compatibilityInfoEnd = compatibilityInfo + protoSize;
 
         minSize += protoSize;
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
 
         if (!suppressCompatibilityCheck) {
             auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
 
             bool success = storedCompatibilityInfo.ParseFromArray(compatibilityInfo, protoSize);
-            Y_ABORT_UNLESS(success);
+            Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
 
             bool isCompatible = CompatibilityInfo.CheckCompatibility(&storedCompatibilityInfo,
                     NKikimrConfig::TCompatibilityRule::PDisk, errorReason);
@@ -504,7 +558,7 @@ TRcBuf TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
 
     outWritePosition = (firstSysLogSectorIdx + sectorGroup % Format.SysLogSectorCount * ReplicationFactor)
             * Format.SectorSize;
-    Y_ABORT_UNLESS(outWritePosition > 0);
+    Y_VERIFY_S(outWritePosition > 0, PCtx->PDiskLogPrefix);
 
     if (!readLogResult.Results.size()) {
         P_LOG(PRI_ERROR, BPD54, "ProcessReadSysLogResult Results.size() == 0");
@@ -639,24 +693,36 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     ui64 chunkIsTrimmedSize = TChunkTrimInfo::SizeForChunkCount(chunkCount);
     TVector<TChunkInfo> chunkOwners(chunkCount);
     TVector<TChunkTrimInfo> chunkIsTrimmed(TChunkTrimInfo::RecordsForChunkCount(chunkCount), TChunkTrimInfo(0));
+    const ui32 chunkStateSize = ChunkState.size();
+    for (ui32 i = 0; i < std::min(64u, chunkCount); ++i) {
+        chunkOwners[i].SetGenerationBit(ShredGeneration & (1ull << i));
+    }
+    ui8 shredStateBits = (1ull << ShredState);
+    for (ui32 i = 64; i < std::min(64u+8u, chunkCount); ++i) {
+        chunkOwners[i].SetGenerationBit(shredStateBits & (1u << (i-64)));
+    }
     for (ui32 i = 0; i < chunkCount; ++i) {
-        if (ChunkState.size() > i
+        TChunkInfo &info = chunkOwners[i];
+        if (chunkStateSize > i
                 && (ChunkState[i].CommitState == TChunkState::DATA_COMMITTED
                     || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
                     || ChunkState[i].CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE)
                 && IsOwnerUser(ChunkState[i].OwnerId)) {
-            chunkOwners[i].OwnerId = ChunkState[i].OwnerId;
-            chunkOwners[i].Nonce = ChunkState[i].Nonce;
+            info.OwnerId = ChunkState[i].OwnerId;
+            info.Nonce = ChunkState[i].Nonce;
         } else {
-            if (ChunkState.size() > i && ChunkState[i].OwnerId == OwnerUnallocatedTrimmed) {
+            if (chunkStateSize > i && ChunkState[i].OwnerId == OwnerUnallocatedTrimmed) {
                 chunkIsTrimmed[i / 8].SetChunkTrimmed(i % 8);
             }
             // Write OwnerUnallocated for forward compatibility
-            chunkOwners[i].OwnerId = OwnerUnallocated;
-            chunkOwners[i].Nonce = 0;
+            info.OwnerId = OwnerUnallocated;
+            info.Nonce = 0;
+        }
+        if (chunkStateSize > i) {
+            TChunkState &state = ChunkState[i];
+            info.SetDirty(state.IsDirty, state.ShredGeneration == ShredGeneration);
         }
     }
-
     if (CommonLogger) {
         std::optional<TChunkIdx> firstChunk;
         for (auto rit = LogChunks.crbegin(); rit != LogChunks.crend(); ++rit) {
@@ -675,7 +741,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         SerializedCompatibilityInfo.emplace(TString());
         auto stored = CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::PDisk);
         bool success = stored.SerializeToString(&*SerializedCompatibilityInfo);
-        Y_ABORT_UNLESS(success);
+        Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
     }
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
 
@@ -757,7 +823,7 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
     for (TLogWrite *logWrite : logWrites) {
-        Y_DEBUG_ABORT_UNLESS(logWrite);
+        Y_VERIFY_DEBUG_S(logWrite, PCtx->PDiskLogPrefix);
         Mon.LogQueueTime.Increment(logWrite->LifeDurationMs(now));
         logWrite->SpanStack.PopOk();
         logOperationSizeBytes += logWrite->Data.size();
@@ -834,7 +900,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
 
     if (IsOwnerUser(owner)) {
         Y_VERIFY_S(LogChunks.empty() || chunksNeeded > 0 || LogChunks.back().ChunkIdx == CommonLogger->ChunkIdx,
-            "PDiskId# " << PCtx->PDiskId << " Chunk idx mismatch! back# " << LogChunks.back().ChunkIdx
+            PCtx->PDiskLogPrefix << "Chunk idx mismatch! back# " << LogChunks.back().ChunkIdx
             << " pre-back# " << (LogChunks.rbegin()->ChunkIdx == LogChunks.begin()->ChunkIdx ?
                 0 : (++LogChunks.rbegin())->ChunkIdx)
             << " logger# " << CommonLogger->ChunkIdx);
@@ -853,13 +919,18 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
     ui64 lastNonce = CommonLogger->Nonce + sectorsToLast + noncesPerChunk * CommonLogger->NextChunks.size();
 
     TString errorReason;
+    bool isDirtyMarked = false;
     for (ui32 i = 0; i < chunksNeeded; ++i) {
         ui32 chunkIdx = Keeper.PopOwnerFreeChunk(keeperOwner, errorReason);
-        Y_VERIFY_S(chunkIdx, "errorReason# " << errorReason);
+        Y_VERIFY_S(chunkIdx, PCtx->PDiskLogPrefix << "errorReason# " << errorReason);
         Y_VERIFY_S(ChunkState[chunkIdx].OwnerId == OwnerUnallocated ||
-                ChunkState[chunkIdx].OwnerId == OwnerUnallocatedTrimmed, "PDiskId# " << PCtx->PDiskId <<
-                " Unexpected ownerId# " << ui32(ChunkState[chunkIdx].OwnerId));
+                ChunkState[chunkIdx].OwnerId == OwnerUnallocatedTrimmed, PCtx->PDiskLogPrefix <<
+                "Unexpected ownerId# " << ui32(ChunkState[chunkIdx].OwnerId));
         ChunkState[chunkIdx].CommitState = TChunkState::LOG_RESERVED;
+        if (TPDisk::IS_SHRED_ENABLED && !ChunkState[chunkIdx].IsDirty) {
+            ChunkState[chunkIdx].IsDirty = true;
+            isDirtyMarked = true;
+        }
         P_LOG(PRI_INFO, BPD01, "AllocateLogChunks for owner", (OwnerId, (ui32)owner), (Lsn, lsn), (ChunkIdx, chunkIdx),
             (LogChunksSize, LogChunks.size()));
         ChunkState[chunkIdx].OwnerId = OwnerSystem;
@@ -875,11 +946,14 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
     }
 
     AskVDisksToCutLogs(OwnerSystem, false);
+    if (isDirtyMarked) {
+        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
+    }
     return true;
 }
 
 void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
-    Y_DEBUG_ABORT_UNLESS(!evLog.Result);
+    Y_VERIFY_DEBUG_S(!evLog.Result, PCtx->PDiskLogPrefix);
     OwnerData[evLog.Owner].Status = TOwnerData::VDISK_STATUS_LOGGED;
 
     bool isCommitRecord = evLog.Signature.HasCommitRecord();
@@ -888,6 +962,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     if (isCommitRecord) {
         ui64 commitSize = (sizeof(ui32) + sizeof(ui64)) * evLog.CommitRecord.CommitChunks.size() +
             sizeof(ui32) * evLog.CommitRecord.DeleteChunks.size() +
+            (TPDisk::IS_SHRED_ENABLED ? sizeof(ui32) * evLog.CommitRecord.DirtyChunks.size() : 0) +
             sizeof(NPDisk::TCommitRecordFooter);
         payloadSize += commitSize;
         *Mon.BandwidthPLogCommit += commitSize;
@@ -899,13 +974,13 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed)) {
         // TODO: make sure that commit records that delete chunks are applied atomically even if this error occurs.
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId << " Can't preallocate log chunks!"
+        str << PCtx->PDiskLogPrefix << "Can't preallocate log chunks!"
             << " Marker# BPD70";
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,
             NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str(),
             Keeper.GetLogChunkCount()));
-        Y_ABORT_UNLESS(evLog.Result.Get());
+        Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
         evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
     }
@@ -941,8 +1016,16 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
             CommonLogger->LogDataPart(evLog.CommitRecord.DeleteChunks.data(), deleteChunksCount * sizeof(ui32),
                 evLog.ReqId, &evLogTraceId);
         }
+        if (TPDisk::IS_SHRED_ENABLED) {
+            ui32 dirtyChunksCount = evLog.CommitRecord.DirtyChunks.size();
+            if (dirtyChunksCount) {
+                CommonLogger->LogDataPart(evLog.CommitRecord.DirtyChunks.data(), dirtyChunksCount * sizeof(ui32),
+                    evLog.ReqId, &evLogTraceId);
+            }
+        }
         NPDisk::TCommitRecordFooter footer(evLog.Data.size(), evLog.CommitRecord.FirstLsnToKeep,
             evLog.CommitRecord.CommitChunks.size(), evLog.CommitRecord.DeleteChunks.size(),
+            evLog.CommitRecord.DirtyChunks.size(),
             evLog.CommitRecord.IsStartingPoint);
         CommonLogger->LogDataPart(&footer, sizeof(footer), evLog.ReqId, &evLogTraceId);
 
@@ -957,20 +1040,15 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
                 if (evLog.CommitRecord.FirstLsnToKeep > OwnerData[evLog.Owner].CurrentFirstLsnToKeep) {
                     OwnerData[evLog.Owner].CutLogAt = TInstant::Now();
                 }
-                P_LOG(PRI_INFO, BPD71, "Setting new FirstLsnToKeep",
-                    (OldFirstLsnToKeep, OwnerData[evLog.Owner].CurrentFirstLsnToKeep),
-                    (NewFirstLsnToKeep, evLog.CommitRecord.FirstLsnToKeep),
-                    (CausedByLsn, evLog.Lsn),
-                    (OwnerId, evLog.Owner));
                 OwnerData[evLog.Owner].CurrentFirstLsnToKeep = evLog.CommitRecord.FirstLsnToKeep;
             }
         }
     }
-    Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
+    Y_VERIFY_S(CommonLogger->NextChunks.empty(), PCtx->PDiskLogPrefix);
 
     evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
         GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), "", Keeper.GetLogChunkCount()));
-    Y_ABORT_UNLESS(evLog.Result.Get());
+    Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
 
@@ -980,7 +1058,7 @@ void TPDisk::LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommi
     if (!CommonLogger->IsEmptySector()) {
         size_t prevPreallocatedSize = CommonLogger->NextChunks.size();
         if (!PreallocateLogChunks(CommonLogger->SectorBytesFree, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
-            Y_ABORT("Last chunk is over, how did you do that?!");
+            Y_ABORT_S(PCtx->PDiskLogPrefix << "Last chunk is over, how did you do that?!");
         }
         size_t nextPreallocatedSize = CommonLogger->NextChunks.size();
         if (nextPreallocatedSize != prevPreallocatedSize && logChunksToCommit) {
@@ -1035,9 +1113,36 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
         }
         ++ChunkState[chunkIdx].CommitsInProgress;
     }
+    bool isDirtyMarked = false;
+    if (TPDisk::IS_SHRED_ENABLED) {
+        bool isLogged = false;
+        for (ui32 chunkIdx : logWrite.CommitRecord.DirtyChunks) {
+            if (chunkIdx >= ChunkState.size()) {
+                if (!isLogged) {
+                    isLogged = true;
+                    LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        PCtx->PDiskLogPrefix << "Commit DirtyChunk contains invalid chunkIdx# " << chunkIdx
+                        << " ShredGeneration# " << ShredGeneration);
+                }
+            } else {
+                if (!ChunkState[chunkIdx].IsDirty) {
+                    ChunkState[chunkIdx].IsDirty = true;
+                    isDirtyMarked = true;
+                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
+                        PCtx->PDiskLogPrefix << "marked chunkIdx# " << chunkIdx << " as dirty"
+                        << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
+                        << " ShredGeneration# " << ShredGeneration);
+                }
+            }
+        }
+    }
     if (logWrite.CommitRecord.DeleteToDecommitted) {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
+                state.IsDirty = true;
+                isDirtyMarked = true;
+            }
             switch (state.CommitState) {
             case TChunkState::DATA_RESERVED:
                 state.CommitState = TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS;
@@ -1048,7 +1153,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                 state.CommitState = TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS;
                 break;
             default:
-                Y_FAIL_S("PDiskID# " << PCtx->PDiskId << " can't delete to decomitted chunkIdx# " << chunkIdx
+                Y_FAIL_S(PCtx->PDiskLogPrefix << "can't delete to decomitted chunkIdx# " << chunkIdx
                     << " request ownerId# " << logWrite.Owner
                     << " as it is in unexpected CommitState# " << state.ToString());
                 break;
@@ -1057,6 +1162,10 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
     } else {
         for (ui32 chunkIdx : logWrite.CommitRecord.DeleteChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
+                state.IsDirty = true;
+                isDirtyMarked = true;
+            }
             if (state.HasAnyOperationsInProgress()) {
                 switch (state.CommitState) {
                 case TChunkState::DATA_RESERVED:
@@ -1071,7 +1180,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                     state.CommitState = TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE;
                     break;
                 default:
-                    Y_FAIL_S("PDiskID# " << PCtx->PDiskId << " can't delete chunkIdx# " << chunkIdx
+                    Y_FAIL_S(PCtx->PDiskLogPrefix << "can't delete chunkIdx# " << chunkIdx
                         << " request ownerId# " << logWrite.Owner
                         << " with operations in progress as it is in unexpected CommitState# " << state.ToString());
                     break;
@@ -1088,11 +1197,14 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                 Mon.CommitedDataChunks->Dec();
                 state.CommitState = TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS;
             } else {
-                Y_FAIL_S("PDiskID# " << PCtx->PDiskId << " can't delete chunkIdx# " << chunkIdx
+                Y_FAIL_S(PCtx->PDiskLogPrefix << "can't delete chunkIdx# " << chunkIdx
                     << " request ownerId# " << logWrite.Owner
                     << " as it is in unexpected CommitState# " << state.ToString());
             }
         }
+    }
+    if (isDirtyMarked) {
+        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
     }
 
     return NKikimrProto::OK;
@@ -1101,8 +1213,8 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
 bool TPDisk::ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
     if (chunkIdx >= ChunkState.size()) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't commit chunkIdx# " << chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't commit chunkIdx# " << chunkIdx
             << " > total# " << ChunkState.size()
             << " ownerId# " << owner
             << " Marker# BPD74";
@@ -1110,8 +1222,8 @@ bool TPDisk::ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
         return false;
     }
     if (ChunkState[chunkIdx].OwnerId != owner) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't commit chunkIdx# " << chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't commit chunkIdx# " << chunkIdx
             << ", ownerId# " << owner
             << " != real ownerId# " << ChunkState[chunkIdx].OwnerId
             << " Marker# BPD75";
@@ -1120,8 +1232,8 @@ bool TPDisk::ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
     }
     if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED
             && ChunkState[chunkIdx].CommitState != TChunkState::DATA_COMMITTED) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't commit chunkIdx# " << chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't commit chunkIdx# " << chunkIdx
             << " in CommitState# " << ChunkState[chunkIdx].CommitState
             << " ownerId# " << owner << " Marker# BPD83";
         P_LOG(PRI_ERROR, BPD01, outErrorReason.Str());
@@ -1134,7 +1246,7 @@ bool TPDisk::ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
 void TPDisk::CommitChunk(ui32 chunkIdx) {
     TGuard<TMutex> guard(StateMutex);
     TChunkState &state = ChunkState[chunkIdx];
-    Y_ABORT_UNLESS(state.CommitsInProgress > 0);
+    Y_VERIFY_S(state.CommitsInProgress > 0, PCtx->PDiskLogPrefix);
     --state.CommitsInProgress;
 
     switch (state.CommitState) {
@@ -1157,7 +1269,7 @@ void TPDisk::CommitChunk(ui32 chunkIdx) {
         // Do nothing
         break;
     default:
-        Y_FAIL_S("PDiskID# " << PCtx->PDiskId << " can't commit chunkIdx# " << chunkIdx
+        Y_FAIL_S(PCtx->PDiskLogPrefix << "can't commit chunkIdx# " << chunkIdx
                 << " as it is in unexpected CommitState# " << state.ToString());
         break;
     }
@@ -1166,8 +1278,8 @@ void TPDisk::CommitChunk(ui32 chunkIdx) {
 bool TPDisk::ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
     if (chunkIdx >= ChunkState.size()) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't delete chunkIdx# " << (ui32)chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't delete chunkIdx# " << (ui32)chunkIdx
             << " > total# " << (ui32)ChunkState.size()
             << " ownerId# " << (ui32)owner << "!"
             << " Marker# BPD76";
@@ -1175,8 +1287,8 @@ bool TPDisk::ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
         return false;
     }
     if (ChunkState[chunkIdx].OwnerId != owner) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't delete chunkIdx# " << (ui32)chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't delete chunkIdx# " << (ui32)chunkIdx
             << " ownerId# " << (ui32)owner
             << " != trueOwnerId# " << (ui32)ChunkState[chunkIdx].OwnerId << "!"
             << " Marker# BPD77";
@@ -1185,8 +1297,8 @@ bool TPDisk::ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
     }
     if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED
             && ChunkState[chunkIdx].CommitState != TChunkState::DATA_COMMITTED) {
-        outErrorReason << "PDiskId# " << PCtx->PDiskId
-            << " Can't delete chunkIdx# " << (ui32)chunkIdx
+        outErrorReason << PCtx->PDiskLogPrefix
+            << "Can't delete chunkIdx# " << (ui32)chunkIdx
             << " in CommitState# " << ChunkState[chunkIdx].CommitState
             << " ownerId# " << (ui32)owner << " Marker# BPD82";
         P_LOG(PRI_ERROR, BPD01, outErrorReason.Str());
@@ -1210,25 +1322,25 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
     case TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS:
         [[fallthrough]];
     case TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS:
-        Y_VERIFY_S(state.CommitsInProgress == 0,
-                "PDiskId# " << PCtx->PDiskId << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
+        Y_VERIFY_S(state.CommitsInProgress == 0, PCtx->PDiskLogPrefix
+                << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
         P_LOG(PRI_INFO, BPD01, "Chunk is deleted",
                 (ChunkIdx, chunkIdx),
                 (OldOwner, (ui32)state.OwnerId),
                 (NewOwner, (ui32)OwnerUnallocated));
-        Y_ABORT_UNLESS(state.OwnerId == owner); // TODO DELETE
+        Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.OwnerId = OwnerUnallocated;
         state.CommitState = TChunkState::FREE;
         Keeper.PushFreeOwnerChunk(owner, chunkIdx);
         break;
     case TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE:
         // Mark chunk as quarantine, so it will be released through default quarantine way
-        Y_ABORT_UNLESS(state.OwnerId == owner); // TODO DELETE
+        Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.CommitState = TChunkState::DATA_ON_QUARANTINE;
         break;
     case TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE:
         // Mark chunk as quarantine, so it will be released through default quarantine way
-        Y_ABORT_UNLESS(state.OwnerId == owner); // TODO DELETE
+        Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.CommitState = TChunkState::DATA_ON_QUARANTINE;
         break;
     case TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS:
@@ -1238,7 +1350,7 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
         break;
 
     default:
-        Y_FAIL_S("PDiskID# " << PCtx->PDiskId << " can't delete chunkIdx# " << chunkIdx
+        Y_FAIL_S(PCtx->PDiskLogPrefix << "can't delete chunkIdx# " << chunkIdx
                 << " requesting ownerId# " << owner
                 << " as it is in unexpected CommitState# " << state.ToString());
     }
@@ -1257,6 +1369,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     // Decrement log chunk user counters and release unused log chunks
     TOwnerData &ownerData = OwnerData[req.OwnerId];
     ui64 currentFirstLsnToKeep = ownerData.CurrentFirstLsnToKeep;
+    
     auto it = LogChunks.begin();
     bool isChunkReleased = false;
     if (req.Lsn <= ownerData.LastWrittenCommitLsn) {
@@ -1270,7 +1383,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     while (it != LogChunks.end() && it->OwnerLsnRange.size() > req.OwnerId) {
         TLogChunkInfo::TLsnRange &range = it->OwnerLsnRange[req.OwnerId];
         if (range.IsPresent && range.LastLsn < currentFirstLsnToKeep) {
-            //Y_ABORT_UNLESS(range.FirstLsn != range.LastLsn);
+            //Y_VERIFY_S(range.FirstLsn != range.LastLsn, PCtx->PDiskLogPrefix);
             P_LOG(PRI_INFO, BPD27, "Log chunk is dereferenced by owner",
                 (ChunkIdx, it->ChunkIdx),
                 (LsnRange, TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
@@ -1279,7 +1392,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
                 (CausedbyLsn, req.Lsn),
                 (PreviousCurrentUserCount, it->CurrentUserCount));
             range.IsPresent = false;
-            Y_ABORT_UNLESS(it->CurrentUserCount > 0);
+            Y_VERIFY_S(it->CurrentUserCount > 0, PCtx->PDiskLogPrefix);
             it->CurrentUserCount--;
             if (it->CurrentUserCount == 0) {
                 isChunkReleased = true;
@@ -1287,10 +1400,33 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
         }
         ++it;
     }
+    bool isContinueShredScheduled = false;
     if (isChunkReleased) {
-        THolder<TCompletionEventSender> completion(new TCompletionEventSender(this));
+        if (ShredIsWaitingForCutLog) {
+            isContinueShredScheduled = true;
+        }
+        THolder<TCompletionEventSender> completion(isContinueShredScheduled ?
+            new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred()) :
+            new TCompletionEventSender(this));
         if (ReleaseUnusedLogChunks(completion.Get())) {
+            if (isContinueShredScheduled) {
+                ShredIsWaitingForCutLog = 0;
+                ContinueShredsInFlight++;
+            }
             WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
+        } else {
+            isContinueShredScheduled = false;
+        }
+    }
+
+    if (!isContinueShredScheduled) {
+        if (ShredIsWaitingForCutLog) {
+            ShredIsWaitingForCutLog = 0;
+            if (ContinueShredsInFlight == 0) {
+                ContinueShredsInFlight++;
+                PCtx->ActorSystem->Send(new IEventHandle(
+                    PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
+            }
         }
     }
     TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
@@ -1317,7 +1453,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
                 dataChunkSizeSectors, Format.MagicLogChunk, req.GapStart->ChunkIdx, nullptr, desiredSectorIdx,
                 nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
 
-        Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, "PDiskId# " << PCtx->PDiskId
+        Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, PCtx->PDiskLogPrefix
             << "Zero GapEnd->DesiredPrevChunkLastNonce, chunkInfo# " << *req.GapEnd);
         // +1 stands for -1 in logreader in old versions of pdisk
         ui64 expectedNonce = req.GapEnd->DesiredPrevChunkLastNonce + 1;
@@ -1338,9 +1474,9 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 
 // Schedules EvReadLogResult event for the system log
 void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
-    Y_VERIFY_S(PDiskThread.Running(), "expect PDiskThread to be running");
-    Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, "expect InitPhase to be Uninitialized, but InitPhase# "
-            << InitPhase.load());
+    Y_VERIFY_S(PDiskThread.Running(), PCtx->PDiskLogPrefix << "expect PDiskThread to be running");
+    Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, PCtx->PDiskLogPrefix
+            << "expect InitPhase to be Uninitialized, but InitPhase# " << InitPhase.load());
     ui32 formatSectorsSize = FormatSectorSize * ReplicationFactor;
     THolder<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
@@ -1436,11 +1572,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
                 for (auto it = chunkOwners.begin(); it != chunkOwners.end(); ++it) {
                     TOwnerData &data = OwnerData[*it];
-                    Y_ABORT_UNLESS(data.VDiskId != TVDiskID::InvalidId);
+                    Y_VERIFY_S(data.VDiskId != TVDiskID::InvalidId, PCtx->PDiskLogPrefix);
                     if (data.StartingPoints.empty()) {
                         TStringStream str;
-                        str << "PDiskId# " << PCtx->PDiskId
-                            << " ownerId# " << (ui32)*it
+                        str << PCtx->PDiskLogPrefix
+                            << "ownerId# " << (ui32)*it
                             << " Owns chunks, but has no starting points! ownedChunks# [";
                         for (size_t chunkIdx = 0; chunkIdx < ChunkState.size(); ++chunkIdx) {
                             TChunkState &state = ChunkState[chunkIdx];
@@ -1548,7 +1684,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             return;
         }
         default:
-            Y_FAIL_S("Unexpected InitPhase# " << InitPhase.load());
+            Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected InitPhase# " << InitPhase.load());
     }
 }
 

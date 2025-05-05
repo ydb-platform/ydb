@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/query/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/stats.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -8,7 +8,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 class TExecStats::TImpl {
 public:
@@ -31,6 +31,7 @@ std::string TExecStats::ToString(bool withPlan) const {
     if (!withPlan) {
         proto.clear_query_plan();
         proto.clear_query_ast();
+        proto.clear_query_meta();
     }
 
     TStringType res;
@@ -56,6 +57,16 @@ std::optional<std::string> TExecStats::GetAst() const {
     }
 
     return proto.query_ast();
+}
+
+std::optional<std::string> TExecStats::GetMeta() const {
+    auto proto = Impl_->Proto;
+
+    if (proto.query_meta().empty()) {
+        return {};
+    }
+
+    return proto.query_meta();
 }
 
 TDuration TExecStats::GetTotalDuration() const {

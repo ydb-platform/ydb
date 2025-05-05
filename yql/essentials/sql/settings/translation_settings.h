@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -76,6 +77,7 @@ namespace NSQLTranslation {
         TTranslationSettings();
         google::protobuf::Arena* Arena = nullptr;
 
+        NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
         THashMap<TString, TString> ClusterMapping;
         TString PathPrefix;
         // keys (cluster name) should be normalized
@@ -127,6 +129,9 @@ namespace NSQLTranslation {
         TMaybe<TString> ApplicationName;
         bool PgSortNulls = false;
         NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
+        bool EmitReadsForExists = false;
+        bool AlwaysAllowExports = false;
+        bool IsReplay = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

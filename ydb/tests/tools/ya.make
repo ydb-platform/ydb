@@ -2,6 +2,7 @@ RECURSE(
     canondata_sync
     datastreams_helpers
     fq_runner
+    fqrun
     idx_test
     kqprun
     mdb_mock

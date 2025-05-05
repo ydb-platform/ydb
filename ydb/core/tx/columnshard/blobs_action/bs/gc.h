@@ -17,6 +17,8 @@ public:
         THashSet<TLogoBlobID> KeepList;
         THashSet<TLogoBlobID> DontKeepList;
         mutable ui32 RequestsCount = 0;
+        
+        constexpr static ui32 RequestsLimit = 10;
     };
     using TGCListsByGroup = THashMap<TBlobAddress, TGCLists>;
 private:
@@ -26,6 +28,7 @@ private:
     const ui64 CurrentGen;
     std::deque<TUnifiedBlobId> KeepsToErase;
     std::shared_ptr<TBlobManager> Manager;
+    size_t Failures = 0;
 protected:
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) override;
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
@@ -52,6 +55,10 @@ public:
 
     bool IsFinished() const {
         return ListsByGroupId.empty();
+    }
+
+    bool HasFailures() const {
+        return Failures != 0;
     }
 
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);

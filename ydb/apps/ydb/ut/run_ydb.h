@@ -2,11 +2,12 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/list.h>
+#include <util/generic/hash.h>
 
 TString GetYdbEndpoint();
 TString GetYdbDatabase();
 
-TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode = true);
+TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode = true, bool autoAddEndpointAndDatabase = true, const THashMap<TString, TString>& env = {}, int expectedExitCode = 0);
 
 ui64 GetFullTimeValue(const TString& output);
 THashSet<TString> GetCodecsList(const TString& output);

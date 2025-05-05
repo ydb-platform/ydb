@@ -2,6 +2,7 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
+#include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
@@ -27,6 +28,7 @@
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
 #include "transactions/tx_controller.h"
+#include "common/path_id.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
@@ -39,6 +41,7 @@
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
@@ -182,6 +185,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitEraseTablesTxSubscriber;
+    friend class TTxPersistSubDomainOutOfSpace;
+    friend class TTxPersistSubDomainPathId;
+    friend class TSpaceWatcher;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -253,7 +259,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -295,8 +301,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-
     void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -332,8 +338,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
-    void OnTieringModified(const std::optional<ui64> pathId = {});
+    void ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
+    void OnTieringModified(const std::optional<TInternalPathId> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
 
@@ -353,7 +359,8 @@ public:
         InsertTable /* "insert_table" */,
         OverloadMetadata /* "overload_metadata" */,
         Disk /* "disk" */,
-        None /* "none" */
+        None /* "none" */,
+        OverloadCompaction /* "overload_compaction" */
     };
 
     // For syslocks
@@ -384,8 +391,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus CheckOverloadedImmediate(const ui64 tableId) const;
-    EOverloadStatus CheckOverloadedWait(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
+    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -421,7 +428,7 @@ protected:
             HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
+            HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
@@ -463,6 +470,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
             HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -546,12 +554,14 @@ private:
     THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
+    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+    TSpaceWatcher* SpaceWatcher;
+    TActorId SpaceWatcherId;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
@@ -596,11 +606,11 @@ private:
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
-    void SetupCompaction(const std::set<ui64>& pathIds);
+    void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
+    bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
     void SetupCleanupInsertTable();

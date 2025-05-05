@@ -13,7 +13,6 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 class IDataSource;
 using TColumnsSet = NCommon::TColumnsSet;
-using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
@@ -28,7 +27,7 @@ private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource,
         const bool partialUsageByPredicate, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
-    std::array<std::array<std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>, 2>, 2>
+    std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2>
         CacheFetchingScripts;
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 

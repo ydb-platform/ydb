@@ -94,9 +94,18 @@ private:
         return CacheByTableOwner.emplace(ownerPathId, std::make_shared<TSchemaObjectsCache>()).first->second;
     }
 
+    void DropCachesImpl() {
+        TGuard lock(Mutex);
+        CacheByTableOwner.clear();
+    }
+
 public:
     static std::shared_ptr<TSchemaObjectsCache> GetCache(const ui64 ownerPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(ownerPathId);
+    }
+
+    static void DropCaches() {
+        Singleton<TSchemaCachesManager>()->DropCachesImpl();
     }
 };
 

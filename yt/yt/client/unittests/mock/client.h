@@ -10,6 +10,8 @@
 
 #include <yt/yt/client/chaos_client/replication_card_cache.h>
 
+#include <yt/yt/client/scheduler/spec_patch.h>
+
 #include <yt/yt/client/table_client/name_table.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
@@ -36,7 +38,7 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
-    MOCK_METHOD(std::optional<TStringBuf>, GetClusterName, (bool fetchIfNull), (override));
+    MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,
@@ -63,7 +65,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options),
         (override));
 
@@ -118,7 +120,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options),
         (override));
 
@@ -376,6 +378,11 @@ public:
         const TTransactionAttachOptions& options),
         (override));
 
+    MOCK_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
         const TMountTableOptions& options),
@@ -399,6 +406,11 @@ public:
     MOCK_METHOD(TFuture<void>, UnfreezeTable, (
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, CancelTabletTransition, (
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, ReshardTable, (
@@ -509,6 +521,11 @@ public:
         const TPartitionTablesOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& partition,
+        const TReadTablePartitionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
         i64 rowCount,
@@ -597,6 +614,12 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PatchOperationSpec, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patch,
+        const TPatchOperationSpecOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TOperation>, GetOperation, (
@@ -834,6 +857,13 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (

@@ -19,11 +19,12 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/concurrency/pollable_detail.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -88,7 +89,8 @@ public:
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker);
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        bool needRejectConnectionOnMemoryOvercommit);
 
     ~TTcpConnection();
 
@@ -279,6 +281,7 @@ private:
     const EVerificationMode VerificationMode_;
 
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const bool NeedRejectConnectionOnMemoryOvercommit_;
 
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 

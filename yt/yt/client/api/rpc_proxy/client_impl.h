@@ -32,6 +32,10 @@ public:
         NTransactionClient::TTransactionId transactionId,
         const NApi::TTransactionAttachOptions& options) override;
 
+    NApi::IPrerequisitePtr AttachPrerequisite(
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const NApi::TPrerequisiteAttachOptions& options) override;
+
     // Tables.
     TFuture<void> MountTable(
         const NYPath::TYPath& path,
@@ -52,6 +56,10 @@ public:
     TFuture<void> UnfreezeTable(
         const NYPath::TYPath& path,
         const NApi::TUnfreezeTableOptions& options) override;
+
+    TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const NApi::TCancelTabletTransitionOptions& options) override;
 
     TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
@@ -252,6 +260,11 @@ public:
         const NYson::TYsonString& parameters,
         const NApi::TUpdateOperationParametersOptions& options) override;
 
+    TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const NApi::TPatchOperationSpecOptions& options) override;
+
     TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NApi::TGetOperationOptions& options) override;
@@ -337,6 +350,10 @@ public:
     TFuture<TMultiTablePartitions> PartitionTables(
         const std::vector<NYPath::TRichYPath>& paths,
         const NApi::TPartitionTablesOptions& options) override;
+
+    TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
 
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
@@ -571,6 +588,12 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
+
+    TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) override;
 
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(

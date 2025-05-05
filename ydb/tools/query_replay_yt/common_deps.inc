@@ -45,9 +45,9 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
     yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
@@ -64,6 +64,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
@@ -84,9 +85,9 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/top
     yql/essentials/udfs/common/topfreq
-    yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    yql/essentials/sql/pg_dummy
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
 )

@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
@@ -30,8 +31,10 @@ namespace {
 bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
     for (const auto& outer: joinTuple.Options()) {
         for (const auto& inner: outer.Cast<TExprList>()) {
-            if (inner.Cast<TCoAtom>().StringValue() == "forceStreamLookup") {
-                return true;
+            if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
+                if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
+                    return true;
+                } 
             }
         }
     }
@@ -54,7 +57,13 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
+    virtual double ComputeJoinCost(
+        const NYql::TOptimizerStatistics& leftStats, 
+        const NYql::TOptimizerStatistics& rightStats, 
+        const double outputRows, 
+        const double outputByteSize, 
+        NYql::EJoinAlgoType joinAlgo
+    ) const override;
 
     TDqConfiguration::TPtr Config;
     TTypeAnnotationContext& TypesCtx;
@@ -90,7 +99,13 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 }
 
 
-double TDqCBOProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
+double TDqCBOProviderContext::ComputeJoinCost(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const double outputRows, 
+    const double outputByteSize, 
+    EJoinAlgoType joinAlgo
+) const  {
     Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {
@@ -321,9 +336,49 @@ protected:
         return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
     }
 
+    static bool ValidateDqEquiJoinTree(const TCoEquiJoinTuple& joinTuple, EHashJoinMode mode) {
+        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+
+        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+
+        TStringBuf joinType = joinTuple.Type().Value();
+        auto options = joinTuple.Options();
+        auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+        bool leftAny = linkSettings.LeftHints.contains("any");
+        bool rightAny = linkSettings.RightHints.contains("any");
+        if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+            mode = EHashJoinMode::Map;
+        } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+            mode = EHashJoinMode::GraceAndSelf;
+        }
+
+        if (mode == EHashJoinMode::Off || mode == EHashJoinMode::Map) {
+            if ((joinType == "Full" || joinType == "Exclusion") && (leftAny || rightAny)) {
+                // YQL-19497
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         auto equiJoin = node.Cast<TCoEquiJoin>();
         if (!HasDqConnectionsInEquiJoin(equiJoin)) {
+            return node;
+        }
+
+        auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
+        auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+        if (!ValidateDqEquiJoinTree(joinTuple, mode)) {
             return node;
         }
 

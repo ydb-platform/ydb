@@ -42,6 +42,8 @@ SRCS(
     skeleton_oos_tracker.h
     skeleton_overload_handler.cpp
     skeleton_overload_handler.h
+    skeleton_shred.cpp
+    skeleton_shred.h
     skeleton_vmultiput_actor.cpp
     skeleton_vmultiput_actor.h
     skeleton_vmovedpatch_actor.cpp

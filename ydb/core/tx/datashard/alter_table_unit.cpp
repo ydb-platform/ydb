@@ -25,7 +25,7 @@ public:
         Y_UNUSED(ctx);
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         // Only applicable when ALTER TABLE is in the transaction
         auto& schemeTx = tx->GetSchemeTx();
@@ -44,12 +44,12 @@ public:
         ui64 tableId = alter.GetId_Deprecated();
         if (alter.HasPathId()) {
             auto& pathId = alter.GetPathId();
-            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+            Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
             tableId = pathId.GetLocalId();
         }
 
         // Only applicable when table has ShadowData enabled
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const TUserTable& table = *DataShard.GetUserTables().at(tableId);
         const ui32 localTid = table.LocalTid;
         const ui32 shadowTid = table.ShadowTid;
@@ -66,7 +66,7 @@ public:
             return EExecutionStatus::Continue;
         }
 
-        Y_ABORT_UNLESS(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
+        Y_ENSURE(op->InputSnapshots().size() == 1, "Expected a single shadow snapshot");
         {
             auto& snapshot = op->InputSnapshots()[0];
             txc.Env.MoveSnapshot(*snapshot, /* src */ shadowTid, /* dst */ localTid);
@@ -129,7 +129,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                                           const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasAlterTable())
@@ -138,7 +138,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto& alterTableTx = schemeTx.GetAlterTable();
 
     const auto version = alterTableTx.GetTableSchemaVersion();
-    Y_ABORT_UNLESS(version);
+    Y_ENSURE(version);
 
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                "Trying to ALTER TABLE at " << DataShard.TabletID()
@@ -147,7 +147,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
         auto& pathId = alterTableTx.GetPathId();
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
         tableId.LocalPathId = pathId.GetLocalId();
     }
 

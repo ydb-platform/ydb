@@ -602,6 +602,8 @@ BELONGS absl/strings/ya.make
     Files with this license:
         absl/base/internal/poison.cc [1:1]
         absl/base/internal/poison.h [1:1]
+        absl/base/internal/tracing.cc [1:1]
+        absl/base/internal/tracing.h [1:1]
         absl/container/hash_container_defaults.h [1:1]
         absl/debugging/internal/bounded_utf8_length_sequence.h [1:1]
         absl/debugging/internal/decode_rust_punycode.cc [1:1]
@@ -610,11 +612,13 @@ BELONGS absl/strings/ya.make
         absl/debugging/internal/demangle_rust.h [1:1]
         absl/debugging/internal/utf8_for_code_point.cc [1:1]
         absl/debugging/internal/utf8_for_code_point.h [1:1]
+        absl/log/internal/structured_proto.cc [2:2]
+        absl/log/internal/structured_proto.h [1:1]
         absl/random/internal/mock_validators.h [1:1]
         absl/status/internal/status_matchers.h [1:1]
     Belongs difference:
         + absl/strings/ya.make
-        - absl/base/ya.make absl/container/ya.make absl/debugging/ya.make absl/random/ya.make absl/status/ya.make
+        - absl/base/ya.make absl/container/ya.make absl/debugging/ya.make absl/log/ya.make absl/random/ya.make absl/status/ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9fd4860fdb6776c0e8deab1d14ff7b1b
 BELONGS absl/debugging/ya.make

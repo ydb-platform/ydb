@@ -167,9 +167,11 @@ def add_python_lint_checks(unit, py_ver, files):
             "taxi/uservices/",
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
+            "market/sre",  # YMAKE-626 -> MARKET-???
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
             "sdg/sdc/third_party/",  # SDC contrib
+            "smart_devices/third_party/",  # smart_devices contrib
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
             "yt/python_py2/",
@@ -588,7 +590,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)
@@ -672,7 +674,11 @@ def _check_test_srcs(*args):
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
+        namespace = "__tests__"
+        # Avoid collision on test modules in venv mode
+        if unit.get('YA_IDE_VENV'):
+            namespace += "." + unit.path()[3:].replace('/', '.')
+        unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
 def onpy_doctests(unit, *args):
@@ -720,6 +726,8 @@ def onpy_register(unit, *args):
                 unit.oncflags(['-DPyInit_{}=PyInit_{}'.format(shortname, mangle(name))])
             else:
                 unit.oncflags(['-Dinit{}=init{}'.format(shortname, mangle(name))])
+            # BOOST_PYTHON_MODULE case
+            unit.oncflags(['-Dinit_module_{}=init_module_{}'.format(shortname, mangle(name))])
 
 
 def py_main(unit, arg):

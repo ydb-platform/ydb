@@ -10,9 +10,11 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/base
     ydb/core/blobstorage
+    ydb/core/testlib/default
 )
 
 SRCS(
+    blobstorage_syncer_broker_ut.cpp
     blobstorage_syncer_data_ut.cpp
     blobstorage_syncer_localwriter_ut.cpp
     blobstorage_syncquorum_ut.cpp

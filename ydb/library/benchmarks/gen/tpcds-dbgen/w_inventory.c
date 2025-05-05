@@ -90,6 +90,7 @@ mk_w_inventory(void *pDest, ds_key_t index)
         base_date = strtodate (DATE_MINIMUM);
         jDate = base_date->julian;
         set_dow(base_date);
+        free(base_date);
         /* Make exceptions to the 1-rng-call-per-row rule */
         bInit = 1;
     }

@@ -78,6 +78,8 @@ sql_stmt_core:
   | create_transfer_stmt
   | alter_transfer_stmt
   | drop_transfer_stmt
+  | alter_database_stmt
+  | show_create_table_stmt
 ;
 
 expr:
@@ -394,7 +396,7 @@ reduce_core:
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT (IF EXISTS)? without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
@@ -683,6 +685,8 @@ backup_collection_settings_entry: an_id EQUALS table_setting_value;
 backup_stmt: BACKUP object_ref (INCREMENTAL)?;
 restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
 
+alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name;
+
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
 with_table_settings: WITH LPAREN table_settings_entry (COMMA table_settings_entry)* RPAREN;
@@ -840,8 +844,9 @@ role_name: an_id_or_type | bind_parameter;
 user_option: authentication_option | login_option;
 
 authentication_option: password_option | hash_option;
-password_option: ENCRYPTED? PASSWORD expr;
-hash_option: HASH expr;
+password_option: ENCRYPTED? PASSWORD password_value;
+password_value: STRING_VALUE | NULL;
+hash_option: HASH STRING_VALUE;
 login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
@@ -1094,6 +1099,8 @@ alter_sequence_action:
   | RESTART
   | INCREMENT BY? integer
 ;
+
+show_create_table_stmt: SHOW CREATE (TABLE | VIEW) simple_table_ref;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1430,6 +1437,7 @@ keyword_as_compat:
   | OTHERS
   // | OUTER
   // | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -1658,6 +1666,7 @@ keyword_compat: (
   | OTHERS
   | OUTER
   | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -1766,9 +1775,7 @@ bool_value: (TRUE | FALSE);
 real: REAL;
 integer: DIGITS | INTEGER_VALUE;
 
-//
-// Lexer
-//
+//! section:punctuation
 
 EQUALS:        '=';
 EQUALS2:       '==';
@@ -1814,6 +1821,8 @@ fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
 fragment DOUBLE_COMMAT: '@@';
 
+//! section:letter
+
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
 fragment B:('b'|'B');
@@ -1841,6 +1850,8 @@ fragment W:('w'|'W');
 fragment X:('x'|'X');
 fragment Y:('y'|'Y');
 fragment Z:('z'|'Z');
+
+//! section:keyword
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
@@ -2022,6 +2033,7 @@ ORDER: O R D E R;
 OTHERS: O T H E R S;
 OUTER: O U T E R;
 OVER: O V E R;
+OWNER: O W N E R;
 PARALLEL: P A R A L L E L;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;
@@ -2134,13 +2146,7 @@ WRAPPER: W R A P P E R;
 //WRITE: W R I T E;
 XOR: X O R;
 
-// YQL Default Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
-// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
-
-// ANSI Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
-// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
+//! section:other
 
 fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
 fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
@@ -2153,7 +2159,7 @@ STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
-fragment ID_QUOTED_CORE: '\\'. | '``' | ~('`' | '\\');
+fragment ID_QUOTED_CORE: '\\' . | '``' | ~('`' | '\\');
 ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
 
 fragment DIGIT: '0'..'9';
@@ -2167,23 +2173,18 @@ DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
 // not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
 INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
 
-fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
+fragment FLOAT_EXP: E (PLUS | MINUS)? DECDIGITS;
 REAL:
     (
         DECDIGITS DOT DIGIT* FLOAT_EXP?
     |   DECDIGITS FLOAT_EXP
 //  |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
-    ) (F | P (F ('4'|'8') | N)?)?
+    ) (F | P (F ('4' | '8') | N)?)?
     ;
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
-// YQL Default Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = .
-// ANSI Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
-
 fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
-fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
-WS: (' '|'\r'|'\t'|'\u000C'|'\n')->channel(HIDDEN);
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT)->channel(HIDDEN);
+fragment LINE_COMMENT: '--' ~('\n' | '\r')* ('\r' '\n'? | '\n' | EOF);
+WS: (' ' | '\r' | '\t' | '\u000C' | '\n') -> channel(HIDDEN);
+COMMENT: (MULTILINE_COMMENT | LINE_COMMENT) -> channel(HIDDEN);

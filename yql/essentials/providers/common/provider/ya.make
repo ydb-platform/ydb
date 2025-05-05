@@ -11,7 +11,6 @@ SRCS(
 PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
-    yql/essentials/sql # fixme
     yql/essentials/core
     yql/essentials/parser/pg_catalog
 )

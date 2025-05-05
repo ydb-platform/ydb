@@ -1,0 +1,22 @@
+From 125bcfc905f63ca6d62c6fdf99ffe388af4c0eea Mon Sep 17 00:00:00 2001
+From: Peter Dimov <pdimov@gmail.com>
+Date: Sun, 29 Sep 2024 15:12:55 +0300
+Subject: [PATCH] Avoid inclusion of deprecated header
+
+---
+ .../spirit/home/support/iterators/detail/ref_counted_policy.hpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/boost/spirit/home/support/iterators/detail/ref_counted_policy.hpp b/include/boost/spirit/home/support/iterators/detail/ref_counted_policy.hpp
+index 723bbee458..a392c2b5fc 100644
+--- a/include/boost/spirit/home/support/iterators/detail/ref_counted_policy.hpp
++++ b/include/boost/spirit/home/support/iterators/detail/ref_counted_policy.hpp
+@@ -10,7 +10,7 @@
+ #include <boost/spirit/home/support/iterators/multi_pass_fwd.hpp>
+ #include <boost/spirit/home/support/iterators/detail/multi_pass.hpp>
+ #if defined(BOOST_HAS_THREADS)
+-#include <boost/detail/atomic_count.hpp>
++#include <boost/smart_ptr/detail/atomic_count.hpp>
+ #endif
+ #include <cstdlib>
+ 

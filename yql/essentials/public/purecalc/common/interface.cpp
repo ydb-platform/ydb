@@ -33,7 +33,14 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
     , UseWorkerPool(true)
+    , UseAntlr4(true)
+    , LangVer(MinLangVersion)
 {
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetLanguageVersion(TLangVersion langver) {
+    LangVer = langver;
+    return *this;
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetUDFsDir(TStringBuf dir) {

@@ -1,4 +1,4 @@
-### Changelog entry <!-- a user-readable short description of changes introduced in this PR -->
+### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes -->
 
 ...
 
@@ -8,11 +8,12 @@
 * Experimental feature
 * Improvement
 * Performance improvement
+* User Interface
 * Bugfix 
 * Backward incompatible change
 * Documentation (changelog entry is not required)
 * Not for changelog (changelog entry is not required)
 
-### Additional information
+### Description for reviewers <!-- (optional) description for those who read this PR -->
 
 ...

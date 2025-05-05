@@ -3830,58 +3830,131 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
     return ETypeAnnotationKind::Optional == type.GetKind() ? *type.Cast<TOptionalExprType>()->GetItemType() : type;
 }
 
-TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
-    const ui32 inputLength = name.length();
-    ui32 startCharPos = 0;
-    ui32 totalSkipped = 0;
-    bool atStart = true;
-    bool justSkippedUnderscore = false;
-    for (ui32 i = 0; i < inputLength; ++i) {
-        const char c = name.at(i);
-        if (c == '_') {
-            if (!atStart) {
-                if (justSkippedUnderscore) {
-                    return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
-                }
-                justSkippedUnderscore = true;
-                ++totalSkipped;
-                continue;
-            } else {
-                ++startCharPos;
-            }
-        }
-        else {
-            atStart = false;
-            justSkippedUnderscore = false;
-        }
-    }
-
-    if (totalSkipped >= 5) {
-        return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
-    }
-
-    ui32 outPos = startCharPos;
-    for (ui32 i = startCharPos; i < inputLength; i++) {
-        const char c = name.at(i);
-        if (c == '_') {
-            continue;
-        } else {
-            name[outPos] = AsciiToLower(c);
-            ++outPos;
-        }
-    }
-
-    name.resize(outPos);
-    Y_ABORT_UNLESS(inputLength - outPos == totalSkipped);
-
-    return Nothing();
+void TDefaultTypeAnnotationVisitor::Visit(const TUnitExprType& type) {
+    Y_UNUSED(type);
 }
 
-TString NormalizeName(const TStringBuf& name) {
-    TString result(name);
-    TMaybe<TIssue> error = NormalizeName(TPosition(), result);
-    YQL_ENSURE(error.Empty(), "" << error->GetMessage());
-    return result;
+void TDefaultTypeAnnotationVisitor::Visit(const TMultiExprType& type) {
+    for (const auto& i : type.GetItems()) {
+        i->Accept(*this);
+    }
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TTupleExprType& type) {
+    for (const auto& i : type.GetItems()) {
+        i->Accept(*this);
+    }
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TStructExprType& type) {
+    for (const auto& i : type.GetItems()) {
+        i->Accept(*this);
+    }
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TItemExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TListExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TStreamExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TFlowExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TDataExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TPgExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TWorldExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TOptionalExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TCallableExprType& type) {
+    type.GetReturnType()->Accept(*this);
+    for (const auto& arg : type.GetArguments()) {
+        arg.Type->Accept(*this);
+    }
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TResourceExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TTypeExprType& type) {
+    type.GetType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TDictExprType& type) {
+    type.GetKeyType()->Accept(*this);
+    type.GetPayloadType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TVoidExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TNullExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TGenericExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TTaggedExprType& type) {
+    type.GetBaseType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TErrorExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TVariantExprType& type) {
+    type.GetUnderlyingType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TEmptyListExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TEmptyDictExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TBlockExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TScalarExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+TErrorTypeVisitor::TErrorTypeVisitor(TExprContext& ctx)
+    : Ctx_(ctx)
+{}
+
+void TErrorTypeVisitor::Visit(const TErrorExprType& type) {
+    HasErrors_ = true;
+    Ctx_.IssueManager.RaiseIssue(type.GetError());
+}
+
+bool TErrorTypeVisitor::HasErrors() const {
+    return HasErrors_;
 }
 
 } // namespace NYql

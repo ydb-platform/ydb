@@ -4,6 +4,105 @@
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
+class TSimpleList {
+public:
+    using iterator = TUnboxedValueVector::const_iterator;
+
+    [[nodiscard]] iterator Begin() const noexcept {
+        return Rows.begin();
+    }
+
+    [[nodiscard]] iterator End() const noexcept {
+        return Rows.end();
+    }
+
+    [[nodiscard]] size_t Size() const noexcept {
+        return Rows.size();
+    }
+
+    [[nodiscard]] bool Empty() const noexcept {
+        return Rows.empty();
+    }
+
+    [[nodiscard]] bool Contains(size_t i) const noexcept {
+        return i < Size();
+    }
+
+    [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
+        return Rows.at(i);
+    }
+
+    ///Range that includes starting and ending points
+    ///Can not be empty
+    class TRange {
+    public:
+        TRange()
+        : FromIndex(Max())
+        , ToIndex(Max())
+        , NfaIndex_(Max())
+        {
+        }
+
+        explicit TRange(ui64 index)
+            : FromIndex(index)
+            , ToIndex(index)
+            , NfaIndex_(Max())
+        {
+        }
+
+        TRange(ui64 from, ui64 to)
+            : FromIndex(from)
+            , ToIndex(to)
+            , NfaIndex_(Max())
+        {
+            MKQL_ENSURE(FromIndex <= ToIndex, "Internal logic error");
+        }
+
+        bool IsValid() const {
+            return FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
+        }
+
+        size_t From() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return FromIndex;
+        }
+
+        size_t To() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return ToIndex;
+        }
+
+        [[nodiscard]] size_t NfaIndex() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return NfaIndex_;
+        }
+
+        size_t Size() const {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            return ToIndex - FromIndex + 1;
+        }
+
+        void Extend() {
+            MKQL_ENSURE(IsValid(), "Internal logic error");
+            ++ToIndex;
+        }
+
+    private:
+        size_t FromIndex;
+        size_t ToIndex;
+        size_t NfaIndex_;
+    };
+
+    TRange Append(NUdf::TUnboxedValue&& value) {
+        TRange result(Rows.size());
+        Rows.push_back(std::move(value));
+        return result;
+    }
+
+private:
+    TUnboxedValueVector Rows;
+};
+
 Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     using TRange = TSimpleList::TRange;
     using TMatchedVar = TMatchedVar<TRange>;
@@ -230,4 +329,4 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValueByRef) {
         }
     }
 }
-}//namespace NKikimr::NMiniKQL::TMatchRecognize
+} // namespace NKikimr::NMiniKQL::NMatchRecognize

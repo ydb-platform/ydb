@@ -9,10 +9,10 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
@@ -40,7 +40,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         {
@@ -94,7 +94,7 @@ public:
                 query << " WHERE name=$name";
                 params.AddParam("$name", NYdb::TValueBuilder().Utf8(name).Build());
             }
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             Session->ExecuteDataQuery(query,
                                      NYdb::NTable::TTxControl::BeginTx(

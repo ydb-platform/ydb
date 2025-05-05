@@ -8,10 +8,11 @@ import string
 import logging
 import six
 import enum
+import re
 from functools import cmp_to_key
 from concurrent import futures
 
-from hamcrest import assert_that, equal_to, raises
+from hamcrest import assert_that, equal_to, is_not, raises
 import yatest
 from yatest.common import source_path, test_source_path
 
@@ -276,8 +277,6 @@ class BaseSuiteRunner(object):
             KikimrConfigGenerator(
                 udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
-                disable_iterator_lookups=True,
                 extra_feature_flags=["enable_resource_pools"],
                 column_shard_config={
                     'allow_nullable_columns_in_pk': True,
@@ -357,11 +356,9 @@ class BaseSuiteRunner(object):
         assert_method(statement)
 
     def assert_statement_ok(self, statement):
-        actual = safe_execute(lambda: self.execute_query(statement))
         assert_that(
-            len(actual),
-            1,
-            str(statement),
+            lambda: self.execute_query(statement),
+            is_not(raises(ydb.Error)),
         )
 
     def assert_statement_error(self, statement):
@@ -393,7 +390,9 @@ class BaseSuiteRunner(object):
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
         if self.plan:
-            query_plan = json.loads(self.explain(statement.text))
+            json_deser = self.explain(statement.text)
+            json_deser = re.sub(r'precompute_\d+_\d+', 'precompute', json_deser)
+            query_plan = json.loads(json_deser)
             if 'SimplifiedPlan' in query_plan:
                 del query_plan['SimplifiedPlan']
             if 'Plan' in query_plan:

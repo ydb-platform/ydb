@@ -32,4 +32,6 @@ message TCommonConfig {
     bool ShowQueryTimeline = 16;
     uint64 MaxQueryTimelineSize = 17; // default: 200KB
     string PqReconnectPeriod = 18; // default: disabled
+    uint32 TopicClientHandlersExecutorThreadsNum = 19; // default: 0 that means use default from TopicClientSettings (1)
+    uint32 TopicClientCompressionExecutorThreadsNum = 20; // default: 0 that means use default from TopicClientSettings (2)
 }

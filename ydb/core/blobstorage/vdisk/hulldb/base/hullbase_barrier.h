@@ -133,7 +133,7 @@ namespace NKikimr {
             , Ingress(ingress)
         {}
 
-        void Merge(const TMemRecBarrier& rec, const TKeyBarrier& key) {
+        void Merge(const TMemRecBarrier& rec, const TKeyBarrier& key, bool /*clearLocal*/, TBlobStorageGroupType /*gtype*/) {
             Y_ABORT_UNLESS(CollectGen == rec.CollectGen && CollectStep == rec.CollectStep,
                    "Barriers MUST be equal; CollectGen# %" PRIu32 " CollectStep# %" PRIu32
                    " rec.CollectGen# %" PRIu32 " rec.CollectStep %" PRIu32

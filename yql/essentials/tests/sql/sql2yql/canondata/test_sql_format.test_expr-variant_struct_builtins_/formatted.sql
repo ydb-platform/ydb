@@ -17,9 +17,9 @@ $visitor = ($var) -> {
 };
 
 SELECT
-    $visitor(VARIANT (5, 'num', $vartype)),
-    $visitor(Just(VARIANT (TRUE, 'flag', $vartype))),
-    $visitor(Just(VARIANT ('somestr', 'str', $vartype))),
+    $visitor(Variant(5, 'num', $vartype)),
+    $visitor(Just(Variant(TRUE, 'flag', $vartype))),
+    $visitor(Just(Variant('somestr', 'str', $vartype))),
     $visitor(Nothing(OptionalType($vartype))),
     $visitor(NULL)
 ;
@@ -29,9 +29,9 @@ $visitor_def = ($var) -> {
 };
 
 SELECT
-    $visitor_def(VARIANT (5, 'num', $vartype)),
-    $visitor_def(Just(VARIANT (TRUE, 'flag', $vartype))),
-    $visitor_def(Just(VARIANT ('somestr', 'str', $vartype))),
+    $visitor_def(Variant(5, 'num', $vartype)),
+    $visitor_def(Just(Variant(TRUE, 'flag', $vartype))),
+    $visitor_def(Just(Variant('somestr', 'str', $vartype))),
     $visitor_def(Nothing(OptionalType($vartype))),
     $visitor_def(NULL)
 ;
@@ -39,8 +39,8 @@ SELECT
 $vartype1 = Variant<num1: Int32, num2: Int32, num3: Int32>;
 
 SELECT
-    VariantItem(VARIANT (7, 'num2', $vartype1)),
-    VariantItem(Just(VARIANT (5, 'num1', $vartype1))),
+    VariantItem(Variant(7, 'num2', $vartype1)),
+    VariantItem(Just(Variant(5, 'num1', $vartype1))),
     VariantItem(Nothing(OptionalType($vartype1))),
     VariantItem(NULL)
 ;

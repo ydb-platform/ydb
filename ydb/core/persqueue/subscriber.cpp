@@ -15,7 +15,7 @@ TMaybe<TReadInfo> TSubscriberLogic::ForgetSubscription(const ui64 cookie)
         return TMaybe<TReadInfo>();
     TReadInfo res(std::move(it->second));
     ReadInfo.erase(it);
-    return res;
+    return std::move(res);
 }
 
 void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
@@ -23,7 +23,7 @@ void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
     Y_ABORT_UNLESS(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
     info.IsSubscription = true;
     WaitingReads.push_back({info.Offset, cookie});
-    bool res = ReadInfo.insert({cookie, std::move(info)}).second;
+    bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     Y_ABORT_UNLESS(res);
 }
 

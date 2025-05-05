@@ -817,4 +817,9 @@ const NACLib::TUserToken& TSystemUsers::Metadata() {
     return GlobalMetadataUser;
 }
 
+const NACLib::TUserToken& TSystemUsers::Tmp() {
+    static TUserToken GlobalTmpUser = TUserToken(BUILTIN_ACL_TMP, {});
+    return GlobalTmpUser;
+}
+
 }

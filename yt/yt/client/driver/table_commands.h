@@ -58,6 +58,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TReadTablePartitionCommand
+    : public TTypedCommand<NApi::TTableReaderOptions>
+{
+    REGISTER_YSON_STRUCT_LITE(TReadTablePartitionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::string Cookie;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TLocateSkynetShareCommand
     : public TTypedCommand<NApi::TLocateSkynetShareOptions>
 {
@@ -140,6 +155,15 @@ private:
     //! If #AdjustDataWeightPerPartition is |false|
     //! the #partition_tables command will throw an exception.
     bool AdjustDataWeightPerPartition;
+
+    //! Return cookies that can be used with read_table_partition command
+    bool EnableCookies;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInOrderedPool;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInUnorderedPool;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -240,6 +264,24 @@ class TUnfreezeTableCommand
 
     static void Register(TRegistrar /*registrar*/)
     { }
+
+public:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCancelTabletTransitionCommand
+    : public TTypedCommand<NApi::TCancelTabletTransitionOptions>
+{
+    NTabletClient::TTabletId TabletId;
+
+    REGISTER_YSON_STRUCT_LITE(TCancelTabletTransitionCommand);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("tablet_id", &TThis::TabletId);
+    }
 
 public:
     void DoExecute(ICommandContextPtr context) override;

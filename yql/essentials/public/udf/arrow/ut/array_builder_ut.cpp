@@ -56,6 +56,57 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             "Expected equal values after building array");
     }
 
+    Y_UNIT_TEST(TestTaggedTypeBuilder) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue testData = TUnboxedValuePod(123);
+
+        arrayBuilder->Add(testData);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 1);
+
+        auto value = datum.array()->buffers[1];
+
+        UNIT_ASSERT_VALUES_EQUAL(*reinterpret_cast<int32_t*>(value->address()), 123);
+    }
+
+    Y_UNIT_TEST(TestTaggedTypeReader) {
+        TArrayBuilderTestData data;
+        const auto intType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, false);
+        const auto taggedType = data.PgmBuilder.NewTaggedType(intType, "tag");
+
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), taggedType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+
+        TUnboxedValue first = TUnboxedValuePod(123);
+        TUnboxedValue second = TUnboxedValuePod(456);
+
+        arrayBuilder->Add(first);
+        arrayBuilder->Add(second);
+
+        auto datum = arrayBuilder->Build(true);
+
+        UNIT_ASSERT(datum.is_array());
+        UNIT_ASSERT_VALUES_EQUAL(datum.length(), 2);
+
+        const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), taggedType);
+
+        const auto item1AfterRead = blockReader->GetItem(*datum.array(), 0);
+        const auto item2AfterRead = blockReader->GetItem(*datum.array(), 1);
+
+        UNIT_ASSERT_C(item1AfterRead.HasValue(), "Expected not null");
+        UNIT_ASSERT_C(item2AfterRead.HasValue(), "Expected not null");
+
+        UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.Get<int>(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.Get<int>(), 456);
+    }
+
     extern const char ResourceName[] = "Resource.Name";
     Y_UNIT_TEST(TestDtorCall) {
         TArrayBuilderTestData data;
@@ -218,6 +269,46 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(item1AfterRead.GetStringRefFromValue(), "test");
         UNIT_ASSERT_VALUES_EQUAL(item2AfterRead.GetStringRefFromValue(), "234");
+    }
+
+    Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
+        TArrayBuilderTestData data;
+        const auto nullType = data.PgmBuilder.NewNullType();
+
+        std::shared_ptr<arrow::ArrayData> arrayData = arrow::NullArray{42}.data();
+        IArrayBuilder::TArrayDataItem arrayDataItem = {.Data = arrayData.get(), .StartOffset = 0};
+        {
+            const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), nullType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
+            // Check builder.
+            arrayBuilder->Add(TUnboxedValuePod::Zero());
+            arrayBuilder->Add(TBlockItem::Zero());
+            arrayBuilder->Add(TBlockItem::Zero(), 4);
+            TInputBuffer inputBuffer("Just arbitrary string");
+            arrayBuilder->Add(inputBuffer);
+            arrayBuilder->AddMany(*arrayData, /*popCount=*/3u, /*sparseBitmat=*/nullptr, /*bitmapSize=*/arrayData->length);
+            arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/1, /*count=*/3u);
+            std::vector<ui64> indexes = {1, 5, 7, 10};
+            arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/indexes.data(), /*count=*/4u);
+            UNIT_ASSERT_VALUES_EQUAL(arrayBuilder->Build(true).array()->length, 1 + 1 + 4 + 1 + 3 + 3 + 4);
+        }
+
+        {
+            // Check reader.
+            const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), nullType);
+
+            UNIT_ASSERT(blockReader->GetItem(*arrayData, 0));
+            UNIT_ASSERT(blockReader->GetScalarItem(arrow::Scalar(arrow::null())));
+            UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(*arrayData), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(TBlockItem::Zero()), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
+            UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
+
+            TOutputBuffer outputBuffer;
+            blockReader->SaveItem(*arrayData, 1, outputBuffer);
+            UNIT_ASSERT(outputBuffer.Finish().empty());
+            blockReader->SaveScalarItem(arrow::Scalar(arrow::null()), outputBuffer);
+            UNIT_ASSERT(outputBuffer.Finish().empty());
+        }
     }
 
     Y_UNIT_TEST(TestBuilderAllocatedSize) {

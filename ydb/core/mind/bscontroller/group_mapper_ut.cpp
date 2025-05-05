@@ -610,6 +610,23 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         context.CheckIfGroupsAreMappedCompact();
     }
 
+    Y_UNIT_TEST(Mirror3dc3Nodes) {
+        // Each node has 3 disks.
+        TTestContext context(
+            {
+                {1, 1, 1, 1, 3},
+                {2, 1, 2, 1, 3},
+                {3, 1, 3, 1, 3},
+            }
+        );
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, 10, 20, 10, 256));
+        context.PopulateGroupMapper(mapper, 9);
+
+        TGroupMapper::TGroupDefinition group;
+        UNIT_ASSERT_UNEQUAL(0, context.AllocateGroup(mapper, group));
+    }
+
     Y_UNIT_TEST(NonUniformCluster) {
         std::vector<std::tuple<ui32, ui32, ui32, ui32, ui32>> disks;
         for (ui32 rack = 0, body = 0; rack < 12; ++rack) {
@@ -638,20 +655,20 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TTestContext context(
             {
                 {1, 1, 1, 1, 1}, // node 1
-                {1, 1, 2, 1, 1},
-                {1, 1, 3, 1, 2}, // node 3 has two disks
-                {1, 1, 4, 1, 1},
-                {1, 1, 5, 1, 1},
-                {1, 1, 6, 1, 1},
-                {1, 1, 2, 1, 1}, // node 7 is in the same rack as node 2
-                {1, 1, 8, 1, 1},
-                {1, 1, 3, 1, 1}, // node 9 is in the same rack as node 3 
+                {1, 1, 2, 2, 1},
+                {1, 1, 3, 3, 2}, // node 3 has two disks
+                {1, 1, 4, 4, 1},
+                {1, 1, 5, 5, 1},
+                {1, 1, 6, 6, 1},
+                {1, 1, 2, 7, 1}, // node 7 is in the same rack as node 2
+                {1, 1, 8, 8, 1},
+                {1, 1, 3, 9, 1}, // node 9 is in the same rack as node 3
             }
         );
 
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
         context.PopulateGroupMapper(mapper, 8);
-        
+
         TGroupMapper::TGroupDefinition group;
         group.emplace_back(TVector<TVector<TPDiskId>>(8));
         auto& g = group[0];

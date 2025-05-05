@@ -11,6 +11,7 @@
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -163,6 +164,10 @@ template <class... Ts>
 constexpr bool CKnownKVRange<THashMap<Ts...>> = true;
 template <class... Ts>
 constexpr bool CKnownKVRange<THashMultiMap<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<TCompactFlatMap<Ts...>> = true;
+template <class K, class V, size_t N>
+constexpr bool CKnownKVRange<TCompactFlatMap<K, V, N>> = true;
 
 // TODO(arkady-e1ppa): Uncomment me when
 // https://github.com/llvm/llvm-project/issues/58534 is shipped.
@@ -248,7 +253,7 @@ void FormatCompactIntervalRange(
 
     auto first = range.begin();
     auto last = first;
-    auto current = first + 1;
+    auto current = std::next(first);
 
     while (current != range.end()) {
         if (valueGetter(current) != valueGetter(last) + 1) {
@@ -311,7 +316,7 @@ typename TFormattableView<TRange, TFormatter>::TEnd TFormattableView<TRange, TFo
 }
 
 template <class TRange, class TFormatter>
-TFormattableView<TRange, TFormatter> MakeFormattableView(
+TFormattableView<TRange, std::decay_t<TFormatter>> MakeFormattableView(
     const TRange& range,
     TFormatter&& formatter)
 {
@@ -319,7 +324,7 @@ TFormattableView<TRange, TFormatter> MakeFormattableView(
 }
 
 template <class TRange, class TFormatter>
-TFormattableView<TRange, TFormatter> MakeShrunkFormattableView(
+TFormattableView<TRange, std::decay_t<TFormatter>> MakeShrunkFormattableView(
     const TRange& range,
     TFormatter&& formatter,
     size_t limit)

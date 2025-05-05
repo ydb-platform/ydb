@@ -158,10 +158,11 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             settings.ItemsLimit = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableSettings::ReverseSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Reverse = true;
+            settings.SetSorting(ERequestSorting::DESC);
         } else if (name == TKqpReadTableSettings::SortedSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Sorted = true;
+            if (settings.GetSorting() == ERequestSorting::NONE) {
+                settings.SetSorting(ERequestSorting::ASC);
+            }
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
@@ -169,7 +170,10 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.ForcePrimary = true;
         } else if (name == TKqpReadTableSettings::GroupByFieldNames) {
-        } else {
+        } else if (name == TKqpReadTableSettings::TabletIdName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        }else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
     }
@@ -221,7 +225,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Reverse) {
+    if (IsReverse()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -237,7 +241,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Sorted) {
+    if (IsSorted()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -252,6 +256,17 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                     .Build(SequentialSettingName)
                 .Value<TCoAtom>()
                     .Value(ToString(*SequentialInFlight))
+                    .Build()
+                .Done());
+    }
+
+    if (TabletId) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(TabletIdName)
+                .Value<TCoAtom>()
+                    .Value(ToString(*TabletId))
                     .Build()
                 .Done());
     }
@@ -285,6 +300,9 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.AllowInconsistentWrites = true;
+        } else if (name == TKqpUpsertRowsSettings::IsConditionalUpdateSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.IsConditionalUpdate = true;
         } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
@@ -316,6 +334,12 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
                 .Name().Build(IsUpdateSettingName)
                 .Done());
     }
+    if (IsConditionalUpdate) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsConditionalUpdateSettingName)
+                .Done());
+    }
     if (AllowInconsistentWrites) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
@@ -328,6 +352,39 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(ModeSettingName)
                 .Value<TCoAtom>().Build(Mode)
+                .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueTupleList& settingsList) {
+    TKqpDeleteRowsSettings settings;
+
+    for (const auto& tuple : settingsList) {
+        TStringBuf name = tuple.Name().Value();
+        
+        if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.IsConditionalDelete = true;
+        } else {
+            YQL_ENSURE(false, "Unknown KqpDeleteRows setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpDeleteRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(1);
+
+    if (IsConditionalDelete) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsConditionalDeleteSettingName)
                 .Done());
     }
 

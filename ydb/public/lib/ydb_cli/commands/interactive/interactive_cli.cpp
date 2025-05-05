@@ -11,9 +11,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 
-namespace NYdb {
-namespace NConsoleClient {
-
+namespace NYdb::NConsoleClient {
 
 namespace {
 
@@ -43,13 +41,14 @@ public:
 
 private:
     std::string_view Input;
-    const char * Position = nullptr;
+    const char* Position = nullptr;
 };
 
 Lexer::Lexer(std::string_view input)
     : Input(input)
     , Position(Input.data())
-{}
+{
+}
 
 std::optional<Token> Lexer::GetNextToken() {
     while (Position < Input.end() && std::isspace(*Position)) {
@@ -60,7 +59,7 @@ std::optional<Token> Lexer::GetNextToken() {
         return {};
     }
 
-    const char * tokenStart = Position;
+    const char* tokenStart = Position;
     if (IsSeparatedTokenSymbol(*Position)) {
         ++Position;
     } else {
@@ -92,7 +91,7 @@ struct InteractiveCLIState {
     NTable::ECollectQueryStatsMode CollectStatsMode = NTable::ECollectQueryStatsMode::None;
 };
 
-std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std::vector<Token> & tokens) {
+std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std::vector<Token>& tokens) {
     size_t tokensSize = tokens.size();
 
     if (tokensSize > 4) {
@@ -107,7 +106,7 @@ std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std
     return statsMode;
 }
 
-void ParseSetCommand(const std::vector<Token> & tokens, InteractiveCLIState & interactiveCLIState) {
+void ParseSetCommand(const std::vector<Token>& tokens, InteractiveCLIState& interactiveCLIState) {
     if (tokens.size() == 1) {
         Cerr << "Missing variable name for \"SET\" special command." << Endl;
     } else if (tokens.size() == 2 || tokens[2].data != "=") {
@@ -123,31 +122,24 @@ void ParseSetCommand(const std::vector<Token> & tokens, InteractiveCLIState & in
     }
 }
 
-}
+} // namespace
 
-TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig & config, std::string prompt)
+TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig& config, std::string prompt)
     : Config(config)
     , Prompt(std::move(prompt))
-{}
+{
+}
 
 void TInteractiveCLI::Run() {
-    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER", "BY", "LIMIT", "OFFSET", 
-        "EXPLAIN", "AST", "SET"};
-    std::vector<std::string> Words;
-    for (auto & word : SQLWords) {
-        Words.push_back(word);
-        Words.push_back(ToLower(word));
-    }
-
     TFsPath homeDirPath(HomeDir);
     TString historyFilePath(homeDirPath / ".ydb_history");
-    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Suggest{std::move(Words)});
+    std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath);
 
     InteractiveCLIState interactiveCLIState;
 
     while (auto lineOptional = lineReader->ReadLine())
     {
-        auto & line = *lineOptional;
+        auto& line = *lineOptional;
         if (line.empty()) {
             continue;
         }
@@ -192,11 +184,11 @@ void TInteractiveCLI::Run() {
             sqlCommand.SetCollectStatsMode(std::move(queryStatsMode));
             sqlCommand.SetSyntax("yql");
             sqlCommand.Run(Config);
-        } catch (NStatusHelpers::TYdbErrorException &error) {
+        } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << error;
-        } catch (yexception & error) {
+        } catch (yexception& error) {
             Cerr << error;
-        } catch (std::exception & error) {
+        } catch (std::exception& error) {
             Cerr << error.what();
         }
     }
@@ -204,5 +196,4 @@ void TInteractiveCLI::Run() {
     std::cout << std::endl << "Bye" << std::endl;
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

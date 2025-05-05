@@ -640,13 +640,14 @@ namespace NKikimr {
     }
 
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
-                            const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers) {
+                            const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers,
+                            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {
         TAutoPtr<TAppPrepare> dummy;
         if (app == nullptr) {
             dummy = app = new TAppPrepare;
         }
         TUltimateNodes nodes(runtime, app);
-        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, sharedCacheConfig, forceFollowers);
+        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, sharedCacheConfig, forceFollowers, dsProxies);
     }
 
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count) {
@@ -1501,7 +1502,7 @@ namespace NKikimr {
             TBlobStorageGroupType::EErasureSpecies erasure) {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));
-            return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(
+            return ctx.Register(CreateBootstrapper(
                 CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
         }
 

@@ -7,17 +7,13 @@ namespace NKafka {
 
 using namespace NKikimr::NRawSocket;
 
-
-TActorId MakeKafkaDiscoveryCacheID();
-
 inline NActors::IActor* CreateKafkaListener(
-        const NActors::TActorId& poller, const TListenerSettings& settings, const NKikimrConfig::TKafkaProxyConfig& config,
-        const TActorId& discoveryCacheActorId
+        const NActors::TActorId& poller, const TListenerSettings& settings, const NKikimrConfig::TKafkaProxyConfig& config
 ) {
     return CreateSocketListener(
         poller, settings,
         [=](const TActorId& listenerActorId, TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
-            return CreateKafkaConnection(listenerActorId, socket, address, config, discoveryCacheActorId);
+            return CreateKafkaConnection(listenerActorId, socket, address, config);
         },
         NKikimrServices::EServiceKikimr::KAFKA_PROXY, EErrorAction::Abort);
 }

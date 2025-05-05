@@ -59,7 +59,7 @@ public:
 
     void ResolveQueryData() {
         const TString& query = FetchQuery;
-        TActorSystem* actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId self = SelfId();
 
         NYdb::TParams params = Client->GetParamsBuilder().AddParam("$query_id").String(QueryId).Build().Build();

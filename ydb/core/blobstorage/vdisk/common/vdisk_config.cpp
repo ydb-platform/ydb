@@ -75,6 +75,8 @@ namespace NKikimr {
         ReplPrefetchDataSize = 32 << 20;
         ReplMaxResponseSize = 10 << 20;
         ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
+        ReplMaxDonorNotReadyDuration = TDuration::Minutes(10);
+        ReplMaxDonorNotReadyCount = 100;
         HandoffMaxWaitQueueSize = 10000;
         HandoffMaxWaitQueueByteSize = 32u << 20u;
         HandoffMaxInFlightSize = 1000;

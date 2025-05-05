@@ -199,7 +199,7 @@ public:
         ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << User);
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
-        TDuration maxAge = (ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now());
+        TDuration maxAge = ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now();
         headers.Set("Set-Cookie", TStringBuilder() << "ydb_session_id=" << cookie << "; Max-Age=" << maxAge.Seconds());
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
         PassAway();

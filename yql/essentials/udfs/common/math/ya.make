@@ -13,7 +13,7 @@ YQL_UDF_CONTRIB(math_udf)
     IF (BUILD_TYPE != "release" AND BUILD_TYPE != "relwithdebinfo")
         CFLAGS(-DDISABLE_IR)
     ELSE()
-        USE_LLVM_BC14()
+        USE_LLVM_BC16()
         
         LLVM_BC(
             math_ir.cpp

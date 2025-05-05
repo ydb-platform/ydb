@@ -5,6 +5,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/scheduled_executor.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <atomic>
 

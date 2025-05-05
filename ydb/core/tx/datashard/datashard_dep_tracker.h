@@ -59,26 +59,26 @@ private:
             : Parent(parent) {}
 
         // Adds operation to the tracker
-        virtual void AddOperation(const TOperation::TPtr& op) const noexcept = 0;
+        virtual void AddOperation(const TOperation::TPtr& op) const = 0;
 
         // Removes operation from the tracker, no future operations may conflict with it
-        virtual void RemoveOperation(const TOperation::TPtr& op) const noexcept = 0;
+        virtual void RemoveOperation(const TOperation::TPtr& op) const = 0;
     };
 
     struct TMvccDependencyTrackingLogic : public TDependencyTrackingLogic {
         explicit TMvccDependencyTrackingLogic(TDependencyTracker& parent)
             : TDependencyTrackingLogic(parent) {}
 
-        void AddOperation(const TOperation::TPtr& op) const noexcept override;
-        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
+        void AddOperation(const TOperation::TPtr& op) const override;
+        void RemoveOperation(const TOperation::TPtr& op) const override;
     };
 
     struct TFollowerDependencyTrackingLogic : public TDependencyTrackingLogic {
         explicit TFollowerDependencyTrackingLogic(TDependencyTracker& parent)
             : TDependencyTrackingLogic(parent) {}
 
-        void AddOperation(const TOperation::TPtr& op) const noexcept override;
-        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
+        void AddOperation(const TOperation::TPtr& op) const override;
+        void RemoveOperation(const TOperation::TPtr& op) const override;
     };
 
 public:
@@ -88,18 +88,18 @@ public:
 
 public:
     // Called to update this table schema
-    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept;
+    void UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo);
 
     // Calld to update this table schema upon move
-    void RemoveSchema(const TPathId& tableId) noexcept;
+    void RemoveSchema(const TPathId& tableId);
 
     // Adds operation to the tracker
-    void AddOperation(const TOperation::TPtr& op) noexcept {
+    void AddOperation(const TOperation::TPtr& op) {
         GetTrackingLogic().AddOperation(op);
     }
 
     // Removes operation from the tracker, no future operations may conflict with it
-    void RemoveOperation(const TOperation::TPtr& op) noexcept {
+    void RemoveOperation(const TOperation::TPtr& op) {
         GetTrackingLogic().RemoveOperation(op);
     }
 
@@ -112,18 +112,18 @@ public:
     }
 
 private:
-    void ClearTmpRead() noexcept;
-    void ClearTmpWrite() noexcept;
+    void ClearTmpRead();
+    void ClearTmpWrite();
 
-    void AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) noexcept;
-    void AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept;
-    void AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) noexcept;
-    void AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept;
+    void AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads);
+    void AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes);
+    void AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads);
+    void AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes);
 
-    void FlushPlannedReads() noexcept;
-    void FlushPlannedWrites() noexcept;
-    void FlushImmediateReads() noexcept;
-    void FlushImmediateWrites() noexcept;
+    void FlushPlannedReads();
+    void FlushPlannedWrites();
+    void FlushImmediateReads();
+    void FlushImmediateWrites();
 
     const TDependencyTrackingLogic& GetTrackingLogic() const noexcept;
 

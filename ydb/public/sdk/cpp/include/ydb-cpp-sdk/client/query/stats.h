@@ -10,14 +10,14 @@ namespace Ydb::TableStats {
     class QueryStats;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 }
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 class TExecStats {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TExecStats() = default;
@@ -29,6 +29,7 @@ public:
 
     std::optional<std::string> GetPlan() const;
     std::optional<std::string> GetAst() const;
+    std::optional<std::string> GetMeta() const;
 
     TDuration GetTotalDuration() const;
     TDuration GetTotalCpuTime() const;
@@ -41,4 +42,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

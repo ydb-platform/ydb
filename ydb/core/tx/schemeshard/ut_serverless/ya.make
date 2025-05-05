@@ -4,6 +4,8 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+TIMEOUT(120)
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

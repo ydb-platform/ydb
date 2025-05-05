@@ -35,20 +35,20 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeRecoveryLogPos::ParseFromString(const TString &serialized) {
-            ParseFromArray(serialized.data(), serialized.size());
+        void THullHugeRecoveryLogPos::ParseFromString(const TString& prefix, const TString &serialized) {
+            ParseFromArray(prefix, serialized.data(), serialized.size());
         }
 
-        void THullHugeRecoveryLogPos::ParseFromArray(const char* data, size_t size) {
+        void THullHugeRecoveryLogPos::ParseFromArray(const TString& prefix, const char* data, size_t size) {
             const char *cur = data;
             const char *end = data + size;
             for (ui64 *var : {&ChunkAllocationLsn, &ChunkFreeingLsn, &HugeBlobLoggedLsn, &LogoBlobsDbSlotDelLsn,
                     &BlocksDbSlotDelLsn, &BarriersDbSlotDelLsn, &EntryPointLsn}) {
-                Y_ABORT_UNLESS(static_cast<size_t>(end - cur) >= sizeof(*var));
+                Y_VERIFY_S(static_cast<size_t>(end - cur) >= sizeof(*var), prefix);
                 memcpy(var, cur, sizeof(*var));
                 cur += sizeof(*var);
             }
-            Y_ABORT_UNLESS(cur == end);
+            Y_VERIFY_S(cur == end, prefix);
         }
 
         bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {
@@ -103,7 +103,7 @@ namespace NKikimr {
         {
             ParseFromString(entryPointData);
             Heap->FinishRecovery();
-            Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
+            Y_VERIFY_S(entryPointLsn == LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
                 Guid, entryPointLsn, ToString().data()));
@@ -130,7 +130,7 @@ namespace NKikimr {
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
             Heap->FinishRecovery();
-            Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
+            Y_VERIFY_S(entryPointLsn == LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
                 Guid, entryPointLsn, ToString().data()));
@@ -146,7 +146,7 @@ namespace NKikimr {
 
             // log pos
             TString serializedLogPos = LogPos.Serialize();
-            Y_DEBUG_ABORT_UNLESS(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
+            Y_VERIFY_DEBUG_S(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize, VCtx->VDiskLogPrefix);
             str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
 
             // heap
@@ -158,17 +158,17 @@ namespace NKikimr {
             TString serializedHeap = Heap->Serialize();
             size_t index = 0;
             for (const THugeSlot& slot : SlotsInFlight) {
-                Y_DEBUG_ABORT_UNLESS(index < inLockedChunks.size());
+                Y_VERIFY_DEBUG_S(index < inLockedChunks.size(), VCtx->VDiskLogPrefix);
                 Heap->OccupySlot(slot, inLockedChunks[index++]); // restore slot ownership
             }
-            Y_DEBUG_ABORT_UNLESS(index == inLockedChunks.size());
+            Y_VERIFY_DEBUG_S(index == inLockedChunks.size(), VCtx->VDiskLogPrefix);
             ui32 heapSize = serializedHeap.size();
             str.Write(&heapSize, sizeof(ui32));
             str.Write(serializedHeap.data(), heapSize);
 
             // chunks to free -- obsolete field
             const ui32 chunksSize = 0;
-            Y_ABORT_UNLESS(!chunksSize);
+            Y_VERIFY_S(!chunksSize, VCtx->VDiskLogPrefix);
             str.Write(&chunksSize, sizeof(ui32));
 
             // allocated slots (we really never save them now, they're considered as free ones while serializing Heap)
@@ -190,7 +190,7 @@ namespace NKikimr {
             cur += sizeof(ui32); // signature
 
             // log pos
-            LogPos.ParseFromString(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize));
+            LogPos.ParseFromString(VCtx->VDiskLogPrefix, TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize));
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
             // heap
@@ -202,7 +202,7 @@ namespace NKikimr {
             // chunks to free
             ui32 chunksSize = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // chunks size
-            Y_ABORT_UNLESS(!chunksSize);
+            Y_VERIFY_S(!chunksSize, VCtx->VDiskLogPrefix);
 
             // allocated slots
             ui32 slotsSize = ReadUnaligned<ui32>(cur);
@@ -334,7 +334,7 @@ namespace NKikimr {
         ui64 THullHugeKeeperPersState::FirstLsnToKeep(ui64 minInFlightLsn) const {
             const ui64 res = Min(minInFlightLsn, PersistentLsn);
 
-            Y_VERIFY_S(FirstLsnToKeepReported <= res, "FirstLsnToKeepReported# " << FirstLsnToKeepReported
+            Y_VERIFY_S(FirstLsnToKeepReported <= res, VCtx->VDiskLogPrefix << "FirstLsnToKeepReported# " << FirstLsnToKeepReported
                 << " res# " << res << " state# " << FirstLsnToKeepDecomposed() << " minInFlightLsn# " << minInFlightLsn);
             FirstLsnToKeepReported = res;
 
@@ -354,7 +354,7 @@ namespace NKikimr {
 
         // initiate commit
         void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn) {
-            Y_ABORT_UNLESS(lsn > LogPos.EntryPointLsn);
+            Y_VERIFY_S(lsn > LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
             LogPos.EntryPointLsn = lsn;
             PersistentLsn = Min(lsn, minInFlightLsn);
 
@@ -365,7 +365,7 @@ namespace NKikimr {
 
         // finish commit
         void THullHugeKeeperPersState::EntryPointCommitted(ui64 entryPointLsn) {
-            Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
+            Y_VERIFY_S(entryPointLsn == LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
         }
 
         // chunk allocation
@@ -526,8 +526,8 @@ namespace NKikimr {
 
             TString logPosSerialized = ExtractLogPosition(data);
             auto logPos = THullHugeRecoveryLogPos::Default();
-            logPos.ParseFromString(logPosSerialized);
-            Y_ABORT_UNLESS(logPos.EntryPointLsn == lsn);
+            logPos.ParseFromString(VCtx->VDiskLogPrefix, logPosSerialized);
+            Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                     VDISKP(VCtx->VDiskLogPrefix,
@@ -548,8 +548,8 @@ namespace NKikimr {
 
             TContiguousSpan logPosSerialized = ExtractLogPosition(data);
             auto logPos = THullHugeRecoveryLogPos::Default();
-            logPos.ParseFromArray(logPosSerialized.GetData(), logPosSerialized.GetSize());
-            Y_ABORT_UNLESS(logPos.EntryPointLsn == lsn);
+            logPos.ParseFromArray(VCtx->VDiskLogPrefix, logPosSerialized.GetData(), logPosSerialized.GetSize());
+            Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                     VDISKP(VCtx->VDiskLogPrefix,
@@ -578,12 +578,12 @@ namespace NKikimr {
 
         void THullHugeKeeperPersState::AddSlotInFlight(THugeSlot hugeSlot) {
             const auto [it, inserted] = SlotsInFlight.insert(hugeSlot);
-            Y_ABORT_UNLESS(inserted);
+            Y_VERIFY_S(inserted, VCtx->VDiskLogPrefix);
         }
 
         bool THullHugeKeeperPersState::DeleteSlotInFlight(THugeSlot hugeSlot) {
             if (const auto it = SlotsInFlight.find(hugeSlot); it != SlotsInFlight.end()) {
-                Y_ABORT_UNLESS(it->GetSize() == hugeSlot.GetSize());
+                Y_VERIFY_S(it->GetSize() == hugeSlot.GetSize(), VCtx->VDiskLogPrefix);
                 SlotsInFlight.erase(it);
                 return true;
             } else {

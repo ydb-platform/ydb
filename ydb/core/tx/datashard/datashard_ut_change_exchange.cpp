@@ -10,9 +10,9 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
-#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -842,6 +842,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
+                .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
@@ -2067,6 +2068,23 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(DecimalKey) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"decimal1_key", "Decimal(1, 0)", true, false},
+                {"decimal35_key", "Decimal(35, 10)", true, false},
+                {"decimal_value", "Decimal", false , false},
+            });
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            R"(
+                UPSERT INTO `/Root/Table` (decimal1_key, decimal35_key, decimal_value)
+                VALUES (CAST("5.0" AS Decimal(1, 0)), CAST("355555555555555.321" AS Decimal(35, 10)), CAST("4.321" AS Decimal(22, 9)));
+            )",
+        }, {
+            R"({"update":{"decimal_value":"4.321"},"key":["5","355555555555555.321"]})",
+        });
+    }
+
     // Schema snapshots
     using TActionFunc = std::function<ui64(TServer::TPtr)>;
 
@@ -2150,7 +2168,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 TVector<NJson::TJsonValue> values;
                 for (const auto& pr : result) {
                     bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
-                    Y_ABORT_UNLESS(ok);
+                    Y_ENSURE(ok);
                 }
                 return values;
             }
@@ -2412,6 +2430,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
             case TEvDataShard::EvProposeTransactionResult:
                 if (auto* msg = ev->Get<TEvDataShard::TEvProposeTransactionResult>()) {
                     if (msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
+                        txCompleted = true;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            
+            case NKikimr::NEvents::TDataEvents::EvWriteResult:
+                if (auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()) {
+                    if (msg->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
                         txCompleted = true;
                     }
                 }
@@ -2693,7 +2719,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             case TSchemeBoardEvents::EvUpdate:
                 if (auto* msg = ev->Get<NSchemeBoard::NInternalEvents::TEvUpdate>()) {
                     NKikimrScheme::TEvDescribeSchemeResult desc;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
+                    Y_ENSURE(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;

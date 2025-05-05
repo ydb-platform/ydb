@@ -155,7 +155,7 @@ TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set)
 }
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, const TKeySet& set)
+void DropMissingKeys(TMap&& map, TKeySet&& set)
 {
     for (auto it = map.begin(); it != map.end(); ) {
         if (!set.contains(it->first)) {
@@ -206,6 +206,15 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     auto [it, emplaced] = container.emplace(std::forward<TArgs>(args)...);
     YT_VERIFY(emplaced);
     return it;
+}
+
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key)
+{
+    return map.emplace(
+        std::piecewise_construct_t{},
+        std::tuple<TKey&&>{std::forward<TKey>(key)},
+        std::tuple{});
 }
 
 template <class T, class... TVariantArgs>

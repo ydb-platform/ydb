@@ -1124,6 +1124,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "Unique((one,{two,xxx},yyy))");
     }
 
+    Y_UNIT_TEST(UniqueNarrowCast) {
+        const auto s = R"((
+            (let res (DataSink 'result))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
+                (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
+                (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'z)))
+            ))
+            (let list (AssumeUnique list '('key 'subkey)))
+            (let list (Map list (lambda '(item)
+                (SafeCast item (StructType '('key (DataType 'String)) '('value (DataType 'String))))
+            )))
+            (let world (Write! world res (Key) list '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "");
+    }
+
     Y_UNIT_TEST(Distinct) {
         const auto s = R"((
     (let res (DataSink 'result))
@@ -3315,6 +3337,52 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
+    }
+
+    Y_UNIT_TEST(StablePickleOfComplexUnique) {
+        const TStringBuf s = R"(
+(
+    (let config (DataSource 'config))
+    (let res_sink (DataSink 'result))
+
+    (let list (AsList
+        (AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
+        (AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))
+    ))
+
+    (let res (Aggregate list '('key 'value) '() '()))
+    (let res (Map res (lambda '(item)
+        (AsStruct
+            '('composite (AsStruct
+                '('k (Member item 'key))
+                '('v (Member item 'value))
+            ))
+            '('key (Member item 'key))
+            '('value (Member item 'value))
+        )
+    )))
+    (let res (FlatMap res (lambda '(item)
+        (Just (AsStruct
+            '('packed (StablePickle (Member item 'composite)))
+            '('composite (Member item 'composite))
+            '('key (Member item 'key))
+            '('value (Member item 'value))
+        ))
+    )))
+    (let world (Write! world res_sink (Key) res '('('type))))
+    (let world (Commit! world res_sink))
+    (return world)
+)
+        )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "StablePickle", "");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "StablePickle", "");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({composite/k,key},{composite/v,value}))");
     }
 }
 

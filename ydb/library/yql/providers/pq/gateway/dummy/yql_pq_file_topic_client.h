@@ -4,7 +4,7 @@
 
 namespace NYql {
 struct TFileTopicClient : public ITopicClient {
-    TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics): Topics_(topics) {}
+    explicit TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics);
 
     NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override;
 
@@ -32,5 +32,7 @@ struct TFileTopicClient : public ITopicClient {
 
 private:
     THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> Topics_;
+    bool CancelOnFileFinish_ = false;
 };
+
 }

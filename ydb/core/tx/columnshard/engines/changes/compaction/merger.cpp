@@ -14,7 +14,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
-    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId,
+    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const TInternalPathId pathId,
     const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
@@ -105,7 +105,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows());
+            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows(), Context.Counters);
             chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
             ++batchIdx;
         }
@@ -155,7 +155,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
-                SaverContext.GetStoragesManager());
+                SaverContext.GetStoragesManager(), EPortionType::Compacted);
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());

@@ -537,7 +537,7 @@ public:
     {
         return NConcurrency::TPropagatingStorageGuard(Storage_
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-        , Location_
+            , Location_
 #endif
         );
     }

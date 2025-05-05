@@ -506,6 +506,10 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -556,12 +560,17 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
-void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+template <typename TYdbProto>
+void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     auto& schema = in.GetSchema();
 
     for (const auto& column : schema.GetColumns()) {
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
+
+        if (column.HasColumnFamilyName()) {
+            newColumn->set_family(column.GetColumnFamilyName());
+        }
     }
 
     for (auto& name : schema.GetKeyColumnNames()) {
@@ -586,6 +595,14 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     }
 
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+}
+
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -735,6 +752,18 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
 
         if (!column.Getfamily().empty()) {
             columnDesc->SetColumnFamilyName(column.Getfamily());
+        }
+
+        if (column.has_from_literal()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default values are not supported in column tables";
+            return false;
+        }
+
+        if (column.has_from_sequence()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default sequences are not supported in column tables";
+            return false;
         }
     }
 
@@ -1138,7 +1167,7 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
 }
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     const NKikimrSchemeOp::TCdcStreamDescription& in) {
-    
+
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_aws_region(in.GetAwsRegion());
@@ -1200,8 +1229,9 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
     }
 }
 
-bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
-        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename T>
+bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const T& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
@@ -1241,6 +1271,17 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         return false;
     }
 
+    for (const auto& [key, value] : in.attributes()) {
+        auto& attr = *out.AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    return true;
+}
+
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     if (in.initial_scan()) {
         if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
             status = Ydb::StatusIds::UNSUPPORTED;
@@ -1249,14 +1290,12 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         }
         out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
     }
+    return FillChangefeedDescriptionCommon(out, in, status, error);
+}
 
-    for (const auto& [key, value] : in.attributes()) {
-        auto& attr = *out.AddUserAttributes();
-        attr.SetKey(key);
-        attr.SetValue(value);
-    }
-
-    return true;
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillChangefeedDescriptionCommon(out, in, status, error);
 }
 
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
@@ -1389,6 +1428,50 @@ void FillStorageSettings(Ydb::Table::CreateTableRequest& out,
     FillStorageSettingsImpl(out, in);
 }
 
+void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFamilyDescription& in, bool isColumnTable) {
+    if (in.HasName() && !in.GetName().empty()) {
+        out.set_name(in.GetName());
+    } else if (IsDefaultFamily(in)) {
+        out.set_name("default");
+    } else if (in.HasId()) {
+        out.set_name(TStringBuilder() << "<id: " << in.GetId() << ">");
+    } else {
+        out.set_name(in.GetName());
+    }
+
+    if (!isColumnTable && in.HasStorageConfig() && in.GetStorageConfig().HasData()) {
+        FillStoragePool(&out, &Ydb::Table::ColumnFamily::mutable_data, in.GetStorageConfig().GetData());
+    }
+
+    if (in.HasColumnCodec()) {
+        switch (in.GetColumnCodec()) {
+            case NKikimrSchemeOp::ColumnCodecPlain:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+                break;
+            case NKikimrSchemeOp::ColumnCodecLZ4:
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+                break;
+            case NKikimrSchemeOp::ColumnCodecZSTD: {
+                if (!isColumnTable) {
+                    break; // FIXME: not supported
+                }
+                out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_ZSTD);
+                break;
+            }
+        }
+    } else if (in.GetCodec() == 1) {
+        // Legacy setting, see datashard
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+    } else {
+        out.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+    }
+
+    // Check legacy settings for permanent in-memory cache
+    if (in.GetInMemory() || in.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
+        out.set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
+    }
+}
+
 template <typename TYdbProto>
 void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TTableDescription& in) {
@@ -1406,42 +1489,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
         const auto& family = partConfig.GetColumnFamilies(i);
         auto* r = out.add_column_families();
 
-        if (family.HasName() && !family.GetName().empty()) {
-            r->set_name(family.GetName());
-        } else if (IsDefaultFamily(family)) {
-            r->set_name("default");
-        } else if (family.HasId()) {
-            r->set_name(TStringBuilder() << "<id: " << family.GetId() << ">");
-        } else {
-            r->set_name(family.GetName());
-        }
-
-        if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            FillStoragePool(r, &Ydb::Table::ColumnFamily::mutable_data, family.GetStorageConfig().GetData());
-        }
-
-        if (family.HasColumnCodec()) {
-            switch (family.GetColumnCodec()) {
-                case NKikimrSchemeOp::ColumnCodecPlain:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecLZ4:
-                    r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-                    break;
-                case NKikimrSchemeOp::ColumnCodecZSTD:
-                    break; // FIXME: not supported
-            }
-        } else if (family.GetCodec() == 1) {
-            // Legacy setting, see datashard
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-        } else {
-            r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-        }
-
-        // Check legacy settings for permanent in-memory cache
-        if (family.GetInMemory() || family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
-            r->set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
-        }
+        FillColumnFamily(*r, family, false);
     }
 }
 
@@ -1452,6 +1500,28 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
 
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    const auto& schema = in.GetSchema();
+    for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
+        const auto& family = schema.GetColumnFamilies(i);
+        auto* r = out.add_column_families();
+
+        FillColumnFamily(*r, family, true);
+    }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
     FillColumnFamiliesImpl(out, in);
 }
 

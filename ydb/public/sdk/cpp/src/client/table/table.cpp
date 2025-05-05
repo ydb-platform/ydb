@@ -1,30 +1,30 @@
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/retry/retry.h>
-#include <src/client/impl/ydb_internal/retry/retry_async.h>
-#include <src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <src/client/impl/ydb_stats/stats.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/value/value.h>
-#include <src/client/table/impl/client_session.h>
-#include <src/client/table/impl/data_query.h>
-#include <src/client/table/impl/request_migrator.h>
-#include <src/client/table/impl/table_client.h>
-#include <src/client/table/impl/transaction.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/client_session.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/data_query.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/request_migrator.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/table_client.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/transaction.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <google/protobuf/util/time_util.h>
 
 #include <library/cpp/cache/cache.h>
-#include <ydb-cpp-sdk/library/string_utils/misc/misc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/misc/misc.h>
 
 #include <util/generic/overloaded.h>
 #include <util/random/random.h>
@@ -33,7 +33,7 @@
 
 #include <map>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 using namespace NThreading;
@@ -1367,7 +1367,7 @@ TScanQueryPartIterator::TScanQueryPartIterator(
 TAsyncScanQueryPart TScanQueryPartIterator::ReadNext() {
     if (!ReaderImpl_ || ReaderImpl_->IsFinished()) {
         if (!IsSuccess())
-            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result " 
+            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result "
                 << GetIssues().ToString());
         RaiseError("Attempt to perform read on invalid or finished stream");
     }
@@ -1830,6 +1830,14 @@ TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const
     return Client_->DescribeTable(SessionImpl_->GetId(), path, settings);
 }
 
+TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
+    return Client_->DescribeExternalDataSource(path, settings);
+}
+
+TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
+    return Client_->DescribeExternalTable(path, settings);
+}
+
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
     const TExecDataQuerySettings& settings)
 {
@@ -1975,12 +1983,10 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : TransactionImpl_(new TTransaction::TImpl(session, txId))
-{}
-
-const std::string& TTransaction::GetId() const
+    : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {
-    return TransactionImpl_->GetId();
+    SessionId_ = &TransactionImpl_->Session_.GetId();
+    TxId_ = &TransactionImpl_->TxId_;
 }
 
 bool TTransaction::IsActive() const
@@ -1993,11 +1999,18 @@ TAsyncStatus TTransaction::Precommit() const
     return TransactionImpl_->Precommit();
 }
 
-TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
+NThreading::TFuture<void> TTransaction::ProcessFailure() const
+{
+    return TransactionImpl_->ProcessFailure();
+}
+
+TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings)
+{
     return TransactionImpl_->Commit(settings);
 }
 
-TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
+TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings)
+{
     return TransactionImpl_->Rollback(settings);
 }
 
@@ -2009,6 +2022,10 @@ TSession TTransaction::GetSession() const
 void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
 {
     TransactionImpl_->AddPrecommitCallback(std::move(cb));
+}
+
+void TTransaction::AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+    TransactionImpl_->AddOnFailureCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2030,6 +2047,14 @@ const std::string& TDataQuery::GetId() const {
 
 const std::optional<std::string>& TDataQuery::GetText() const {
     return Impl_->GetText();
+}
+
+std::map<std::string, TType> TDataQuery::GetParameterTypes() const {
+    std::map<std::string, TType> typesMap;
+    for (const auto& param : Impl_->ParameterTypes_) {
+        typesMap.emplace(param.first, TType(param.second));
+    }
+    return typesMap;
 }
 
 TParamsBuilder TDataQuery::GetParamsBuilder() const {
@@ -2340,7 +2365,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
@@ -3307,6 +3332,74 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
     : TStatus(std::move(status))
     , ResultSet(std::move(resultSet))
 {}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TExternalDataSourceDescription::TImpl {
+    Ydb::Table::DescribeExternalDataSourceResult Proto_;
+
+public:
+    TImpl(Ydb::Table::DescribeExternalDataSourceResult&& description)
+        : Proto_(std::move(description))
+    {}
+
+    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const {
+        return Proto_;
+    }
+};
+
+TExternalDataSourceDescription::TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description)
+    : Impl_(std::make_shared<TImpl>(std::move(description)))
+{
+}
+
+const Ydb::Table::DescribeExternalDataSourceResult& TExternalDataSourceDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeExternalDataSourceResult::TDescribeExternalDataSourceResult(TStatus&& status, Ydb::Table::DescribeExternalDataSourceResult&& description)
+    : NScheme::TDescribePathResult(std::move(status), description.self())
+    , ExternalDataSourceDescription_(std::move(description))
+{}
+
+TExternalDataSourceDescription TDescribeExternalDataSourceResult::GetExternalDataSourceDescription() const {
+    CheckStatusOk("TDescribeExternalDataSourceResult::GetExternalDataSourceDescription");
+    return ExternalDataSourceDescription_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TExternalTableDescription::TImpl {
+    Ydb::Table::DescribeExternalTableResult Proto_;
+
+public:
+    TImpl(Ydb::Table::DescribeExternalTableResult&& description)
+        : Proto_(std::move(description))
+    {}
+
+    const Ydb::Table::DescribeExternalTableResult& GetProto() const {
+        return Proto_;
+    }
+};
+
+TExternalTableDescription::TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description)
+    : Impl_(std::make_shared<TImpl>(std::move(description)))
+{
+}
+
+const Ydb::Table::DescribeExternalTableResult& TExternalTableDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb::Table::DescribeExternalTableResult&& description)
+    : NScheme::TDescribePathResult(std::move(status), description.self())
+    , ExternalTableDescription_(std::move(description))
+{}
+
+TExternalTableDescription TDescribeExternalTableResult::GetExternalTableDescription() const {
+    CheckStatusOk("TDescribeExternalTableResult::GetExternalTableDescription");
+    return ExternalTableDescription_;
+}
 
 } // namespace NTable
 } // namespace NYdb

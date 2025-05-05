@@ -1,0 +1,226 @@
+{
+    "test_sql_streaming.test[suites-GroupByHop-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHop-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHop-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopByStringKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopByStringKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopByStringKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopExprKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopExprKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopExprKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopListKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopListKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopListKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopNoKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopNoKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopNoKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopPercentile-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopPercentile-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopPercentile-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopTimeExtractorUnusedColumns-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopTimeExtractorUnusedColumns-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopTimeExtractorUnusedColumns-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHopWithDataWatermarks-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopWithDataWatermarks-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHopWithDataWatermarks-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindow-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindow-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindow-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowByStringKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowByStringKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowByStringKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowExprKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowExprKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowExprKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowListKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowListKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowListKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowNoKey-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowNoKey-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowNoKey-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowPercentile-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowPercentile-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowPercentile-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-GroupByHoppingWithDataWatermarks-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWithDataWatermarks-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-GroupByHoppingWithDataWatermarks-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopic-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopic-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopic-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicGroupWriteToSolomon-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicGroupWriteToSolomon-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicGroupWriteToSolomon-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicWithMetadata-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadata-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadata-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicWithMetadataInsideFilter-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataInsideFilter-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataInsideFilter-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicWithMetadataNestedDeep-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataNestedDeep-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataNestedDeep-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicWithMetadataWithFilter-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataWithFilter-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithMetadataWithFilter-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTopicWithSchema-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithSchema-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTopicWithSchema-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadTwoTopics-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTwoTopics-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadTwoTopics-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadWriteSameTopic-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteSameTopic-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteSameTopic-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadWriteTopic-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteTopic-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteTopic-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-ReadWriteTopicWithSchema-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteTopicWithSchema-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-ReadWriteTopicWithSchema-default.txt_/plan.json"
+        }
+    },
+    "test_sql_streaming.test[suites-WriteTwoTopics-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_suites-WriteTwoTopics-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_suites-WriteTwoTopics-default.txt_/plan.json"
+        }
+    }
+}

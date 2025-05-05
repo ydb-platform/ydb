@@ -12,7 +12,7 @@ ADDINCL(
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_wrapper
 )
 

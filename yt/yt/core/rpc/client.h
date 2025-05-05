@@ -12,13 +12,13 @@
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
-
 #include <yt/yt/core/rpc/helpers.h>
 #include <yt/yt/core/rpc/message.h>
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -444,11 +444,11 @@ struct TServiceDescriptor
 
 struct TMethodDescriptor
 {
-    TString MethodName;
+    std::string MethodName;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
     bool StreamingEnabled = false;
 
-    explicit TMethodDescriptor(const TString& methodName);
+    explicit TMethodDescriptor(std::string methodName);
 
     TMethodDescriptor& SetMultiplexingBand(EMultiplexingBand value);
     TMethodDescriptor& SetStreamingEnabled(bool value);

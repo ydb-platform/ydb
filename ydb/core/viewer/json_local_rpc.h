@@ -130,8 +130,7 @@ public:
                 return false;
             }
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        Params2Proto(params, request);
+        Params2Proto(Params, request);
         if (!ValidateRequest(request)) {
             return false;
         }

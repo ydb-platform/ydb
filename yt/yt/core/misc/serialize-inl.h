@@ -458,6 +458,26 @@ T Load(C& context, TArgs&&... args)
     return value;
 }
 
+template <class TSerializer, class T, class C, class... TArgs>
+void SaveWith(C& context, const T& value, TArgs&&... args)
+{
+    TSerializer::Save(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+void LoadWith(C& context, T& value, TArgs&&... args)
+{
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+T LoadWith(C& context, TArgs&&... args)
+{
+    T value{};
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
+    return value;
+}
+
 template <class T, class C, class... TArgs>
 T LoadSuspended(C& context, TArgs&&... args)
 {

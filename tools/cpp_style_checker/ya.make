@@ -11,4 +11,6 @@ PY_SRCS(
     __main__.py
 )
 
+STYLE_PYTHON()
+
 END()

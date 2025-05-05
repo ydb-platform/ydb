@@ -1,13 +1,2 @@
-{%- include "[generator]/proto_vars.jinja" -%}
-{%- include "[generator]/proto_import.jinja" -%}
-{%- include "[generator]/repositories.jinja" -%}
-{%- include "[generator]/proto_builddir.jinja" -%}
-{%- include "[generator]/proto_plugins.jinja" -%}
-{%- include "[generator]/publish.jinja" -%}
-{%- include "[generator]/proto_configuration.jinja" -%}
-{%- include "[generator]/proto_source_sets.jinja" -%}
-{%- include "[generator]/protobuf.jinja" -%}
-{%- include "[generator]/proto_prepare.jinja" -%}
-{%- include "[generator]/javadoc.jinja" -%}
-{%- include "[generator]/proto_dependencies.jinja" -%}
-{%- include "[generator]/debug.jinja" ignore missing -%}
+{%- set proto_template = true -%}
+{%- include "[generator]/build.gradle.kts.any.jinja" -%}

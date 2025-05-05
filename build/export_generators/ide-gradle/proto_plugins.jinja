@@ -1,10 +1,13 @@
 {#- empty string #}
 plugins {
     id("java-library")
-    id("com.google.protobuf") version "0.8.19"
+    id("com.google.protobuf") version "0.9.4"
 {%- if publish %}
     `maven-publish`
     `signing`
+{%- endif %}
+{%- if with_kotlin and kotlin_version %}
+    kotlin("jvm") version "{{ kotlin_version }}"
 {%- endif %}
 }
 

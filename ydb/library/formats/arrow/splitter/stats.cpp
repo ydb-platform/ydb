@@ -21,4 +21,13 @@ std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBat
     return GetStatsForRecordBatch(rb->schema());
 }
 
+ TSimpleSerializationStat::TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes)
+    : SerializedBytes(bytes)
+    , RecordsCount(recordsCount)
+    , RawBytes(rawBytes) {
+    Y_ABORT_UNLESS(SerializedBytes);
+    Y_ABORT_UNLESS(RecordsCount);
+//    Y_ABORT_UNLESS(RawBytes);
+}
+
 }

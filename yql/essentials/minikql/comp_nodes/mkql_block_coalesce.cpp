@@ -9,14 +9,113 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce_blending_helper.h>
+#include <yql/essentials/minikql/defs.h>
 
 #include <arrow/util/bitmap_ops.h>
 
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
+
+template <typename TType>
+void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, bool outIsOptional, arrow::MemoryPool& pool) {
+    auto bitmap = outIsOptional ? ARROW_RESULT(arrow::AllocateBitmap((left.array()->length + left.array()->offset % 8) * sizeof(ui8), &pool)) : nullptr;
+    if (bitmap && bitmap->size() > 0) {
+        // Fill first byte with zero to prevent further uninitialized memory access.
+        bitmap->mutable_data()[0] = 0;
+    }
+    out = arrow::ArrayData::Make(right.type(), left.array()->length,
+                                 {std::move(bitmap),
+                                  ARROW_RESULT(arrow::AllocateBuffer((left.array()->length + left.array()->offset % 8) * sizeof(TType), &pool))},
+                                 arrow::kUnknownNullCount, left.array()->offset % 8);
+    if (outIsOptional) {
+        if (right.is_scalar()) {
+            if (right.scalar()->is_valid) {
+                BlendCoalesce<TType, /*isScalar=*/true, /*rightIsOptional=*/true>(
+                    TDatumStorageView<TType>(left),
+                    TDatumStorageView<TType>(right),
+                    TDatumStorageView<TType>(out),
+                    left.array()->length);
+            } else {
+                out = left;
+            }
+        } else {
+            MKQL_ENSURE(TDatumStorageView<TType>(right).bitMask(), "Right array must have a null mask");
+            BlendCoalesce<TType, /*isScalar=*/false, /*rightIsOptional=*/true>(
+                TDatumStorageView<TType>(left),
+                TDatumStorageView<TType>(right),
+                TDatumStorageView<TType>(out),
+                left.array()->length);
+        }
+    } else {
+        if (right.is_scalar()) {
+            BlendCoalesce<TType, /*isScalar=*/true, /*rightIsOptional=*/false>(
+                TDatumStorageView<TType>(left),
+                TDatumStorageView<TType>(right),
+                TDatumStorageView<TType>(out),
+                left.array()->length);
+        } else {
+            BlendCoalesce<TType, /*isScalar=*/false, /*rightIsOptional=*/false>(
+                TDatumStorageView<TType>(left),
+                TDatumStorageView<TType>(right),
+                TDatumStorageView<TType>(out),
+                left.array()->length);
+        }
+    }
+}
+
+bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, TType* rightType, arrow::MemoryPool& pool) {
+    TTypeInfoHelper typeInfoHelper;
+    bool rightIsOptional;
+    rightType = UnpackOptional(rightType, rightIsOptional);
+    MKQL_ENSURE(rightType, "Right type must be valid");
+
+    NYql::NUdf::TDataTypeInspector typeData(typeInfoHelper, rightType);
+    if (!typeData) {
+        return false;
+    }
+    auto typeId = typeData.GetTypeId();
+
+    switch (NYql::NUdf::GetDataSlot(typeId)) {
+        case NYql::NUdf::EDataSlot::Bool:
+        case NYql::NUdf::EDataSlot::Int8:
+        case NYql::NUdf::EDataSlot::Uint8:
+            DispatchCoalesceImpl<ui8>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        case NYql::NUdf::EDataSlot::Int16:
+        case NYql::NUdf::EDataSlot::Uint16:
+        case NYql::NUdf::EDataSlot::Date:
+            DispatchCoalesceImpl<ui16>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        case NYql::NUdf::EDataSlot::Int32:
+        case NYql::NUdf::EDataSlot::Uint32:
+        case NYql::NUdf::EDataSlot::Date32:
+        case NYql::NUdf::EDataSlot::Datetime:
+            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        case NYql::NUdf::EDataSlot::Int64:
+        case NYql::NUdf::EDataSlot::Uint64:
+        case NYql::NUdf::EDataSlot::Datetime64:
+        case NYql::NUdf::EDataSlot::Timestamp64:
+        case NYql::NUdf::EDataSlot::Interval64:
+        case NYql::NUdf::EDataSlot::Interval:
+        case NYql::NUdf::EDataSlot::Timestamp:
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        case NYql::NUdf::EDataSlot::Double:
+            static_assert(sizeof(NUdf::TDataType<double>::TLayout) == sizeof(NUdf::TDataType<ui64>::TLayout));
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        case NYql::NUdf::EDataSlot::Float:
+            static_assert(sizeof(NUdf::TDataType<float>::TLayout) == sizeof(NUdf::TDataType<ui32>::TLayout));
+            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
+        default:
+            // Fallback to general builder/reader pipeline.
+            return false;
+    }
+}
 
 class TCoalesceBlockExec {
 public:
@@ -24,8 +123,8 @@ public:
         : ReturnArrowType_(returnArrowType)
         , FirstItemType_(firstItemType)
         , SecondItemType_(secondItemType)
-        , NeedUnwrapFirst_(needUnwrapFirst)
-    {}
+        , NeedUnwrapFirst_(needUnwrapFirst) {
+    }
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         const auto& first = batch.values[0];
@@ -53,6 +152,10 @@ public:
                 builder->Add(secondValue, length);
                 *res = builder->Build(true);
             } else {
+                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, *ctx->memory_pool())) {
+                    return arrow::Status::OK();
+                }
+
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 for (size_t i = 0; i < length; ++i) {
@@ -74,6 +177,10 @@ public:
             } else if ((size_t)firstArray.GetNullCount() == length) {
                 *res = second;
             } else {
+                if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, *ctx->memory_pool())) {
+                    return arrow::Status::OK();
+                }
+
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
                 for (size_t i = 0; i < length; ++i) {
                     auto firstItem = firstReader->GetItem(firstArray, i);
@@ -110,9 +217,9 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVec
         AS_TYPE(TBlockType, argTypes[1])->GetItemType(),
         needUnwrapFirst);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        return exec->Exec(ctx, batch, res);
-    });
+                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                                                                     return exec->Exec(ctx, batch, res);
+                                                                 });
 
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;
@@ -135,6 +242,8 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     bool needUnwrapFirst = false;
     if (!firstItemType->IsSameType(*secondItemType)) {
+        // Here the left operand and right operand are of types T? and T respectively.
+        // The first operand must be unwrapped to obtain the resulting type.
         needUnwrapFirst = true;
         bool firstOptional;
         firstItemType = UnpackOptional(firstItemType, firstOptional);
@@ -143,12 +252,11 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
     auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
-    TVector<TType*> argsTypes = { firstType, secondType };
+    TComputationNodePtrVector argsNodes = {firstCompute, secondCompute};
+    TVector<TType*> argsTypes = {firstType, secondType};
 
     auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);
     return new TBlockFuncNode(ctx.Mutables, "Coalesce", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

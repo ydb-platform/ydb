@@ -3,18 +3,19 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard {
 
 class TBackgroundControllerCounters {
 private:
-    THashMap<ui64, TInstant> LastCompactionFinishByPathId;
+    THashMap<TInternalPathId, TInstant> LastCompactionFinishByPathId;
     TInstant LastCompactionFinish;
 
 public:
-    void OnCompactionFinish(ui64 pathId);
+    void OnCompactionFinish(TInternalPathId pathId);
 
-    void FillStats(ui64 pathId, ::NKikimrTableStats::TTableStats& output) const {
+    void FillStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& output) const {
         output.SetLastFullCompactionTs(GetLastCompactionFinishInstant(pathId).value_or(TInstant::Zero()).Seconds());
     }
 
@@ -23,7 +24,7 @@ public:
     }
 
 private:
-    std::optional<TInstant> GetLastCompactionFinishInstant(const ui64 pathId) const {
+    std::optional<TInstant> GetLastCompactionFinishInstant(const TInternalPathId pathId) const {
         auto findInstant = LastCompactionFinishByPathId.FindPtr(pathId);
         if (!findInstant) {
             return std::nullopt;

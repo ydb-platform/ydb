@@ -30,6 +30,8 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
+    local_user_token.cpp
+    local_user_token.h
     localdb.cpp
     localdb.h
     location.h
@@ -125,5 +127,6 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_auth
     ut_board_subscriber
 )

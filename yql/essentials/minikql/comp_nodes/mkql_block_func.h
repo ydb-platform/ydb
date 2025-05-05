@@ -6,7 +6,6 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapBlockBitCast(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 }
 }

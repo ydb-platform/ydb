@@ -1,8 +1,8 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+REQUIREMENTS(ram:32)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
@@ -21,10 +21,13 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public/impl
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/src/client/topic/impl
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/library/issue
 
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/ut/common
@@ -38,6 +41,11 @@ SRCS(
     local_partition_ut.cpp
     topic_to_table_ut.cpp
     trace_ut.cpp
+)
+
+RESOURCE(
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat topic_A_partition_0_v24-4-2.dat
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat topic_A_partition_1_v24-4-2.dat
 )
 
 END()

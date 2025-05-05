@@ -106,7 +106,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);
             if (future.HasValue()) {
-                UNIT_ASSERT_STRING_CONTAINS(future.GetValue().ToOneLineString(), "Read session to topic \"NonExistentTopic\" was closed");
+                auto message = future.GetValue().ToOneLineString();
+                UNIT_ASSERT_STRING_CONTAINS(message, "Error: ");
+                UNIT_ASSERT_STRING_CONTAINS(message, " \"NonExistentTopic\" ");
                 failured = true;
                 break;
             }

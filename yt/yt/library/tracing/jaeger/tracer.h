@@ -24,10 +24,9 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJaegerTracerDynamicConfig
+struct TJaegerTracerDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     NRpc::NGrpc::TChannelConfigPtr CollectorChannel;
 
     std::optional<i64> MaxRequestSize;
@@ -47,10 +46,9 @@ DEFINE_REFCOUNTED_TYPE(TJaegerTracerDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJaegerTracerConfig
+struct TJaegerTracerConfig
     : public NYTree::TYsonStruct
 {
-public:
     NRpc::NGrpc::TChannelConfigPtr CollectorChannelConfig;
 
     TDuration FlushPeriod;
@@ -102,7 +100,7 @@ class TBatchInfo
 {
 public:
     TBatchInfo() = default;
-    explicit TBatchInfo(const TString& endpoint);
+    explicit TBatchInfo(const std::string& endpoint);
 
     void PopFront();
     void EmplaceBack(int size, NYT::TSharedRef&& value);

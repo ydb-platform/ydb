@@ -251,7 +251,7 @@ Check how {{ ydb-short-name }} works:
     ydb \
       --endpoint grpc://database-sample-grpc:2135 \
       --database /root/database-sample \
-      table query execute --query 'SELECT 2 + 2;'
+      sql -s 'SELECT 2 + 2;'
     ```
 
     * `--endpoint`: The database endpoint.

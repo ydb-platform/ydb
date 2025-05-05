@@ -3,6 +3,6 @@
 Область действия команд `CREATE USER`, `ALTER USER`, `DROP USER` не распространяется на внешние каталоги пользователей.
 Учитывайте это, если к {{ ydb-short-name }} подключаются пользователи со сторонней аутентификацией (например, LDAP).
 Например, команда `CREATE USER` не создаст пользователя в LDAP-каталоге.
-Подробнее про [взаимодействие {{ ydb-short-name }} с LDAP-каталогом](../security/authentication.md#ldap-auth-provider).
+Подробнее про [взаимодействие {{ ydb-short-name }} с LDAP-каталогом](../security/authentication.md#ldap).
 
 {% endnote %}

@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGetBlock>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGetBlock>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TGetBlockQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGetBlock> {
             ui32 BlockedGeneration = 0;
 
@@ -41,7 +42,7 @@ namespace NKikimr::NBlobDepot {
                 return Request.TabletId;
             }
         };
-        return new TGetBlockQuery(*this, std::move(ev));
+        return new TGetBlockQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

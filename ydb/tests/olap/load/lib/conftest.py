@@ -14,7 +14,7 @@ from time import time
 from typing import Optional
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.allure_utils import allure_test_description
+from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -36,6 +36,8 @@ class LoadSuiteBase:
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
+    verify_data: bool = True
+    __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
     def suite(cls) -> str:
@@ -62,13 +64,13 @@ class LoadSuiteBase:
 
     @classmethod
     def _test_name(cls, query_num: int) -> str:
-        return f'Query{query_num:02d}'
+        return f'Query{query_num:02d}' if query_num >= 0 else '_Verification'
 
     @classmethod
     @allure.step('check tables size')
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         wait_error = YdbCluster.wait_ydb_alive(
-            20 * 60, (
+            int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), (
                 f'{YdbCluster.tables_path}/{folder}'
                 if folder is not None
                 else [f'{YdbCluster.tables_path}/{t}' for t in tables.keys()]
@@ -91,8 +93,19 @@ class LoadSuiteBase:
             msg = "\n".join(errors)
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
+    @staticmethod
+    def __execute_ssh(host: str, cmd: str):
+        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        ssh_user = os.getenv('SSH_USER')
+        if ssh_user is not None:
+            ssh_cmd += ['-l', ssh_user]
+        ssh_key_file = os.getenv('SSH_KEY_FILE')
+        if ssh_key_file is not None:
+            ssh_cmd += ['-i', ssh_key_file]
+        return yatest.common.execute(ssh_cmd + [host, cmd], wait=False)
+
     @classmethod
-    def _attach_logs(cls, start_time, attach_name):
+    def __attach_logs(cls, start_time, attach_name):
         hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
@@ -101,28 +114,20 @@ class LoadSuiteBase:
             '': {},
         }
         exec_start = deepcopy(exec_kikimr)
-        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-        ssh_user = os.getenv('SSH_USER')
-        if ssh_user is not None:
-            ssh_cmd += ['-l', ssh_user]
-        ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
-            ssh_cmd += ['-i', ssh_key_file]
         for host in hosts:
             for c in exec_kikimr.keys():
                 try:
-                    exec_kikimr[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(
+                    exec_kikimr[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr',
-                        container=f' -m k8s_container:{c}' if c else '')],
-                        wait=False)
+                        container=f' -m k8s_container:{c}' if c else ''
+                    ))
                 except BaseException as e:
                     logging.error(e)
             for c in exec_start.keys():
                 try:
-                    exec_start[c][host] = yatest.common.execute(ssh_cmd + [host, cmd.format(
+                    exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr-start',
-                        container=f' -m k8s_container:{c}' if c else '')],
-                        wait=False)
+                        container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
                     logging.error(e)
 
@@ -146,37 +151,112 @@ class LoadSuiteBase:
             allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
 
     @classmethod
+    def save_nodes_state(cls) -> None:
+        cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
+
+    @classmethod
+    def __get_core_hashes_by_pod(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
+        core_processes = {
+            h: cls.__execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
+            for h in hosts
+        }
+
+        core_hashes = {}
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process coredumps on host {h}: {exec.stderr.decode("utf-8")}')
+            exec = cls.__execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
+                                         f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
+                                         ' | while read FILE; do cat $FILE; echo -n ","; done'))
+            exec.wait(check_exit_code=False)
+            if exec.returncode == 0:
+                for core in json.loads(f'[{exec.stdout.decode("utf-8").strip(",")}]'):
+                    slot = f"{core.get('slot', '')}@{h}"
+                    core_hashes.setdefault(slot, [])
+                    core_hashes[slot].append((core.get('core_id', ''), core.get('core_hash', '')))
+            else:
+                logging.error(f'Error while search coredumps on host {h}: {exec.stderr.decode("utf-8")}')
+        return core_hashes
+
+    @classmethod
+    def __get_hosts_with_omms(cls, hosts: set[str], start_time: float, end_time: float) -> set[str]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
+        end = datetime.fromtimestamp(end_time, tz).strftime("%Y-%m-%d %H:%M:%S")
+        oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "Out of memory: Kill" --case-sensitive=false'
+        ooms = set()
+        for h in hosts:
+            exec = cls.__execute_ssh(h, oom_cmd)
+            exec.wait(check_exit_code=False)
+            if exec.returncode == 0:
+                if exec.stdout.decode('utf-8'):
+                    ooms.add(h)
+            else:
+                logging.error(f'Error while search OOMs on host {h}: {exec.stderr.decode("utf-8")}')
+        return ooms
+
+    @classmethod
+    def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+        if cls.__nodes_state is None:
+            return []
+        node_errors = []
+        fail_hosts = set()
+        for node in YdbCluster.get_cluster_nodes(db_only=True):
+            saved_node = cls.__nodes_state.get(node.slot)
+            if saved_node is not None:
+                if node.start_time > saved_node.start_time:
+                    node_errors.append(NodeErrors(node, 'was restarted'))
+                    fail_hosts.add(node.host)
+                del cls.__nodes_state[node.slot]
+        for _, node in cls.__nodes_state.items():
+            node_errors.append(NodeErrors(node, 'is down'))
+            fail_hosts.add(node.host)
+        cls.__nodes_state = None
+        if len(node_errors) == 0:
+            return []
+
+        core_hashes = cls.__get_core_hashes_by_pod(fail_hosts, result.start_time, end_time)
+        ooms = cls.__get_hosts_with_omms(fail_hosts, result.start_time, end_time)
+        for node in node_errors:
+            node.core_hashes = core_hashes.get(f'{node.node.slot}', [])
+            node.was_oom = node.node.host in ooms
+
+        for err in node_errors:
+            result.add_error(f'Node {err.node.slot} {err.message}')
+        return node_errors
+
+    @classmethod
     def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
-            if stats is None:
-                return None
-            result = stats.get(field)
-            return float(result) / 1e3 if result is not None else None
+            r = stats.get(field)
+            return float(r) / 1e3 if r is not None else None
 
         def _duration_text(duration: float | int):
             s = f'{int(duration)}s ' if duration >= 1 else ''
             return f'{s}{int(duration * 1000) % 1000}ms'
 
-        def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
+        def _attach_plans(plan: YdbCliHelper.QueryPlan, name: str) -> None:
+            if plan is None:
+                return
             if plan.plan is not None:
-                allure.attach(json.dumps(plan.plan), 'Plan json', attachment_type=allure.attachment_type.JSON)
+                allure.attach(json.dumps(plan.plan), f'{name} json', attachment_type=allure.attachment_type.JSON)
             if plan.table is not None:
-                allure.attach(plan.table, 'Plan table', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.table, f'{name} table', attachment_type=allure.attachment_type.TEXT)
             if plan.ast is not None:
-                allure.attach(plan.ast, 'Plan ast', attachment_type=allure.attachment_type.TEXT)
+                allure.attach(plan.ast, f'{name} ast', attachment_type=allure.attachment_type.TEXT)
             if plan.svg is not None:
-                allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
+                allure.attach(plan.svg, f'{name} svg', attachment_type=allure.attachment_type.SVG)
+            if plan.stats is not None:
+                allure.attach(plan.stats, f'{name} stats', attachment_type=allure.attachment_type.TEXT)
 
         test = cls._test_name(query_num)
-        stats = result.stats.get(test)
-        if stats is None:
-            stats = {}
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
-        if result.explain.plan is not None:
+        if result.explain.final_plan is not None:
             with allure.step('Explain'):
-                _attach_plans(result.explain.plan)
+                _attach_plans(result.explain.final_plan, 'Plan')
 
         for iter_num in sorted(result.iterations.keys()):
             iter_res = result.iterations[iter_num]
@@ -185,7 +265,8 @@ class LoadSuiteBase:
                 s.params['duration'] = _duration_text(iter_res.time)
             try:
                 with s:
-                    _attach_plans(iter_res.plan)
+                    _attach_plans(iter_res.final_plan, 'Final plan')
+                    _attach_plans(iter_res.in_progress_plan, 'In-progress plan')
                     if iter_res.error_message:
                         pytest.fail(iter_res.error_message)
             except BaseException:
@@ -205,38 +286,33 @@ class LoadSuiteBase:
 
         if result.stderr is not None:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
+        end_time = time()
+        allure_test_description(
+            cls.suite(), test, refference_set=cls.refference,
+            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
+        )
+        stats = result.get_stats(test)
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-        error_message = ''
-        success = True
-        if not result.success:
-            success = False
-            error_message = result.error_message
-        elif stats.get('FailsCount', 0) != 0:
-            success = False
-            error_message = 'There are fail attemps'
-        if os.getenv('NO_KUBER_LOGS') is None and not success:
-            cls._attach_logs(start_time=result.start_time, attach_name='kikimr')
-        stats['with_warrnings'] = bool(result.warning_message)
-        stats['with_errors'] = bool(error_message)
-        stats['errors'] = result.get_error_stats()
+        if os.getenv('NO_KUBER_LOGS') is None and not result.success:
+            cls.__attach_logs(start_time=result.start_time, attach_name='kikimr')
         allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
         if upload:
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),
                 test=test,
-                timestamp=time(),
-                is_successful=success,
+                timestamp=end_time,
+                is_successful=result.success,
                 min_duration=_get_duraton(stats, 'Min'),
                 max_duration=_get_duraton(stats, 'Max'),
                 mean_duration=_get_duraton(stats, 'Mean'),
                 median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
-        if not success:
-            exc = pytest.fail.Exception('\n'.join([error_message, result.warning_message]))
+        if not result.success:
+            exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
@@ -246,29 +322,22 @@ class LoadSuiteBase:
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()
-        error = YdbCluster.wait_ydb_alive(20 * 60)
-        tb = None
-        if not error and hasattr(cls, 'do_setup_class'):
+        result = YdbCliHelper.WorkloadRunResult()
+        result.iterations[0] = YdbCliHelper.Iteration()
+        result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
+        result.traceback = None
+        if not result.error_message and hasattr(cls, 'do_setup_class'):
             try:
                 cls.do_setup_class()
             except BaseException as e:
-                error = str(e)
-                tb = e.__traceback__
-        first_node_start_time = min([n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)])
-        ResultsProcessor.upload_results(
-            kind='Load',
-            suite=cls.suite(),
-            test='_Verification',
-            timestamp=start_time,
-            is_successful=(error is None),
-            statistics={'with_errors': bool(error), 'with_warrnings': False}
-        )
-        if os.getenv('NO_KUBER_LOGS') is None and error is not None:
-            cls._attach_logs(start_time=max(start_time - 600, first_node_start_time), attach_name='kikimr_start')
-        if error is not None:
-            exc = pytest.fail.Exception(error)
-            exc.with_traceback(tb)
-            raise exc
+                result.add_error(str(e))
+                result.traceback = e.__traceback__
+        result.iterations[0].time = time() - start_time
+        result.add_stat('_Verification', 'Mean', 1000 * result.iterations[0].time)
+        nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+        first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
+        result.start_time = max(start_time - 600, first_node_start_time)
+        cls.process_query_result(result, -1, 1, True)
 
     def run_workload_test(self, path: str, query_num: int) -> None:
         for plugin in plugin_manager.get_plugin_manager().get_plugins():
@@ -279,6 +348,7 @@ class LoadSuiteBase:
                         if param.name == 'query_num':
                             param.mode = allure.parameter_mode.HIDDEN.value
         qparams = self._get_query_settings(query_num)
+        self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path=path,
             query_num=query_num,
@@ -290,5 +360,4 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix
         )
-        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=result.start_time, end_time=time())
         self.process_query_result(result, query_num, qparams.iterations, True)

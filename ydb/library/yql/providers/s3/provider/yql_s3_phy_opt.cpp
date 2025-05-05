@@ -124,13 +124,15 @@ public:
         auto keys = GetPartitionKeys(partBy);
 
         auto sinkSettingsBuilder = Build<TExprList>(ctx, target.Pos());
-        if (partBy)
+        if (partBy) {
             sinkSettingsBuilder.Add(std::move(partBy));
+        }
 
         auto compression = GetCompression(settings);
         const auto& extension = GetExtension(target.Format().Value(), compression ? compression->Tail().Content() : ""sv);
-        if (compression)
+        if (compression) {
             sinkSettingsBuilder.Add(std::move(compression));
+        }
 
         auto sinkOutputSettingsBuilder = Build<TExprList>(ctx, target.Pos());
         if (auto csvDelimiter = GetCsvDelimiter(settings)) {
@@ -199,31 +201,17 @@ public:
             }
         }
 
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
+        if (IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
-            auto shouldBePassedAsInput = FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TDqStage::CallableName()); });
-
-            auto stageInputs = Build<TExprList>(ctx, writePos);
-            auto toFlow = Build<TCoToFlow>(ctx, writePos);
-            TVector<TCoArgument> args;
-
-            if (shouldBePassedAsInput) {
-                auto arg = Build<TCoArgument>(ctx, writePos).Name("in").Done();
-                stageInputs.Add(input);
-                args.push_back(arg);
-                toFlow.Input(arg);
-            }
-            else {
-                toFlow.Input(input);
-            }
-
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)
-                    .Inputs(stageInputs.Done())
+                    .Inputs().Build()
                     .Program<TCoLambda>()
-                        .Args(args)
+                        .Args({})
                         .Body<TS3SinkOutput>()
-                            .Input(toFlow.Done())
+                            .Input<TCoToFlow>()
+                                .Input(input)
+                                .Build()
                             .Format(target.Format())
                             .KeyColumns().Build()
                             .Settings(sinkOutputSettingsBuilder.Done())
@@ -251,10 +239,12 @@ public:
                             .Add<TDqCnHashShuffle>()
                                 .Output<TDqOutput>()
                                     .Stage<TDqStage>()
-                                        .Inputs(stageInputs.Done())
+                                        .Inputs().Build()
                                         .Program<TCoLambda>()
-                                            .Args(args)
-                                            .Body(toFlow.Done())
+                                            .Args({})
+                                            .Body<TCoToFlow>()
+                                                .Input(input)
+                                                .Build()
                                             .Build()
                                         .Settings().Build()
                                         .Build()
@@ -317,23 +307,26 @@ public:
                 .Build()
             .Done();
 
-        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos());
-        if (inputStage.Outputs() && keys.empty()) {
-            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
-        }
-        outputsBuilder.Add(sink);
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos())
+            .Add(sink);
 
         if (keys.empty()) {
-            const auto outputBuilder = Build<TS3SinkOutput>(ctx, target.Pos())
-                .Input(inputStage.Program().Body().Ptr())
-                .Format(target.Format())
-                .KeyColumns().Add(std::move(keys)).Build()
-                .Settings(sinkOutputSettingsBuilder.Done())
-                .Done();
-
             return Build<TDqStage>(ctx, writePos)
-                .InitFrom(inputStage)
-                .Program(ctx.DeepCopyLambda(inputStage.Program().Ref(), outputBuilder.Ptr()))
+                .Inputs()
+                    .Add<TDqCnMap>()
+                        .Output(dqUnion.Output())
+                        .Build()
+                    .Build()
+                .Program<TCoLambda>()
+                    .Args({"in"})
+                    .Body<TS3SinkOutput>()
+                        .Input("in")
+                        .Format(target.Format())
+                        .KeyColumns().Add(std::move(keys)).Build()
+                        .Settings(sinkOutputSettingsBuilder.Done())
+                        .Build()
+                    .Build()
+                .Settings().Build()
                 .Outputs(outputsBuilder.Done())
                 .Done();
         } else {

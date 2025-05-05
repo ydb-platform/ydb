@@ -13,6 +13,7 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/proto_parser
+    yql/essentials/parser/proto_ast/gen/v1_proto_split
     yql/essentials/core/sql_types
     library/cpp/protobuf/util
     library/cpp/resource

@@ -521,6 +521,13 @@ void TCopyCommand::Register(TRegistrar registrar)
             return command->Options.EnableCrossCellCopying;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "allow_secondary_index_abandonment",
+        [] (TThis* command) -> auto& {
+            return command->Options.AllowSecondaryIndexAbandonment;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TCopyCommand::DoExecute(ICommandContextPtr context)
@@ -617,6 +624,13 @@ void TMoveCommand::Register(TRegistrar registrar)
         "enable_cross_cell_copying",
         [] (TThis* command) -> auto& {
             return command->Options.EnableCrossCellCopying;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "allow_secondary_index_abandonment",
+        [] (TThis* command) -> auto& {
+            return command->Options.AllowSecondaryIndexAbandonment;
         })
         .Optional(/*init*/ false);
 }

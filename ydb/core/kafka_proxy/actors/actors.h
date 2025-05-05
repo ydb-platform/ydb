@@ -52,10 +52,10 @@ struct TContext {
     NKikimr::NPQ::TRlContext RlContext;
 
     bool Authenticated() {
-        return !RequireAuthentication || AuthenticationStep == SUCCESS;
-    }
 
-    TActorId DiscoveryCacheActor;
+        return !RequireAuthentication || AuthenticationStep == SUCCESS;
+
+    }
 };
 
 template<std::derived_from<TApiMessage> T>
@@ -128,6 +128,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
     switch (code) {
         case Ydb::PersQueue::ErrorCode::ErrorCode::OK:
             return EKafkaErrors::NONE_ERROR;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::UNKNOWN_READ_RULE:
+            return EKafkaErrors::GROUP_ID_NOT_FOUND;
         case Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST:
             return EKafkaErrors::INVALID_REQUEST;
         case Ydb::PersQueue::ErrorCode::ErrorCode::ERROR:
@@ -172,6 +174,7 @@ NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui
                                           const TActorId& discoveryCacheActor);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
+NActors::IActor* CreateKafkaBalancerActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
 NActors::IActor* CreateKafkaListOffsetsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListOffsetsRequestData>& message);
@@ -181,6 +184,7 @@ NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, cons
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message);
 NActors::IActor* CreateKafkaCreateTopicsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreateTopicsRequestData>& message);
 NActors::IActor* CreateKafkaCreatePartitionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreatePartitionsRequestData>& message);
+NActors::IActor* CreateKafkaDescribeConfigsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TDescribeConfigsRequestData>& message);
 NActors::IActor* CreateKafkaAlterConfigsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TAlterConfigsRequestData>& message);
 
 } // namespace NKafka

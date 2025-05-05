@@ -7,6 +7,7 @@
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
@@ -17,6 +18,11 @@
 
 namespace NYT::NConcurrency {
 namespace {
+
+using ::testing::Each;
+using ::testing::IsFalse;
+using ::testing::IsTrue;
+using ::testing::Property;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,8 +47,9 @@ TEST_W(TPeriodicTest, Simple)
         callback,
         TDuration::MilliSeconds(100));
 
-    executor->Start();
+    auto firstExecution = executor->StartAndGetFirstExecutedEvent();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(600));
+    EXPECT_TRUE(firstExecution.IsSet());
     WaitFor(executor->Stop())
         .ThrowOnError();
     EXPECT_EQ(2, count.load());
@@ -58,6 +65,13 @@ TEST_W(TPeriodicTest, Simple)
     WaitFor(executor->GetExecutedEvent())
         .ThrowOnError();
     EXPECT_EQ(6, count.load());
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+    EXPECT_EQ(6, count.load());
+
+    WaitFor(executor->StartAndGetFirstExecutedEvent())
+        .ThrowOnError();
+    EXPECT_EQ(7, count.load());
     WaitFor(executor->Stop())
         .ThrowOnError();
 }
@@ -88,6 +102,66 @@ TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
     auto executionDuration = TInstant::Now() - now;
     EXPECT_LT(executionDuration, TDuration::MilliSeconds(20));
     EXPECT_EQ(2, count.load());
+}
+
+TEST_W(TPeriodicTest, ParallelStart)
+{
+    static constexpr int ThreadCount = 4;
+
+    TPromise<void> threadStartBarrier = NewPromise<void>();
+    TPromise<void> callbackStartBarrier = NewPromise<void>();
+    TPromise<void> callbackEndBarrier = NewPromise<void>();
+    std::atomic<int> countStarted = {0};
+    std::atomic<int> countFinished = {0};
+    std::atomic<int> countWaiting = {0};
+
+    auto callback = BIND([&] {
+        ++countStarted;
+        threadStartBarrier.ToFuture().Get();
+        callbackStartBarrier.Set();
+        callbackEndBarrier.ToFuture().Get();
+        ++countFinished;
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TDuration::MilliSeconds(200));
+
+    auto startCallback = BIND([&] {
+        auto result = executor->StartAndGetFirstExecutedEvent();
+        if (++countWaiting == ThreadCount) {
+            threadStartBarrier.Set();
+        }
+        return result;
+    });
+
+    auto threadPool = CreateThreadPool(ThreadCount, "test");
+
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < ThreadCount; ++i) {
+        futures.push_back(startCallback.AsyncVia(threadPool->GetInvoker()).Run());
+    }
+
+    // Check that start futures are set correctly in all threads
+    // after the first execution, but before the second one.
+
+    callbackStartBarrier.ToFuture().Get();
+    EXPECT_THAT(
+        futures,
+        Each(
+            Property(&TFuture<void>::IsSet, IsFalse())));
+    callbackEndBarrier.Set();
+    threadStartBarrier = NewPromise<void>();
+    WaitFor(AllSucceeded(futures))
+        .ThrowOnError();
+    EXPECT_EQ(1, countStarted.load());
+    EXPECT_EQ(1, countFinished.load());
+    threadStartBarrier.Set();
+
+    WaitFor(executor->Stop())
+        .ThrowOnError();
 }
 
 TEST_W(TPeriodicTest, ParallelStop)
@@ -233,6 +307,34 @@ TEST_W(TPeriodicTest, OnExecutedEventCanceled)
     EXPECT_EQ(2, count.load());
 }
 
+TEST_W(TPeriodicTest, OnStartCancelled)
+{
+    auto callbackStarted = NewPromise<void>();
+
+    auto callback = BIND([&] {
+        callbackStarted.Set();
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TDuration::MilliSeconds(200));
+
+    auto startFuture1 = executor->StartAndGetFirstExecutedEvent();
+    auto startFuture2 = executor->StartAndGetFirstExecutedEvent();
+    startFuture1.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled"));
+
+    // NB(pavook): cancellation of a start future shouldn't cause an executor stop
+    // and should not propagate to the underlying promise (and other futures).
+    EXPECT_TRUE(callbackStarted.ToFuture().Get().IsOK());
+    EXPECT_TRUE(executor->IsStarted());
+    EXPECT_TRUE(startFuture2.IsSet());
+    EXPECT_TRUE(startFuture2.Get().IsOK());
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+}
+
 TEST_W(TPeriodicTest, Stop)
 {
     auto neverSetPromise = NewPromise<void>();
@@ -248,7 +350,7 @@ TEST_W(TPeriodicTest, Stop)
         callback,
         TDuration::MilliSeconds(100));
 
-    executor->Start();
+    auto startFuture = executor->StartAndGetFirstExecutedEvent();
     // Wait for the callback to enter WaitFor.
     Sleep(TDuration::MilliSeconds(100));
     WaitFor(executor->Stop())
@@ -256,6 +358,16 @@ TEST_W(TPeriodicTest, Stop)
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
     EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.Get().GetCode());
+    EXPECT_FALSE(startFuture.Get().IsOK());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, startFuture.Get().GetCode());
+
+    startFuture = executor->StartAndGetFirstExecutedEvent();
+    Sleep(TDuration::MilliSeconds(200));
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+    // startFuture should be set after the first execution.
+    EXPECT_TRUE(startFuture.IsSet());
+    EXPECT_TRUE(startFuture.Get().IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

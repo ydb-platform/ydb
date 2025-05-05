@@ -84,6 +84,7 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.SyncVersion = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
+    schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
@@ -103,6 +104,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+    topicsIter->second.PartitionGraph = entry.PQGroupInfo->PartitionGraph;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -203,7 +205,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
-                    PersQueue::ErrorCode::BAD_REQUEST, ctx
+                    PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx
             );
             return false;
         }
@@ -271,7 +273,16 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.Partitions
+            holder.FullConverter,
+            holder.TabletID,
+            holder.CloudId,
+            holder.DbId,
+            holder.DbPath,
+            holder.IsServerless,
+            holder.FolderId,
+            holder.MeteringMode,
+            holder.Partitions,
+            holder.PartitionGraph
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

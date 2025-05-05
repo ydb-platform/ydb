@@ -644,6 +644,7 @@ void TSolomonExporter::DoHandleShard(
         options.Times = readWindow;
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
+        options.ReportTimestampsForRateMetrics = Config_->ReportTimestampsForRateMetrics;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
 

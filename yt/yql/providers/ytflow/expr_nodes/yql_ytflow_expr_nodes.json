@@ -1,0 +1,128 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TYtflowDSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Builder": {"Generate": "None"},
+            "Match": {"Type": "Callable", "Name": "DataSource"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtflowDSink",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Builder": {"Generate": "None"},
+            "Match": {"Type": "Callable", "Name": "DataSink"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtflowReadWrap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowReadWrap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TYtflowWriteWrap",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowWriteWrap"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TYtflowReadStub",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowReadStub!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ItemType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TYtflowPersistentSource",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowPersistentSource"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Input", "Type": "TYtflowReadWrap"}
+            ]
+        },
+        {
+            "Name": "TYtflowSinkBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtflowIntermediateSink",
+            "Base": "TYtflowSinkBase",
+            "Match": {"Type": "Callable", "Name": "YtflowIntermediateSink"},
+            "Children": [
+                {"Index": 1, "Name": "RowType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TYtflowPersistentSink",
+            "Base": "TYtflowSinkBase",
+            "Match": {"Type": "Callable", "Name": "YtflowPersistentSink"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TYtflowWriteWrap"}
+            ]
+        },
+        {
+            "Name": "TYtflowOpBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Sources", "Type": "TExprList"},
+                {"Index": 2, "Name": "Sinks", "Type": "TExprList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TYtflowMap",
+            "Base": "TYtflowOpBase",
+            "Match": {"Type": "Callable", "Name": "YtflowMap!"},
+            "Children": [
+                {"Index": 4, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TYtflowOutput",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowOutput"},
+            "Children": [
+                {"Index": 0, "Name": "Operation", "Type": "TYtflowOpBase"},
+                {"Index": 1, "Name": "OutputIndex", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtflowPublish",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowPublish!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        }
+    ]
+}

@@ -24,48 +24,47 @@ TClientCommandServer::TClientCommandServer(std::shared_ptr<TModuleFactories> fac
         *Logger
     }))
     , InitCfg(DepsRecorder->GetDeps())
+    , RunConfig(AppConfig)
 {}
 
 int TClientCommandServer::Run(TConfig& config) {
-    NKikimrConfig::TAppConfig appConfig;
-
-    TKikimrRunConfig runConfig(appConfig);
-
     InitCfg.Apply(
-        appConfig,
-        runConfig.NodeId,
-        runConfig.ScopeId,
-        runConfig.TenantName,
-        runConfig.ServicesMask,
-        runConfig.ClusterName,
-        runConfig.ConfigsDispatcherInitInfo);
+        AppConfig,
+        RunConfig.NodeId,
+        RunConfig.ScopeId,
+        RunConfig.TenantName,
+        RunConfig.ServicesMask,
+        RunConfig.ClusterName,
+        RunConfig.ConfigsDispatcherInitInfo);
 
-    runConfig.ConfigsDispatcherInitInfo.RecordedInitialConfiguratorDeps =
+    RunConfig.ConfigsDispatcherInitInfo.RecordedInitialConfiguratorDeps =
         std::make_shared<NConfig::TRecordedInitialConfiguratorDeps>(DepsRecorder->GetRecordedDeps());
 
     for (int i = 0; i < config.ArgC; ++i) {
-        runConfig.ConfigsDispatcherInitInfo.Args.push_back(config.ArgV[i]);
+        RunConfig.ConfigsDispatcherInitInfo.Args.push_back(config.ArgV[i]);
     }
 
-    Y_ABORT_UNLESS(runConfig.NodeId);
-    return MainRun(runConfig, Factories);
+    Y_ABORT_UNLESS(RunConfig.NodeId);
+    return MainRun(RunConfig, Factories);
 }
 
 void TClientCommandServer::Config(TConfig& config) {
     TClientCommand::Config(config);
-
+    for (auto plugin: RunConfig.Plugins) {
+        plugin->SetupOpts(config.Opts->GetOpts());
+    }
     NConfig::AddProtoConfigOptions(DepsRecorder->GetDeps().ProtoConfigFileProvider);
-    InitCfg.RegisterCliOptions(*config.Opts);
-    ProtoConfigFileProvider->RegisterCliOptions(*config.Opts);
+    InitCfg.RegisterCliOptions(config.Opts->GetOpts());
+    ProtoConfigFileProvider->RegisterCliOptions(config.Opts->GetOpts());
     config.SetFreeArgsMin(0);
 
-    config.Opts->AddHelpOption('h');
+    config.Opts->GetOpts().AddHelpOption('h');
 }
 
 void TClientCommandServer::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    InitCfg.ValidateOptions(*config.Opts, *config.ParseResult);
-    InitCfg.Parse(config.ParseResult->GetFreeArgs());
+    InitCfg.ValidateOptions(config.Opts->GetOpts(), config.ParseResult->GetCommandLineParseResult());
+    InitCfg.Parse(config.ParseResult->GetFreeArgs(), Factories->ConfigSwissKnife.get());
 }
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {

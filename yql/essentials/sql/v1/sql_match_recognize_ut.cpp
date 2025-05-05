@@ -1,15 +1,10 @@
 #include "sql_ut.h"
-#include "match_recognize.h"
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 #include <yql/essentials/core/sql_types/match_recognize.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
-#include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/string/split.h>
-
-using namespace NSQLTranslation;
 
 NYql::TAstParseResult MatchRecognizeSqlToYql(const TString& query) {
     TString enablingPragma = R"(
@@ -25,25 +20,44 @@ const NYql::TAstNode* FindMatchRecognizeParam(const NYql::TAstNode* root, TStrin
     return paramNode->GetChild(2);
 }
 
-bool IsQuotedListOfSize(const NYql::TAstNode* node, ui32 size) {
-    UNIT_ASSERT(node->IsListOfSize(2));
-    if (!node->IsListOfSize(2))
-        return false;
-    UNIT_ASSERT_EQUAL(node->GetChild(0)->GetContent(), "quote");
-    if (node->GetChild(0)->GetContent() != "quote")
-        return false;
-    UNIT_ASSERT_EQUAL(node->GetChild(1)->GetChildrenCount(), size);
-    return node->GetChild(1)->IsListOfSize(size);
+std::string_view GetAtom(const NYql::TAstNode* node) {
+    UNIT_ASSERT(node);
+    UNIT_ASSERT(node->IsAtom());
+    return node->GetContent();
+}
+
+bool IsAtom(const NYql::TAstNode* node, std::string_view value) {
+    UNIT_ASSERT_NO_DIFF(GetAtom(node), value);
+    return true;
+}
+
+bool IsListOfSize(const NYql::TAstNode* node, ui32 size) {
+    UNIT_ASSERT(node);
+    UNIT_ASSERT(node->IsList());
+    UNIT_ASSERT_EQUAL(node->GetChildrenCount(), size);
+    return true;
+}
+
+template<typename Proj = std::identity>
+bool IsListOfAtoms(const NYql::TAstNode* node, std::vector<std::string_view> atoms, Proj proj = {}) {
+    UNIT_ASSERT(IsListOfSize(node, atoms.size()));
+    for (ui32 i = 0; i < atoms.size(); ++i) {
+        const auto child = std::invoke(proj, node->GetChild(i));
+        UNIT_ASSERT(IsAtom(child, atoms[i]));
+    }
+    return true;
+}
+
+const NYql::TAstNode* GetQuoted(const NYql::TAstNode* node) {
+    UNIT_ASSERT(IsListOfSize(node, 2));
+    UNIT_ASSERT(IsAtom(node->GetChild(0), "quote"));
+    return node->GetChild(1);
 }
 
 bool IsLambda(const NYql::TAstNode* node, ui32 numberOfArgs) {
-    if (!node->IsListOfSize(3)) {
-        return false;
-    }
-    if (!node->GetChild(0)->IsAtom() || node->GetChild(0)->GetContent() != "lambda") {
-        return  false;
-    }
-    return IsQuotedListOfSize(node->GetChild(1), numberOfArgs);
+    UNIT_ASSERT(IsListOfSize(node, 3));
+    UNIT_ASSERT(IsAtom(node->GetChild(0), "lambda"));
+    return IsListOfSize(GetQuoted(node->GetChild(1)), numberOfArgs);
 }
 
 Y_UNIT_TEST_SUITE(MatchRecognize) {
@@ -64,14 +78,14 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
         UNIT_ASSERT(r.IsOk());
         auto input = FindMatchRecognizeParam(r.Root, "input");
-        UNIT_ASSERT(input->IsAtom() && input->GetContent() == "core");
+        UNIT_ASSERT(IsAtom(input, "core"));
     }
 
     Y_UNIT_TEST(MatchRecognizeAndSample) {
         auto matchRecognizeAndSample = R"(
 USE plato;
 SELECT *
-FROM Input  MATCH_RECOGNIZE(
+FROM Input MATCH_RECOGNIZE(
     PATTERN ( A )
     DEFINE A as A
     ) TABLESAMPLE BERNOULLI(1.0)
@@ -83,9 +97,9 @@ FROM Input  MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
         UNIT_ASSERT(r.IsOk());
         auto partitionKeySelector = FindMatchRecognizeParam(r.Root, "partitionKeySelector");
-        UNIT_ASSERT(IsQuotedListOfSize(partitionKeySelector->GetChild(2), 0)); //empty tuple
+        UNIT_ASSERT(IsListOfSize(GetQuoted(partitionKeySelector->GetChild(2)), 0)); //empty tuple
         auto partitionColumns = FindMatchRecognizeParam(r.Root, "partitionColumns");
-        UNIT_ASSERT(IsQuotedListOfSize(partitionColumns, 0)); //empty tuple
+        UNIT_ASSERT(IsListOfSize(GetQuoted(partitionColumns), 0)); //empty tuple
     }
 
     Y_UNIT_TEST(PartitionBy) {
@@ -101,9 +115,9 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto partitionKeySelector = FindMatchRecognizeParam(r.Root, "partitionKeySelector");
-        UNIT_ASSERT(IsQuotedListOfSize(partitionKeySelector->GetChild(2), 3));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(partitionKeySelector->GetChild(2)), 3));
         auto partitionColumns = FindMatchRecognizeParam(r.Root, "partitionColumns");
-        UNIT_ASSERT(IsQuotedListOfSize(partitionColumns, 3));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(partitionColumns), 3));
         //TODO check partitioner lambdas(alias/no alias)
     }
 
@@ -111,8 +125,7 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
         UNIT_ASSERT(r.IsOk());
         auto sortTraits = FindMatchRecognizeParam(r.Root, "sortTraits");
-        UNIT_ASSERT(sortTraits && sortTraits->IsListOfSize(1));
-        UNIT_ASSERT(sortTraits->GetChild(0)->GetContent() == "Void");
+        UNIT_ASSERT(IsListOfAtoms(sortTraits, {"Void"}));
     }
 
     Y_UNIT_TEST(OrderBy) {
@@ -128,10 +141,10 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         auto sortTraits = FindMatchRecognizeParam(r.Root, "sortTraits");
-        UNIT_ASSERT(sortTraits && sortTraits->IsListOfSize(4));
-        UNIT_ASSERT(sortTraits->GetChild(0)->GetContent() == "SortTraits");
-        UNIT_ASSERT(IsQuotedListOfSize(sortTraits->GetChild(2), 3));
-        UNIT_ASSERT(IsQuotedListOfSize(sortTraits->GetChild(3)->GetChild(2), 3));
+        UNIT_ASSERT(IsListOfSize(sortTraits, 4));
+        UNIT_ASSERT(IsAtom(sortTraits->GetChild(0), "SortTraits"));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(sortTraits->GetChild(2)), 3));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(sortTraits->GetChild(3)->GetChild(2)), 3));
     }
     Y_UNIT_TEST(Measures) {
         auto stmt = R"(
@@ -148,13 +161,13 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto measures = FindMatchRecognizeParam(r.Root, "measures");
-        UNIT_ASSERT_VALUES_EQUAL(6, measures->GetChildrenCount());
-        const auto columnNames = measures->GetChild(3);
-        UNIT_ASSERT(IsQuotedListOfSize(columnNames, 2));
-        UNIT_ASSERT_VALUES_EQUAL("T", columnNames->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
-        UNIT_ASSERT_VALUES_EQUAL("Key", columnNames->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
-        UNIT_ASSERT(IsLambda(measures->GetChild(4), 2));
-        UNIT_ASSERT(IsLambda(measures->GetChild(5), 2));
+        UNIT_ASSERT(IsListOfSize(measures, 5));
+        const auto patternVars = measures->GetChild(2);
+        UNIT_ASSERT(IsListOfAtoms(GetQuoted(patternVars), {"Y", "Q"}, GetQuoted));
+        const auto measuresNames = measures->GetChild(3);
+        UNIT_ASSERT(IsListOfAtoms(GetQuoted(measuresNames), {"T", "Key"}, GetQuoted));
+        const auto measuresCallables = measures->GetChild(4);
+        UNIT_ASSERT(IsListOfSize(GetQuoted(measuresCallables), 2));
     }
     Y_UNIT_TEST(RowsPerMatch) {
         {
@@ -170,7 +183,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
-            UNIT_ASSERT_VALUES_EQUAL("RowsPerMatch_OneRow", rowsPerMatch->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsAtom(GetQuoted(rowsPerMatch), "RowsPerMatch_OneRow"));
         }
         {
             const auto stmt = R"(
@@ -197,7 +210,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
-            UNIT_ASSERT_VALUES_EQUAL("RowsPerMatch_OneRow", rowsPerMatch->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsAtom(GetQuoted(rowsPerMatch), "RowsPerMatch_OneRow"));
         }
 
     }
@@ -215,7 +228,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
-            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_NextRow", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_NextRow", ""}, GetQuoted));
         }
         {
             const auto stmt = R"(
@@ -230,7 +243,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
-            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_PastLastRow", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_PastLastRow", ""}, GetQuoted));
         }
         {
             const auto stmt = R"(
@@ -245,8 +258,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
-            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_ToFirst", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
-            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_ToFirst", "Y"}, GetQuoted));
         }
         {
             const auto stmt = R"(
@@ -274,8 +286,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
-            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_ToLast", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
-            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_ToLast", "Y"}, GetQuoted));
         }
         {
             const auto stmt = R"(
@@ -303,8 +314,7 @@ FROM Input MATCH_RECOGNIZE(
             auto r = MatchRecognizeSqlToYql(stmt);
             UNIT_ASSERT(r.IsOk());
             auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
-            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_To", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
-            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+            UNIT_ASSERT(IsListOfAtoms(GetQuoted(skipTo), {"AfterMatchSkip_To", "Y"}, GetQuoted));
         }
         {
             const auto stmt = R"(
@@ -326,7 +336,7 @@ USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
     INITIAL
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
@@ -340,7 +350,7 @@ USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
     SEEK
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
@@ -353,17 +363,16 @@ FROM Input MATCH_RECOGNIZE(
 USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN (A+  B* C?)
+    PATTERN (A+ B* C?)
     DEFINE A as A
     )
 )";
         const auto& r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 1);
-        const auto& term = patternCallable->GetChild(1);
-        UNIT_ASSERT(IsQuotedListOfSize(term, 3));
+        UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 1));
+        UNIT_ASSERT(IsAtom(patternCallable->GetChild(0), "MatchRecognizePattern"));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(patternCallable->GetChild(1)), 3));
     }
 
     Y_UNIT_TEST(PatternMultiTerm) {
@@ -378,10 +387,9 @@ FROM Input MATCH_RECOGNIZE(
         const auto& r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 4);
-        const auto& lastTerm = patternCallable->GetChild(4);
-        UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 5));
+        UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 4));
+        UNIT_ASSERT(IsAtom(patternCallable->GetChild(0), "MatchRecognizePattern"));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(patternCallable->GetChild(4)), 5));
     }
 
     Y_UNIT_TEST(PatternWithParanthesis) {
@@ -398,18 +406,18 @@ FROM Input MATCH_RECOGNIZE(
         const auto& r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
-        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 2);
+        UNIT_ASSERT(IsListOfSize(patternCallable, 1 + 2));
+        UNIT_ASSERT(IsAtom(patternCallable->GetChild(0), "MatchRecognizePattern"));
         const auto& firstTerm = patternCallable->GetChild(1);
-        UNIT_ASSERT(IsQuotedListOfSize(firstTerm, 1));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(firstTerm), 1));
         const auto& lastTerm = patternCallable->GetChild(2);
-        UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 3));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(lastTerm), 3));
         const auto& firstFactorOfLastTerm = lastTerm->GetChild(1)->GetChild(0);
-        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 6));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(firstFactorOfLastTerm), 6));
         const auto nestedPattern = firstFactorOfLastTerm->GetChild(1)->GetChild(0);
-        UNIT_ASSERT_EQUAL(nestedPattern->GetChildrenCount(), 1 + 1);
-        UNIT_ASSERT_EQUAL(nestedPattern->GetChild(0)->GetContent(), "MatchRecognizePattern");
-        UNIT_ASSERT(IsQuotedListOfSize(nestedPattern->GetChild(1), 2));
+        UNIT_ASSERT(IsListOfSize(nestedPattern, 1 + 1));
+        UNIT_ASSERT(IsAtom(nestedPattern->GetChild(0), "MatchRecognizePattern"));
+        UNIT_ASSERT(IsListOfSize(GetQuoted(nestedPattern->GetChild(1)), 2));
     }
 
     Y_UNIT_TEST(PatternManyAlternatives) {
@@ -427,7 +435,7 @@ PATTERN (
     }
 
     Y_UNIT_TEST(PatternLimitedNesting) {
-        const size_t MaxNesting = 20;
+        constexpr size_t MaxNesting = 20;
         for (size_t extraNesting = 0; extraNesting <= 1; ++extraNesting) {
             std::string pattern;
             for (size_t i = 0; i != MaxNesting + extraNesting; ++i)
@@ -469,14 +477,14 @@ FROM Input MATCH_RECOGNIZE(
         };
         auto getTheFactor = [](const NYql::TAstNode* root) {
             const auto& patternCallable = FindMatchRecognizeParam(root, "pattern");
-            const auto& factor =  patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
+            const auto& factor = patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
             return NYql::NMatchRecognize::TRowPatternFactor{
-                    TString(), //primary var or subexpression, not used in this test
-                    FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
-                    FromString<uint64_t>(factor->GetChild(2)->GetChild(1)->GetContent()), //QuantityMax
-                    FromString<bool>(factor->GetChild(3)->GetChild(1)->GetContent()), //Greedy
-                    false, //Output, not used in this test
-                    false, // Flag "Unused", not used in this test
+                TString(), // Primary var or subexpression, not used in this test
+                FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(1)))), // QuantityMin
+                FromString<uint64_t>(GetAtom(GetQuoted(factor->GetChild(2)))), // QuantityMax
+                FromString<bool>(GetAtom(GetQuoted(factor->GetChild(3)))), // Greedy
+                FromString<bool>(GetAtom(GetQuoted(factor->GetChild(4)))), // Output, not used in this test
+                FromString<bool>(GetAtom(GetQuoted(factor->GetChild(5)))), // Flag "Unused", not used in this test
             };
         };
         {
@@ -647,11 +655,11 @@ FROM Input MATCH_RECOGNIZE(
 
         const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
         const auto permutePattern = patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1)->GetChild(0);
-        UNIT_ASSERT(permutePattern->IsListOfSize(1 + 120)); //CallableName + 5!
+        UNIT_ASSERT(IsListOfSize(permutePattern, 1 + 120)); //CallableName + 5!
     }
 
     Y_UNIT_TEST(PermuteTooMuch) {
-        for (size_t n = 1; n <= NYql::NMatchRecognize::MaxPermutedItems + 1; ++n) {
+        for (size_t n = 1; n <= 6 + 1; ++n) {
             std::vector<std::string> vars(n);
             std::generate(begin(vars), end(vars), [n = 0] () mutable { return "A" + std::to_string(n++);});
             const auto stmt = TString(R"(
@@ -671,7 +679,7 @@ FROM Input MATCH_RECOGNIZE(
 )"
             );
             const auto &r = MatchRecognizeSqlToYql(stmt);
-            if (n <= NYql::NMatchRecognize::MaxPermutedItems) {
+            if (n <= 6) {
                 UNIT_ASSERT(r.IsOk());
             } else {
                 UNIT_ASSERT(!r.IsOk());
@@ -699,12 +707,9 @@ FROM Input MATCH_RECOGNIZE(
         auto r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
         const auto defines = FindMatchRecognizeParam(r.Root, "define");
-        UNIT_ASSERT_VALUES_EQUAL(7, defines->GetChildrenCount());
+        UNIT_ASSERT(IsListOfSize(defines, 7));
         const auto varNames = defines->GetChild(3);
-        UNIT_ASSERT(IsQuotedListOfSize(varNames, 3));
-        UNIT_ASSERT_VALUES_EQUAL("Y", varNames->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
-        UNIT_ASSERT_VALUES_EQUAL("Q", varNames->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
-        UNIT_ASSERT_VALUES_EQUAL("L", varNames->GetChild(1)->GetChild(2)->GetChild(1)->GetContent());
+        UNIT_ASSERT(IsListOfAtoms(GetQuoted(varNames), {"Y", "Q", "L"}, GetQuoted));
 
         UNIT_ASSERT(IsLambda(defines->GetChild(4), 3));
         UNIT_ASSERT(IsLambda(defines->GetChild(5), 3));

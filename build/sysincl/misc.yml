@@ -97,19 +97,19 @@
     - atomic.h: contrib/restricted/openal-soft/common/atomic.h
     - threads.h: contrib/restricted/openal-soft/common/threads.h
 
-- source_filter: "^contrib/libs/ffmpeg-3/"
+- source_filter: "^contrib/deprecated/ffmpeg-3/"
   includes:
     - fontconfig/fontconfig.h
     - fribidi.h
-    - stdatomic.h:    contrib/libs/ffmpeg-3/compat/atomics/win32/stdatomic.h
-    - atomic.h:       contrib/libs/ffmpeg-3/libavutil/atomic.h
+    - stdatomic.h:    contrib/deprecated/ffmpeg-3/compat/atomics/win32/stdatomic.h
+    - atomic.h:       contrib/deprecated/ffmpeg-3/libavutil/atomic.h
 
-- source_filter: "^contrib/libs/ffmpeg-3.4.1/"
+- source_filter: "^contrib/deprecated/ffmpeg-3.4.1/"
   includes:
     - fontconfig/fontconfig.h
     - fribidi.h
-    - stdatomic.h:    contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
-    - atomic.h:       contrib/libs/ffmpeg-3.4.1/libavutil/atomic.h
+    - stdatomic.h:    contrib/deprecated/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
+    - atomic.h:       contrib/deprecated/ffmpeg-3.4.1/libavutil/atomic.h
 
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
 
@@ -459,18 +459,15 @@
       - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h
 
-- source_filter: "^smart_devices/third_party/beken_freertos_sdk"
-  includes:
-    - error.h: smart_devices/third_party/beken_freertos_sdk/beken378/common/error.h
-    - errno.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/errno.h
-    - netdb.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/lwip_intf/lwip-2.1.2/src/include/lwip/netdb.h
-    - signal.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/wpa_supplicant_2_9/bk_patch/signal.h
-    - check_config.h: smart_devices/third_party/beken_freertos_sdk/beken378/func/mbedtls/mbedtls-2.27.0/include/mbedtls/check_config.h
-
 - source_filter: "^contrib/libs/svt-av1"
   includes:
     - filter.h: contrib/libs/svt-av1/Source/Lib/Codec/filter.h
 
-- source_filter: "^sdg/sdc"
+- source_filter: "^contrib/libs/tinycbor"
   includes:
-    - uuid/uuid.h: sdg/sdc/contrib/uuid/uuid/uuid.h
+    - memory.h: contrib/libs/tinycbor/src/memory.h
+
+- source_filter: "^contrib/restricted/ffmpeg"
+  includes:
+    - thread.h: contrib/restricted/ffmpeg/libavcodec/thread.h
+    - jni.h: contrib/restricted/ffmpeg/libavcodec/jni.h

@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/core/fq/libs/common/iceberg_processor.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -27,6 +28,9 @@ void FillClusterAuth(TClusterConfig& clusterCfg,
         break;
     case FederatedQuery::IamAuth::kCurrentIam:
         clusterCfg.SetToken(authToken);
+        break;
+    case FederatedQuery::IamAuth::kToken:
+        clusterCfg.SetToken(auth.token().token());
         break;
     case FederatedQuery::IamAuth::kServiceAccount:
         clusterCfg.SetServiceAccountId(auth.service_account().id());
@@ -88,6 +92,19 @@ std::pair<TString, bool> ParseHttpEndpoint(const TString& endpoint) {
     return std::make_pair(ToString(host), scheme != "http");
 }
 
+std::pair<TString, TIpPort> ParseGrpcEndpoint(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf address;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, address, uri);
+
+    TString hostname;
+    TIpPort port;
+    NHttp::CrackAddress(TString(address), hostname, port);
+
+    return {hostname, port};
+}
+
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
@@ -138,6 +155,9 @@ void FillGenericClusterConfigBase(
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         case NYql::EGenericDataSourceKind::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
+            break;
+        case NYql::EGenericDataSourceKind::ICEBERG:
             clusterCfg.SetProtocol(NYql::EGenericProtocol::NATIVE);
             break;
         default:
@@ -230,8 +250,18 @@ void AddClustersFromConnections(
             clusterCfg->SetKind(NYql::EGenericDataSourceKind::YDB);
             clusterCfg->SetProtocol(NYql::EGenericProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
-            clusterCfg->SetDatabaseId(db.database_id());
-            clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
+            if (const auto& databaseId = db.database_id()) {
+                clusterCfg->SetDatabaseId(databaseId);
+                clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
+            } else {
+                const auto& [host, port] = ParseGrpcEndpoint(db.endpoint());
+
+                auto& endpoint = *clusterCfg->MutableEndpoint();
+                endpoint.set_host(host);
+                endpoint.set_port(port);
+                clusterCfg->SetUseSsl(db.secure());
+                clusterCfg->SetDatabaseName(db.database());
+            }
             FillClusterAuth(*clusterCfg, db.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
@@ -312,6 +342,17 @@ void AddClustersFromConnections(
             clusterCfg->SetName(connectionName);
             clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
             FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
+
+        case FederatedQuery::ConnectionSetting::kIceberg: {
+            const auto& db = conn.content().setting().iceberg();
+            auto& clusterConfig = *gatewaysConfig.MutableGeneric()->AddClusterMapping();
+
+            clusterConfig.SetName(connectionName);
+            NFq::FillIcebergGenericClusterConfig(common, db, clusterConfig);
+            FillClusterAuth(clusterConfig, db.warehouse_auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }

@@ -21,7 +21,6 @@
 #include <yt/yt/core/bus/public.h>
 
 #include <yt/yt/core/misc/fs.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/rpc/bus/channel.h>
 #include <yt/yt/core/rpc/bus/server.h>
@@ -61,6 +60,8 @@
 #include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt/build/ya_version.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
@@ -104,7 +105,7 @@ public:
 
     IChannelPtr CreateChannel(
         const std::optional<TString>& address = {},
-        THashMap<TString, NYTree::INodePtr> grpcArguments = {})
+        THashMap<std::string, NYTree::INodePtr> grpcArguments = {})
     {
         return TImpl::CreateChannel(
             address.value_or(Host_->GetAddress()),
@@ -190,7 +191,7 @@ public:
     static IChannelPtr CreateChannel(
         const std::string& address,
         const std::string& serverAddress,
-        THashMap<TString, NYTree::INodePtr> grpcArguments)
+        THashMap<std::string, NYTree::INodePtr> grpcArguments)
     {
         return TImpl::CreateChannel(address, serverAddress, std::move(grpcArguments));
     }
@@ -212,7 +213,7 @@ public:
     static IChannelPtr CreateChannel(
         const std::string& address,
         const std::string& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto config = NYT::NBus::TBusClientConfig::CreateTcp(address);
         config->EnableLocalBypass = EnableLocalBypass;
@@ -384,7 +385,7 @@ public:
     static IChannelPtr CreateChannel(
         const std::string& address,
         const std::string& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> grpcArguments)
+        THashMap<std::string, NYTree::INodePtr> grpcArguments)
     {
         auto channelConfig = New<NGrpc::TChannelConfig>();
         if (EnableSsl) {
@@ -464,7 +465,7 @@ public:
     static IChannelPtr CreateChannel(
         const std::string& address,
         const std::string& serverAddress,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
         auto config = NYT::NBus::TBusClientConfig::CreateUds(
             address == serverAddress ? SocketPath_ : address);
@@ -495,7 +496,7 @@ public:
     static IChannelPtr CreateChannel(
         const std::string& address,
         const std::string& /*serverAddress*/,
-        THashMap<TString, NYTree::INodePtr> /*grpcArguments*/)
+        THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();

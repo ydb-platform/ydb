@@ -269,7 +269,7 @@ private:
             req.AddKnownNodes(node);
         }
 
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto selfId = SelfId();
 
         Resolver->GetConnection()

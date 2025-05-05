@@ -15,6 +15,7 @@ using namespace NTransactionClient;
 using namespace NYTree;
 using namespace NCypressClient;
 using namespace NChunkClient;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -124,12 +125,12 @@ TFuture<void> PingDistributedWriteSession(
     const TSignedDistributedWriteSessionPtr& session,
     const IClientPtr& client)
 {
-    auto concreteSession = ConvertTo<TDistributedWriteSession>(session.Underlying()->Payload());
+    auto concreteSession = ConvertTo<TDistributedWriteSession>(TYsonStringBuf(session.Underlying()->Payload()));
 
     // NB(arkady-e1ppa): AutoAbort = false by default.
-    auto mainTx = client->AttachTransaction(concreteSession.MainTransactionId);
+    auto mainTransaction = client->AttachTransaction(concreteSession.MainTransactionId);
 
-    return mainTx->Ping();
+    return mainTransaction->Ping();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

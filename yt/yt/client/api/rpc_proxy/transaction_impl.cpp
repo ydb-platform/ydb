@@ -81,7 +81,10 @@ TTransaction::TTransaction(
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
+}
 
+void TTransaction::Initialize()
+{
     // TODO(babenko): don't run periodic pings if client explicitly disables them in options
     RunPeriodicPings();
 }
@@ -162,7 +165,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
         transaction->GetConnection()->GetLoggingTag());
 }
 
-TFuture<void> TTransaction::Ping(const NApi::TTransactionPingOptions& /*options*/)
+TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
 {
     return SendPing();
 }
@@ -486,7 +489,7 @@ void TTransaction::ModifyRows(
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     YT_LOG_DEBUG(error, "Error sending row modifications");
-                    YT_UNUSED_FUTURE(Abort());
+                    YT_UNUSED_FUTURE(ITransaction::Abort());
                 }
             }));
 
@@ -657,7 +660,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows
 }
 
 TFuture<TSelectRowsResult> TTransaction::SelectRows(
-    const TString& query,
+    const std::string& query,
     const TSelectRowsOptions& options)
 {
     ValidateActive();
@@ -667,7 +670,7 @@ TFuture<TSelectRowsResult> TTransaction::SelectRows(
 }
 
 TFuture<NYson::TYsonString> TTransaction::ExplainQuery(
-    const TString& query,
+    const std::string& query,
     const TExplainQueryOptions& options)
 {
     ValidateActive();

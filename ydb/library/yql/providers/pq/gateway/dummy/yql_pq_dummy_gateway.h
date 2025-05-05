@@ -9,10 +9,11 @@
 namespace NYql {
 
 struct TDummyTopic {
-    TDummyTopic(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = {})
+    TDummyTopic(const TString& cluster, const TString& topicName, const TMaybe<TString>& path = {}, size_t partitionCount = 1)
         : Cluster(cluster)
+        , TopicName(topicName)
         , Path(path)
-        , FilePath(filePath)
+        , PartitionsCount(partitionCount)
     {
     }
 
@@ -22,9 +23,10 @@ struct TDummyTopic {
     }
 
     TString Cluster;
-    TString Path;
-    TMaybe<TString> FilePath;
-    size_t PartitionsCount = 1;
+    TString TopicName;
+    TMaybe<TString> Path;
+    size_t PartitionsCount;
+    bool CancelOnFileFinish = false;
 };
 
 // Dummy Pq gateway for tests.
@@ -37,6 +39,13 @@ public:
     NThreading::TFuture<void> CloseSession(const TString& sessionId) override;
 
     ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& path,
+        const TString& token) override;
+
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
         const TString& sessionId,
         const TString& cluster,
         const TString& database,
@@ -56,8 +65,13 @@ public:
         const TString& endpoint,
         const TString& database,
         bool secure) override;
-    
+
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
+
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
 
     using TClusterNPath = std::pair<TString, TString>;
 private:
@@ -68,5 +82,7 @@ private:
 };
 
 IPqGateway::TPtr CreatePqFileGateway();
+
+IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway);
 
 } // namespace NYql

@@ -678,6 +678,7 @@ namespace NYql {
                                             fluent.Item("file_paths").Value(*filePaths);
                                         })
                                         .Item("job_count").Value(1)
+                                        .Item("port_count").Value(1)
                                         .DoIf(Options.YtBackend.HasMemoryLimit(), [&] (NYT::TFluentMap fluent) {
                                             fluent.Item("memory_limit").Value(Options.YtBackend.GetMemoryLimit());
                                         })

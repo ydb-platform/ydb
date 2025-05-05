@@ -4,6 +4,7 @@
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/persqueue/list_all_topics_actor.h>
 
 namespace NKafka {
 using namespace NKikimr;
@@ -32,12 +33,16 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
         SendDiscoveryRequest();
 
         if (Message->Topics.size() == 0) {
-            NeedCurrentNode = true;
+            ctx.Register(NKikimr::NPersQueue::MakeListAllTopicsActor(
+                    SelfId(), Context->DatabasePath, GetUserSerializedToken(Context), true, {}, {}));
+
+            PendingResponses++;
+            NeedAllNodes = true;
         }
     }
 
     if (Message->Topics.size() != 0) {
-        ProcessTopics();
+        ProcessTopicsFromRequest();
     }
 
     Become(&TKafkaMetadataActor::StateWork);
@@ -111,40 +116,55 @@ void TKafkaMetadataActor::HandleNodesResponse(
     RespondIfRequired(ctx);
 }
 
-void TKafkaMetadataActor::AddProxyNodeToBrokers() {
-    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
-}
-
-void TKafkaMetadataActor::ProcessTopics() {
-    THashMap<TString, TActorId> partitionActors;
+void TKafkaMetadataActor::ProcessTopicsFromRequest() {
+    TVector<TString> topicsToRequest;
     for (size_t i = 0; i < Message->Topics.size(); ++i) {
-        Response->Topics[i] = TMetadataResponseData::TMetadataResponseTopic{};
         auto& reqTopic = Message->Topics[i];
-        Response->Topics[i].Name = reqTopic.Name.value_or("");
-
         if (!reqTopic.Name.value_or("")) {
             AddTopicError(Response->Topics[i], EKafkaErrors::INVALID_TOPIC_EXCEPTION);
             continue;
         }
-        const auto& topicName = reqTopic.Name.value();
-        TActorId child;
-        auto namesIter = partitionActors.find(topicName);
-        if (namesIter.IsEnd()) {
-            child = SendTopicRequest(reqTopic);
-            partitionActors[topicName] = child;
-        } else {
-            child = namesIter->second;
-        }
-        TopicIndexes[child].push_back(i);
+        AddTopic(reqTopic.Name.value_or(""), i);
     }
 }
 
-TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
+void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
+    Y_ABORT_UNLESS(PendingResponses > 0);
+    PendingResponses--;
+    auto topics = std::move(ev->Get()->Topics);
+    Response->Topics.resize(topics.size());
+    for (size_t i = 0; i < topics.size(); ++i) {
+        AddTopic(topics[i], i);
+    }
+    RespondIfRequired(ActorContext());
+}
+
+void TKafkaMetadataActor::AddProxyNodeToBrokers() {
+    AddBroker(ProxyNodeId, Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort());
+}
+
+
+void TKafkaMetadataActor::AddTopic(const TString& topic, ui64 index) {
+    Response->Topics[index] = TMetadataResponseData::TMetadataResponseTopic{};
+    Response->Topics[index].Name = topic;
+
+    TActorId child;
+    auto namesIter = PartitionActors.find(topic);
+    if (namesIter.IsEnd()) {
+        child = SendTopicRequest(topic);
+        PartitionActors[topic] = child;
+    } else {
+        child = namesIter->second;
+    }
+    TopicIndexes[child].push_back(index);
+}
+
+TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
+    KAFKA_LOG_D("Describe partitions locations for topic '" << topic << "' for user '" << GetUsernameOrAnonymous(Context) << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
-    locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
-    locationRequest.Token = Context->UserToken->GetSerializedToken();
+    locationRequest.Topic = NormalizePath(Context->DatabasePath, topic);
+    locationRequest.Token = GetUserSerializedToken(Context);
     locationRequest.Database = Context->DatabasePath;
 
     PendingResponses++;
@@ -193,7 +213,7 @@ void TKafkaMetadataActor::AddTopicResponse(
 
         topic.Partitions.emplace_back(std::move(responsePartition));
 
-        if (!WithProxy) {
+        if (!WithProxy && !NeedAllNodes) {
             auto ins = AllClusterNodes.insert(part.NodeId);
             if (ins.second) {
                 auto hostname = (*nodeIter)->Host;
@@ -210,8 +230,8 @@ void TKafkaMetadataActor::AddTopicResponse(
 void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, const TActorContext& ctx) {
     --PendingResponses;
 
-    auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
+    TSimpleSharedPtr<TEvLocationResponse> locationResponse{ev->Release()};
 
     Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd());
     Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
@@ -228,12 +248,12 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 
     for (auto index : actorIter->second) {
         auto& topic = Response->Topics[index];
-        if (r->Status == Ydb::StatusIds::SUCCESS) {
+        if (locationResponse->Status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
-            PendingTopicResponses.insert(std::make_pair(index, ev->Release()));
+            PendingTopicResponses.emplace(index, locationResponse);
         } else {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << r->Status << ", Issues=" << r->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(r->Status));
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         }
     }
     RespondIfRequired(ctx);
@@ -265,16 +285,6 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-    if (NeedCurrentNode) {
-        auto nodeIter = Nodes.find(SelfId().NodeId());
-        if (nodeIter.IsEnd()) {
-            // Node info was not found, request from IC nodes cache instead
-            RequestICNodeCache();
-            return;
-        }
-        AddBroker(nodeIter->first, nodeIter->second.Host, nodeIter->second.Port);
-        NeedCurrentNode = false;
-    }
     while (!PendingTopicResponses.empty()) {
         auto& [index, ev] = *PendingTopicResponses.begin();
         auto& topic = Response->Topics[index];
@@ -293,6 +303,11 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             AddTopicResponse(topic, ev.Get(), topicNodes);
         }
         PendingTopicResponses.erase(PendingTopicResponses.begin());
+    }
+
+    if (NeedAllNodes) {
+        for (const auto& [id, nodeInfo] : Nodes)
+            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
     }
 
     Respond();

@@ -12,6 +12,12 @@ namespace NYql {
 
 TExprNode::TPtr TAggregateExpander::ExpandAggregate() {
     YQL_CLOG(DEBUG, Core) << "Expand " << Node->Content();
+    if (Node->Head().GetTypeAnn()->HasErrors()) {
+        TErrorTypeVisitor errorVisitor(Ctx);
+        Node->Head().GetTypeAnn()->Accept(errorVisitor);
+        return nullptr;
+    }
+
     auto result = ExpandAggregateWithFullOutput();
     if (result) {
         auto outputColumns = GetSetting(*Node->Child(NNodes::TCoAggregate::idx_Settings), "output_columns");
@@ -679,8 +685,15 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
     auto extractorLambda = Ctx.NewLambda(Node->Pos(), Ctx.NewArguments(Node->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
     auto mappedWideFlow = Ctx.NewCallable(Node->Pos(), "WideMap", { wideFlow, extractorLambda });
-    auto blocks = Ctx.NewCallable(Node->Pos(), "WideToBlocks", { mappedWideFlow });
-    return blocks;
+    return Ctx.Builder(Node->Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, mappedWideFlow)
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {

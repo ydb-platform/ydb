@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <memory>
+#include <source_location>
 
 namespace NKikimr {
 
@@ -41,6 +42,27 @@ constexpr ui32 MaxPageUserData = TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TAllo
 
 static_assert(sizeof(TAllocPageHeader) % MKQL_ALIGNMENT == 0, "Incorrect size of header");
 
+struct TMkqlArrowHeader;
+
+#ifndef NDEBUG
+using TAllocLocation = std::source_location;
+#else
+struct TAllocLocation
+{
+    const char* file_name() const {
+        return "";
+    }
+
+    std::uint_least32_t line() const {
+        return 0;
+    }
+
+    static TAllocLocation current() {
+        return {};
+    }
+};
+#endif
+
 struct TAllocState : public TAlignedPagePool
 {
     struct TListEntry {
@@ -55,17 +77,10 @@ struct TAllocState : public TAlignedPagePool
     };
 
 #ifndef NDEBUG
+    TIntrusivePtr<TMemoryUsageInfo> DefaultMemInfo;
     std::unordered_map<TMemoryUsageInfo*, TIntrusivePtr<TMemoryUsageInfo>> ActiveMemInfo;
 #endif
     bool SupportsSizedAllocators = false;
-
-    void* LargeAlloc(size_t size) {
-        return Alloc(size);
-    }
-
-    void LargeFree(void* ptr, size_t size) noexcept {
-        Free(ptr, size);
-    }
 
     using TCurrentPages = std::array<TAllocPageHeader*, (TMemorySubPoolIdx)EMemorySubPool::Count>;
 
@@ -77,6 +92,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
     TListEntry ArrowBlocksRoot;
+    TMkqlArrowHeader* CurrentArrowPages = nullptr; // page arena for small arrow allocations
     std::unordered_set<const void*> ArrowBuffers;
     bool EnableArrowTracking = true;
 
@@ -173,7 +189,9 @@ constexpr size_t ArrowAlignment = 64;
 struct TMkqlArrowHeader {
     TAllocState::TListEntry Entry;
     ui64 Size;
-    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64)];
+    ui64 Offset;
+    std::atomic<ui64> UseCount;
+    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>)];
 };
 
 static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);
@@ -288,47 +306,23 @@ private:
 };
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
-inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
+
+inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
+#ifdef NDEBUG
+    Y_UNUSED(location);
+#endif
     Y_DEBUG_ABORT_UNLESS(state);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
-    if (!ret) {
-        throw TMemoryLimitExceededException();
-    }
-
-    ret->Link(&state->OffloadedBlocksRoot);
-    return ret + 1;
-#endif
-
-    auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
-    if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
-        void* ret = (char*)currPage + currPage->Offset;
-        currPage->Offset = AlignUp(currPage->Offset + sz, MKQL_ALIGNMENT);
-        ++currPage->UseCount;
-        return ret;
-    }
-
-    return MKQLAllocSlow(sz, state, mPool);
-}
-
-inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    Y_DEBUG_ABORT_UNLESS(state);
-
-    bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    useMemalloc = true;
-#endif
-
-    if (useMemalloc) {
-        state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
             throw TMemoryLimitExceededException();
         }
 
         ret->Link(&state->OffloadedBlocksRoot);
+#ifndef NDEBUG
+        state->DefaultMemInfo->Take(ret + 1, sz, { location.file_name(), (int)location.line() });
+#endif
         return ret + 1;
     }
 
@@ -337,10 +331,57 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
         void* ret = (char*)currPage + currPage->Offset;
         currPage->Offset = AlignUp(currPage->Offset + sz, MKQL_ALIGNMENT);
         ++currPage->UseCount;
+#ifndef NDEBUG
+        state->DefaultMemInfo->Take(ret, sz, { location.file_name(), (int)location.line() });
+#endif
         return ret;
     }
 
-    return MKQLAllocSlow(sz, state, mPool);
+    auto ret = MKQLAllocSlow(sz, state, mPool);
+#ifndef NDEBUG
+    state->DefaultMemInfo->Take(ret, sz, { location.file_name(), (int)location.line() });
+#endif
+    return ret;
+}
+
+inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
+#ifdef NDEBUG
+    Y_UNUSED(location);
+#endif
+    Y_DEBUG_ABORT_UNLESS(state);
+
+    bool useMalloc = (state->SupportsSizedAllocators && sz > MaxPageUserData) || TAllocState::IsDefaultAllocatorUsed();
+
+    if (Y_UNLIKELY(useMalloc)) {
+        state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
+        auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+        if (!ret) {
+            throw TMemoryLimitExceededException();
+        }
+
+        ret->Link(&state->OffloadedBlocksRoot);
+#ifndef NDEBUG
+        state->DefaultMemInfo->Take(ret + 1, sz, { location.file_name(), (int)location.line() });
+#endif
+        return ret + 1;
+    }
+
+    auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
+    if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
+        void* ret = (char*)currPage + currPage->Offset;
+        currPage->Offset = AlignUp(currPage->Offset + sz, MKQL_ALIGNMENT);
+        ++currPage->UseCount;
+#ifndef NDEBUG
+        state->DefaultMemInfo->Take(ret, sz, { location.file_name(), (int)location.line() });
+#endif
+        return ret;
+    }
+
+    auto ret = MKQLAllocSlow(sz, state, mPool);
+#ifndef NDEBUG
+    state->DefaultMemInfo->Take(ret, sz, { location.file_name(), (int)location.line() });
+#endif
+    return ret;
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
@@ -350,15 +391,19 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noex
         return;
     }
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    TAllocState *state = TlsAllocState;
-    Y_DEBUG_ABORT_UNLESS(state);
-
-    auto entry = (TAllocState::TListEntry*)(mem) - 1;
-    entry->Unlink();
-    free(entry);
-    return;
+#ifndef NDEBUG
+    TlsAllocState->DefaultMemInfo->Return(mem);
 #endif
+
+    if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
+        TAllocState *state = TlsAllocState;
+        Y_DEBUG_ABORT_UNLESS(state);
+
+        auto entry = (TAllocState::TListEntry*)(mem) - 1;
+        entry->Unlink();
+        free(entry);
+        return;
+    }
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
@@ -376,14 +421,13 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     }
 
     Y_DEBUG_ABORT_UNLESS(state);
-
-    bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    useFree = true;
+#ifndef NDEBUG
+    state->DefaultMemInfo->Return(mem, sz);
 #endif
 
-    if (useFree) {
+    bool useFree = (state->SupportsSizedAllocators && sz > MaxPageUserData) || TAllocState::IsDefaultAllocatorUsed();
+
+    if (Y_UNLIKELY(useFree)) {
         auto entry = (TAllocState::TListEntry*)(mem) - 1;
         entry->Unlink();
         free(entry);
@@ -402,12 +446,12 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     MKQLFreeSlow(header, state, mPool);
 }
 
-inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {
-    return MKQLAllocFastDeprecated(sz, TlsAllocState, mPool);
+inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
+    return MKQLAllocFastDeprecated(sz, TlsAllocState, mPool, location);
 }
 
-inline void* MKQLAllocWithSize(size_t sz, const EMemorySubPool mPool) {
-    return MKQLAllocFastWithSize(sz, TlsAllocState, mPool);
+inline void* MKQLAllocWithSize(size_t sz, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
+    return MKQLAllocFastWithSize(sz, TlsAllocState, mPool, location);
 }
 
 inline void MKQLFreeWithSize(const void* mem, size_t sz, const EMemorySubPool mPool) noexcept {
@@ -425,7 +469,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 void* MKQLArrowAllocate(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
-void MKQLArrowUntrack(const void* mem);
+void MKQLArrowUntrack(const void* mem, ui64 size);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {
@@ -455,6 +499,14 @@ struct TWithMiniKQLAlloc {
         NMiniKQL::MKQLFreeWithSize(mem, sz, MemoryPool);
     }
 };
+
+template <typename T, typename... Args>
+T* AllocateOn(const TAllocLocation& location, TAllocState* state, Args&&... args)
+{
+    void* addr = MKQLAllocFastWithSize(sizeof(T), state, T::MemoryPool, location);
+    return ::new(addr) T(std::forward<Args>(args)...);
+    static_assert(std::is_base_of<TWithMiniKQLAlloc<T::MemoryPool>, T>::value, "Class must inherit TWithMiniKQLAlloc.");
+}
 
 template <typename T, typename... Args>
 T* AllocateOn(TAllocState* state, Args&&... args)

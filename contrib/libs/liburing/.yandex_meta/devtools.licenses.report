@@ -52,21 +52,21 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README [103:103]
+        README [108:108]
     Scancode info:
         Original SPDX id: GPL-1.0-or-later
         Score           : 50.00
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README [103:103]
+        README [108:108]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 50.00
         Match type      : REFERENCE
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
-        README [103:103]
+        README [108:108]
 
 KEEP     MIT                  1eaf467c6d00edd4a5876ad437b67edf
 BELONGS ya.make
@@ -151,6 +151,7 @@ BELONGS ya.make
         test/fd-pass.c [2:2]
         test/fdinfo.c [2:2]
         test/fifo-nonblock-read.c [2:2]
+        test/file-exit-unreg.c [2:2]
         test/file-register.c [2:2]
         test/file-update.c [2:2]
         test/file-verify.c [2:2]
@@ -221,6 +222,7 @@ BELONGS ya.make
         test/pollfree.c [2:2]
         test/probe.c [2:2]
         test/read-before-exit.c [2:2]
+        test/read-inc-file.c [2:2]
         test/read-mshot-empty.c [2:2]
         test/read-mshot-stdin.c [2:2]
         test/read-mshot.c [2:2]
@@ -232,10 +234,12 @@ BELONGS ya.make
         test/reg-fd-only.c [2:2]
         test/reg-hint.c [2:2]
         test/reg-reg-ring.c [2:2]
+        test/reg-wait.c [2:2]
         test/regbuf-clone.c [2:2]
         test/regbuf-merge.c [2:2]
         test/register-restrictions.c [2:2]
         test/rename.c [2:2]
+        test/resize-rings.c [2:2]
         test/ring-leak.c [2:2]
         test/ring-leak2.c [2:2]
         test/ringbuf-read.c [2:2]
@@ -254,6 +258,7 @@ BELONGS ya.make
         test/skip-cqe.c [2:2]
         test/socket-getsetsock-cmd.c [2:2]
         test/socket-io-cmd.c [2:2]
+        test/socket-nb.c [2:2]
         test/socket-rw-eagain.c [2:2]
         test/socket-rw-offset.c [2:2]
         test/socket-rw.c [2:2]
@@ -364,7 +369,7 @@ BELONGS ya.make
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 9566044df50ee1c37e39ed99e7926750
 BELONGS ya.make
-FILE_INCLUDE COPYING.GPL found in files: README at line 104
+FILE_INCLUDE COPYING.GPL found in files: README at line 109
     License text:
         COPYING.GPL and <https://spdx.org/licenses/Linux-syscall-note.html>.
     Scancode info:
@@ -373,14 +378,14 @@ FILE_INCLUDE COPYING.GPL found in files: README at line 104
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README [104:104]
+        README [109:109]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 95.00
         Match type      : REFERENCE
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
-        README [104:104]
+        README [109:109]
 
 KEEP     "(LGPL-2.1-only OR MIT)" 9d1d95673c01a94e06648bf72ecda12d
 BELONGS ya.make
@@ -409,11 +414,11 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README [101:101]
+        README [106:106]
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later
         Score           : 75.00
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
     Files with this license:
-        README [101:101]
+        README [106:106]

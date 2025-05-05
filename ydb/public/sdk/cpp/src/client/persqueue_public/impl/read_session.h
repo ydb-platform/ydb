@@ -1,14 +1,14 @@
 #pragma once
 
-#include <src/client/persqueue_public/impl/aliases.h>
-#include <src/client/topic/impl/read_session_impl.ipp>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/counters_logger.h>
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/counters_logger.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
 
 #include <unordered_map>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // High level class that manages several read session impls.
 // Each one of them works with single cluster.

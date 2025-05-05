@@ -147,6 +147,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
 
             status = res.Fetch(v);
             UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
+            // XXX: Check whether the internal state is not released
+            // and the sentinel is still set (see more info in YQL-19866).
+            status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
         };
 
         for (auto stream : {true, false}) {
@@ -161,7 +165,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
             }
         }
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 23u
+
     Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
         auto test = [](bool hashed, bool multi, bool compact, bool withPayload) {
             Cerr << "TestNarrowSqueezeToDict [type: " << (hashed ? "hashed" : "sorted") << ", multi: " << multi
@@ -201,6 +205,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
 
             status = res.Fetch(v);
             UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
+            // XXX: Check whether the internal state is not released
+            // and the sentinel is still set (see more info in YQL-19866).
+            status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
         };
 
         for (auto hashed : {true, false}) {
@@ -213,7 +221,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
             }
         }
     }
-#endif
+
     template <bool LLVM>
     static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, bool withNull, bool withData) {
         TSetup<LLVM> setup;

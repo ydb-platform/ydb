@@ -13,7 +13,6 @@
 
 #include <util/datetime/base.h>
 
-
 namespace NYT::NClient::NFederated {
 namespace {
 
@@ -22,6 +21,7 @@ using namespace NYT::NApi;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Return;
+using ::testing::ReturnRef;
 using ::testing::StrictMock;
 
 using TStrictMockClient = StrictMock<NApi::TMockClient>;
@@ -108,9 +108,9 @@ TEST(TFederatedClientTest, Basic)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -173,9 +173,14 @@ TEST(TFederatedClientTest, CheckHealth)
 
     auto mockClientSas = New<TStrictMockClient>();
 
+    auto mockConnectionVla = New<TStrictMockConnection>();
+    std::optional<std::string> clusterName("vla-cluster");
+    EXPECT_CALL(*mockConnectionVla, GetClusterName())
+        .WillRepeatedly(ReturnRef(clusterName));
+
     auto mockClientVla = New<TStrictMockClient>();
-    EXPECT_CALL(*mockClientVla, GetClusterName(_))
-        .Times(AnyNumber());
+    EXPECT_CALL(*mockClientVla, GetConnection())
+        .WillRepeatedly(Return(mockConnectionVla));
 
     // To identify best (closest) cluster.
     NYson::TYsonString listResult1(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));
@@ -187,9 +192,9 @@ TEST(TFederatedClientTest, CheckHealth)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
@@ -273,9 +278,9 @@ TEST(TFederatedClientTest, Transactions)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -364,9 +369,9 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillOnce(Return(VoidFuture))
@@ -450,9 +455,9 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillOnce(Return(MakeFuture(listResult2)));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
+    NNet::SetLocalHostName("b-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
@@ -463,17 +468,25 @@ TEST(TFederatedClientTest, AttachTransaction)
     auto mockConnectionSas = New<TStrictMockConnection>();
     EXPECT_CALL(*mockConnectionSas, GetClusterTag())
         .WillRepeatedly(Return(NObjectClient::TCellTag(123)));
+    std::optional<std::string> clusterNameSas = "cluster-sas";
+    EXPECT_CALL(*mockConnectionSas, GetClusterName())
+        .WillRepeatedly(ReturnRef(clusterNameSas));
     EXPECT_CALL(*mockClientSas, GetConnection())
-        .WillOnce(Return(mockConnectionSas));
+        .WillRepeatedly(Return(mockConnectionSas));
 
     auto mockConnectionVla = New<TStrictMockConnection>();
     EXPECT_CALL(*mockConnectionVla, GetClusterTag())
         .WillRepeatedly(Return(NObjectClient::TCellTag(456)));
+    std::optional<std::string> clusterNameVla = "cluster-vla";
+    EXPECT_CALL(*mockConnectionVla, GetClusterName())
+        .WillRepeatedly(ReturnRef(clusterNameVla));
+    EXPECT_CALL(*mockClientVla, GetConnection())
+        .WillRepeatedly(Return(mockConnectionVla));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
-    config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
+    config->ClusterHealthCheckPeriod = TDuration::Seconds(1);
     auto federatedClient = CreateClient(clients, config);
 
     // Wait initialization.

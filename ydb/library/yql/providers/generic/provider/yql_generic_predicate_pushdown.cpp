@@ -112,6 +112,7 @@ namespace NYql {
             MATCH_TYPE(String, STRING);
             MATCH_TYPE(Utf8, UTF8);
             MATCH_TYPE(Json, JSON);
+            MATCH_TYPE(Timestamp, TIMESTAMP);
 
             ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
             return false;
@@ -271,6 +272,9 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStartsWith, STARTS_WITH);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEndsWith, ENDS_WITH);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStringContains, CONTAINS);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
                 ctx.Err << "unknown compare operation: " << compare.Raw()->Content();
@@ -788,6 +792,22 @@ namespace NYql {
     TString FormatComparison(TPredicate_TComparison comparison) {
         TString operation;
 
+        auto left = FormatExpression(comparison.left_value());
+        auto right = FormatExpression(comparison.right_value());
+
+        // Distinct branch handling LIKE operator
+        switch (comparison.operation()) {
+            case TPredicate_TComparison::STARTS_WITH:
+                return TStringBuilder() << "StartsWith(" << left << ", " << right << ")";
+            case TPredicate_TComparison::ENDS_WITH:
+                return TStringBuilder() << "EndsWith(" << left << ", " << right << ")";
+            case TPredicate_TComparison::CONTAINS:
+                return TStringBuilder() << "String::Contains(" << left << ", " << right << ")";
+            default:
+                break;
+        }
+
+        // General comparisons
         switch (comparison.operation()) {
         case TPredicate_TComparison::L:
             operation = " < ";
@@ -816,9 +836,6 @@ namespace NYql {
         default:
             throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
         }
-
-        auto left = FormatExpression(comparison.left_value());
-        auto right = FormatExpression(comparison.right_value());
 
         return TStringBuilder() << "(" << left << operation << right << ")";
     }

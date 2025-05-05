@@ -90,6 +90,8 @@ private:
 };
 
 struct TBlockState : public TComputationValue<TBlockState> {
+    static constexpr i64 LAST_COLUMN_MARKER = -1;
+
     using TBase = TComputationValue<TBlockState>;
 
     ui64 Count = 0;
@@ -99,7 +101,9 @@ struct TBlockState : public TComputationValue<TBlockState> {
     std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
     std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
 
-    TBlockState(TMemoryUsageInfo* memInfo, size_t width);
+    ui64 BlockLengthIndex_ = 0;
+
+    TBlockState(TMemoryUsageInfo* memInfo, size_t width, i64 blockLengthIndex = LAST_COLUMN_MARKER);
 
     void ClearValues();
 

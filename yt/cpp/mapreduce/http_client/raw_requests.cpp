@@ -15,11 +15,14 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/client.h>
+#include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
+
+#include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -42,7 +45,7 @@ TOperationAttributes ParseOperationAttributes(const TNode& node)
     if (auto typeNode = mapNode.FindPtr("type")) {
         result.Type = FromString<EOperationType>(typeNode->AsString());
     } else if (auto operationTypeNode = mapNode.FindPtr("operation_type")) {
-        // COMPAT(levysotsky): "operation_type" is a deprecated synonym for "type".
+        // COMPAT(levysotsky): (YT-24340) "operation_type" is a deprecated synonym for "type".
         // This branch should be removed when all clusters are updated.
         result.Type = FromString<EOperationType>(operationTypeNode->AsString());
     }
@@ -306,6 +309,97 @@ NHttpClient::IHttpResponsePtr SkyShareTable(
     TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
 
     return RequestWithoutRetry(skyApiHost, mutationId, header, "");
+}
+
+struct THttpRequestStream
+    : public IOutputStream
+{
+public:
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+};
+
+struct THttpBufferedRequestStream
+    : public IOutputStream
+{
+public:
+    THttpBufferedRequestStream(NHttpClient::IHttpRequestPtr request, size_t bufferSize)
+        : Request_(std::move(request))
+        , Underlying_(std::make_unique<TBufferedOutput>(Request_->GetStream(), bufferSize))
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    std::unique_ptr<IOutputStream> Underlying_;
+};
+
+std::unique_ptr<IOutputStream> WriteTable(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteTableCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetInputFormat(format);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(context, header, config);
+    if (options.SingleHttpRequest_) {
+        return std::make_unique<THttpBufferedRequestStream>(std::move(request), options.BufferSize_);
+    }
+    return std::make_unique<THttpRequestStream>(std::move(request));
+}
+
+std::unique_ptr<IOutputStream> WriteFile(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteFileCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(context, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request));
 }
 
 TAuthorizationInfo WhoAmI(const TClientContext& context)

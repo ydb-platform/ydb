@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/ydb.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <memory>
 
-namespace NYdb::inline V3::NDynamicConfig {
+namespace NYdb::inline Dev::NDynamicConfig {
 
 struct TGetConfigResult : public TStatus {
     TGetConfigResult(
@@ -160,6 +160,21 @@ private:
 
 using TAsyncVerboseResolveConfigResult = NThreading::TFuture<TVerboseResolveConfigResult>;
 
+struct TFetchStartupConfigResult : public TStatus {
+    TFetchStartupConfigResult(TStatus&& status, std::string&& config)
+        : TStatus(std::move(status))
+        , Config_(std::move(config))
+    {}
+
+    const std::string& GetConfig() const {
+        return Config_;
+    }
+
+private:
+    std::string Config_;
+};
+
+using TAsyncFetchStartupConfigResult = NThreading::TFuture<TFetchStartupConfigResult>;
 
 struct TDynamicConfigClientSettings : public TCommonClientSettingsBase<TDynamicConfigClientSettings> {
     using TSelf = TDynamicConfigClientSettings;
@@ -239,6 +254,9 @@ public:
         const std::string& config,
         const std::map<uint64_t, std::string>& volatileConfigs,
         const TClusterConfigSettings& settings = {});
+
+    // Fetch startup config
+    TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {});
 
 private:
     std::shared_ptr<TImpl> Impl_;

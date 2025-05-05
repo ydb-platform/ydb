@@ -9,6 +9,7 @@ SRCS(
     read.cpp
     storage.cpp
     remove.cpp
+    common.cpp
 )
 
 PEERDIR(

@@ -4,6 +4,9 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
+#include <util/string/strip.h>
+#include <util/string/split.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -34,7 +37,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 13, ctx)) {
+        if (!EnsureArgsCount(*input, 15, ctx)) {
             return TStatus::Error;
         }
 
@@ -66,6 +69,11 @@ public:
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
             return TStatus::Error;
         }
+
+        auto& requiredLabelNames = *input->Child(TSoSourceSettings::idx_RequiredLabelNames);
+        if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
+            return TStatus::Error;
+        }
         
         auto& from = *input->Child(TSoSourceSettings::idx_From);
         if (!EnsureAtom(from, ctx) || !ValidateDatetimeFormat("from", from, ctx)) {
@@ -77,13 +85,25 @@ public:
             return TStatus::Error;
         }
 
+        auto& selectors = *input->Child(TSoSourceSettings::idx_Selectors);
+        if (!EnsureAtom(selectors, ctx)) {
+            return TStatus::Error;
+        }
+        bool hasSelectors = !selectors.Content().empty();
+
         auto& program = *input->Child(TSoSourceSettings::idx_Program);
         if (!EnsureAtom(program, ctx)) {
             return TStatus::Error;
         }
+        bool hasProgram = !program.Content().empty();
 
-        if (program.Content().empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "program must be specified"));
+        if (hasSelectors && hasProgram) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "either program or selectors must be specified"));
+            return TStatus::Error;
+        }
+
+        if (!hasSelectors && !hasProgram) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "specify either program or selectors"));
             return TStatus::Error;
         }
 

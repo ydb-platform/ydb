@@ -1,14 +1,14 @@
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TStatus::TImpl {
 public:
@@ -71,7 +71,7 @@ const std::multimap<std::string, std::string>& TStatus::GetResponseMetadata() co
 }
 
 float TStatus::GetConsumedRu() const {
-    return Impl_->Status.ConstInfo.consumed_units();
+    return Impl_->Status.CostInfo.consumed_units();
 }
 
 void TStatus::Out(IOutputStream& out) const {

@@ -104,7 +104,7 @@ struct max_clique_visitor
     max_clique_visitor(std::size_t& max) : maximum(max) {}
 
     template < typename Clique, typename Graph >
-    inline void clique(const Clique& p, const Graph& g)
+    inline void clique(const Clique& p, const Graph&)
     {
         BOOST_USING_STD_MAX();
         maximum = max BOOST_PREVENT_MACRO_SUBSTITUTION(maximum, p.size());
@@ -220,7 +220,7 @@ namespace detail
 
         // otherwise, iterate over candidates and and test
         // for maxmimal cliquiness.
-        typename Container::iterator i, j;
+        typename Container::iterator i;
         for (i = cands.begin(); i != cands.end();)
         {
             Vertex candidate = *i;

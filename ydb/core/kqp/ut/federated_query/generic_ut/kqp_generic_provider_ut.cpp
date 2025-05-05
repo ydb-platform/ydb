@@ -1,3 +1,5 @@
+#include "iceberg_ut_data.h"
+
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -5,9 +7,12 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/query/query.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -33,6 +38,12 @@ namespace NKikimr::NKqp {
         PostgreSQL,
         ClickHouse,
         Ydb,
+        IcebergHiveMetastoreBasic,
+        IcebergHiveMetastoreSa,
+        IcebergHiveMetastoreToken,
+        IcebergHadoopBasic,
+        IcebergHadoopSa,
+        IcebergHadoopToken,
     };
 
     NYql::TGenericDataSourceInstance MakeDataSourceInstance(EProviderType providerType) {
@@ -43,6 +54,18 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::Ydb:
                 return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
+            case EProviderType::IcebergHiveMetastoreBasic:
+                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreSa:
+                return NTestUtils::CreateIcebergSa().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHiveMetastoreToken:
+                return NTestUtils::CreateIcebergToken().CreateDataSourceForHiveMetastore();
+            case EProviderType::IcebergHadoopBasic:
+                return NTestUtils::CreateIcebergBasic().CreateDataSourceForHadoop();
+            case EProviderType::IcebergHadoopSa:
+                return NTestUtils::CreateIcebergSa().CreateDataSourceForHadoop();
+            case EProviderType::IcebergHadoopToken:
+                return NTestUtils::CreateIcebergToken().CreateDataSourceForHadoop();
         }
     }
 
@@ -54,6 +77,24 @@ namespace NKikimr::NKqp {
                 return CreateClickHouseExternalDataSource(kikimr);
             case EProviderType::Ydb:
                 return CreateYdbExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreBasic:
+                return NTestUtils::CreateIcebergBasic()
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreSa:
+                return NTestUtils::CreateIcebergSa()
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHiveMetastoreToken:
+                return NTestUtils::CreateIcebergToken()
+                    .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
+            case EProviderType::IcebergHadoopBasic:
+                return NTestUtils::CreateIcebergBasic()
+                    .ExecuteCreateHadoopExternalDataSource(kikimr);
+            case EProviderType::IcebergHadoopSa:
+                return NTestUtils::CreateIcebergSa()
+                    .ExecuteCreateHadoopExternalDataSource(kikimr);
+            case EProviderType::IcebergHadoopToken:
+                return NTestUtils::CreateIcebergToken()
+                    .ExecuteCreateHadoopExternalDataSource(kikimr);
         }
     }
 
@@ -62,10 +103,21 @@ namespace NKikimr::NKqp {
         NYql::TAttr dateTimeFormat;
         dateTimeFormat.SetName("DateTimeFormat");
         dateTimeFormat.SetValue("string");
-        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->SetUseSsl(false);
-        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_host("localhost");
-        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_port(1234);
-        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+
+        auto& config = *appConfig.MutableQueryServiceConfig();
+        auto& connector = *config.MutableGeneric()->MutableConnector();
+
+        connector.SetUseSsl(false);
+        connector.MutableEndpoint()->set_host("localhost");
+        connector.MutableEndpoint()->set_port(1234);
+
+        config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        config.AddAvailableExternalDataSources("ObjectStorage");
+        config.AddAvailableExternalDataSources("ClickHouse");
+        config.AddAvailableExternalDataSources("PostgreSQL");
+        config.AddAvailableExternalDataSources("MySQL");
+        config.AddAvailableExternalDataSources("Ydb");
+        config.AddAvailableExternalDataSources("Iceberg");
         return appConfig;
     }
 
@@ -97,7 +149,6 @@ namespace NKikimr::NKqp {
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
             const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
-
             // step 1: DescribeTable
             // clang-format off
             clientMock->ExpectDescribeTable()
@@ -110,9 +161,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        .Column("col1", Ydb::Type::UINT16)
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -147,7 +195,8 @@ namespace NKikimr::NKqp {
             // run test
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -188,6 +237,30 @@ namespace NKikimr::NKqp {
             TestSelectAllFields(EProviderType::Ydb);
         }
 
+        Y_UNIT_TEST(IcebergHiveBasicSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHiveSaSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreSa);
+        }
+
+        Y_UNIT_TEST(IcebergHiveTokenSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHiveMetastoreToken);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopBasicSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHadoopBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopSaSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHadoopSa);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopTokenSelectAll) {
+            TestSelectAllFields(EProviderType::IcebergHadoopToken);
+        }
+
         void TestSelectConstant(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
@@ -209,9 +282,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -241,7 +311,8 @@ namespace NKikimr::NKqp {
             // run test
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -281,6 +352,30 @@ namespace NKikimr::NKqp {
             TestSelectConstant(EProviderType::Ydb);
         }
 
+        Y_UNIT_TEST(IcebergHiveBasicSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHiveSaSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreSa);
+        }
+
+        Y_UNIT_TEST(IcebergHiveTokenSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHiveMetastoreToken);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopBasicSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHadoopBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopSaSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHadoopSa);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopTokenSelectConstant) {
+            TestSelectConstant(EProviderType::IcebergHadoopToken);
+        }
+
         void TestSelectCount(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
@@ -302,9 +397,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -334,7 +426,8 @@ namespace NKikimr::NKqp {
             // run test
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -370,13 +463,41 @@ namespace NKikimr::NKqp {
             TestSelectCount(EProviderType::Ydb);
         }
 
+        Y_UNIT_TEST(IcebergHiveBasicSelectCount) {
+            TestSelectCount(EProviderType::IcebergHiveMetastoreBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHiveSaSelectCount) {
+            TestSelectCount(EProviderType::IcebergHiveMetastoreSa);
+        }
+
+        Y_UNIT_TEST(IcebergHiveTokenSelectCount) {
+            TestSelectCount(EProviderType::IcebergHiveMetastoreToken);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopBasicSelectCount) {
+            TestSelectCount(EProviderType::IcebergHadoopBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopSaSelectCount) {
+            TestSelectCount(EProviderType::IcebergHadoopSa);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopTokenSelectCount) {
+            TestSelectCount(EProviderType::IcebergHadoopToken);
+        }
+
         void TestFilterPushdown(EProviderType providerType) {
             // prepare mock
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
             const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+
             // clang-format off
-            const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
+            const NApi::TSelect selectInListSplits = TConnectorClientMock::TSelectBuilder<>()
+                .DataSourceInstance(dataSourceInstance).GetResult();
+
+            const NApi::TSelect selectInReadSplits = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
                 .What()
                     .NullableColumn("data_column", Ydb::Type::STRING)
@@ -406,11 +527,11 @@ namespace NKikimr::NKqp {
             // step 2: ListSplits
             // clang-format off
             clientMock->ExpectListSplits()
-                .Select(select)
+                .Select(selectInListSplits)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
-                        .Select(select);
+                        .Select(selectInReadSplits);
             // clang-format on
 
             // step 3: ReadSplits
@@ -424,7 +545,7 @@ namespace NKikimr::NKqp {
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
-                    .Select(select)
+                    .Select(selectInReadSplits)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
@@ -439,7 +560,8 @@ namespace NKikimr::NKqp {
             // run test
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -475,6 +597,65 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(YdbFilterPushdown) {
             TestFilterPushdown(EProviderType::Ydb);
+        }
+
+        Y_UNIT_TEST(IcebergHiveBasicFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHiveSaFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreSa);
+        }
+
+        Y_UNIT_TEST(IcebergHiveTokenFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHiveMetastoreToken);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopBasicFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHadoopBasic);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopSaFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHadoopSa);
+        }
+
+        Y_UNIT_TEST(IcebergHadoopTokenFilterPushdown) {
+            TestFilterPushdown(EProviderType::IcebergHadoopToken);
+        }
+
+        void TestFailsOnIncorrectScriptExecutionOperation(const TString& operationId, const TString& fetchToken) {
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
+                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
+
+            // Create trash query
+            NYdbGrpc::TGRpcClientLow clientLow;
+
+            std::shared_ptr<grpc::Channel> channel;
+            channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
+            {
+                std::unique_ptr<Ydb::Query::V1::QueryService::Stub> stub;
+                stub = Ydb::Query::V1::QueryService::NewStub(channel);
+                grpc::ClientContext context;
+                Ydb::Query::FetchScriptResultsRequest request;
+                request.set_operation_id(operationId);
+                request.set_fetch_token(fetchToken);
+                Ydb::Query::FetchScriptResultsResponse response;
+                grpc::Status st = stub->FetchScriptResults(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId) {
+            TestFailsOnIncorrectScriptExecutionOperation("trash", "");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {
+            TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
     }
 }

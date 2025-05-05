@@ -54,7 +54,10 @@ channel_profile_config:
     - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
     - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
     profile_id: 0
-disable_builtin_security: true
+security_config:
+  disable_builtin_security: false
+  disable_builtin_groups: false
+  disable_builtin_access: true
 domains_config:
   domain:
   - domain_id: 1

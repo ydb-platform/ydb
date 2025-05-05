@@ -70,7 +70,7 @@ DECLARE_REFCOUNTED_STRUCT(TSerializableReplicaInfo)
 struct TSerializableReplicaInfo
     : public TYsonStruct
 {
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     NTabletClient::ETableReplicaContentType ContentType;
     NTabletClient::ETableReplicaMode Mode;
@@ -112,7 +112,7 @@ struct TSerializableReplicationCard
     TReplicationEra Era;
     TTableId TableId;
     TYPath TablePath;
-    TString TableClusterName;
+    std::string TableClusterName;
     NTransactionClient::TTimestamp CurrentTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;

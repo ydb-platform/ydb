@@ -21,7 +21,7 @@ TTopicOperationsScenario::TTopicOperationsScenario() :
 {
 }
 
-int TTopicOperationsScenario::Run(const TConfig& config)
+int TTopicOperationsScenario::Run(TConfig& config)
 {
     InitLog(config);
     InitDriver(config);
@@ -60,13 +60,13 @@ THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosit
                             TConfig::VerbosityLevelToELogPriority(level));
 }
 
-void TTopicOperationsScenario::InitLog(const TConfig& config)
+void TTopicOperationsScenario::InitLog(TConfig& config)
 {
     Log = std::make_shared<TLog>(MakeLogBackend(config.VerbosityLevel));
     Log->SetFormatter(GetPrefixLogFormatter(""));
 }
 
-void TTopicOperationsScenario::InitDriver(const TConfig& config)
+void TTopicOperationsScenario::InitDriver(TConfig& config)
 {
     Driver =
         std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,

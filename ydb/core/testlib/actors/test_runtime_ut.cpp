@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
                 auto sender = ev->Sender;
                 auto selfID = SelfId();
-                auto actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+                auto actorSystem = TActivationContext::ActorSystem();
                 TMutex *syncMutex = SyncMutex;
 
                 SystemThreadFactory()->Run([=](){
@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 Y_UNUSED(ev);
-                ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
+                ActorSystem = TActivationContext::ActorSystem();
                 Thread.Reset(new TThread(&TProducerActor::ThreadProc, this));
                 Thread->Start();
             }

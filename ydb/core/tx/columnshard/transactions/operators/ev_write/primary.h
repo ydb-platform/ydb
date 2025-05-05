@@ -24,8 +24,7 @@ private:
     std::set<ui64> WaitShardsResultAck;
     std::optional<bool> TxBroken;
 
-    virtual NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() const override {
-        NKikimrTxColumnShard::TCommitWriteTxBody result;
+    virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const override {
         auto& data = *result.MutablePrimaryTabletData();
         if (TxBroken) {
             data.SetTxBroken(*TxBroken);
@@ -42,7 +41,6 @@ private:
         for (auto&& i : WaitShardsResultAck) {
             data.AddWaitShardsResultAck(i);
         }
-        return result;
     }
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
@@ -216,9 +214,7 @@ private:
         }
     }
 
-    virtual void DoOnTabletInit(TColumnShard& owner) override {
-        InitializeRequests(owner);
-        CheckFinished(owner);
+    virtual void DoOnTabletInit(TColumnShard& /*owner*/) override {
     }
 
     class TTxStartPreparation: public TExtendedTransactionBase {
@@ -230,21 +226,6 @@ private:
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
-                auto copy = *op;
-                copy.TxBroken = lock.IsBroken();
-                AFL_VERIFY(copy.WaitShardsBrokenFlags.erase(Self->TabletID()));
-                if (copy.WaitShardsBrokenFlags.empty()) {
-                    AFL_VERIFY(copy.WaitShardsResultAck.erase(Self->TabletID()));
-                }
-                
-                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, copy.SerializeToProto().SerializeAsString());
-            }
-            return true;
-        }
-        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
-            if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
                 op->TxBroken = lock.IsBroken();
                 AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
                 if (op->WaitShardsBrokenFlags.empty()) {
@@ -252,6 +233,12 @@ private:
                 }
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
                     "receive", Self->TabletID());
+                Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+            }
+            return true;
+        }
+        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+            if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true)) {
                 op->CheckFinished(*Self);
             }
         }

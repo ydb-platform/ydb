@@ -83,7 +83,7 @@ private:
         if (result.IsOK()) {
             NYT::NApi::TLockNodeOptions options;
             options.Waitable = false;
-            auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+            auto* actorSystem = ctx.ActorSystem();
             auto selfId = SelfId();
             try {
                 YT_UNUSED_FUTURE(Transaction->LockNode("#" + ToString(result.ValueOrThrow()), NYT::NCypressClient::ELockMode::Exclusive, options).As<void>()
@@ -224,7 +224,7 @@ private:
     template<typename T>
     void Finish(const NYT::TErrorOr<T>& result, const TActorContext& ctx) {
         if (result.IsOK()) {
-            auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+            auto* actorSystem = ctx.ActorSystem();
             auto selfId = SelfId();
             Transaction->SubscribeAborted(BIND([actorSystem, selfId](const NYT::TError& /*error*/) {
                 actorSystem->Send(selfId, new TEvents::TEvPoison());
@@ -247,7 +247,7 @@ private:
         auto lockNode = Prefix + "/" + LockName + ".lock";
 
         try {
-            auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+            auto* actorSystem = ctx.ActorSystem();
             auto selfId = SelfId();
             YT_UNUSED_FUTURE(Transaction->CreateNode(
                 lockNode,

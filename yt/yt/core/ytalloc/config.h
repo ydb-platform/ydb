@@ -8,10 +8,9 @@ namespace NYT::NYTAlloc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TYTAllocConfig
+struct TYTAllocConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<bool> EnableAllocationProfiling;
     std::optional<double> AllocationProfilingSamplingRate;
     std::optional<std::vector<int>> SmallArenasToProfile;
@@ -34,10 +33,9 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TYTAllocConfig)
 
-class TYTProfilingConfig
+struct TYTProfilingConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<bool> EnableDetailedAllocationStatistics;
 
     REGISTER_YSON_STRUCT(TYTProfilingConfig);

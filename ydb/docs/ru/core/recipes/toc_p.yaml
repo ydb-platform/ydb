@@ -11,4 +11,4 @@ items:
 - name: YQL
   include:
     mode: link
-    path: yql/toc_p.yaml
+    path: ../yql/reference/recipes/toc_i.yaml

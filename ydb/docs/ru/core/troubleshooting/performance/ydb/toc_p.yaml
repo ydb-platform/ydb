@@ -1,0 +1,5 @@
+items:
+    - name: Процедура последовательного перезапуска
+      href: ydb-updates.md
+    - name: Частые переезды таблеток между узлами
+      href: tablets-moved.md

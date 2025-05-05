@@ -284,7 +284,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         TString GetTopicPath() const override {
-            auto path = NPersQueue::GetFullTopicPath(this->ActorContext(), this->Request_->GetDatabaseName(), TActorBase::TopicPath);
+            auto path = NPersQueue::GetFullTopicPath(this->Request_->GetDatabaseName(), TActorBase::TopicPath);
             if (PrivateTopicName) {
                 path = JoinPath(ChildPath(NKikimr::SplitPath(path), *PrivateTopicName));
             }

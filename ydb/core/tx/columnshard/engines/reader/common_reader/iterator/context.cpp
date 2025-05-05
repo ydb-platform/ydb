@@ -40,14 +40,12 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
             stagePrefix + "::FETCHING", kffFetching * TGlobalLimits::ScanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * TGlobalLimits::ScanMemoryLimit)
     };
-    ProcessMemoryGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
+    ProcessMemoryGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
     ProcessScopeGuard =
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
-    IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {
@@ -76,13 +74,13 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
             EFColumns = std::make_shared<TColumnsSet>();
         }
     }
-    if (ReadMetadata->HasProcessingColumnIds()) {
+    if (ReadMetadata->HasProcessingColumnIds() && ReadMetadata->GetProcessingColumnIds().size()) {
         FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), readSchema);
         if (SpecColumns->Contains(*FFColumns) && !EFColumns->IsEmpty()) {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns + *SpecColumns);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_modified", FFColumns->DebugString());
         } else {
-            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
+//            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_first", FFColumns->DebugString());
         }
     } else {

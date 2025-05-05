@@ -48,6 +48,8 @@ public:
         i64 sequenceNumberSourceId,
         TStringBuf capitalizedCreationReason);
 
+    void Initialize();
+
     // ITransaction implementation.
     NApi::IConnectionPtr GetConnection() override;
     NApi::IClientPtr GetClient() const override;
@@ -59,10 +61,10 @@ public:
     NTransactionClient::EDurability GetDurability() const override;
     TDuration GetTimeout() const override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const NApi::TPrerequisitePingOptions& options = {}) override;
     TFuture<NApi::TTransactionFlushResult> Flush() override;
     TFuture<NApi::TTransactionCommitResult> Commit(const NApi::TTransactionCommitOptions&) override;
-    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options = {}) override;
+    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options) override;
     void Detach() override;
     void RegisterAlienTransaction(const ITransactionPtr& transaction) override;
 
@@ -127,11 +129,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<NApi::TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const NApi::TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const NApi::TExplainQueryOptions& options) override;
 
     TFuture<NApi::TPullRowsResult> PullRows(

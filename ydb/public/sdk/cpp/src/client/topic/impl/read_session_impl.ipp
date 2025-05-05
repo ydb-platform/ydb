@@ -4,10 +4,10 @@
 #include "read_session_impl.h"
 #undef INCLUDE_READ_SESSION_IMPL_H
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <google/protobuf/util/time_util.h>
@@ -24,7 +24,7 @@
 #include <variant>
 
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 static const bool RangesMode = !std::string{std::getenv("PQ_OFFSET_RANGES_MODE") ? std::getenv("PQ_OFFSET_RANGES_MODE") : ""}.empty();
 
@@ -73,6 +73,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
+        if (commitOffset.has_value()) {
+            SetFirstNotReadOffset(commitOffset.value());
+        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }
@@ -968,6 +971,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
     RetryState = nullptr;
+    ReadSessionId = msg.session_id();
 
     // Successful init. Do nothing.
     ContinueReadingDataImpl();
@@ -1219,6 +1223,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Y_UNUSED(deferred);
 
     RetryState = nullptr;
+    ReadSessionId = msg.session_id();
 
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
@@ -1318,8 +1323,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
-        NextPartitionStreamId, msg.partition_session().path(), msg.partition_session().partition_id(),
-        msg.partition_session().partition_session_id(), msg.committed_offset(),
+        NextPartitionStreamId,
+        msg.partition_session().path(),
+        ReadSessionId,
+        msg.partition_session().partition_id(),
+        msg.partition_session().partition_session_id(),
+        msg.committed_offset(),
         SelfContext);
     NextPartitionStreamId += PartitionStreamIdStep;
 
@@ -1910,7 +1919,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(TTransactionBase& tx,
                                                                          const std::vector<TReadSessionEvent::TEvent>& events,
                                                                          std::shared_ptr<TTopicClient::TImpl> client)
 {
@@ -1922,7 +1931,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable:
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(TTransactionBase& tx,
                                                                          const TReadSessionEvent::TEvent& event,
                                                                          std::shared_ptr<TTopicClient::TImpl> client)
 {
@@ -1934,7 +1943,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CollectOffsets(NTable:
 }
 
 template <bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TrySubscribeOnTransactionCommit(TTransactionBase& tx,
                                                                                           std::shared_ptr<TTopicClient::TImpl> client)
 {
     const TTransactionId txId = MakeTransactionId(tx);

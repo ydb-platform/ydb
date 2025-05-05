@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvRange>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvRange>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TRangeQuery : public TBlobStorageQuery<TEvBlobStorage::TEvRange> {
             struct TRead {
                 TLogoBlobID Id;
@@ -179,7 +180,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TRangeQuery(*this, std::move(ev));
+        return new TRangeQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

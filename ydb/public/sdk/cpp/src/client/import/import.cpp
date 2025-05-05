@@ -1,16 +1,16 @@
-#include <ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_import_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NImport {
 
 using namespace NThreading;
@@ -141,9 +141,19 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
     for (const auto& item : settings.Item_) {
+        if (!item.Src.empty() && !item.SrcPath.empty()) {
+            throw TContractViolation(
+                TStringBuilder() << "Invalid item: both source prefix and source path are set: \"" << item.Src << "\" and \"" << item.SrcPath << "\"");
+        }
+
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
-        protoItem.set_source_prefix(TStringType{item.Src});
-        protoItem.set_destination_path(TStringType{item.Dst});
+        if (!item.Src.empty()) {
+            protoItem.set_source_prefix(item.Src);
+        }
+        if (!item.SrcPath.empty()) {
+            protoItem.set_source_path(item.SrcPath);
+        }
+        protoItem.set_destination_path(item.Dst);
     }
 
     if (settings.Description_) {
@@ -156,6 +166,18 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
 
     if (settings.NoACL_) {
         request.mutable_settings()->set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SourcePrefix_) {
+        request.mutable_settings()->set_source_prefix(settings.SourcePrefix_.value());
+    }
+
+    if (settings.DestinationPath_) {
+        request.mutable_settings()->set_destination_path(settings.DestinationPath_.value());
+    }
+
+    if (settings.SymmetricKey_) {
+        request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(*settings.SymmetricKey_);
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);

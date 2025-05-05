@@ -150,7 +150,6 @@ namespace NActors {
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)");
 
-        struct TEvResolveNode;
         struct TEvNodeAddress;
 
         struct TEvConnectNode: public TEventLocal<TEvConnectNode, EvConnectNode> {
@@ -243,13 +242,28 @@ namespace NActors {
 
         struct TEvGetNode: public TEventLocal<TEvGetNode, EvGetNode> {
             ui32 NodeId;
-            TInstant Deadline;
+            TMonotonic Deadline;
 
-            TEvGetNode(ui32 nodeId, TInstant deadline = TInstant::Max())
+            TEvGetNode(ui32 nodeId, TMonotonic deadline = TMonotonic::Max())
                 : NodeId(nodeId)
                 , Deadline(deadline)
             {
             }
+
+            TString ToString() const override;
+        };
+
+        struct TEvResolveNode: public TEventLocal<TEvResolveNode, EvResolveNode> {
+            ui32 NodeId;
+            TMonotonic Deadline;
+
+            TEvResolveNode(ui32 nodeId, TMonotonic deadline = TMonotonic::Max())
+                : NodeId(nodeId)
+                , Deadline(deadline)
+            {
+            }
+
+            TString ToString() const override;
         };
 
         struct TEvNodeInfo: public TEventLocal<TEvNodeInfo, EvNodeInfo> {

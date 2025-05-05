@@ -102,100 +102,102 @@ public:
     }
 
     operator ui64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint64
                   || Type() == NScheme::NTypeIds::Timestamp)
-                 && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data()));
     }
 
     operator i64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int64
                   || Type() == NScheme::NTypeIds::Interval
                   || Type() == NScheme::NTypeIds::Datetime64
                   || Type() == NScheme::NTypeIds::Timestamp64
                   || Type() == NScheme::NTypeIds::Interval64)
-                 && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
 
     operator ui32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint32
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint32
                   || Type() == NScheme::NTypeIds::Datetime)
-                 && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data()));
         return value;
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
                   || Type() == NScheme::NTypeIds::Date32)
-                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
 
     operator ui16() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui16 value = ReadUnaligned<ui16>(reinterpret_cast<const ui16*>(Data()));
         return value;
     }
 
     operator ui8() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui8 value = *reinterpret_cast<const ui8*>(Data());
         return value;
     }
 
     operator bool() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         bool value = *reinterpret_cast<const bool*>(Data());
         return value;
     }
 
     operator double() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         double value = ReadUnaligned<double>(reinterpret_cast<const double*>(Data()));
         return value;
     }
 
     operator TActorId() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::ActorId
+        Y_ENSURE((Type() == NScheme::NTypeIds::ActorId
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const TActorId*>(Data());
     }
 
     operator TString() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Utf8
+        Y_ENSURE(Type() == NScheme::NTypeIds::Utf8
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TString(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator TBuffer() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String
+        Y_ENSURE(Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TBuffer(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator std::pair<ui64, ui64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, ui64>*>(Data());
     }
 
     operator std::pair<ui64, i64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
     template <typename ElementType>
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + count;
@@ -205,8 +207,8 @@ public:
     template <typename ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + Size() / sizeof(ElementType);
         container.resize(Size() / sizeof(ElementType));
@@ -238,6 +240,7 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Ty
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::JsonDocument> { typedef TString Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>
@@ -310,7 +313,7 @@ public:
 //    TConvertValue(const TRawTypeValue& value)
 //        : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
 //    {
-//        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+//        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
 //    }
 //
 //    operator TStringBuf() const {
@@ -453,12 +456,12 @@ struct TConvertValueFromRawTypeValueToProto {
     TConvertValueFromRawTypeValueToProto(const TRawTypeValue& value)
         : Value(value)
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
     }
 
     operator TargetType() const {
         TargetType msg;
-        Y_ABORT_UNLESS(msg.ParseFromArray(Value.Data(), Value.Size()));
+        Y_ENSURE(msg.ParseFromArray(Value.Data(), Value.Size()));
         return msg;
     }
 };
@@ -494,14 +497,14 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
     TConvertValue(const TRawTypeValue& value) {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
-        Y_ABORT_UNLESS(value.Size() % sizeof(VectorType) == 0);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Size() % sizeof(VectorType) == 0);
         const size_t count = value.Size() / sizeof(VectorType);
         Value.reserve(count);
         for (TUnalignedMemoryIterator<VectorType> it(value.Data(), value.Size()); !it.AtEnd(); it.Next()) {
             Value.emplace_back(it.Cur());
         }
-        Y_ABORT_UNLESS(Value.size() == count);
+        Y_ENSURE(Value.size() == count);
     }
 
     operator const TVector<VectorType>&() const {
@@ -549,7 +552,7 @@ struct TConvertValue<ColumnType, TStringBuf, TRawTypeValue> {
     TConvertValue(const TRawTypeValue& value)
         : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
     }
 
     operator TStringBuf() const {

@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = false;
@@ -15,17 +16,32 @@ namespace NKikimr::NBlobDepot {
             bool WrittenBeyondBarrier = false;
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
+            std::optional<TS3Locator> LocatorInFlight;
+            TActorId WriterActorId;
+            ui64 ConnectionInstanceOnStart;
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void OnDestroy(bool success) override {
-                if (IsInFlight) {
+                if (IsInFlight || LocatorInFlight) {
                     Y_ABORT_UNLESS(!success);
-                    RemoveBlobSeqFromInFlight();
+                    if (IsInFlight) {
+                        RemoveBlobSeqFromInFlight();
+                    }
                     NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
-                    BlobSeqId.ToProto(msg.AddItems());
+                    if (IsInFlight) {
+                        BlobSeqId.ToProto(msg.AddItems());
+                    }
+                    if (LocatorInFlight) {
+                        LocatorInFlight->ToProto(msg.AddS3Locators());
+                    }
                     Agent.Issue(std::move(msg), this, nullptr);
+                }
+
+                if (WriterActorId) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, WriterActorId, Agent.SelfId(),
+                        nullptr, 0));
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
@@ -67,6 +83,24 @@ namespace NKikimr::NBlobDepot {
             void IssuePuts() {
                 Y_ABORT_UNLESS(!PutsIssued);
 
+                auto prepare = [&] {
+                    Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
+                    auto *commitItem = CommitBlobSeq.AddItems();
+                    commitItem->SetKey(Request.Id.AsBinaryString());
+                    for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
+                        auto *p = commitItem->AddExtraBlockChecks();
+                        p->SetTabletId(tabletId);
+                        p->SetGeneration(generation);
+                    }
+                    return commitItem;
+                };
+
+                if (const auto& s3 = Agent.S3BackendSettings; s3 && s3->HasSyncMode()) {
+                    auto *commitItem = prepare();
+                    commitItem->MutableS3Locator();
+                    return IssueS3Put();
+                }
+
                 const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
                 if (it == Agent.ChannelKinds.end()) {
                     return EndWithError(NKikimrProto::ERROR, "no Data channels");
@@ -90,9 +124,7 @@ namespace NKikimr::NBlobDepot {
                 BDEV_QUERY(BDEV09, "TEvPut_new", (U.BlobId, Request.Id), (U.BufferSize, Request.Buffer.size()),
                     (U.HandleClass, Request.HandleClass));
 
-                Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
-                auto *commitItem = CommitBlobSeq.AddItems();
-                commitItem->SetKey(Request.Id.AsBinaryString());
+                auto *commitItem = prepare();
                 auto *locator = commitItem->MutableBlobLocator();
                 BlobSeqId.ToProto(locator->MutableBlobSeqId());
                 //locator->SetChecksum(Crc32c(Request.Buffer.data(), Request.Buffer.size()));
@@ -192,15 +224,23 @@ namespace NKikimr::NBlobDepot {
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
-                if (auto *p = std::get_if<TEvBlobStorage::TEvPutResult*>(&response)) {
-                    HandlePutResult(std::move(context), **p);
-                } else if (auto *p = std::get_if<TEvBlobDepot::TEvCommitBlobSeqResult*>(&response)) {
-                    HandleCommitBlobSeqResult(std::move(context), (*p)->Record);
-                } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
-                } else {
-                    Y_ABORT("unexpected response");
-                }
+                std::visit(TOverloaded{
+                    [&](TEvBlobStorage::TEvPutResult *ev) {
+                        HandlePutResult(std::move(context), *ev);
+                    },
+                    [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
+                        HandleCommitBlobSeqResult(std::move(context), ev->Record);
+                    },
+                    [&](TTabletDisconnected) {
+                        EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
+                    },
+                    [&](TEvBlobDepot::TEvPrepareWriteS3Result *ev) {
+                        HandlePrepareWriteS3Result(std::move(context), ev->Record);
+                    },
+                    [&](auto /*other*/) {
+                        Y_ABORT("unexpected response");
+                    }
+                }, response);
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
@@ -284,9 +324,79 @@ namespace NKikimr::NBlobDepot {
             ui64 GetTabletId() const override {
                 return Request.Id.TabletID();
             }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // writing directly to S3
+
+            void IssueS3Put() {
+                NKikimrBlobDepot::TEvPrepareWriteS3 query;
+                auto *item = query.AddItems();
+                item->SetKey(Request.Id.AsBinaryString());
+                for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
+                    auto *p = item->AddExtraBlockChecks();
+                    p->SetTabletId(tabletId);
+                    p->SetGeneration(generation);
+                }
+                item->SetLen(Request.Id.BlobSize());
+                Agent.Issue(query, this, nullptr);
+            }
+
+            void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
+#ifndef KIKIMR_DISABLE_S3_OPS
+                Y_ABORT_UNLESS(msg.ItemsSize() == 1);
+                const auto& item = msg.GetItems(0);
+                if (item.GetStatus() != NKikimrProto::OK) {
+                    return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+
+                auto *commitItem = CommitBlobSeq.MutableItems(0);
+                auto *locator = commitItem->MutableS3Locator();
+                locator->CopyFrom(item.GetS3Locator());
+
+                LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
+
+                TString key = TS3Locator::FromProto(*locator).MakeObjectName(Agent.S3BasePath);
+
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
+                    (QueryId, GetQueryId()), (Key, key));
+
+                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id);
+
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+#else
+                Y_UNUSED(msg);
+                Y_ABORT("S3 is not supported");
+#endif
+            }
+
+            void OnPutS3ObjectResponse(std::optional<TString>&& error) override {
+                STLOG(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, BDA53, "OnPutS3ObjectResponse",
+                    (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error));
+
+                WriterActorId = {};
+
+                if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
+                    error = "BlobDepot tablet disconnected";
+                    LocatorInFlight.reset(); // prevent discarding this locator
+                }
+
+                if (error) {
+                    ++*Agent.S3PutsError;
+
+                    // LocatorInFlight is not reset here on purpose: OnDestroy will generate spoiled blob message to the
+                    // tablet
+                    EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
+                } else {
+                    ++*Agent.S3PutsOk;
+                    *Agent.S3PutBytesOk += LocatorInFlight->Len;
+
+                    LocatorInFlight.reset();
+                    IssueCommitBlobSeq(false);
+                }
+            }
         };
 
-        return new TPutQuery(*this, std::move(ev));
+        return new TPutQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

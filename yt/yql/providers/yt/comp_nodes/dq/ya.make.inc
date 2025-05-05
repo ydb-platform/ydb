@@ -15,6 +15,7 @@ PEERDIR(
     yql/essentials/public/udf
     contrib/libs/apache/arrow
     contrib/libs/flatbuffers
+    yql/essentials/parser/pg_wrapper/interface
 )
 
 ADDINCL(

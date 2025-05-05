@@ -10,8 +10,8 @@ DECLARE_REFCOUNTED_CLASS(TSignature)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TSignatureGeneratorBase)
-DECLARE_REFCOUNTED_CLASS(TSignatureValidatorBase)
+DECLARE_REFCOUNTED_STRUCT(ISignatureGenerator)
+DECLARE_REFCOUNTED_STRUCT(ISignatureValidator)
 
 ///////////////////////////////////////////////////////////////////////////////
 

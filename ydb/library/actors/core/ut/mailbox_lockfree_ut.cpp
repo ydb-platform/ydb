@@ -72,9 +72,16 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         UNIT_ASSERT(m.IsEmpty());
     }
 
-    class TSimpleActor : public IActor {
+    class TSimpleActor : public TActor<TSimpleActor> {
     public:
-        TSimpleActor() = default;
+        TSimpleActor()
+            : TActor(&TThis::StateFunc)
+        {}
+
+    private:
+        void StateFunc(TAutoPtr<IEventHandle>&) {
+            // nothing
+        }
     };
 
     Y_UNIT_TEST(RegisterActors) {

@@ -15,12 +15,13 @@ SRCS(
     splitter.cpp
     portions.cpp
     writes_monitor.cpp
+    portion_index.cpp
 )
 
 PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/core/tx/columnshard/counters/aggregation
-    ydb/core/tx/columnshard/counters/common
+    ydb/library/signals
     ydb/core/base
     ydb/library/actors/core
 )

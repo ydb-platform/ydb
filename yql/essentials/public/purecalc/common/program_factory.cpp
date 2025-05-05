@@ -90,10 +90,12 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         CountersProvider_,
         mode,
         syntaxVersion,
+        Options_.LangVer,
         Options_.NativeYtTypeFlags,
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
-        Options_.UseWorkerPool
+        Options_.UseWorkerPool,
+        Options_.UseAntlr4
     ));
 }
 
@@ -119,10 +121,12 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         CountersProvider_,
         mode,
         syntaxVersion,
+        Options_.LangVer,
         Options_.NativeYtTypeFlags,
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
-        Options_.UseWorkerPool
+        Options_.UseWorkerPool,
+        Options_.UseAntlr4
     ));
 }
 
@@ -152,9 +156,11 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         CountersProvider_,
         mode,
         syntaxVersion,
+        Options_.LangVer,
         Options_.NativeYtTypeFlags,
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
-        Options_.UseWorkerPool
+        Options_.UseWorkerPool,
+        Options_.UseAntlr4
     ));
 }

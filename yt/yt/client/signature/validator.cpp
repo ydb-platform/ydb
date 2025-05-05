@@ -8,47 +8,36 @@ namespace NYT::NSignature {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NYson::TYsonString& TSignatureValidatorBase::GetHeader(const TSignaturePtr& signature)
-{
-    return signature->Header_;
-}
+namespace {
 
-const std::vector<std::byte>& TSignatureValidatorBase::GetSignature(const TSignaturePtr& signature)
+struct TDummySignatureValidator
+    : public ISignatureValidator
 {
-    return signature->Signature_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDummySignatureValidator
-    : public TSignatureValidatorBase
-{
-public:
-    TFuture<bool> Validate(const TSignaturePtr& signature) override
+    TFuture<bool> Validate(const TSignaturePtr& /*signature*/) const final
     {
-        YT_VERIFY(GetHeader(signature).ToString() == "DummySignature");
         return TrueFuture;
     }
 };
 
-TSignatureValidatorBasePtr CreateDummySignatureValidator()
+struct TAlwaysThrowingSignatureValidator
+    : public ISignatureValidator
 {
-    return New<TDummySignatureValidator>();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TAlwaysThrowingSignatureValidator
-    : public TSignatureValidatorBase
-{
-public:
-    TFuture<bool> Validate(const TSignaturePtr& /*signature*/) override
+    TFuture<bool> Validate(const TSignaturePtr& /*signature*/) const final
     {
         THROW_ERROR_EXCEPTION("Signature validation is unsupported");
     }
 };
 
-TSignatureValidatorBasePtr CreateAlwaysThrowingSignatureValidator()
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISignatureValidatorPtr CreateDummySignatureValidator()
+{
+    return New<TDummySignatureValidator>();
+}
+
+ISignatureValidatorPtr CreateAlwaysThrowingSignatureValidator()
 {
     return New<TAlwaysThrowingSignatureValidator>();
 }

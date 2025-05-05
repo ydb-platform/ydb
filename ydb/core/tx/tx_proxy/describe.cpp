@@ -442,7 +442,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
         }
     }
 
-    ctx.ExecutorThread.Send(ev->Forward(Source));
+    ctx.Send(ev->Forward(Source));
     return Die(ctx);
 }
 

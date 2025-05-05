@@ -32,6 +32,20 @@ TYdbSdkRetryPolicy::TPtr MakeCreateSchemaRetryPolicy() {
 
 } // namespace
 
+TControlPlaneStorageBase::TControlPlaneStorageBase(
+    const NConfig::TControlPlaneStorageConfig& config,
+    const NYql::TS3GatewayConfig& s3Config,
+    const NConfig::TCommonConfig& common,
+    const NConfig::TComputeConfig& computeConfig,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const TString& tenantName)
+    : TBase(config, s3Config, common, computeConfig)
+    , Counters(counters, *Config)
+    , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("FinalFailedStatusCode", counters->GetSubgroup("component", "QueryDiagnostic")))
+    , TenantName(tenantName)
+{
+}
+
 void TYdbControlPlaneStorageActor::Bootstrap() {
     CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
@@ -323,7 +337,7 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
     // Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
 }
 
-bool TControlPlaneStorageUtils::IsSuperUser(const TString& user)
+bool TControlPlaneStorageUtils::IsSuperUser(const TString& user) const
 {
     return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;

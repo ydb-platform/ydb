@@ -1,0 +1,10 @@
+{
+    "schema" = <"strict" = %true; "unique_keys" = %false> [
+        { "type" = "string"; "required" = %true; "name" = "a"; "group" = "g1" };
+        { "type" = "string"; "required" = %true; "name" = "b"; "group" = "g1" };
+        { "type" = "string"; "required" = %true; "name" = "c"; "group" = "g1" };
+        { "type" = "string"; "required" = %true; "name" = "d"; "group" = "g1" };
+        { "type" = "string"; "required" = %true; "name" = "e"; "group" = "g1" };
+        { "type" = "string"; "required" = %true; "name" = "f"; "group" = "g1" };
+    ];
+}

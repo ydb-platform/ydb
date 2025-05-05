@@ -1,12 +1,10 @@
-from typing import Type
-
 import pytest
 
-from multidict import MultiMapping
+from multidict import MultiDict
 
 
 def test_guard_items(
-    case_sensitive_multidict_class: Type[MultiMapping[str]],
+    case_sensitive_multidict_class: type[MultiDict[str]],
 ) -> None:
     md = case_sensitive_multidict_class({"a": "b"})
     it = iter(md.items())
@@ -16,7 +14,7 @@ def test_guard_items(
 
 
 def test_guard_keys(
-    case_sensitive_multidict_class: Type[MultiMapping[str]],
+    case_sensitive_multidict_class: type[MultiDict[str]],
 ) -> None:
     md = case_sensitive_multidict_class({"a": "b"})
     it = iter(md.keys())
@@ -26,7 +24,7 @@ def test_guard_keys(
 
 
 def test_guard_values(
-    case_sensitive_multidict_class: Type[MultiMapping[str]],
+    case_sensitive_multidict_class: type[MultiDict[str]],
 ) -> None:
     md = case_sensitive_multidict_class({"a": "b"})
     it = iter(md.values())

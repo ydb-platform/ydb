@@ -273,6 +273,10 @@ void TYqlJobBase::Init() {
         JobStats = CreateDefaultStatsRegistry();
     }
     SecureParamsProvider.Reset(new TEnvSecureParamsProvider("YT_SECURE_VAULT"));
+    LogProvider = NUdf::MakeLogProvider(
+        [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+            Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
+        }, RuntimeLogLevel);
 }
 
 void TYqlJobBase::Save(IOutputStream& s) const {
@@ -281,7 +285,9 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         FileAliases,
         UdfValidateMode,
         OptLLVM,
-        TableNames
+        TableNames,
+        RuntimeLogLevel,
+        LangVer
     );
 }
 
@@ -291,7 +297,9 @@ void TYqlJobBase::Load(IInputStream& s) {
         FileAliases,
         UdfValidateMode,
         OptLLVM,
-        TableNames
+        TableNames,
+        RuntimeLogLevel,
+        LangVer
     );
 }
 

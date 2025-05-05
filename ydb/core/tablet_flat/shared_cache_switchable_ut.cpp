@@ -37,7 +37,7 @@ namespace {
         }
 
         static void SetCacheId(TPage* page, ui32 id) {
-            Y_ABORT_UNLESS(id < (1 << 4));
+            Y_ENSURE(id < (1 << 4));
             page->CacheId = id;
         }
     };
@@ -103,9 +103,9 @@ namespace {
                 if (count != 0) result << ", ";
                 result << "{" << page->Id << " " << page->Size << "b}";
                 count++;
-                Y_ABORT_UNLESS(*Map.FindPtr(page->Id) == it);
+                Y_ENSURE(*Map.FindPtr(page->Id) == it);
             }
-            Y_ABORT_UNLESS(Map.size() == count);
+            Y_ENSURE(Map.size() == count);
             return result;
         }
     

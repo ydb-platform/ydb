@@ -67,7 +67,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
 
         const auto& info = result.GetResult().SourceIdInfo;
-        Y_ABORT_UNLESS(info.GetExplicit());
+        Y_ENSURE(info.GetExplicit());
 
         MaxSeqNo = info.GetSeqNo();
         Ready();
@@ -503,10 +503,10 @@ class TCdcChangeSenderMain
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-        Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);
+        Y_ENSURE(topic.Kind == TNavigate::KindTopic);
         TopicPathId = topic.PathId;
 
         ResolveTopic();
@@ -582,13 +582,13 @@ class TCdcChangeSenderMain
         }
 
         const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
-        Y_ABORT_UNLESS(topicAutoPartitioning || entry.PQGroupInfo->Schema);
+        Y_ENSURE(topicAutoPartitioning || entry.PQGroupInfo->Schema);
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
-        Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
+        Y_ENSURE(entry.PQGroupInfo->Partitioning);
         KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
-            Y_ABORT_UNLESS(entry.PQGroupInfo->PartitionChooser);
+            Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
@@ -619,7 +619,7 @@ class TCdcChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
-        Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
+        Y_ENSURE(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
         return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
     }
@@ -651,7 +651,7 @@ class TCdcChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
+        Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();

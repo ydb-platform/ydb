@@ -87,7 +87,7 @@ String types in UTF-8. Such strings are represented in JSON as strings with JSON
 
 ## Date {#date}
 
-Date. Uint64, unix time days.
+Date. Uint16, unix time days.
 
 * Type in JSON: `string`.
 * Value example: `18367`.
@@ -111,11 +111,59 @@ Date and time. Uint64, unix time microseconds.
 
 ## Interval {#interval}
 
-Time interval. Int64, precision to the microsecond, the interval values must not exceed 24 hours.
+Time interval. Int64, precision to the microsecond.
 
 * Type in JSON: `number`.
 * Value example: `123456`, `-123456`.
 * Sample JSON value: `123456`, `-123456`.
+
+### TzDate, TzDateTime, TzTimestamp {#tzdate}
+
+Datetime types with time zone label.
+
+* Type in JSON: `string`.
+* Value is represented as string with the date/time value and the time zone label separated by a comma.
+* Sample JSON value: `"2023-06-29,Europe/Moscow"`, `""2023-06-29T17:14:11,Europe/Moscow""`, `""2023-06-29T17:15:36.645735,Europe/Moscow""` for TzDate, TzDateTime and TzTimestamp respectively..
+
+## Date32 {#date32}
+
+Date. Int32, unix time days.
+
+* Type in JSON: `string`.
+* Value example: `"-8722"`.
+* Sample JSON value: `1946-02-14`.
+
+## Datetime64 {#datetime64}
+
+Date and time. Int64, unix time seconds.
+
+* Type in JSON: `string`.
+* Value example: `"-753511371"`.
+* Sample JSON value: `1946-02-14T19:17:09Z`.
+
+## Timestamp64 {#timestamp64}
+
+Date and time. Int64, unix time microseconds.
+
+* Type in JSON: `string`.
+* Value example: `"-753511370765432"`.
+* Sample JSON value: `1946-02-14T19:17:09.234568Z`.
+
+## Interval64 {#interval64}
+
+Time interval. Int64, precision to the microsecond.
+
+* Type in JSON: `number`.
+* Value example: `"-9223339708799000000"`, `"9223339708799000000"`.
+* Sample JSON value: `-9223339708799000000`, `9223339708799000000`.
+
+### TzDate32, TzDateTime64, TzTimestamp64 {#tzdate32}
+
+Datetime types with time zone label.
+
+* Type in JSON: `string`.
+* Value is represented as string with the date/time value and the time zone label separated by a comma.
+* Sample JSON value: `"1946-02-14,Europe/Moscow"`, `"1946-02-14T19:17:09,Europe/Moscow"`, `"1946-02-14T19:17:09.234568,Europe/Moscow"` for TzDate32, TzDateTime64 и TzTimestamp64 respectively.
 
 ## Optional {#optional}
 

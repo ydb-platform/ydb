@@ -4,6 +4,7 @@
 #include "tablet_flat_executor.h"
 #include "flat_sausagecache.h"
 
+#include <util/generic/intrlist.h>
 #include <util/generic/ptr.h>
 #include <util/system/hp_timer.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -12,7 +13,17 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TSeat {
+    enum class ESeatState {
+        None,
+        Pending,
+        Active,
+        ActiveLow,
+        Postponed,
+        Waiting,
+        Done,
+    };
+
+    struct TSeat : public TIntrusiveListItem<TSeat> {
         using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
 
         TSeat(const TSeat&) = delete;
@@ -20,42 +31,46 @@ namespace NTabletFlatExecutor {
         TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
             : UniqID(uniqId)
             , Self(self)
+            , TxType(Self->GetTxType())
         {
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out << "Tx{" << UniqID << ", ";
             Self->Describe(out);
             out << "}";
         }
 
-        void Complete(const TActorContext& ctx, bool isRW) noexcept;
+        bool IsTerminated() const {
+            return TerminationReason != ETerminationReason::None;
+        }
 
-        void Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept;
+        void Complete(const TActorContext& ctx, bool isRW);
 
-        void StartEnqueuedSpan() noexcept {
+        void StartEnqueuedSpan() {
             WaitingSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
         }
 
-        void FinishEnqueuedSpan() noexcept {
+        void FinishEnqueuedSpan() {
             WaitingSpan.EndOk();
         }
 
-        void CreatePendingSpan() noexcept {
+        void CreatePendingSpan() {
             WaitingSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Pending");
         }
 
-        void FinishPendingSpan() noexcept {
+        void FinishPendingSpan() {
             WaitingSpan.EndOk();
         }
 
-        NWilson::TTraceId GetTxTraceId() const noexcept {
+        NWilson::TTraceId GetTxTraceId() const {
             return Self->TxSpan.GetTraceId();
         }
 
-        const ui64 UniqID = Max<ui64>();
+        const ui64 UniqID;
         const TAutoPtr<ITransaction> Self;
+        const TTxType TxType;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
         TPinned Pinned;
@@ -73,6 +88,10 @@ namespace NTabletFlatExecutor {
         ui64 CurrentMemoryLimit = 0;
         ui32 NotEnoughMemoryCount = 0;
         ui64 TaskId = 0;
+
+        ESeatState State = ESeatState::Done;
+        bool LowPriority = false;
+        bool Cancelled = false;
 
         TAutoPtr<TMemoryToken> AttachedMemory;
         TIntrusivePtr<TMemoryGCToken> CapturedMemory;

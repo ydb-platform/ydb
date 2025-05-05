@@ -141,7 +141,18 @@ def validate_test(unit, kw):
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
         if not project_path.startswith(
-            ("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")
+            (
+                "contrib",
+                "mail",
+                "maps",
+                "mobile/geo/maps",
+                "tools/idl",
+                "metrika",
+                "devtools",
+                "mds",
+                "yandex_io",
+                "smart_devices",
+            )
         ):
             errors.append("BOOSTTEST is not allowed here")
 
@@ -257,8 +268,11 @@ def validate_test(unit, kw):
         if in_autocheck and size == consts.TestSize.Large:
             errors.append("LARGE test must have ya:fat tag")
 
-    if consts.YaTestTags.Privileged in tags and 'container' not in requirements:
-        errors.append("Only tests with 'container' requirement can have 'ya:privileged' tag")
+    if 'container' in requirements and 'porto_layers' in requirements:
+        errors.append("Only one of 'container', 'porto_layers' can be set, not both")
+
+    if consts.YaTestTags.Privileged in tags and 'container' not in requirements and 'porto_layers' not in requirements:
+        errors.append("Only tests with 'container' or 'porto_layers' requirement can have 'ya:privileged' tag")
 
     if size not in size_timeout:
         errors.append(
@@ -862,6 +876,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestEnv.value,
         df.TestData.java_test,
         df.ForkMode.test_fork_mode,
+        df.TestExperimentalFork.value,
         df.SplitFactor.from_unit,
         df.CustomDependencies.test_depends_only,
         df.Tag.from_macro_args_and_unit,
@@ -1021,7 +1036,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "LINTER": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
-        "CUSTOM_CONFIG": 1,
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
@@ -1069,9 +1083,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
-        "CUSTOM_CONFIG": 1,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

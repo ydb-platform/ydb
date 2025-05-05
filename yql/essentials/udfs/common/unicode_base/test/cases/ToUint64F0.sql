@@ -1,3 +1,6 @@
+/* syntax version 1 */
 SELECT
-    Unicode::ToUint64("hell");
+    value as value,
+    Unicode::ToUint64(value),
+FROM Input
 

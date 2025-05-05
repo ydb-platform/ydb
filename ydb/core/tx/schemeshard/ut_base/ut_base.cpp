@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             TableDescription {
               Name: "src2"
               Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value0" Type: "String" }
               Columns { Name: "value1" Type: "Utf8" }
               KeyColumnNames: ["key"]
             }
@@ -1110,6 +1110,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               KeyColumnNames: ["value0"]
               DataColumnNames: ["value1"]
             }
+            IndexDescription {
+              Name: "UserDefinedVectorIndexByValue0CoveringValue1"
+              Type: EIndexTypeGlobalVectorKmeansTree
+              KeyColumnNames: ["value0"]
+              DataColumnNames: ["value1"]
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_INT8
+                    vector_dimension: 2
+                  }
+                  clusters: 3
+                  levels: 5
+                }
+              }
+            }
         )");
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
@@ -1118,12 +1135,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         env.TestWaitNotification(runtime, {txId, txId-1 , txId-2});
 
+        static constexpr ui64 PathsInsideWithoutIndexes = 2;
+        static constexpr ui64 PathsInside = PathsInsideWithoutIndexes + 2 + 2 + 2 + 3;
+        static constexpr ui64 ShardsInsideWithoutIndexes = 2;
+        static constexpr ui64 ShardsInside = ShardsInsideWithoutIndexes + 1 + 1 + 1 + 2;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(8),
                             NLs::Finished,
                             NLs::PathExist,
-                            NLs::PathsInsideDomain(9),
-                            NLs::ShardsInsideDomain(5),
+                            NLs::PathsInsideDomain(1 + 1 * PathsInside),
+                            NLs::ShardsInsideDomain(1 * ShardsInside),
                             NLs::ChildrenCount(2)
                            });
 
@@ -1153,8 +1175,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                NLs::PathExist,
                                                NLs::Finished,
                                                NLs::PathExist,
-                                               NLs::PathsInsideDomain(17),
-                                               NLs::ShardsInsideDomain(10)});
+                                               NLs::PathsInsideDomain(1 + 2 * PathsInside),
+                                               NLs::ShardsInsideDomain(2 * ShardsInside)});
 
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
                        CopyTableDescriptions {
@@ -1172,8 +1194,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(18),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(25),
-                            NLs::ShardsInsideDomain(15),
+                            NLs::PathsInsideDomain(1 + 3 * PathsInside),
+                            NLs::ShardsInsideDomain(3 * ShardsInside),
                             NLs::ChildrenCount(6)
                            });
 
@@ -1212,6 +1234,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::IndexKeys({"value0"}),
                             NLs::IndexDataColumns({"value1"})});
 
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedVectorIndexByValue0CoveringValue1"),
+                           {NLs::Finished,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexDataColumns({"value1"})});
+
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
                            {NLs::Finished});
 
@@ -1227,7 +1256,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(3),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::IndexesCount(3),
+                            NLs::IndexesCount(4),
                             NLs::CreatedAt(txId)
                            });
 
@@ -1248,8 +1277,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(22),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(27),
-                            NLs::ShardsInsideDomain(17),
+                            NLs::PathsInsideDomain(1 + 3 * PathsInside + PathsInsideWithoutIndexes),
+                            NLs::ShardsInsideDomain(3 * ShardsInside + ShardsInsideWithoutIndexes),
                             NLs::ChildrenCount(8)
                            });
 
@@ -2076,11 +2105,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Columns { Name: "key18"   Type: "Uint64" }
               Columns { Name: "key19"   Type: "Uint64" }
               Columns { Name: "key20"   Type: "Uint64" }
+              Columns { Name: "key21"   Type: "Uint64" }
+              Columns { Name: "key22"   Type: "Uint64" }
+              Columns { Name: "key23"   Type: "Uint64" }
+              Columns { Name: "key24"   Type: "Uint64" }
+              Columns { Name: "key25"   Type: "Uint64" }
+              Columns { Name: "key26"   Type: "Uint64" }
+              Columns { Name: "key27"   Type: "Uint64" }
+              Columns { Name: "key28"   Type: "Uint64" }
+              Columns { Name: "key29"   Type: "Uint64" }
+              Columns { Name: "key30"   Type: "Uint64" }
 
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
               KeyColumnNames: ["key1", "key2", "key3", "key4", "key5", "key6", "key7", "key8", "key9", "key10",
-                               "key11", "key12", "key13", "key14", "key15", "key16", "key17", "key18", "key19", "key20"]
+                               "key11", "key12", "key13", "key14", "key15", "key16", "key17", "key18", "key19", "key20",
+                               "key21", "key22", "key23", "key24", "key25", "key26", "key27", "key28", "key29", "key30"]
             }
             IndexDescription {
               Name: "UserDefinedIndexByValue0"
@@ -6617,6 +6657,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup4", true), {
             NLs::CheckPartCount("PQGroup4", 2, 1, 2, 2),
         });
+
+        // decimal type
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "PQGroup5"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig { LifetimeSeconds: 10 }
+                PartitionKeySchema { Name: "key1" TypeId: 4865 TypeInfo { DecimalPrecision: 35 DecimalScale: 10 } }
+            }
+            PartitionBoundaries {
+                Tuple { Optional { Low128: 0 Hi128: 0 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup5", true), {
+            NLs::CheckPartCount("PQGroup5", 2, 1, 2, 2),
+        });        
     }
 
     Y_UNIT_TEST(AlterPersQueueGroupWithKeySchema) {
@@ -9158,7 +9216,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                       "PartitionCount: 40 ");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(40)});
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(40),
+                           [](const NKikimrScheme::TEvDescribeSchemeResult& result){
+                                const auto& desc = result.GetPathDescription().GetSolomonDescription();
+                                const auto& boundChannels = desc.GetBoundChannels();
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels.size(), 4);
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[0].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[1].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[2].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[3].GetStoragePoolName(), "pool-1");
+                           }});
 
         // Already exists
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
@@ -9259,7 +9326,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)});
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4),
+                           [](const NKikimrScheme::TEvDescribeSchemeResult& result){
+                                const auto& desc = result.GetPathDescription().GetSolomonDescription();
+                                const auto& boundChannels = desc.GetBoundChannels();
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels.size(), 4);
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[0].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[1].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[2].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[3].GetStoragePoolName(), "pool-1");
+                           }});
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon");
         env.TestWaitNotification(runtime, txId);
@@ -9370,6 +9446,134 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(UpdateChannelsBindingSolomonShouldUpdate) {
         UpdateChannelsBindingSolomon(true);
+    }
+
+    void UpdateChannelsBindingSolomonStorageConfig() {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));
+        ui64 txId = 100;
+
+        auto check = [&](const TString& path, ui64 shards, const THashMap<TString, ui32>& expectedChannels) {
+            NKikimrSchemeOp::TDescribeOptions opts;
+            opts.SetReturnChannelsBinding(true);
+
+            auto makeChannels = [](const auto& boundsChannels) {
+                THashMap<TString, ui32> channels;
+                for (const auto& channel : boundsChannels) {
+                    channels[channel.GetStoragePoolName()]++;
+                }
+                return channels;
+            };
+
+            TestDescribeResult(DescribePath(runtime, path, opts), {
+                NLs::Finished,
+                NLs::ShardsInsideDomain(shards),
+                [&expectedChannels, &makeChannels, &shards] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& desc = record.GetPathDescription().GetSolomonDescription();
+
+                    UNIT_ASSERT_VALUES_EQUAL(shards, desc.PartitionsSize());
+
+                    for (size_t i = 0; i < desc.PartitionsSize(); ++i) {
+                        const auto& partition = desc.GetPartitions(i);
+
+                        THashMap<TString, ui32> channels = makeChannels(partition.GetBoundChannels());
+                        UNIT_ASSERT_VALUES_EQUAL(expectedChannels.size(), channels.size());
+
+                        for (const auto& [name, count] : expectedChannels) {
+                            UNIT_ASSERT_C(channels.contains(name), "Cannot find channel: " << name);
+                            UNIT_ASSERT_VALUES_EQUAL(channels.at(name), count);
+                        }
+                    }
+
+                    THashMap<TString, ui32> volumeChannels = makeChannels(desc.GetBoundChannels());
+                    UNIT_ASSERT_VALUES_EQUAL(expectedChannels.size(), volumeChannels.size());
+
+                    for (const auto& [name, count] : expectedChannels) {
+                        UNIT_ASSERT_C(volumeChannels.contains(name), "Cannot find channel: " << name);
+                        UNIT_ASSERT_VALUES_EQUAL(volumeChannels.at(name), count);
+                    }
+                }
+            });
+        };
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 1
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 1, {{{"pool-1", 3}}});
+        // case 1: empty alter
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // case 2: add partition
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 2    
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 2, {{"pool-1", 3}});
+
+        // case 3: add partition & update channels binding
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 3
+            UpdateChannelsBinding: true
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 3, {{"pool-2", 3}});
+    }
+
+    Y_UNIT_TEST(UpdateChannelsBindingSolomonStorageConfig) {
+        UpdateChannelsBindingSolomonStorageConfig();
     }
 
     Y_UNIT_TEST(RejectAlterSolomon) { //+
@@ -11578,6 +11782,85 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::IsTable,
                 NLs::Finished,
             });
+        }
+    }
+
+    Y_UNIT_TEST(NewOwnerOnDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
+
+        ui64 txId = 100;
+
+        TString newOwner = "user1";
+
+        TApplyIfUnit applyIfUnit;
+        applyIfUnit.PathTypes = {NKikimrSchemeOp::EPathTypeSubDomain, NKikimrSchemeOp::EPathTypeExtSubDomain};
+        TApplyIf applyIf = {applyIfUnit};
+
+        auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& self = record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
+        };
+
+        {
+            TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "Subdomain"
+            )");
+
+            {
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Subdomain"), {checkOwner});
+            }
+        }
+
+        {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                Name: "Extsubdomain"
+            )");
+
+            {
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain"), {checkOwner});
+            }
+        }
+
+        { // last case didnt create external subdomain
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                Name: "Extsubdomain2"
+            )");
+
+            TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "Extsubdomain2"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )");
+
+            {
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain2", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain2"), {checkOwner});
+            }
+        }
+
+        {
+            TestCreateTable(runtime, txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+
+            {
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusPreconditionFailed, applyIf);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusSuccess);
+            }
         }
     }
 }

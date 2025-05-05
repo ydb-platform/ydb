@@ -1,6 +1,18 @@
 #include "utils.h"
 
+#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
+
 namespace NFq {
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) const {
+    const auto& request = ev->Get()->Request;
+    return ValidateWriteResultData(
+        request.result_id().value(),
+        request.result_set(),
+        NProtoInterop::CastFromProto(request.deadline()),
+        Config->ResultSetsTtl
+    );
+}
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
 {
@@ -17,11 +29,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const Ydb::ResultSet& resultSet = request.result_set();
     const int byteSize = resultSet.ByteSize();
 
-
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
 
-    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config->ResultSetsTtl);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

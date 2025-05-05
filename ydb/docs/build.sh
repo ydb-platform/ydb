@@ -34,12 +34,12 @@ check_dependency "python3" "Python3" "https://www.python.org/downloads/"
 echo "Starting YFM builder"
 echo "Output directory: $DIR"
 
-if ! yfm -i . -o $DIR --allowHTML  --apply-presets; then
+if ! yfm -s -i . -o $DIR --allowHTML  --apply-presets; then
   echo
-  echo "================================"
-  echo "YFM build completed with ERRORS!"
-  echo "================================"
-  echo "It may be necessary to use the latest version of npm. Run the command `nvm use v22.9.0` to update it."
+  echo '================================'
+  echo 'YFM build completed with ERRORS!'
+  echo '================================'
+  echo 'It may be necessary to use the latest version of npm. Run the commands `nvm install v23.7.0` and `nvm use v23.7.0` to update it.'
   exit 1
 fi
 

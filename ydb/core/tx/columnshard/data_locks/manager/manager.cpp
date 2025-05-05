@@ -1,4 +1,5 @@
 #include "manager.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NDataLocks {
@@ -17,28 +18,12 @@ void TManager::UnregisterLock(const TString& processId) {
 
 std::optional<TString> TManager::IsLocked(
     const TPortionInfo& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(portion, lockCategory, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
+    return IsLockedImpl(portion, lockCategory, excludedLocks);
 }
 
 std::optional<TString> TManager::IsLocked(
     const TGranuleMeta& granule, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks) const {
-    for (auto&& i : ProcessLocks) {
-        if (excludedLocks.contains(i.first)) {
-            continue;
-        }
-        if (auto lockName = i.second->IsLocked(granule, lockCategory, excludedLocks)) {
-            return lockName;
-        }
-    }
-    return {};
+    return IsLockedImpl(granule, lockCategory, excludedLocks);
 }
 
 std::optional<TString> TManager::IsLocked(const std::shared_ptr<const TPortionInfo>& portion, const ELockCategory lockCategory,

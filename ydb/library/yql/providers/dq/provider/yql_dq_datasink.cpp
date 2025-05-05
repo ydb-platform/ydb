@@ -32,12 +32,9 @@ public:
     TDqDataProviderSink(const TDqState::TPtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
-        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings); })
+        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(state->TypeCtx, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
-        , TypeAnnotationTransformer([state] () {
-            return CreateDqsDataSinkTypeAnnotationTransformer(
-                state->TypeCtx, state->Settings->IsDqReplicateEnabled(*state->TypeCtx));
-        })
+        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
         , ConstraintsTransformer([] () { return CreateDqDataSinkConstraintTransformer(); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }

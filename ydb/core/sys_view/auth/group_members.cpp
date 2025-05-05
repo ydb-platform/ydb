@@ -20,8 +20,9 @@ public:
     using TAuthBase = TAuthScanBase<TGroupMembersScan>;
 
     TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns)
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), true, false)
     {
     }
 
@@ -30,29 +31,38 @@ protected:
         Y_ABORT_UNLESS(entry.Status == TNavigate::EStatus::Ok);
         Y_ABORT_UNLESS(CanonizePath(entry.Path) == TBase::TenantName);
         
-        TVector<TCell> cells(::Reserve(Columns.size()));
-
-        // TODO: add rows according to request's sender user rights
-
+        TVector<std::pair<const TDomainInfo::TGroup*, const TString*>> memberships;
         for (const auto& group : entry.DomainInfo->Groups) {
             for (const auto& member : group.Members) {
-                for (auto& column : Columns) {
-                    switch (column.Tag) {
-                    case Schema::AuthGroupMembers::GroupSid::ColumnId:
-                        cells.push_back(TCell(group.Sid.data(), group.Sid.size()));
-                        break;
-                    case Schema::AuthGroupMembers::MemberSid::ColumnId:
-                        cells.push_back(TCell(member.data(), member.size()));
-                        break;
-                    default:
-                        cells.emplace_back();
-                    }
+                if (StringKeyIsInTableRange({group.Sid, member})) {
+                    memberships.emplace_back(&group, &member);
                 }
-
-                TArrayRef<const TCell> ref(cells);
-                batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
-                cells.clear();
             }
+        }
+        SortBatch(memberships, [](const auto& left, const auto& right) {
+            return left.first->Sid < right.first->Sid ||
+                left.first->Sid == right.first->Sid && *left.second < *right.second;
+        });
+
+        TVector<TCell> cells(::Reserve(Columns.size()));
+
+        for (const auto& [group, member] : memberships) {
+            for (auto& column : Columns) {
+                switch (column.Tag) {
+                case Schema::AuthGroupMembers::GroupSid::ColumnId:
+                    cells.push_back(TCell(group->Sid.data(), group->Sid.size()));
+                    break;
+                case Schema::AuthGroupMembers::MemberSid::ColumnId:
+                    cells.push_back(TCell(member->data(), member->size()));
+                    break;
+                default:
+                    cells.emplace_back();
+                }
+            }
+
+            TArrayRef<const TCell> ref(cells);
+            batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
+            cells.clear();
         }
 
         batch.Finished = true;
@@ -60,9 +70,10 @@ protected:
 };
 
 THolder<NActors::IActor> CreateGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TGroupMembersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
 }
 
 }

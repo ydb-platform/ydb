@@ -968,6 +968,19 @@ TCheckFunc RetentionPeriod(const TDuration& value) {
     };
 }
 
+TCheckFunc ConsumerExist(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        bool isExist = false;
+        for (const auto& consumer : record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers()) {
+            if (consumer.GetName() == name) {
+                isExist = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(isExist);
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }
@@ -1248,7 +1261,7 @@ TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
     return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         std::optional<TSet<TString>> actualMembers;
         for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
-            if (sid.GetName() == group) {
+            if (sid.GetName() == group && sid.GetType() == NLoginProto::ESidType::GROUP) {
                 actualMembers.emplace();
                 for (const auto& member : sid.GetMembers()) {
                     actualMembers->insert(member);
@@ -1257,6 +1270,16 @@ TCheckFunc HasGroup(const TString& group, const TSet<TString> members) {
         }
         UNIT_ASSERT_C(actualMembers.has_value(), "Group " + group + " not found");
         UNIT_ASSERT_VALUES_EQUAL(members, actualMembers.value());
+    };
+}
+
+TCheckFunc HasNoGroup(const TString& group) {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        for (const auto& sid : record.GetPathDescription().GetDomainDescription().GetSecurityState().GetSids()) {
+            if (sid.GetName() == group && sid.GetType() == NLoginProto::ESidType::GROUP) {
+                UNIT_FAIL("Group " + group + " exists");
+            }
+        }
     };
 }
 
@@ -1393,7 +1416,7 @@ TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
     };
 }
 
-template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
+template TCheckFunc SplitBoundaries<ui64>(TVector<ui64>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

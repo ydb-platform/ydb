@@ -799,7 +799,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineStreamPerfTest) {
         Cerr << "Runtime is " << t2 - t1 << " vs C++ " << cppTime << Endl;
     }
 }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 3u
+
 Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
     Y_UNIT_TEST_LLVM(TestFullCombineWithOptOut) {
         TSetup<LLVM> setup(GetNodeFactory());
@@ -1530,6 +1530,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowPerfTest) {
         Cerr << "Runtime is " << t2 - t1 << " vs C++ " << cppTime << Endl;
     }
 }
-#endif
+
 } // NMiniKQL
 } // NKikimr

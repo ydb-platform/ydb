@@ -257,6 +257,10 @@ def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 
 
+def report_monitoring_info():
+    return os.getenv('YDB_REPORT_MONITORING_INFO') == 'true'
+
+
 def generic_connector_config():
     endpoint = os.getenv("FQ_CONNECTOR_ENDPOINT")
     if not endpoint:
@@ -352,6 +356,12 @@ def deploy(arguments):
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
 
+    enabled_grpc_services = arguments.enabled_grpc_services.copy()  # type: typing.List[str]
+    if 'YDB_GRPC_SERVICES' in os.environ:
+        services = os.environ['YDB_GRPC_SERVICES'].split(",")
+        for service in services:
+            enabled_grpc_services.append(service)
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
@@ -371,7 +381,7 @@ def deploy(arguments):
         use_log_files=not arguments.dont_use_log_files,
         default_users=default_users(),
         extra_feature_flags=enable_feature_flags,
-        extra_grpc_services=arguments.enabled_grpc_services,
+        extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
         **optionals
     )
@@ -410,7 +420,8 @@ def deploy(arguments):
     recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
-    recipe.write_mon_port(mon_port)
+    if report_monitoring_info():
+        recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database

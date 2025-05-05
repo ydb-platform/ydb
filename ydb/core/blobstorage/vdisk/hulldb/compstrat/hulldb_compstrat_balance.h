@@ -129,7 +129,7 @@ namespace NKikimr {
                         return i + 1;
                     }
                 }
-                Y_ABORT("free level not found");
+                Y_ABORT_S(HullCtx->VCtx->VDiskLogPrefix << "free level not found");
                 return -1;
             }
 
@@ -148,7 +148,7 @@ namespace NKikimr {
                     added++;
                     it.Next();
                 }
-                Y_ABORT_UNLESS(added > 0);
+                Y_VERIFY_S(added > 0, HullCtx->VCtx->VDiskLogPrefix);
             }
 
             // check and run full compaction if required
@@ -239,7 +239,7 @@ namespace NKikimr {
                                 ToString().data()));
                 }
 
-                Y_ABORT_UNLESS(freeLevels <= totalPsl);
+                Y_VERIFY_S(freeLevels <= totalPsl, HullCtx->VCtx->VDiskLogPrefix);
                 double rank = 0.0;
                 if (freeLevels == totalPsl) {
                     rank = 0.0;
@@ -309,7 +309,7 @@ namespace NKikimr {
                     }
                     added++;
                 }
-                Y_ABORT_UNLESS(added);
+                Y_VERIFY_S(added, HullCtx->VCtx->VDiskLogPrefix);
             }
 
             void Compact() {
@@ -417,12 +417,12 @@ namespace NKikimr {
                     // srcIt is equal to srcSegs.begin() and it's fine
                 }
 
-                Y_ABORT_UNLESS(srcIt != srcSegs.end());
+                Y_VERIFY_S(srcIt != srcSegs.end(), HullCtx->VCtx->VDiskLogPrefix);
                 CompactSst(srcLevel, srcIt);
             }
 
             void CompactSst(ui32 srcLevel, typename TSegments::const_iterator srcIt) {
-                Y_ABORT_UNLESS(srcLevel > 0);
+                Y_VERIFY_S(srcLevel > 0, HullCtx->VCtx->VDiskLogPrefix);
                 // srcIt points to the sst to compact
                 TKey firstKeyToCover = (*srcIt)->FirstKey();
                 TKey lastKeyToCover = (*srcIt)->LastKey();
@@ -453,7 +453,7 @@ namespace NKikimr {
                     const TSortedLevel &srcLevelData = SliceSnap.GetLevelXRef(srcLevelArrIdx);
                     if (!srcLevelData.Empty()) {
                         const TSegments &srcSegs = srcLevelData.Segs->Segments;
-                        Y_ABORT_UNLESS(!srcSegs.empty());
+                        Y_VERIFY_S(!srcSegs.empty(), HullCtx->VCtx->VDiskLogPrefix);
                         for (typename TSegments::const_iterator it = srcSegs.begin(); it != srcSegs.end(); ++it) {
                             if ((*it)->GetLastLsn() <= attrs.FullCompactionLsn) {
                                 Sublog.Log() << "TBalanceLevelX::FullCompact: srcLevel# " << srcLevel
@@ -474,7 +474,7 @@ namespace NKikimr {
                     const TSortedLevel &srcLevelData = SliceSnap.GetLevelXRef(srcLevelArrIdx);
                     if (!srcLevelData.Empty()) {
                         const TSegments &srcSegs = srcLevelData.Segs->Segments;
-                        Y_ABORT_UNLESS(!srcSegs.empty());
+                        Y_VERIFY_S(!srcSegs.empty(), HullCtx->VCtx->VDiskLogPrefix);
                         for (typename TSegments::const_iterator it = srcSegs.begin(); it != srcSegs.end(); ++it) {
                             // for the last level we add a condition that sst is subject for compaction if
                             // it was built before full compaction was started

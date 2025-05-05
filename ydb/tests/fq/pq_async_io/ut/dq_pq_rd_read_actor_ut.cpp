@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/tests/fq/pq_async_io/mock_pq_gateway.h>
 
 #include <thread>
 
@@ -47,6 +48,7 @@ struct TFixture : public TPqIoTestFixture {
             const THashMap<TString, TString> taskParams { {"pq", serializedParams} };
 
             NYql::NPq::NProto::TDqPqTopicSource copySettings = settings;
+            TPqIoTestFixture setup;
             auto [dqSource, dqSourceAsActor] = CreateDqPqRdReadActor(
                 actor.TypeEnv,
                 std::move(copySettings),
@@ -56,11 +58,14 @@ struct TFixture : public TPqIoTestFixture {
                 0,
                 secureParams,
                 taskParams,
+                setup.Driver,
+                {},
                 actor.SelfId(),         // computeActorId
                 LocalRowDispatcherId,
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                freeSpace
+                freeSpace,
+                CreateMockPqGateway(*CaSetup->Runtime, {}) // XXX Is this correct XXX
                 );
 
             actor.InitAsyncInput(dqSource, dqSourceAsActor);

@@ -5,9 +5,9 @@
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 
 #include <util/generic/yexception.h>
 #include <util/folder/iterator.h>
@@ -48,6 +48,7 @@ TYqlRunTool::TYqlRunTool()
 {
     GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
+    GetRunOptions().CustomTests = true;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption('t', "table", "Table mapping").RequiredArgument("table@file")
@@ -90,8 +91,15 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
-        opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&GetRunOptions().TestSqlFormat);
-        opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
+    });
+
+    GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
+        Y_UNUSED(res);
+
+        if (GetRunOptions().GatewaysConfig) {
+            auto ytConfig = GetRunOptions().GatewaysConfig->GetYt();
+            FillClusterMapping(ytConfig, TString{YtProviderName});
+        }
     });
 
     GetRunOptions().SetSupportedGateways({TString{YtProviderName}});
@@ -99,14 +107,21 @@ TYqlRunTool::TYqlRunTool()
     AddClusterMapping(TString{"plato"}, TString{YtProviderName});
 
     AddProviderFactory([this]() -> NYql::TDataProviderInitializer {
-        auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
-        auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices);
-        return GetYtNativeDataProviderInitializer(ytNativeGateway, MakeSimpleCBOOptimizerFactory(), {});
+        auto ytNativeGateway = CreateYtGateway();
+        auto optimizerFactory = CreateCboFactory();
+        return GetYtNativeDataProviderInitializer(ytNativeGateway, optimizerFactory, {});
     });
 
     SetPeepholePipelineConfigurator(&PEEPHOLE_CONFIG_INSTANCE);
-
 }
 
+IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {
+    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
+    return CreateYtFileGateway(yqlNativeServices);
+}
+
+IOptimizerFactory::TPtr TYqlRunTool::CreateCboFactory() {
+    return MakeSimpleCBOOptimizerFactory();
+}
 
 } // NYql

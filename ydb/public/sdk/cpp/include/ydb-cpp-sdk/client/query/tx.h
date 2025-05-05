@@ -1,12 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/stream/output.h>
 
-#include <optional>
-
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
@@ -85,35 +83,4 @@ private:
     ETransactionMode Mode_;
 };
 
-struct TTxControl {
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const std::string& txId) {
-        return TTxControl(txId);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    static TTxControl NoTx() {
-        return TTxControl();
-    }
-
-    const std::optional<std::string> TxId_;
-    const std::optional<TTxSettings> TxSettings_;
-    FLUENT_SETTING_FLAG(CommitTx);
-
-    bool HasTx() const { return TxId_.has_value() || TxSettings_.has_value(); }
-
-private:
-    TTxControl() {}
-
-    TTxControl(const std::string& txId)
-        : TxId_(txId) {}
-
-    TTxControl(const TTxSettings& txSettings)
-        : TxSettings_(txSettings) {}
-};
-
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

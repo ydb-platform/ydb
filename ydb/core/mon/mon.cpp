@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
 
@@ -15,6 +16,7 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/core/base/monitoring_provider.h>
+#include <ydb/core/util/wildcard.h>
 
 #include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
@@ -402,7 +404,19 @@ public:
             type = "application/json";
         }
         NHttp::THeaders headers(request->Headers);
-        TString origin = TString(headers["Origin"]);
+        TString allowOrigin = AppData()->Mon->GetConfig().AllowOrigin;
+        TString requestOrigin = TString(headers["Origin"]);
+        TString origin;
+        if (allowOrigin) {
+            if (IsMatchesWildcards(requestOrigin, allowOrigin)) {
+                origin = requestOrigin;
+            } else {
+                Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseBadRequest("Invalid CORS origin")));
+                return PassAway();
+            }
+        } else if (requestOrigin) {
+            origin = requestOrigin;
+        }
         if (origin.empty()) {
             origin = "*";
         }
@@ -538,16 +552,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : ActorMonPage->AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1169,16 +1174,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

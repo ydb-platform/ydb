@@ -256,7 +256,7 @@ public:
         const auto factory = ctx.GetFactory();
         const auto builder = ctx.GetBuilder();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::SkipList));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::SkipList>());
 
         const auto list = GetNodeValue(List, ctx, block);
         const auto cnt = GetNodeValue(Count, ctx, block);

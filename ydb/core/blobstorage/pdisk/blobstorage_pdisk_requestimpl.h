@@ -317,7 +317,7 @@ public:
     }
 
     virtual ~TLogWrite() {
-        Y_DEBUG_ABORT_UNLESS(Replied);
+        Y_VERIFY_DEBUG(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
@@ -333,8 +333,8 @@ public:
     }
 
     void AddToBatch(TLogWrite *req) {
-        Y_ABORT_UNLESS(BatchTail->NextInBatch == nullptr);
-        Y_ABORT_UNLESS(req->NextInBatch == nullptr);
+        Y_VERIFY(BatchTail->NextInBatch == nullptr);
+        Y_VERIFY(req->NextInBatch == nullptr);
         BatchTail->NextInBatch = req;
         BatchTail = req;
     }
@@ -386,6 +386,7 @@ public:
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
+    bool ChunkEncrypted = true;
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -414,11 +415,11 @@ public:
     }
 
     virtual ~TChunkRead() {
-        Y_ABORT_UNLESS(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
+        Y_VERIFY(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
         // Set DoubleFreeCanary to 0 and make sure compiler will not eliminate that action
         SecureWipeBuffer((ui8*)&DoubleFreeCanary, sizeof(DoubleFreeCanary));
-        Y_ABORT_UNLESS(!SelfPointer);
-        Y_ABORT_UNLESS(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
+        Y_VERIFY(!SelfPointer);
+        Y_VERIFY(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
             " CurrentSector# %" PRIu32 " RemainingSize# %" PRIu32,
             (ui32)ChunkIdx, (ui32)Offset, (ui32)Size, (ui32)CurrentSector, (ui32)RemainingSize);
     }
@@ -468,7 +469,7 @@ public:
     TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, bool isTheLastPiece, NWilson::TSpan span);
 
     virtual ~TChunkReadPiece() {
-        Y_ABORT_UNLESS(!SelfPointer);
+        Y_VERIFY(!SelfPointer);
     }
 
     void OnSuccessfulDestroy(TActorSystem* actorSystem);
@@ -486,6 +487,7 @@ public:
 };
 
 
+class TCompletionChunkWrite;
 //
 // TChunkWrite
 //
@@ -498,6 +500,7 @@ public:
     bool DoFlush;
     bool IsSeqWrite;
     bool IsReplied = false;
+    bool ChunkEncrypted = true;
 
     ui32 TotalSize;
     ui32 CurrentPart = 0;
@@ -510,25 +513,9 @@ public:
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    THolder<NPDisk::TCompletionAction> Completion;
+    THolder<TCompletionChunkWrite> Completion;
 
-    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
-        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
-        , ChunkIdx(ev.ChunkIdx)
-        , Offset(ev.Offset)
-        , PartsPtr(ev.PartsPtr)
-        , Cookie(ev.Cookie)
-        , DoFlush(ev.DoFlush)
-        , IsSeqWrite(ev.IsSeqWrite)
-    {
-        if (PartsPtr) {
-            for (size_t i = 0; i < PartsPtr->Size(); ++i) {
-                RemainingSize += (*PartsPtr)[i].second;
-            }
-        }
-        TotalSize = RemainingSize;
-        SlackSize = Max<ui32>();
-    }
+    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
     void RegisterPiece() {
         AtomicIncrement(Pieces);
@@ -1018,6 +1005,36 @@ public:
     }
 };
 
+//
+// TChunkShredResult
+//
+class TChunkShredResult : public TRequestBase {
+public:
+    TChunkIdx Chunk;
+    ui32 SectorIdx;
+    ui64 ShredSize;
+
+    TChunkShredResult(TChunkIdx chunk, ui32 sectorIdx, ui64 shredSize, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ChunkShredResult, reqIdx), OwnerSystem, 0, NPriInternal::Other, {})
+        , Chunk(chunk)
+        , SectorIdx(sectorIdx)
+        , ShredSize(shredSize)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkShredResult;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TChunkShredResult { Chunk# " << Chunk
+        << " SectorIdx# " << SectorIdx
+        << " ShredSize# " << ShredSize << "}";
+        return str.Str();
+    }
+};
+
+
 class TStopDevice : public TRequestBase {
 public:
     TStopDevice(TAtomicBase reqIdx)
@@ -1144,12 +1161,13 @@ public:
 class TShredPDisk : public TRequestBase {
 public:
     ui64 ShredGeneration;
+    ui64 Cookie;
 
     TShredPDisk(NPDisk::TEvShredPDisk& ev, TActorId sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ShredPDisk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ShredGeneration(ev.ShredGeneration)
     {}
-    
+
     ERequestType GetType() const override {
         return ERequestType::RequestShredPDisk;
     }
@@ -1225,26 +1243,21 @@ public:
     }
 };
 
-class TMarkDirty : public TRequestBase {
+class TContinueShred : public TRequestBase {
 public:
-    TStackVec<TChunkIdx, 1> ChunksToMarkDirty;
-
-    TMarkDirty(NPDisk::TEvMarkDirty& ev, TActorId sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::MarkDirty, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-        , ChunksToMarkDirty(ev.ChunksToMarkDirty)
-    {}
+    TContinueShred(NPDisk::TEvContinueShred& ev, TActorId sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ContinueShred, reqIdx), OwnerUnallocated, 0, NPriInternal::Other)
+    {
+        Y_UNUSED(ev);
+    }
 
     ERequestType GetType() const override {
-        return ERequestType::RequestMarkDirty;
+        return ERequestType::RequestContinueShred;
     }
 
     TString ToString() const {
         TStringStream str;
-        str << "TMarkDirty {";
-        str << " Owner# " << Owner;
-        str << " OwnerRound# " << OwnerRound;
-        str << " ChunksToMarkDirty# ";
-        FormatList(str, ChunksToMarkDirty);
+        str << "TContinueShred {";
         str << "}";
         return str.Str();
     }

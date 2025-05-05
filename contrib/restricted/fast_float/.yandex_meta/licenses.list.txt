@@ -210,6 +210,8 @@ Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 href="LICENSE-BOOST">BOOST license</a>.
 </sup>
 
+<br/>
+
 <sub>
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository by you, as defined in the Apache-2.0 license,

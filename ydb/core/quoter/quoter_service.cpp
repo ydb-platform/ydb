@@ -359,7 +359,7 @@ void TQuoterService::Bootstrap() {
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "quoter_proxy", "QuoterProxy", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "quoter_proxy", "QuoterProxy", false, TActivationContext::ActorSystem(), SelfId());
     }
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);

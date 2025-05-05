@@ -111,6 +111,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQ
         case READ_ERROR_TOO_BIG_OFFSET:
         case SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
         case SET_OFFSET_ERROR_COMMIT_TO_PAST:
+        case UNKNOWN_READ_RULE:
             return Ydb::StatusIds::BAD_REQUEST;
         case WRONG_COOKIE:
         case CREATE_SESSION_ALREADY_LOCKED:

@@ -5,9 +5,10 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
@@ -49,7 +50,7 @@ enum class EOperationBehaviour : ui32 {
 class TWriteOperation: public TMonitoringObjectsCounter<TWriteOperation> {
 private:
     YDB_READONLY(TString, Identifier, TGUID::CreateTimebased().AsGuidString());
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
@@ -69,7 +70,7 @@ public:
         *Activity = 0;
     }
 
-    TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+    TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
         const bool writePortions);
 

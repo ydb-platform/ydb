@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -262,22 +262,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
@@ -326,22 +317,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
@@ -634,9 +616,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
-                
+
                 FROM `/Root/Join1_1` AS t1
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
@@ -657,6 +640,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 
@@ -664,7 +648,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 CROSS JOIN `/Root/Join1_3` AS t3
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
-                
+
                 WHERE t2.Value > 1001;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -817,7 +801,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
-    Y_UNIT_TEST(TwoJoinsWithQueryService) { 
+    Y_UNIT_TEST(TwoJoinsWithQueryService) {
         NKikimrConfig::TAppConfig appConfig;
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -832,9 +816,9 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE ta(
-                    a Int64, 
-                    b Int64, 
-                    c Int64, 
+                    a Int64,
+                    b Int64,
+                    c Int64,
                     PRIMARY KEY(a)
                 );
             )");
@@ -845,10 +829,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE tb(
-                    b Int64, 
-                    bval Int64, 
+                    b Int64,
+                    bval Int64,
                     PRIMARY KEY(b)
-                );    
+                );
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -857,8 +841,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE tc(
-                    c Int64, 
-                    cval Int64, 
+                    c Int64,
+                    cval Int64,
                     PRIMARY KEY(c)
                 );
             )");
@@ -1638,7 +1622,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
         appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
-        //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
         auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
 
@@ -1831,11 +1814,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     ("04","1","07"),
                     ("04","2","08"),
                     ("05","1","09"),
-                    ("05","2","10"),                   
+                    ("05","2","10"),
                     ("06","1","11"),
-                    ("06","2","12"),    
+                    ("06","2","12"),
                     ("07","1","13"),
-                    ("07","2","14"), 
+                    ("07","2","14"),
                     ("09","1","15"),
                     ("09","2","16");
 
@@ -1866,11 +1849,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     (NULL,"1","01"),
                     (NULL,"2","02"),
                     ("02","1","03"),
-                    ("02","1","04"),         
+                    ("02","1","04"),
                     ("02","2","05"),
                     ("02","2","06"),
                     ("03","1","07"),
-                    ("03","2","08"),                                     
+                    ("03","2","08"),
                     ("09","1","09"),
                     ("09","2","10");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1896,6 +1879,48 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             [[["02"];#;["02"];["03"];#;["03"];["1"];#;["1"]];[["02"];#;["02"];["05"];#;["05"];["2"];#;["2"]];[["02"];#;["02"];["06"];#;["05"];["2"];#;["2"]];[["03"];["03"];["03"];["08"];["02"];["07"];["1"];["1"];["1"]];[["03"];["03"];["03"];["09"];["03"];["08"];["2"];["2"];["2"]];[["09"];#;["09"];["20"];#;["09"];["1"];#;["1"]];[["09"];#;["09"];["21"];#;["10"];["2"];#;["2"]]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST(HashJoinWithAsTable) {
+        TKikimrRunner kikimr;
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE test_table (
+                    test_column Int32,
+                    PRIMARY key (test_column)
+                ))";
+
+                const auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString joinQuery = R"(
+            PRAGMA ydb.HashJoinMode = "grace";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            $as_table = SELECT * FROM AS_TABLE([<|test_column: 42|>]);
+
+            SELECT
+                as_table.test_column
+            FROM $as_table AS as_table
+            LEFT JOIN test_table
+                ON test_table.test_column = as_table.test_column
+        )";
+
+        const auto result = client.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        const auto& resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt32(), 42);
     }
 }
 

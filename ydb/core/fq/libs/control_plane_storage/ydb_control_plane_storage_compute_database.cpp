@@ -19,7 +19,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_DATABASE, RTC_CREATE_DATABASE);
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
-    const FederatedQuery::Internal::ComputeDatabaseInternal& request = event.Record;
+    const FederatedQuery::Internal::ComputeDatabaseInternal& request = event.Request;
     const int byteSize = request.ByteSize();
 
     CPS_LOG_T(MakeLogPrefix(scope, "internal", request.id())

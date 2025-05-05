@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
-namespace NSolomonStatExtension::inline V3 {
+namespace NSolomonStatExtension::inline Dev {
 
 template <typename TMetricRegistryPtr>
 class TMetricRegistryConnector: public NYdb::IExtension {

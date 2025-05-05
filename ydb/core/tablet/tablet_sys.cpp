@@ -1102,6 +1102,56 @@ void TTablet::Handle(TEvTablet::TEvCommit::TPtr &ev) {
     HandleNext(ev);
 }
 
+void TTablet::Handle(TEvTablet::TEvConfirmLeader::TPtr &ev) {
+    auto *msg = ev->Get();
+
+    Y_ABORT_UNLESS(msg->TabletID == TabletID() && msg->Generation == StateStorageInfo.KnownGeneration,
+        "ev.TabletID=%ld, tablet=%ld, ev.Generation=%d, KnownGeneration=%d",
+        msg->TabletID, TabletID(), msg->Generation, StateStorageInfo.KnownGeneration);
+
+    ui64 reqId = ++ConfirmLeaderCounter;
+    ConfirmLeaderRequests[reqId] = { ev->Sender, ev->Cookie };
+
+    const auto *channelInfo = Info->ChannelInfo(0);
+    Y_ABORT_UNLESS(channelInfo, "Unexpected failure to find group for channel 0");
+    const auto *x = channelInfo->LatestEntry();
+    Y_ABORT_UNLESS(x->FromGeneration <= StateStorageInfo.KnownGeneration);
+
+    SendToBSProxy(ActorContext(), x->GroupID, new TEvBlobStorage::TEvGetBlock(TabletID(), TInstant::Max()), reqId);
+}
+
+void TTablet::Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev) {
+    auto *msg = ev->Get();
+
+    auto it = ConfirmLeaderRequests.find(ev->Cookie);
+    if (it == ConfirmLeaderRequests.end()) {
+        BLOG_ERROR("Unexpected TEvGetBlockResult with cookie " << ev->Cookie << " without a pending request", "TSYS33");
+        return;
+    }
+
+    auto status = msg->Status;
+    if (status == NKikimrProto::OK && msg->BlockedGeneration >= StateStorageInfo.KnownGeneration) {
+        status = NKikimrProto::BLOCKED;
+    }
+
+    if (status != NKikimrProto::OK) {
+        // We want to stop after current graph is committed
+        if (BlobStorageStatus == NKikimrProto::OK) {
+            BlobStorageStatus = status;
+            BlobStorageErrorStep = Graph.NextEntry;
+            BlobStorageErrorReason = std::move(msg->ErrorReason);
+        }
+
+        CheckBlobStorageError();
+        return;
+    }
+
+    auto addr = std::move(it->second);
+    ConfirmLeaderRequests.erase(it);
+
+    Send(addr.Sender, new TEvTablet::TEvConfirmLeaderResult(TabletID(), StateStorageInfo.KnownGeneration), 0, addr.Cookie);
+}
+
 bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     TEvTablet::TEvCommit *msg = ev->Get();
 
@@ -1285,6 +1335,15 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         }
         break;
     case NKikimrProto::OK:
+        if (GcInFly == 0 && GcForStepAckRequest) {
+            const auto& req = *GcForStepAckRequest->Get();
+            const ui32 gen = StateStorageInfo.KnownGeneration;
+            if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
+                Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
+                GcForStepAckRequest = nullptr;
+            }
+        }
+        [[fallthrough]];
     default: // silently ignore unrecognized errors (assume temporary)
         if (GcInFly == 0 && GcNextStep != 0) {
             GcLogChannel(std::exchange(GcNextStep, 0));
@@ -1293,6 +1352,16 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     }
 
     CheckBlobStorageError();
+}
+
+void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
+    const auto& req = *ev->Get();
+    const ui32 gen = StateStorageInfo.KnownGeneration;
+    if (GcInFly == 0 && std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
+        Send(ev->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
+    } else {
+        GcForStepAckRequest = ev;
+    }
 }
 
 void TTablet::GcLogChannel(ui32 step) {
@@ -1776,6 +1845,16 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
     if (UserTablet)
         Send(UserTablet, new TEvTablet::TEvTabletDead(TabletID(), reason, reportedGeneration));
 
+    if (BlobStorageStatus != NKikimrProto::OK) {
+        // Note: probably unnecessary after TEvTabletDead
+        for (const auto& pr : ConfirmLeaderRequests) {
+            Send(pr.second.Sender,
+                new TEvTablet::TEvConfirmLeaderResult(TabletID(), StateStorageInfo.KnownGeneration, BlobStorageStatus, BlobStorageErrorReason),
+                0, pr.second.Cookie);
+        }
+        ConfirmLeaderRequests.clear();
+    }
+
     if (StateStorageGuardian)
         Send(StateStorageGuardian, new TEvents::TEvPoisonPill());
 
@@ -1951,13 +2030,13 @@ TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &
 
 TActorId TTabletSetupInfo::Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                   ui32 suggestedGeneration, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
+    return ctx.Register(CreateTablet(launcher, info, this, suggestedGeneration, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 
 TActorId TTabletSetupInfo::Follower(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,
                                  ui32 followerId, TResourceProfilesPtr profiles, TSharedQuotaPtr txCacheQuota) {
-    return ctx.ExecutorThread.RegisterActor(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
+    return ctx.Register(CreateTabletFollower(launcher, info, this, followerId, profiles, txCacheQuota),
                                             TabletMailboxType, TabletPoolId);
 }
 

@@ -20,6 +20,12 @@ CFLAGS(
     -DLDAPI_SOCK=\"/run/openldap/ldapi\"
 )
 
+IF (DEFINED LMDB_IDL_LOGN)
+    CFLAGS(
+        -DMDB_IDL_LOGN=${LMDB_IDL_LOGN}
+    )
+ENDIF()
+
 IF (OS_ANDROID)
     CFLAGS(
         -DMDB_USE_ROBUST=0

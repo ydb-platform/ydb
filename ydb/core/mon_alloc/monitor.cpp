@@ -334,9 +334,9 @@ namespace NKikimr {
                 auto* indexPage = mon->RegisterIndexPage("memory", "Memory");
                 mon->RegisterActorPage(
                     indexPage, "statistics", "Statistics",
-                    false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                    false, ctx.ActorSystem(), ctx.SelfID);
 
-                AllocMonitor->RegisterPages(mon, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                AllocMonitor->RegisterPages(mon, ctx.ActorSystem(), ctx.SelfID);
                 AllocMonitor->RegisterControls(AppData(ctx)->Icb);
 
                 Become(&TThis::StateWork);

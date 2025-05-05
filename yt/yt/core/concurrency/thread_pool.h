@@ -46,7 +46,7 @@ struct TThreadPoolOptions
 
 IThreadPoolPtr CreateThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
+    const std::string& threadNamePrefix,
     const TThreadPoolOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////

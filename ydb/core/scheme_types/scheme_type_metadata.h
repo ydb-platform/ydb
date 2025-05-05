@@ -4,6 +4,7 @@
 #include "scheme_types.h"
 
 #include <util/generic/hash.h>
+#include <util/generic/yexception.h>
 
 
 namespace NKikimr {
@@ -39,8 +40,8 @@ public:
     typedef THashMap<::TString, const ITypeMetadata*> TMapByName;
 
     void Register(const ITypeMetadata* metadata) {
-        Y_ABORT_UNLESS(MapById.insert({ metadata->GetTypeId(), metadata }).second);
-        Y_ABORT_UNLESS(MapByName.insert({ metadata->GetName(), metadata }).second);
+        Y_ENSURE(MapById.insert({ metadata->GetTypeId(), metadata }).second);
+        Y_ENSURE(MapByName.insert({ metadata->GetName(), metadata }).second);
     }
 
     const ITypeMetadata* GetType(TTypeId typeId) const {

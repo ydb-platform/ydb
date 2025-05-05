@@ -1,6 +1,6 @@
 #include "write_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -8,7 +8,7 @@
 #include <util/generic/utility.h>
 #include <util/stream/buffer.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession

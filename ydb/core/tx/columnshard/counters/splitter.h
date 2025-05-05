@@ -1,6 +1,6 @@
 #pragma once
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard {
 

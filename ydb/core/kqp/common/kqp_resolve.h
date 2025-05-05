@@ -11,6 +11,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <util/generic/map.h>
 
@@ -231,6 +232,8 @@ public:
 private:
     THashMap<TTableId, TTable> TablesById;
 };
+
+NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type);
 
 TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);

@@ -280,6 +280,11 @@ public:
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) override;
 
+    std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) override;
+
     std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -336,6 +341,10 @@ public:
     ui64 GenerateTimestamp() override;
 
     IRawBatchRequestPtr CreateRawBatchRequest() override;
+
+    IRawClientPtr Clone() override;
+
+    IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
     const TClientContext Context_;

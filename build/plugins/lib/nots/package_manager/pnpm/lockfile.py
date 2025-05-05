@@ -10,6 +10,7 @@ from ..base import PackageJson, BaseLockfile, LockfilePackageMeta, LockfilePacka
 
 LOCKFILE_VERSION = "lockfileVersion"
 IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)
+WS_PREFIX = "workspace:"
 
 
 class PnpmLockfileHelper:
@@ -266,6 +267,25 @@ class PnpmLockfile(BaseLockfile):
         importer = {k: self.data[k] for k in IMPORTER_KEYS if k in self.data}
 
         return {".": importer} if importer else {}
+
+    def validate_importers(self):
+        importers = self.get_importers()
+        pkg = importers.get(".")
+        peers = set(["."])
+        problem_importers = []
+
+        for _, deps in pkg.items():
+            for _, dep in deps.items():
+                specifier = dep.get("specifier")
+                if specifier and specifier.startswith(WS_PREFIX):
+                    peers.add(specifier[len(WS_PREFIX) :])
+
+        for importer in self.get_importers().keys():
+            if importer not in peers:
+                problem_importers.append(importer)
+
+        if problem_importers:
+            raise Exception(f"Invalid importers in lockfile: {", ".join(problem_importers)}")
 
     def merge(self, lf):
         """

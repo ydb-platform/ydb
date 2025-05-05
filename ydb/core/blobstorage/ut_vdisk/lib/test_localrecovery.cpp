@@ -155,7 +155,7 @@ class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPut
             ui32 channel = 0;
             ui32 gen = 1;
             auto badSteps = std::make_shared<TSet<ui32>>();
-            ctx.ExecutorThread.RegisterActor(CreateManyPuts(Conf, ctx.SelfID, Conf->VDisks->Get(0),
+            ctx.Register(CreateManyPuts(Conf, ctx.SelfID, Conf->VDisks->Get(0),
                                                             MsgSize, MsgNum, tabletId, channel, gen,
                                                             HandleClassGen, badSteps, RequestTimeout));
             BadSteps.push_back(badSteps);

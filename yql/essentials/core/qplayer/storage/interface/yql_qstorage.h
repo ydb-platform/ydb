@@ -48,10 +48,10 @@ using IQReaderPtr = std::shared_ptr<IQReader>;
 class IQWriter {
 public:
     virtual ~IQWriter() = default;
-
     virtual NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) = 0;
     // Commmit should be called at most once, no more Put are allowed after it
     virtual NThreading::TFuture<void> Commit() = 0;
+    virtual void Close() {};
 };
 
 using IQWriterPtr = std::shared_ptr<IQWriter>;
@@ -134,6 +134,7 @@ private:
     IQWriterPtr Writer_;
 };
 
+IQWriterPtr MakeCloseAwareWriterDecorator(IQWriterPtr&& rhs);
 }
 
 template <>

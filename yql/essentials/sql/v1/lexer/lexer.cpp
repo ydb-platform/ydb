@@ -1,31 +1,21 @@
 #include "lexer.h"
 
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/parser/proto_ast/collect_issues/collect_issues.h>
-#include <yql/essentials/parser/proto_ast/antlr3/proto_ast_antlr3.h>
-#include <yql/essentials/parser/proto_ast/antlr4/proto_ast_antlr4.h>
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/parser/lexer_common/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
+#include <util/string/join.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
 #endif
-
-namespace NALPDefault {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
-
-namespace NALPAnsi {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
-
 
 namespace NSQLTranslationV1 {
 
@@ -36,47 +26,87 @@ TMutex SanitizerSQLTranslationMutex;
 #endif
 
 using NSQLTranslation::ILexer;
+using NSQLTranslation::MakeDummyLexerFactory;
 
 class TV1Lexer : public ILexer {
 public:
-    explicit TV1Lexer(bool ansi, bool antlr4)
-        : Ansi(ansi), Antlr4(antlr4)
+    explicit TV1Lexer(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor)
+        : Factory(GetFactory(lexers, ansi, antlr4, flavor))
     {
     }
 
     bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) override {
-        NYql::TIssues newIssues;
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
-        if (Ansi && !Antlr4) {
-            NProtoAST::TLexerTokensCollector3<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else if (!Ansi && !Antlr4) {
-            NProtoAST::TLexerTokensCollector3<NALPDefault::SQLv1Lexer> tokensCollector(query, (const char**)NALPDefault::SQLv1ParserTokenNames, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else if (Ansi && Antlr4) {
-            NProtoAST::TLexerTokensCollector4<NALPAnsiAntlr4::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        } else {
-            NProtoAST::TLexerTokensCollector4<NALPDefaultAntlr4::SQLv1Antlr4Lexer> tokensCollector(query, queryName);
-            tokensCollector.CollectTokens(collector, onNextToken);
-        }
-
-        issues.AddIssues(newIssues);
-        return !AnyOf(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
+        return Factory->MakeLexer()->Tokenize(query, queryName, onNextToken, issues, maxErrors);
     }
 
 private:
-    const bool Ansi;
-    const bool Antlr4;
+    static NSQLTranslation::TLexerFactoryPtr GetFactory(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+        if (auto ptr = GetMaybeFactory(lexers, ansi, antlr4, flavor)) {
+            return ptr;
+        }
+        return MakeDummyLexerFactory(GetLexerName(ansi, antlr4, flavor));
+    }
+
+    static NSQLTranslation::TLexerFactoryPtr GetMaybeFactory(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+        if (!ansi && !antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr3;
+        } else if (ansi && !antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr3Ansi;
+        } else if (!ansi && antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr4;
+        } else if (ansi && antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr4Ansi;
+        } else if (!ansi && antlr4 && flavor == ELexerFlavor::Pure) {
+            return lexers.Antlr4Pure;
+        } else if (ansi && antlr4 && flavor == ELexerFlavor::Pure) {
+            return lexers.Antlr4PureAnsi;
+        } else if (!ansi && !antlr4 && flavor == ELexerFlavor::Regex) {
+            return lexers.Regex;
+        } else if (ansi && !antlr4 && flavor == ELexerFlavor::Regex) {
+            return lexers.RegexAnsi;
+        } else {
+            return nullptr;
+        }
+    }
+
+    static TString GetLexerName(bool ansi, bool antlr4, ELexerFlavor flavor) {
+        TVector<const TStringBuf> parts;
+
+        if (antlr4) {
+            parts.emplace_back("antlr4");
+        } else if (!antlr4 && flavor != ELexerFlavor::Regex) {
+            parts.emplace_back("antlr3");
+        }
+
+        switch (flavor) {
+        case ELexerFlavor::Default: {
+        } break;
+        case ELexerFlavor::Pure: {
+            parts.emplace_back("pure");
+        } break;
+        case ELexerFlavor::Regex: {
+            parts.emplace_back("regex");
+        } break;
+        }
+
+        if (ansi) {
+            parts.emplace_back("ansi");
+        }
+
+        return JoinSeq("_", parts);
+    }
+
+private:
+    NSQLTranslation::TLexerFactoryPtr Factory;
 };
 
 } // namespace
 
-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4) {
-    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(ansi, antlr4));
+NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(lexers, ansi, antlr4, flavor));
 }
 
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token) {
@@ -242,7 +272,10 @@ void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenI
 
 }
 
-bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer, TVector<TString>& statements, NYql::TIssues& issues) {
+bool SplitQueryToStatements(
+    const TString& query, NSQLTranslation::ILexer::TPtr& lexer, 
+    TVector<TString>& statements, NYql::TIssues& issues, const TString& file,
+    bool areBlankSkipped) {
     TParsedTokenList allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -250,7 +283,7 @@ bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr&
         }
     };
 
-    if (!lexer->Tokenize(query, "Query", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+    if (!lexer->Tokenize(query, file, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
         return false;
     }
 
@@ -258,12 +291,14 @@ bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr&
     SplitByStatements(allTokens.begin(), allTokens.end(), statementsTokens);
 
     for (size_t i = 1; i < statementsTokens.size(); ++i) {
-        TStringBuilder currentQueryBuilder;
+        TString statement;
         for (auto it = statementsTokens[i - 1]; it != statementsTokens[i]; ++it) {
-            currentQueryBuilder << it->Content;
+            statement += it->Content;
         }
-        TString statement = currentQueryBuilder;
-        statement = StripStringLeft(statement);
+
+        if (areBlankSkipped) {
+            statement = StripStringLeft(statement);
+        }
 
         bool isBlank = true;
         for (auto c : statement) {
@@ -273,11 +308,11 @@ bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr&
             }
         };
 
-        if (isBlank) {
+        if (isBlank && areBlankSkipped) {
             continue;
         }
 
-        statements.push_back(statement);
+        statements.emplace_back(std::move(statement));
     }
 
     return true;

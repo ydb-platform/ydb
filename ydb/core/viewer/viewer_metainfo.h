@@ -56,7 +56,7 @@ public:
     }
 
     void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(Event->Sender));
+        ctx.Send(ev->Forward(Event->Sender));
         Die(ctx);
     }
 

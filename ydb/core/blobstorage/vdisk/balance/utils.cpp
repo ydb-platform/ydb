@@ -18,7 +18,7 @@ namespace NBalancing {
     {
     }
 
-    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/) {
+    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/, const void* /*sst*/) {
         Ingress.Merge(memRec.GetIngress());
 
         const NMatrix::TVectorType local = memRec.GetLocalParts(GType);

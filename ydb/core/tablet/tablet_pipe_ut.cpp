@@ -101,7 +101,7 @@ namespace NKikimr {
 
             auto client = NTabletPipe::CreateClient(ctx.SelfID, ev->Get()->UseBadTabletId ?
                 TTestTxConfig::TxTablet2 : TTestTxConfig::TxTablet1, Config);
-            ClientId = ctx.ExecutorThread.RegisterActor(client, TMailboxType::Simple, Max<ui32>(), ctx.SelfID);
+            ClientId = ctx.Register(client, TMailboxType::Simple, Max<ui32>());
         }
 
         void Handle(TEvProducerTablet::TEvSend::TPtr &ev, const TActorContext &ctx) {
@@ -136,7 +136,7 @@ namespace NKikimr {
             if (IsOpened && ClientId == ev->Get()->ClientId && !IsShutdown) {
                 Cout << "Recreate client\n";
                 auto client = NTabletPipe::CreateClient(ctx.SelfID, TTestTxConfig::TxTablet1, Config);
-                ClientId = ctx.ExecutorThread.RegisterActor(client);
+                ClientId = ctx.Register(client);
             }
         }
 
@@ -1093,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
                 ev->Rewrite(TEvInterconnect::EvForward, sessionId);
             }
 
-            ctx.ExecutorThread.Send(ev);
+            ctx.Send(ev);
         }
 
         void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {

@@ -137,7 +137,7 @@ public:
     THashSet<TString> AllowedUserPermissions = {
         "user1-something.read",
         "ApiKey-value-valid-something.read",
-        "ApiKey-value-valid-ydb.api.kafkaPlainAuth",
+        "ApiKey-value-valid-ydb.streams.write",
         "user1-monitoring.view"};
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
     THashSet<TString> AllowedResourceIds = {};
@@ -200,7 +200,6 @@ public:
     THashSet<TString> AllowedUserPermissions = {
         "user1-something.read",
         "ApiKey-value-valid-something.read",
-        "ApiKey-value-valid-ydb.api.kafkaPlainAuth",
         "user1-monitoring.view"
     };
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};

@@ -36,30 +36,6 @@ const TKernel& ResolveKernel(const IBuiltinFunctionRegistry& builtins, const TSt
     return *kernel;
 }
 
-class TBlockBitCastWrapper : public TBlockFuncNode {
-public:
-    TBlockBitCastWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* argType, TType* to)
-        : TBlockFuncNode(mutables, "BitCast", { arg }, { argType }, ResolveKernel(argType, to), {}, &CastOptions)
-        , CastOptions(false)
-    {
-    }
-private:
-    static const arrow::compute::ScalarKernel& ResolveKernel(TType* from, TType* to) {
-        std::shared_ptr<arrow::DataType> type;
-        MKQL_ENSURE(ConvertArrowType(to, type), "can't get arrow type");
-
-        auto function = ARROW_RESULT(arrow::compute::GetCastFunction(type));
-        MKQL_ENSURE(function != nullptr, "missing function");
-        MKQL_ENSURE(function->kind() == arrow::compute::Function::SCALAR, "expected SCALAR function");
-
-        std::vector<arrow::ValueDescr> args = { ToValueDescr(from) };
-        const auto kernel = ARROW_RESULT(function->DispatchExact(args));
-        return *static_cast<const arrow::compute::ScalarKernel*>(kernel);
-    }
-
-    const arrow::compute::CastOptions CastOptions;
-};
-
 } // namespace
 
 IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -81,17 +57,6 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     } else {
         return new TBlockFuncNode(ctx.Mutables, funcName, std::move(argsNodes), argsTypes, kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);
     }
-}
-
-IComputationNode* WrapBlockBitCast(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
-    auto argNode = LocateNode(ctx.NodeLocator, callable, 0);
-    MKQL_ENSURE(callable.GetInput(1).GetStaticType()->IsType(), "Expected type");
-    return new TBlockBitCastWrapper(ctx.Mutables,
-        argNode,
-        callable.GetType()->GetArgumentType(0),
-        static_cast<TType*>(callable.GetInput(1).GetNode())
-    );
 }
 
 }

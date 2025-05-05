@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(string_udf)
     
     YQL_ABI_VERSION(
         2
-        37
+        43
         0
     )
     
@@ -11,8 +11,8 @@ YQL_UDF_CONTRIB(string_udf)
     )
     
     PEERDIR(
+        yql/essentials/public/langver
         yql/essentials/public/udf/arrow
-        library/cpp/charset
         library/cpp/deprecated/split
         library/cpp/html/pcdata
         library/cpp/string_utils/base32

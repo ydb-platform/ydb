@@ -371,7 +371,7 @@ public:
         Chain.PutToEnd(std::move(data));
     }
 
-    TRope(TRope&& rope)
+    TRope(TRope&& rope) noexcept
         : Chain(std::move(rope.Chain))
         , Size(std::exchange(rope.Size, 0))
     {
@@ -431,7 +431,7 @@ public:
         return *this;
     }
 
-    TRope& operator=(TRope&& other) {
+    TRope& operator=(TRope&& other) noexcept {
         Chain = std::move(other.Chain);
         Size = std::exchange(other.Size, 0);
         InvalidateIterators();

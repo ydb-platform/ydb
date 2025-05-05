@@ -21,10 +21,13 @@ TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContai
 }
 
 void TWriteMeta::OnStage(const EWriteStage stage) const {
-    AFL_VERIFY(CurrentStage != EWriteStage::Finished && CurrentStage != EWriteStage::Aborted);
+    if (stage == CurrentStage) {
+        return;
+    }
     AFL_VERIFY((ui32)stage > (ui32)CurrentStage)("from", CurrentStage)("to", stage);
     const TMonotonic nextStageInstant = TMonotonic::Now();
     Counters->OnStageMove(CurrentStage, stage, nextStageInstant - LastStageInstant);
+    CurrentStage = stage;
     LastStageInstant = nextStageInstant;
     if (stage == EWriteStage::Finished) {
         Counters->OnWriteFinished(nextStageInstant - WriteStartInstant);

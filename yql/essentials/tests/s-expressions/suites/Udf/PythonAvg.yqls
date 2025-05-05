@@ -4,7 +4,7 @@
 # prepare python udf
 (let ui32 (DataType 'Uint32))
 (let dbl (DataType 'Double))
-(let rt (ResourceType 'Python2))
+(let rt (ResourceType 'Python3))
 
 (let udfScript (String '@@
 class AvgCalc:

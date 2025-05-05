@@ -25,11 +25,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::optional<TMonotonic> StartInstant;
-
-public:
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_OLAP_SCAN;
-    }
+    std::optional<TMonotonic> FinishInstant;
 
 public:
     virtual void PassAway() override;
@@ -50,6 +46,7 @@ private:
             "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
+            hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
@@ -64,6 +61,8 @@ private:
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 
+    void HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr& ev);
+
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
 
@@ -77,6 +76,8 @@ private:
     void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/);
 
 private:
+    void CheckHanging(const bool logging = false) const;
+
     void MakeResult(size_t reserveRows = 0);
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
@@ -111,7 +112,9 @@ private:
 
     void ScheduleWakeup(const TMonotonic deadline);
 
-    TMonotonic GetDeadline() const;
+    TMonotonic GetScanDeadline() const;
+
+    TMonotonic GetComputeDeadline() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -188,7 +191,6 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
-    TDuration LastReportedElapsedTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

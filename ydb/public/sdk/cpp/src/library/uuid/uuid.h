@@ -1,4 +1,5 @@
 #pragma once
+
 #include <util/system/types.h>
 #include <util/system/yassert.h>
 
@@ -9,6 +10,7 @@
 class IOutputStream;
 
 namespace NYdb {
+inline namespace Dev {
 namespace NUuid {
 
 static constexpr ui32 UUID_LEN = 16;
@@ -121,5 +123,6 @@ inline void UuidBytesToHalfs(const char *str, size_t sz, ui64 &high, ui64 &low) 
     high = buf.half[1];
 }
 
+}
 }
 }

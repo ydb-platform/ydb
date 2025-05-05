@@ -44,17 +44,6 @@ BELONGS ya.make
         include/simdjson/internal/instruction_set.h [5:14]
         src/internal/isadetection.h [5:14]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1ce2e39c07413c844104d4a1610b8621
-BELONGS ya.make
-    License text:
-           Copyright 2018-2023 The simdjson authors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE [189:189]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 2067bdaf1585921cf47dfb0b810c88f7
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -98,6 +87,18 @@ BELONGS ya.make
     Files with this license:
         include/simdjson/internal/instruction_set.h [5:14]
         src/internal/isadetection.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e2e2b3059e8b51ccc7c129f32aa3c56
+BELONGS ya.make
+    License text:
+           Copyright 2018-2025 The simdjson authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [189:189]
+        LICENSE-MIT [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL abfbab3d484099905de04f84551ac607
 BELONGS ya.make

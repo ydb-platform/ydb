@@ -19,10 +19,9 @@ DEFINE_ENUM(EJsonAttributesMode,
     (OnDemand)
 );
 
-class TJsonFormatConfig
+struct TJsonFormatConfig
     : public NYTree::TYsonStruct
 {
-public:
     EJsonFormat Format;
     EJsonAttributesMode AttributesMode;
     bool Plain;

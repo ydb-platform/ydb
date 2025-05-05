@@ -138,81 +138,8 @@ SELECTORS_CONFIGS = dict(
 
 TRACING_SCHEMA = dict(
     type="object",
-    properties=dict(
-        backend=dict(
-            type="object",
-            properties=dict(
-                auth_config=dict(
-                    type="object",
-                    properties=dict(
-                        tvm=dict(
-                            type="object",
-                            properties=dict(
-                                url=dict(type="string"),
-                                self_tvm_id=dict(type="integer"),
-                                tracing_tvm_id=dict(type="integer"),
-                                disc_cache_dir=dict(type="string"),
-                                plain_text_secret=dict(type="string"),
-                                secret_file=dict(type="string"),
-                                secret_environment_variable=dict(type="string"),
-                            ),
-                            required=["self_tvm_id", "tracing_tvm_id"],
-                        )
-                    ),
-                    required=["tvm"],
-                ),
-                opentelemetry=dict(
-                    type="object",
-                    properties=dict(
-                        collector_url=dict(type="string"),
-                        service_name=dict(type="string"),
-                    )
-                ),
-            ),
-            required=["opentelemetry"],
-            additionalProperties=False,
-        ),
-        uploader=dict(
-            type="object",
-            properties=dict(
-                max_exported_spans_per_second=dict(type="integer", minimum=1),
-                max_spans_in_batch=dict(type="integer", minimum=1),
-                max_bytes_in_batch=dict(type="integer"),
-                max_batch_accumulation_milliseconds=dict(type="integer"),
-                span_export_timeout_seconds=dict(type="integer", minimum=1),
-                max_export_requests_inflight=dict(type="integer", minimum=1),
-            ),
-            additionalProperties=False,
-        ),
-        sampling=dict(
-            type="array",
-            items=dict(
-                type="object",
-                properties=dict(
-                    scope=SELECTORS_CONFIGS,
-                    fraction=dict(type="number", minimum=0, maximum=1),
-                    level=dict(type="integer", minimum=0, maximum=15),
-                    max_traces_per_minute=dict(type="integer", minimum=0),
-                    max_traces_burst=dict(type="integer", minimum=0),
-                ),
-                required=["fraction", "level", "max_traces_per_minute"],
-            ),
-        ),
-        external_throttling=dict(
-            type="array",
-            items=dict(
-                type="object",
-                properties=dict(
-                    scope=SELECTORS_CONFIGS,
-                    max_traces_per_minute=dict(type="integer", minimum=0),
-                    max_traces_burst=dict(type="integer", minimum=0),
-                ),
-                required=["max_traces_per_minute"],
-            ),
-        ),
-    ),
-    required=["backend"],
-    additionalProperties=False,
+    properties={},
+    additionalProperties=True,
 )
 
 FAILURE_INJECTION_CONFIG_SCHEMA = {
@@ -228,6 +155,11 @@ DRIVE_SCHEMA = {
         "path": dict(type="string", minLength=1),
         "shared_with_os": dict(type="boolean"),
         "expected_slot_count": dict(type="integer"),
+        "pdisk_config": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {},
+        },
         "kind": dict(type="integer"),
     },
     "required": ["type", "path"],
@@ -485,7 +417,7 @@ DOMAIN_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": utils.get_resources_list("resources/console_initializers/"),
+                "enum": ["cloud_ssd_table_profile", "cloud_ssdencrypted_table_profile"],
             },
         },
     },
@@ -1025,7 +957,12 @@ TEMPLATE_SCHEMA = {
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (host.get("name", host.get("host")), str(host.get("ic_port", 19001)))
+    port = 19001
+    if "ic_port" in host:
+        port = host["ic_port"]
+    if "port" in host:
+        port = host["port"]
+    return "%s:%s" % (host.get("name", host.get("host")), str(port))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):

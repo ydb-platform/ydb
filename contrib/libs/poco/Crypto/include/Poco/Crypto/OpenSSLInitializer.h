@@ -28,6 +28,16 @@
 #endif
 
 
+#ifndef POCO_CRYPT_NO_SANITIZE_THREAD
+	#define POCO_CRYPT_NO_SANITIZE_THREAD
+		#if defined(__has_feature)
+			#if __has_feature(thread_sanitizer)
+				#undef POCO_CRYPT_NO_SANITIZE_THREAD
+				#define POCO_CRYPT_NO_SANITIZE_THREAD __attribute__((no_sanitize_thread))
+			#endif
+		#endif
+#endif
+
 extern "C"
 {
 	struct CRYPTO_dynlock_value
@@ -50,14 +60,14 @@ class Crypto_API OpenSSLInitializer
 public:
 	OpenSSLInitializer();
 		/// Automatically initialize OpenSSL on startup.
-		
+
 	~OpenSSLInitializer();
 		/// Automatically shut down OpenSSL on exit.
-	
-	static void initialize();
+
+	POCO_CRYPT_NO_SANITIZE_THREAD static void initialize();
 		/// Initializes the OpenSSL machinery.
 
-	static void uninitialize();
+	POCO_CRYPT_NO_SANITIZE_THREAD static void uninitialize();
 		/// Shuts down the OpenSSL machinery.
 
 	static bool isFIPSEnabled();
@@ -71,7 +81,7 @@ protected:
 	{
 		SEEDSIZE = 256
 	};
-	
+
 	// OpenSSL multithreading support
 	static void lock(int mode, int n, const char* file, int line);
 	static unsigned long id();

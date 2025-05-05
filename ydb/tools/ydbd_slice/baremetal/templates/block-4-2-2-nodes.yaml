@@ -88,33 +88,32 @@ domains:
 
 table_service_config:
   sql_version: 1
-actor_system_config:    # the configuration of the actor system which descibes how cores of the instance are distributed
-  executor:             # accross different types of workloads in the instance.
-  - name: System        # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
-                        # and reads from storage.
-    threads: 2          # the number of threads allocated to system executor.
-    type: BASIC
-  - name: User          # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
-                        # queries and rpc calls.
-    threads: 3          # the number of threads allocated to user executor.
-    type: BASIC
-  - name: Batch         # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
-                        # compactions, background compactions.
-    threads: 2          # the number of threads allocated to the batch executor.
-    type: BASIC
-  - name: IO            # the io executor. In this executor launches sync operations and writes logs.
-    threads: 1
-    time_per_mailbox_micro_secs: 100
-    type: IO
-  - name: IC            # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
-    spin_threshold: 10
-    threads: 1          # the number of threads allocated to the interconnect executor.
-    time_per_mailbox_micro_secs: 100
-    type: BASIC
+
+sys:                      # the configuration of the actor system which descibes how cores of the instance are distributed
+  executors:              # accross different types of workloads in the instance.
+    system:               # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
+      threads: 9          # the number of threads allocated to system executor.
+      spin_threshold: 1
+    user:                 # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
+      spin_threshold: 1   # the number of threads allocated to user executor.
+      threads: 16         # queries and rpc calls.
+    batch:                # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
+      threads: 7          # compactions, background compactions.
+      spin_threshold: 1
+    io:                   # the io executor. In this executor launches sync operations and writes logs.
+      threads: 1
+    ic:                   # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
+      threads: 3          # the number of threads allocated to the interconnect executor.
+      max_threads: 5
+      max_avg_ping_deviation: 500
+      spin_threshold: 10
+      time_per_mailbox_micro_secs: 100
+      priority: 40
   scheduler:
-    progress_threshold: 10000
-    resolution: 256
+    resolution: 64
     spin_threshold: 0
+    progress_threshold: 10000
+
 blob_storage_config:    # configuration of static blobstorage group.
                         # YDB uses this group to store system tablets' data, like SchemeShard
   service_set:

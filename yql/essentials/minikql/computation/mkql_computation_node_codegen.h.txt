@@ -217,16 +217,16 @@ Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodege
 
 Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
-template<typename Method>
-Value* CallUnaryUnboxedValueFunction(Method method, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallUnaryUnboxedValueFunctionImpl(GetMethodPtr(method), result, arg, codegen, block);
+template<auto Method>
+Value* CallUnaryUnboxedValueFunction(Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    return CallUnaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, arg, codegen, block);
 }
 
 Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
-template<typename Method>
-Value* CallBinaryUnboxedValueFunction(Method method, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallBinaryUnboxedValueFunctionImpl(GetMethodPtr(method), result, left, right, codegen, block);
+template<auto Method>
+Value* CallBinaryUnboxedValueFunction(Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
+    return CallBinaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, left, right, codegen, block);
 }
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
@@ -589,10 +589,11 @@ protected:
         : TBase(mutables, kind)
     {}
 
+
 public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         static_assert(std::is_same<std::invoke_result_t<decltype(&TDerived::DoCalculate), TDerived, TComputationContext&>, NUdf::TUnboxedValuePod>(), "DoCalculate must return pod!");
-        return DoGenerateGetValueImpl(GetMethodPtr(&TDerived::DoCalculate), uintptr_t(this), ctx, block);
+        return DoGenerateGetValueImpl(GetMethodPtr<&TDerived::DoCalculate>(), uintptr_t(this), ctx, block);
     }
 };
 

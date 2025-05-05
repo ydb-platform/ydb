@@ -44,7 +44,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
         auto flatMapRangeInput = lookupKeysFlatMap.Cast().Input().Maybe<TCoRangeFinalize>();
 
         // This rule should depend on feature flag for safety
-        if (!flatMapRangeInput || !kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+        if (!flatMapRangeInput) {
             return {};
         }
 
@@ -150,10 +150,6 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
     }
 
     const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
-
-    if (!kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
-        return node;
-    }
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;

@@ -43,6 +43,7 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/events.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
@@ -529,7 +530,7 @@ public:
         if (mon) {
             ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_control_plane_proxy", "YQ Control Plane Proxy", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TlsActivationContext->ActorSystem(), SelfId());
         }
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
@@ -599,7 +600,7 @@ private:
         CPS_LOG_E(requestName << ", validation failed: " << ev->Get()->Scope << " "
                               << ev->Get()->User << " "
                               << NKikimr::MaskTicket(ev->Get()->Token) << " "
-                              << ev->Get()->Request.DebugString()
+                              << SecureDebugString(ev->Get()->Request)
                               << " error: " << issues.ToString());
         Send(ev->Sender, new TProxyResponse(issues, ev->Get()->SubjectType), 0, ev->Cookie);
         requestCounters.IncError();
@@ -1325,7 +1326,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("CreateConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("CreateConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1356,7 +1357,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("CreateConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1396,7 +1397,7 @@ private:
             if (requestValidationIssues) {
                 CPS_LOG_E("CreateConnectionRequest, validation failed: "
                           << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
+                          << " " << SecureDebugString(request)
                           << " error: " << requestValidationIssues.ToString());
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvCreateConnectionResponse(
@@ -1610,7 +1611,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::ModifyConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("ModifyConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("ModifyConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
@@ -1642,7 +1643,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("ModifyConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvModifyConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;
@@ -1682,7 +1683,7 @@ private:
             if (requestValidationIssues) {
                 CPS_LOG_E("ModifyConnectionRequest, validation failed: "
                           << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                          << " " << request.DebugString()
+                          << " " << SecureDebugString(request)
                           << " error: " << requestValidationIssues.ToString());
                 Send(ev->Sender,
                      new TEvControlPlaneProxy::TEvModifyConnectionResponse(
@@ -1884,7 +1885,7 @@ private:
     void Handle(TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::TestConnectionRequest request = ev->Get()->Request;
-        CPP_LOG_T("TestConnectionRequest: " << request.DebugString());
+        CPP_LOG_T("TestConnectionRequest: " << SecureDebugString(request));
         const TString cloudId = ev->Get()->CloudId;
 
         const TString subjectType = ev->Get()->SubjectType;
@@ -1916,7 +1917,7 @@ private:
 
         NYql::TIssues issues = ValidatePermissions(ev, requiredPermissions);
         if (issues) {
-            CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << request.DebugString() << " error: " << issues.ToString());
+            CPS_LOG_E("TestConnectionRequest, validation failed: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << " " << SecureDebugString(request) << " error: " << issues.ToString());
             Send(ev->Sender, new TEvControlPlaneProxy::TEvTestConnectionResponse(issues, subjectType), 0, ev->Cookie);
             requestCounters.IncError();
             TDuration delta = TInstant::Now() - startTime;

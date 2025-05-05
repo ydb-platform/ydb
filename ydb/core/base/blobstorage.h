@@ -494,6 +494,7 @@ struct TEvBlobStorage {
 
         EvGetQueuesInfo,     // for debugging purposes
         EvGetBlock,
+        EvCheckIntegrity,
 
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
@@ -511,6 +512,7 @@ struct TEvBlobStorage {
 
         EvQueuesInfo,  // for debugging purposes
         EvGetBlockResult,
+        EvCheckIntegrityResult,
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
@@ -747,6 +749,19 @@ struct TEvBlobStorage {
         EvPreShredCompactVDisk,
         EvShredVDisk,
         EvMarkDirty,
+        EvHullShredDefrag,
+        EvHullShredDefragResult,
+        EvHugeShredNotify,
+        EvHugeShredNotifyResult,
+        EvNotifyChunksDeleted,
+        EvListChunks,
+        EvListChunksResult,
+        EvHugeQueryForbiddenChunks,
+        EvHugeForbiddenChunks,
+        EvContinueShred,
+        EvQuerySyncToken,
+        EvSyncToken,
+        EvReleaseSyncToken,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -858,6 +873,10 @@ struct TEvBlobStorage {
         EvControllerReplaceConfigResponse           = 0x10031628,
         EvControllerShredRequest                    = 0x10031629,
         EvControllerShredResponse                   = 0x1003162a,
+        EvControllerFetchConfigRequest              = 0x1003162b,
+        EvControllerFetchConfigResponse             = 0x1003162c,
+        EvControllerDistconfRequest                 = 0x1003162d,
+        EvControllerDistconfResponse                = 0x1003162e,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -934,6 +953,7 @@ struct TEvBlobStorage {
 
     struct TEvPutResult;
     struct TEvGetResult;
+    struct TEvCheckIntegrityResult;
     struct TEvGetBlockResult;
     struct TEvBlockResult;
     struct TEvDiscoverResult;
@@ -1347,6 +1367,95 @@ struct TEvBlobStorage {
                 size += Responses[i].Buffer.size();
             }
             return size;
+        }
+    };
+
+    struct TEvCheckIntegrity : public TEventLocal<TEvCheckIntegrity, EvCheckIntegrity> {
+        TLogoBlobID Id;
+        TInstant Deadline;
+        NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+
+        ui32 RestartCounter = 0;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvCheckIntegrity(
+                const TLogoBlobID& id,
+                TInstant deadline,
+                NKikimrBlobStorage::EGetHandleClass getHandleClass)
+            : Id(id)
+            , Deadline(deadline)
+            , GetHandleClass(getHandleClass)
+        {}
+
+        TString Print(bool /*isFull*/) const {
+            TStringStream str;
+            str << "TEvCheckIntegrity {"
+                << " Id# " << Id
+                << " Deadline# " << Deadline
+                << " GetHandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(GetHandleClass)
+                << " }";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
+        }
+
+        ui32 CalculateSize() const {
+            return sizeof(*this);
+        }
+
+        void ToSpan(NWilson::TSpan& span) const;
+
+        std::unique_ptr<TEvCheckIntegrityResult> MakeErrorResponse(
+            NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId groupId);
+    };
+
+    struct TEvCheckIntegrityResult : public TEventLocal<TEvCheckIntegrityResult, EvCheckIntegrityResult> {
+        TLogoBlobID Id;
+        NKikimrProto::EReplyStatus Status;
+        // OK - we were able to check the integrity
+        // any other status - some problem prevents the check, ErrorReason contains detailed info
+        // for example if the group is disintegrated, the status is ERROR
+
+        TString ErrorReason;
+
+        enum EPlacementStatus {
+            PS_OK = 1,      // blob parts are placed according to fail model
+            PS_ERROR = 2,   // blob parts are definitely placed incorrectly or there are missing parts for sure
+            PS_UNKNOWN = 3, // status is unknown because of missing disks or network problems
+            PS_NOT_YET = 4, // there are missing parts but status may become OK after replication
+        };
+        EPlacementStatus PlacementStatus;
+
+        // TODO: calculate data status
+        enum EDataStatus {
+            DS_OK = 1,      // all data parts contain valid data
+            DS_ERROR = 2,   // some parts definitely contain invalid data
+            DS_UNKNOWN = 3, // status is unknown because of missing disks or network problems
+        };
+        EDataStatus DataStatus;
+
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvCheckIntegrityResult(NKikimrProto::EReplyStatus status)
+            : Status(status)
+        {}
+
+        TString Print(bool /*isFull*/) const {
+            TStringStream str;
+            str << "TEvCheckIntegrityResult {"
+                << " Id# " << Id
+                << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
+                << " ErrorReason# " << ErrorReason
+                << " PlacementStatus# " << (int)PlacementStatus
+                << " DataStatus# " << (int)DataStatus
+                << " }";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
         }
     };
 
@@ -2509,6 +2618,10 @@ struct TEvBlobStorage {
     struct TEvControllerReplaceConfigResponse;
     struct TEvControllerShredRequest;
     struct TEvControllerShredResponse;
+    struct TEvControllerFetchConfigRequest;
+    struct TEvControllerFetchConfigResponse;
+    struct TEvControllerDistconfRequest;
+    struct TEvControllerDistconfResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

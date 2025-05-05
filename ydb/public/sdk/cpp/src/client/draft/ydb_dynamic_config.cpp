@@ -1,10 +1,10 @@
-#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 
 #include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
-#include <src/client/common_client/impl/client.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::inline V3::NDynamicConfig {
+namespace NYdb::inline Dev::NDynamicConfig {
 
 class TDynamicConfigClient::TImpl : public TClientImplCommon<TDynamicConfigClient::TImpl> {
 public:
@@ -156,9 +156,12 @@ public:
                 std::string config;
                 std::map<uint64_t, std::string> volatileConfigs;
                 if (Ydb::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
-                    clusterName = result.identity().cluster();
-                    version = result.identity().version();
-                    config = result.config();
+                    // only if they are present
+                    if (result.identity_size() && result.config_size()) {
+                        clusterName = result.identity(0).cluster();
+                        version = result.identity(0).version();
+                        config = result.config(0);
+                    }
                     for (const auto& config : result.volatile_configs()) {
                         volatileConfigs.emplace(config.id(), config.config());
                     }
@@ -336,6 +339,32 @@ public:
 
         return promise.GetFuture();
     }
+
+    TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::FetchStartupConfigRequest>(settings);
+
+        auto promise = NThreading::NewPromise<TFetchStartupConfigResult>();
+
+        auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
+                std::string config;
+                if (Ydb::DynamicConfig::FetchStartupConfigResult result; any && any->UnpackTo(&result)) {
+                    config = result.config();
+                }
+
+                TFetchStartupConfigResult val(TStatus(std::move(status)), std::move(config));
+                promise.SetValue(std::move(val));
+            };
+
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::FetchStartupConfigRequest, Ydb::DynamicConfig::FetchStartupConfigResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncFetchStartupConfig,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
 };
 
 TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
@@ -431,4 +460,8 @@ TAsyncVerboseResolveConfigResult TDynamicConfigClient::VerboseResolveConfig(
     return Impl_->VerboseResolveConfig(config, volatileConfigs, settings);
 }
 
-} // namespace NYdb::V3::NDynamicConfig
+TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TClusterConfigSettings& settings) {
+    return Impl_->FetchStartupConfig(settings);
+}
+
+} // namespace NYdb::NDynamicConfig

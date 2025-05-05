@@ -39,5 +39,16 @@ using TParsedTokenList = TVector<TParsedToken>;
 IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end);
 bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors);
 
+class ILexerFactory : public TThrRefBase {
+public:
+    virtual ~ILexerFactory() = default;
+
+    virtual ILexer::TPtr MakeLexer() const = 0;
+};
+
+using TLexerFactoryPtr = TIntrusivePtr<ILexerFactory>;
+
+TLexerFactoryPtr MakeDummyLexerFactory(const TString& name);
+
 }
 

@@ -46,5 +46,18 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TTxId indexBuildId
 );
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo::TItem& item,
+    TString& error
+);
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    TImportInfo::TItem& item
+);
+
 } // NSchemeShard
 } // NKikimr

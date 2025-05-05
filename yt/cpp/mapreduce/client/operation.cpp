@@ -11,6 +11,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -21,9 +22,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
 #include <yt/cpp/mapreduce/io/job_writer.h>
@@ -222,11 +220,24 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         return tableList;
     }
 
-    auto isDynamic = NRawClient::BatchTransform(
+    TVector<TRichYPath> tableListPaths;
+    for (const auto& table: tableList) {
+        Y_ABORT_UNLESS(table.RichYPath, "Cannot get path to apply column filters");
+        tableListPaths.emplace_back(*table.RichYPath);
+    }
+
+    auto isDynamic = NRawClient::RemoteClustersBatchTransform(
         preparer.GetClient()->GetRawClient(),
-        tableList,
+        preparer.GetContext(),
+        tableListPaths,
         [&] (IRawBatchRequestPtr batch, const auto& table) {
-            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (table.Cluster_ && !table.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
+            }
+            return batch->Get(preparer.GetTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -770,6 +781,8 @@ void BuildUserJobFluently(
                     list.Item().Value(BuildJobProfilerSpec(jobProfiler));
                 })
             .EndList()
+        .Item("start_queue_consumer_registration_manager").Value(false)
+        .Item("enable_rpc_proxy_in_job_proxy").Value(userJobSpec.EnableRpcProxyInJobProxy_)
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
@@ -842,6 +855,9 @@ void BuildCommonOperationPart(
         MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
+    if (baseSpec.Alias_) {
+        (*specNode)["alias"] = *baseSpec.Alias_;
+    }
     TString pool;
     if (baseSpec.Pool_) {
         pool = *baseSpec.Pool_;
@@ -878,14 +894,20 @@ void BuildCommonOperationPart(
     if (baseSpec.Title_.Defined()) {
         (*specNode)["title"] = *baseSpec.Title_;
     }
+    if (baseSpec.MaxFailedJobCount_.Defined()) {
+        (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
+    if (baseSpec.Description_.Defined()) {
+        (*specNode)["description"] = *baseSpec.Description_;
+    }
+    if (baseSpec.Annotations_.Defined()) {
+        (*specNode)["annotations"] = *baseSpec.Annotations_;
+    }
 }
 
 template <typename TSpec>
 void BuildCommonUserOperationPart(const TSpec& baseSpec, TNode* spec)
 {
-    if (baseSpec.MaxFailedJobCount_.Defined()) {
-        (*spec)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
-    }
     if (baseSpec.FailOnJobRestart_.Defined()) {
         (*spec)["fail_on_job_restart"] = *baseSpec.FailOnJobRestart_;
     }
@@ -1044,17 +1066,19 @@ void CheckInputTablesExist(
 {
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
-        auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
-        auto exists = RequestWithRetry<bool>(
-            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
-                return preparer.GetClient()->GetRawClient()->Exists(
-                    curTransactionId,
-                    path.Path_);
-            });
-        Y_ENSURE_EX(
-            path.Cluster_.Defined() || exists,
-            TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        if (!path.Cluster_.Defined()) {
+            auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+            auto exists = RequestWithRetry<bool>(
+                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+                [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                    return preparer.GetClient()->GetRawClient()->Exists(
+                        curTransactionId,
+                        path.Path_);
+                });
+            Y_ENSURE_EX(
+                exists,
+                TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        }
     }
 }
 
@@ -2655,16 +2679,22 @@ void TOperation::TOperationImpl::UpdateAttributesAndCall(
         }
     }
 
+    auto filter = TOperationAttributeFilter()
+        .Add(EOperationAttribute::Result)
+        .Add(EOperationAttribute::State)
+        .Add(EOperationAttribute::BriefProgress);
+    // To avoid overloading Cypress, we only request the progress attribute as needed,
+    // typically when the user asks for job statistics.
+    if (needJobStatistics) {
+        filter.Add(EOperationAttribute::Progress);
+    }
+
     auto attributes = RequestWithRetry<TOperationAttributes>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this] (TMutationId /*mutationId*/) {
+        [this, &filter] (TMutationId /*mutationId*/) {
             return RawClient_->GetOperation(
                 *Id_,
-                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-                    .Add(EOperationAttribute::Result)
-                    .Add(EOperationAttribute::Progress)
-                    .Add(EOperationAttribute::State)
-                    .Add(EOperationAttribute::BriefProgress)));
+                TGetOperationOptions().AttributeFilter(filter));
         });
 
     func(attributes);

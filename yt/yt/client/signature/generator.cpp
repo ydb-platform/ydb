@@ -10,56 +10,50 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
     auto signature = New<TSignature>();
-    signature->Payload_ = std::move(data);
-    Sign(signature);
+    signature->Payload_ = std::move(payload);
+    Resign(signature);
     return signature;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString& TSignatureGeneratorBase::GetHeader(const TSignaturePtr& signature)
-{
-    return signature->Header_;
-}
+namespace {
 
-std::vector<std::byte>& TSignatureGeneratorBase::GetSignature(const TSignaturePtr& signature)
+struct TDummySignatureGenerator
+    : public ISignatureGenerator
 {
-    return signature->Signature_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDummySignatureGenerator
-    : public TSignatureGeneratorBase
-{
-public:
-    void Sign(const TSignaturePtr& signature) override
-    {
-        GetHeader(signature) = NYson::TYsonString("DummySignature"_sb);
-    }
+    void Resign(const TSignaturePtr& /*signature*/) const final
+    { }
 };
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
 {
-    return New<TDummySignatureGenerator>();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TAlwaysThrowingSignatureGenerator
-    : public TSignatureGeneratorBase
-{
-public:
-    void Sign(const TSignaturePtr& /*signature*/) override
+    void Resign(const TSignaturePtr& /*signature*/) const final
     {
         THROW_ERROR_EXCEPTION("Signature generation is unsupported");
     }
 };
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator()
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
+{
+    return New<TDummySignatureGenerator>();
+}
+
+const ISignatureGeneratorPtr& GetDummySignatureGenerator()
+{
+    static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
+    return signatureGenerator;
+}
+
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {
     return New<TAlwaysThrowingSignatureGenerator>();
 }

@@ -80,17 +80,17 @@
 
   ```java
   public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getAuthProviderFromEnviron();
+      AuthProvider authProvider = new EnvironAuthProvider();
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
   }
   ```

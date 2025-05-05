@@ -136,9 +136,9 @@ namespace NTabletPipe {
             }
         }
 
-        bool IsLocalNode(const TActorContext& ctx) const {
+        bool IsLocalNode(const TActorContext&) const {
             auto leader = GetTabletLeader();
-            return leader.NodeId() == 0 || ctx.ExecutorThread.ActorSystem->NodeId == leader.NodeId();
+            return leader.NodeId() == 0 || SelfId().NodeId() == leader.NodeId();
         }
 
         TActorId GetTabletLeader() const {
@@ -633,7 +633,7 @@ namespace NTabletPipe {
                     case TEvTabletPipe::EvMessage: {
                         // Send local self -> server message without conversions
                         THolder<TEvTabletPipe::TEvMessage> msg(ev->Release<TEvTabletPipe::TEvMessage>().Release());
-                        ctx.ExecutorThread.Send(new IEventHandle(ServerId, SelfId(), msg.Release(),
+                        ctx.Send(new IEventHandle(ServerId, SelfId(), msg.Release(),
                                 IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId)));
                         break;
                     }
@@ -650,7 +650,7 @@ namespace NTabletPipe {
                         }
                         // Rewrite into EvSend and send to the server
                         directEv->Rewrite(TEvTabletPipe::EvSend, ServerId);
-                        ctx.ExecutorThread.Send(directEv.Release());
+                        ctx.Send(directEv.Release());
                         break;
                     }
                     default:
@@ -679,7 +679,7 @@ namespace NTabletPipe {
                     "Sending event to %s via local node %" PRIu32, ev->Recipient.ToString().c_str(), ctx.SelfID.NodeId());
             }
 
-            ctx.ExecutorThread.Send(ev);
+            ctx.Send(ev);
         }
 
         void Die(const TActorContext& ctx) override {
@@ -744,13 +744,13 @@ namespace NTabletPipe {
     void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie, NWilson::TTraceId traceId) {
         auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
-        ctx.ExecutorThread.Send(ev);
+        ctx.Send(ev);
     }
 
     void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie, NWilson::TTraceId traceId) {
         auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
-        ctx.ExecutorThread.Send(ev);
+        ctx.Send(ev);
     }
 
     void ShutdownClient(const TActorContext& ctx, const TActorId& clientId) {

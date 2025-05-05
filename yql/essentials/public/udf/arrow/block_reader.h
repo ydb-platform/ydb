@@ -20,6 +20,7 @@ public:
     virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
 
     virtual ui64 GetDataWeight(const arrow::ArrayData& data) const = 0;
+    virtual ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
     virtual ui64 GetDataWeight(TBlockItem item) const = 0;
     virtual ui64 GetDefaultValueWeight() const = 0;
 
@@ -33,8 +34,28 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
+class TBlockReaderBase : public IBlockReader {
+public:
+    ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        Y_ENSURE(0 <= offset && offset < data.length);
+        Y_ENSURE(offset + length >= offset);
+        Y_ENSURE(offset + length <= data.length);
+        return DoGetSliceDataWeight(data, offset, length);
+    }
+
+protected:
+    virtual ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
+
+    static ui64 GetBitmaskDataWeight(int64_t dataLength) {
+        if (dataLength <= 0) {
+            return 0;
+        }
+        return (dataLength - 1) / 8 + 1;
+    }
+};
+
 template<typename T, bool Nullable, typename TDerived>
-class TFixedSizeBlockReaderBase : public IBlockReader {
+class TFixedSizeBlockReaderBase : public TBlockReaderBase {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -66,10 +87,12 @@ public:
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
-        if constexpr (Nullable) {
-            return (1 + sizeof(T)) * data.length;
-        }
-        return sizeof(T) * data.length;
+        return GetDataWeightImpl(data.length);
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        Y_UNUSED(data, offset);
+        return GetDataWeightImpl(length);
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
@@ -111,6 +134,15 @@ public:
             out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
         }
     }
+
+private:
+    ui64 GetDataWeightImpl(int64_t dataLength) const {
+        ui64 size = sizeof(T) * dataLength;
+        if constexpr (Nullable) {
+            size += GetBitmaskDataWeight(dataLength);
+        }
+        return size;
+    }
 };
 
 template<typename T, bool Nullable>
@@ -132,7 +164,7 @@ public:
 };
 
 template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
-class TStringBlockReader final : public IBlockReader {
+class TStringBlockReader final : public TBlockReaderBase {
 public:
     using TOffset = typename TStringType::offset_type;
 
@@ -164,12 +196,11 @@ public:
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
-        ui64 size = 0;
-        if constexpr (Nullable) {
-            size += data.length;
-        }
-        size += data.buffers[2] ? data.buffers[2]->size() : 0;
-        return size;
+        return GetDataWeightImpl(data.length, data.GetValues<TOffset>(1));
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        return GetDataWeightImpl(length, data.GetValues<TOffset>(1, offset));
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
@@ -214,10 +245,21 @@ public:
         std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
         out.PushString(str);
     }
+
+private:
+    ui64 GetDataWeightImpl(int64_t dataLength, const TOffset* offsets) const {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size += GetBitmaskDataWeight(dataLength);
+        }
+        size += offsets[dataLength] - offsets[0];
+        size += sizeof(TOffset) * dataLength;
+        return size;
+    }
 };
 
 template<bool Nullable, typename TDerived>
-class TTupleBlockReaderBase : public IBlockReader {
+class TTupleBlockReaderBase : public TBlockReaderBase {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -242,10 +284,18 @@ public:
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
         ui64 size = 0;
         if constexpr (Nullable) {
-            size += data.length;
+            size += GetBitmaskDataWeight(data.length);
         }
-
         size += static_cast<const TDerived*>(this)->GetChildrenDataWeight(data);
+        return size;
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size += GetBitmaskDataWeight(length);
+        }
+        size += static_cast<const TDerived*>(this)->GetChildrenDataWeight(data, offset, length);
         return size;
     }
 
@@ -340,6 +390,14 @@ public:
         return size;
     }
 
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+        size_t size = 0;
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            size += Children[i]->GetSliceDataWeight(*data.child_data[i], offset, length);
+        }
+        return size;
+    }
+
     size_t GetChildrenDefaultDataWeight() const {
         size_t size = 0;
         for (ui32 i = 0; i < Children.size(); ++i) {
@@ -393,6 +451,15 @@ public:
         return size;
     }
 
+    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+        Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
+
+        size_t size = 0;
+        size += DateReader_.GetSliceDataWeight(*data.child_data[0], offset, length);
+        size += TimezoneReader_.GetSliceDataWeight(*data.child_data[1], offset, length);
+        return size;
+    }
+
     size_t GetDataWeightImpl(const TBlockItem& item) const {
         Y_UNUSED(item);
         return GetChildrenDefaultDataWeight();
@@ -424,7 +491,54 @@ private:
     TFixedSizeBlockReader<ui16, /* Nullable */false> TimezoneReader_;
 };
 
-class TExternalOptionalBlockReader final : public IBlockReader {
+// NOTE: For any singular type we use arrow::null() data type.
+// This data type DOES NOT support bit mask so for optional type
+// we have to use |TExternalOptional| wrapper.
+class TSingularTypeBlockReader: public TBlockReaderBase {
+public:
+    TSingularTypeBlockReader() = default;
+
+    ~TSingularTypeBlockReader() override = default;
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
+        Y_UNUSED(data, index);
+        return TBlockItem::Zero();
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
+        Y_UNUSED(scalar);
+        return TBlockItem::Zero();
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const override {
+        Y_UNUSED(data);
+        return 0;
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        Y_UNUSED(data, offset, length);
+        return 0;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const override {
+        Y_UNUSED(item);
+        return 0;
+    }
+
+    ui64 GetDefaultValueWeight() const override {
+        return 0;
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const override {
+        Y_UNUSED(index, data, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const override {
+        Y_UNUSED(scalar, out);
+    }
+};
+
+class TExternalOptionalBlockReader final : public TBlockReaderBase {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner(std::move(inner))
@@ -448,7 +562,11 @@ public:
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
-        return data.length + Inner->GetDataWeight(*data.child_data.front());
+        return GetBitmaskDataWeight(data.length) + Inner->GetDataWeight(*data.child_data.front());
+    }
+
+    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+        return GetBitmaskDataWeight(length) + Inner->GetSliceDataWeight(*data.child_data.front(), offset, length);
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
@@ -498,6 +616,7 @@ struct TReaderTraits {
     using TResource = TResourceBlockReader<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
+    using TSingularType = TSingularTypeBlockReader;
 
     constexpr static bool PassType = false;
 
@@ -516,6 +635,10 @@ struct TReaderTraits {
         } else {
             return std::make_unique<TResource<false>>();
         }
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDate>
@@ -592,6 +715,10 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
             props.IsFixed = false;
         }
 
+        return;
+    }
+
+    if (IsSingularType(typeInfoHelper, type)) {
         return;
     }
 

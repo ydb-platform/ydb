@@ -15,6 +15,11 @@ class TTablet : public TActor<TTablet> {
     using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo;
     using ETabletState = TTabletStateInfo::ETabletState;
 
+    struct TRequestAddr {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+
     struct TStateStorageInfo {
         TActorId ProxyID;
 
@@ -225,6 +230,7 @@ class TTablet : public TActor<TTablet> {
     ui32 GcInFly;
     ui32 GcInFlyStep;
     ui32 GcNextStep;
+    TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
@@ -253,6 +259,10 @@ class TTablet : public TActor<TTablet> {
     ui32 BlobStorageErrorStep = Max<ui32>();
     TString BlobStorageErrorReason;
     bool BlobStorageErrorReported = false;
+
+    // Leader confirmation requests
+    THashMap<ui64, TRequestAddr> ConfirmLeaderRequests;
+    ui64 ConfirmLeaderCounter = 0;
 
     ui64 TabletID() const;
 
@@ -315,6 +325,10 @@ class TTablet : public TActor<TTablet> {
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev);
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
 
+    void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
+
+    void Handle(TEvTablet::TEvConfirmLeader::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
     bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
     void Handle(TEvTablet::TEvAux::TPtr &ev);
@@ -509,6 +523,7 @@ class TTablet : public TActor<TTablet> {
     STATEFN(StateActivePhase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTablet::TEvCommit, Handle);
+            hFunc(TEvTablet::TEvConfirmLeader, Handle);
             hFunc(TEvTablet::TEvAux, Handle);
             hFunc(TEvTablet::TEvPreCommit, Handle);
             hFunc(TEvTablet::TEvTabletActive, HandleByLeader);
@@ -533,6 +548,8 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvBlobStorage::TEvGetBlockResult, Handle);
+            hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
         }
     }
 

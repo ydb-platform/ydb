@@ -13,6 +13,7 @@ def openldap_post_install(self):
     )
     self.yamakes.make_recursive(recurse_from_modules=True)
     with self.yamakes["libraries/liblmdb"] as m:
+        m.after("CFLAGS", Switch({'DEFINED LMDB_IDL_LOGN': Linkable(CFLAGS=["-DMDB_IDL_LOGN=${LMDB_IDL_LOGN}"])}))
         m.after("CFLAGS", Switch(OS_ANDROID=Linkable(CFLAGS=["-DMDB_USE_ROBUST=0"])))
 
 

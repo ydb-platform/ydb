@@ -10,7 +10,7 @@ The syntax for calling window functions is detailed in a [separate article](../s
 All [aggregate functions](aggregation.md) can also be used as window functions.
 In this case, each row includes an aggregation result obtained on a set of rows from the [window frame](../syntax/window.md#frame).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -28,13 +28,13 @@ WINDOW
 
 Row number within a [partition](../syntax/window.md#partition). No arguments.
 
-### Signature
+#### Signature
 
 ```yql
 ROW_NUMBER()->Uint64
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -49,14 +49,14 @@ WINDOW w AS (ORDER BY key);
 
 Accessing a value from a row in the [section](../syntax/window.md#partition) that lags behind (`LAG`) or leads (`LEAD`) the current row by a fixed number. The first argument specifies the expression to be accessed, and the second argument specifies the offset in rows. You may omit the offset. By default, the neighbor row is used: the previous or next, respectively (hence, 1 is assumed by default). For the rows having no neighbors at a given distance (for example, `LAG(expr, 3)` `NULL` is returned in the first and second rows of the section).
 
-### Signature
+#### Signature
 
 ```yql
 LEAD(T[,Int32])->T?
 LAG(T[,Int32])->T?
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -97,14 +97,14 @@ Access values from the first and last rows (using the `ORDER BY` clause for the 
 
 Optionally, `OVER` can be preceded by the additional modifier `IGNORE NULLS`. It changes the behavior of functions to the first or last **non-empty** (i.e., non-`NULL`) value among the window frame rows. The antonym of this modifier is `RESPECT NULLS`: it's the default behavior that can be omitted.
 
-### Signature
+#### Signature
 
 ```yql
 FIRST_VALUE(T)->T?
 LAST_VALUE(T)->T?
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -128,13 +128,13 @@ Access a value from a row specified by position in the window's `ORDER BY` order
 
 Optionally, the `IGNORE NULLS` modifier can be specified before `OVER`, which causes rows with `NULL` in the first argument's value to be skipped. The antonym of this modifier is `RESPECT NULLS`, which is the default behavior and may be skipped.
 
-### Signature
+#### Signature
 
 ```yql
 NTH_VALUE(T,N)->T?
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -166,7 +166,7 @@ Passing an argument to `RANK`/`DENSE_RANK`/`PERCENT_RANK` is a non-standard exte
 
 {% endnote %}
 
-### Signature
+#### Signature
 
 ```text
 RANK([T])->Uint64
@@ -174,7 +174,7 @@ DENSE_RANK([T])->Uint64
 PERCENT_RANK([T])->Double
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -203,13 +203,13 @@ WINDOW w AS (ORDER BY my_column);
 
 Distributes the rows of an ordered [partition](../syntax/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
 
-### Signature
+#### Signature
 
 ```yql
 NTILE(Uint64)->Uint64
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -224,13 +224,13 @@ WINDOW w AS (ORDER BY key);
 
 Returns the relative position (> 0 and <= 1) of a row within a [partition](../syntax/window.md#partition). No arguments.
 
-### Signature
+#### Signature
 
 ```yql
 CUME_DIST()->Double
 ```
 
-### Examples
+#### Examples
 
 ```yql
 SELECT

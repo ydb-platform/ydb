@@ -199,8 +199,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, JavascriptCpu).Lower(1.0).GlobalOnly();
-    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(1.0);
-    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(1.0);
+    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(0.1);
+    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(0.1);
 
     REGISTER_SETTING(*this, Owners)
         .NonEmpty()
@@ -317,6 +317,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, EnableFuseMapToMapReduce);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -364,6 +365,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
         .ValueSetter([this](const TString& cluster, const NYT::TNode& spec) {
             OperationSpec[cluster] = spec;
             HybridDqExecution = false;
+        });
+    REGISTER_SETTING(*this, FmrOperationSpec)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
         });
     REGISTER_SETTING(*this, Annotations)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
@@ -458,6 +466,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
+    REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -523,9 +532,33 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, JobBlockTableContent);
     REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
+    REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
+    REGISTER_SETTING(*this, ReportEquiJoinStats);
+    REGISTER_SETTING(*this, RuntimeCluster)
+        .Validator([this] (const TString& cluster, TString value) {
+            if (cluster != "$all") {
+                throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
+            }
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
+    REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
+    REGISTER_SETTING(*this, DefaultRuntimeCluster)
+        .Validator([this] (const TString&, TString value) {
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
+    REGISTER_SETTING(*this, _AllowRemoteClusterInput);
+    REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
+    REGISTER_SETTING(*this, UseNativeDynamicTableRead);
+    REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
+    REGISTER_SETTING(*this, DontForceTransformForInputTables);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

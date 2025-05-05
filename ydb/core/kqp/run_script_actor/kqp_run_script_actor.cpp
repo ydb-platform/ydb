@@ -1,19 +1,20 @@
 #include "kqp_run_script_actor.h"
 
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -86,15 +87,16 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
-        : ExecutionId(executionId)
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
+        : ExecutionId(settings.ExecutionId)
         , Request(request)
-        , Database(database)
-        , LeaseGeneration(leaseGeneration)
-        , LeaseDuration(leaseDuration)
-        , ResultsTtl(resultsTtl)
-        , QueryServiceConfig(queryServiceConfig)
-        , Counters(counters)
+        , Database(settings.Database)
+        , LeaseGeneration(settings.LeaseGeneration)
+        , LeaseDuration(settings.LeaseDuration)
+        , ResultsTtl(settings.ResultsTtl)
+        , ProgressStatsPeriod(settings.ProgressStatsPeriod)
+        , QueryServiceConfig(std::move(queryServiceConfig))
+        , Counters(settings.Counters)
     {
         UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
     }
@@ -173,7 +175,7 @@ private:
         ev->Record.MutableRequest()->SetSessionId(SessionId);
         ev->SetUserRequestContext(UserRequestContext);
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
+            ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
@@ -384,6 +386,16 @@ private:
                 Ydb::Query::Internal::ResultSetMeta meta;
                 if (newResultSet) {
                     *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+
+                    if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
+                        NYql::TIssue rootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support");
+                        for (const NYql::TIssue& issue : issues) {
+                            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                        }
+                        Issues.AddIssue(rootIssue);
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR);
+                        return;
+                    }
                 }
                 if (resultSetInfo.Truncated) {
                     meta.set_truncated(true);
@@ -450,6 +462,7 @@ private:
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, Issues);
+        Issues = TruncateIssues(Issues);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
@@ -668,6 +681,7 @@ private:
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
     const TDuration ResultsTtl;
+    const TDuration ProgressStatsPeriod;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
@@ -701,8 +715,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, std::move(queryServiceConfig), counters);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(request, settings, std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

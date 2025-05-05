@@ -30,7 +30,7 @@ protected:
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
-        TBase::PollAsyncInput();
+        auto lastPollResult = TBase::PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_T("Resume execution, run status: " << status);
@@ -44,6 +44,13 @@ protected:
         }
 
         TBase::ProcessOutputsImpl(status);
+
+        if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
+            // If only reason for continuing was lack on space on all sources,
+            // only continue execution when input was consumed;
+            // otherwise this may result in busy-poll
+            TBase::ContinueExecute(*lastPollResult);
+        }
     }
 
     void DoTerminateImpl() override {
@@ -57,7 +64,7 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{ 
+    bool DoHandleChannelsAfterFinishImpl() override final{
         Y_ABORT_UNLESS(this->Checkpoints);
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -83,7 +90,7 @@ protected: //TDqComputeActorChannels::ICalbacks
 
         auto channel = inputChannel->Channel;
 
-        if (channelData.RowCount()) {
+        if (channelData.ChunkCount()) {
             TDqSerializedBatch batch;
             batch.Proto = std::move(*channelData.Proto.MutableData());
             batch.Payload = std::move(channelData.Payload);
@@ -207,11 +214,13 @@ protected:
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+        limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
+        limits.ArrayBufferMinFillPercentage = this->MemoryLimits.ArrayBufferMinFillPercentage;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-	}
-    
+        }
+
         if (this->Task.GetEnableSpilling()) {
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
@@ -253,7 +262,7 @@ protected:
         );
     }
 
-    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+    const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
         return TaskRunner ? TaskRunner->GetStats() : nullptr;
     }
 

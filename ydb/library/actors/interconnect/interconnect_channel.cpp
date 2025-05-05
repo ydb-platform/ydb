@@ -1,4 +1,5 @@
 #include "interconnect_channel.h"
+#include "interconnect_zc_processor.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -11,7 +12,7 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
-    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
         if (task.GetInternalFreeAmount() < amount) {
             return false;
@@ -48,22 +49,20 @@ namespace NActors {
         // append them to the packet
         task.Write<false>(&part, sizeof(part));
         task.Write<false>(&descr, sizeof(descr));
-
-        *weightConsumed += amount;
         OutputQueueSize -= sizeof(TEventDescr2);
         Metrics->UpdateOutputChannelEvents(ChannelId);
 
         return true;
     }
 
-    void TEventOutputChannel::DropConfirmed(ui64 confirm) {
+    void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
         LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
-            Pool.Release(NotYetConfirmed, it++);
+            pool.Release(NotYetConfirmed, it++);
         }
     }
 
-    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial) {
         for (;;) {
             Y_ABORT_UNLESS(!Queue.empty());
             TEventHolder& event = Queue.front();
@@ -101,7 +100,7 @@ namespace NActors {
                     break;
 
                 case EState::BODY:
-                    if (FeedPayload(task, event, weightConsumed)) {
+                    if (FeedPayload(task, event)) {
                         State = EState::DESCRIPTOR;
                     } else {
                         return false;
@@ -109,7 +108,7 @@ namespace NActors {
                     break;
 
                 case EState::DESCRIPTOR:
-                    if (!FeedDescriptor(task, event, weightConsumed)) {
+                    if (!FeedDescriptor(task, event)) {
                         return false;
                     }
                     event.Serial = serial;
@@ -185,7 +184,7 @@ namespace NActors {
             if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
                 task.Write<External>(data, len);
             } else {
-                task.Append<External>(data, len);
+                task.Append<External>(data, len, &event.ZcTransferId);
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -230,7 +229,7 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event) {
         for (;;) {
             // calculate inline or external part size (it may cover a few sections, not just single one)
             while (!PartLenRemain) {
@@ -255,8 +254,8 @@ namespace NActors {
 
             // serialize bytes
             const auto complete = IsPartInline
-                ? FeedInlinePayload(task, event, weightConsumed)
-                : FeedExternalPayload(task, event, weightConsumed);
+                ? FeedInlinePayload(task, event)
+                : FeedExternalPayload(task, event);
             if (!complete) { // no space to serialize
                 return false;
             } else if (*complete) { // event serialized
@@ -265,7 +264,7 @@ namespace NActors {
         }
     }
 
-    std::optional<bool> TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event) {
         if (task.GetInternalFreeAmount() <= sizeof(TChannelPart)) {
             return std::nullopt;
         }
@@ -284,13 +283,12 @@ namespace NActors {
         };
 
         task.WriteBookmark(std::move(partBookmark), &part, sizeof(part));
-        *weightConsumed += sizeof(TChannelPart) + part.Size;
         OutputQueueSize -= part.Size;
 
         return complete;
     }
 
-    std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
         if (task.GetInternalFreeAmount() < partSize || task.GetExternalFreeAmount() == 0) {
             return std::nullopt;
@@ -314,7 +312,8 @@ namespace NActors {
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
         *ptr++ = static_cast<ui8>(EXdcCommand::PUSH_DATA);
-        *reinterpret_cast<ui16*>(ptr) = bytesSerialized;
+
+        WriteUnaligned<ui16>(ptr, bytesSerialized);
         ptr += sizeof(ui16);
         if (task.ChecksummingXxhash()) {
             XXH3_state_t state;
@@ -322,20 +321,19 @@ namespace NActors {
             task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
                 XXH3_64bits_update(&state, span.data(), span.size());
             });
-            *reinterpret_cast<ui32*>(ptr) = XXH3_64bits_digest(&state);
+            const ui32 cs = XXH3_64bits_digest(&state);
+            WriteUnaligned<ui32>(ptr, cs);
         } else if (task.ChecksummingCrc32c()) {
-            *reinterpret_cast<ui32*>(ptr) = task.ExternalChecksum;
+            WriteUnaligned<ui32>(ptr, task.ExternalChecksum);
         }
 
         task.WriteBookmark(std::move(partBookmark), buffer, partSize);
-
-        *weightConsumed += partSize + bytesSerialized;
         OutputQueueSize -= bytesSerialized;
 
         return complete;
     }
 
-    void TEventOutputChannel::NotifyUndelivered() {
+    void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
@@ -350,11 +348,17 @@ namespace NActors {
                 item.ForwardOnNondelivery(true);
             }
         }
-        Pool.Release(NotYetConfirmed);
+
+        // Events in the NotYetConfirmed may be actualy not sended by kernel.
+        // In case of enabled ZC we need to wait kernel send task to be completed before reusing buffers
+        if (zg) {
+            zg->ExtractToSafeTermination(NotYetConfirmed);
+        }
+        pool.Release(NotYetConfirmed);
         for (auto& item : Queue) {
             item.ForwardOnNondelivery(false);
         }
-        Pool.Release(Queue);
+        pool.Release(Queue);
     }
 
 }

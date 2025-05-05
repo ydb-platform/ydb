@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>

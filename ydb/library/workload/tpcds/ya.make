@@ -50,7 +50,7 @@ ALL_RESOURCE_FILES_FROM_DIRS(
 )
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/resource
     ydb/library/accessor
     ydb/library/workload/tpc_base

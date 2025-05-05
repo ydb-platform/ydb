@@ -5,8 +5,8 @@
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <library/cpp/testing/unittest/registar.h>

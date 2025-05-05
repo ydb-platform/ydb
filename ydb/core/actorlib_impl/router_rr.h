@@ -48,7 +48,7 @@ namespace NActors {
                 NActors::IActor *actor = new TTargetActor();
 
                 // register the actor
-                NActors::TActorId actorId = ctx.ExecutorThread.RegisterActor(actor, mbType, threadPoolId);
+                NActors::TActorId actorId = ctx.Register(actor, mbType, threadPoolId);
                 Actors.push_back(actorId);
             }
         }

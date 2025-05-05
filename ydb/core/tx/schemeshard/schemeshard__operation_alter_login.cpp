@@ -2,7 +2,12 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+
 #include <ydb/library/security/util.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
+
+
 #include <ydb/core/protos/auth.pb.h>
 
 namespace {
@@ -37,6 +42,7 @@ public:
                     request.User = createUser.GetUser();
                     request.Password = createUser.GetPassword();
                     request.CanLogin = createUser.GetCanLogin();
+                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -47,7 +53,7 @@ public:
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
                                                                            Schema::LoginSids::CreatedAt,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds(), sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToMicroSeconds(sid.CreatedAt), sid.IsEnabled);
 
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
@@ -73,6 +79,7 @@ public:
 
                     if (modifyUser.HasPassword()) {
                         request.Password = modifyUser.GetPassword();
+                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {
@@ -86,7 +93,8 @@ public:
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
                                                                            Schema::LoginSids::SidHash,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled,
+                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
@@ -121,7 +129,7 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[group];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -182,18 +190,10 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveGroup: {
                     const auto& removeGroup = alterLogin.GetRemoveGroup();
-                    const TString& group = removeGroup.GetGroup();
-                    auto response = context.SS->LoginProvider.RemoveGroup({
-                        .Group = group,
-                        .MissingOk = removeGroup.GetMissingOk()
-                    });
+                    auto response = RemoveGroup(context, removeGroup, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSids>().Key(group).Delete();
-                        for (const TString& parent : response.TouchedGroups) {
-                            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
-                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -249,20 +249,8 @@ public:
             return {.Error = "User not found"};
         }
 
-        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
-        for (auto pathId : subTree) {
-            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-            if (path->Owner == user) {
-                auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() <<
-                    "User " << user << " owns " << pathStr << " and can't be removed"};
-            }
-            NACLib::TACL acl(path->ACL);
-            if (acl.HasAccess(user)) {
-                auto pathStr = TPath::Init(pathId, context.SS).PathString();
-                return {.Error = TStringBuilder() << 
-                    "User " << user << " has an ACL record on " << pathStr << " and can't be removed"};
-            }
+        if (auto canRemove = CanRemoveSid(context, user, "User"); canRemove.Error) {
+            return canRemove;
         }
 
         auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
@@ -278,20 +266,61 @@ public:
         return {}; // success
     }
 
-    void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
-        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        bool isAdmin = adminSids.empty();
-        if (!isAdmin) {
-            const auto providerGroups = loginProvider.GetGroupsMembership(user);
-            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-            const auto userToken = NACLib::TUserToken(user, groups);
-            auto hasSid = [&userToken](const TString& sid) -> bool {
-                return userToken.IsExist(sid);
-            };
-            isAdmin = std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();   
+    NLogin::TLoginProvider::TBasicResponse RemoveGroup(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveGroup& removeGroup, NIceDb::TNiceDb& db) {
+        const TString& group = removeGroup.GetGroup();
+
+        if (!context.SS->LoginProvider.CheckGroupExists(group)) {
+            if (removeGroup.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "Group not found"};
         }
 
-        if (isAdmin) {
+        if (auto canRemove = CanRemoveSid(context, group, "Group"); canRemove.Error) {
+            return canRemove;
+        }
+
+        auto removeGroupResponse = context.SS->LoginProvider.RemoveGroup(group);
+        if (removeGroupResponse.Error) {
+            return removeGroupResponse;
+        }
+
+        db.Table<Schema::LoginSids>().Key(group).Delete();
+        for (const TString& parent : removeGroupResponse.TouchedGroups) {
+            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
+        }
+
+        return {}; // success
+    }
+
+    NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            return {};
+        }
+
+        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
+        for (auto pathId : subTree) {
+            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            if (path->Owner == sid) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() <<
+                    sidType << " " << sid << " owns " << pathStr << " and can't be removed"};
+            }
+            NACLib::TACL acl(path->ACL);
+            if (acl.HasAccess(sid)) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() <<
+                    sidType << " " << sid << " has an ACL record on " << pathStr << " and can't be removed"};
+            }
+        }
+
+        return {}; // success
+    }
+
+    void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
+        const auto userToken = NKikimr::BuildLocalUserToken(loginProvider, user);
+
+        if (IsAdministrator(AppData(), &userToken)) {
             additionalParts.emplace_back("login_user_level", "admin");
         }
     }

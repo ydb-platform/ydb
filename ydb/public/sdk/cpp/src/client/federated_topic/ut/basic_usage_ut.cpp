@@ -1,16 +1,16 @@
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/federated_topic/impl/federated_write_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_write_session.h>
 
-#include <src/client/topic/ut/ut_utils/managed_executor.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.h>
 
-#include <src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/common/executor_impl.h>
-#include <src/client/persqueue_public/include/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/write_session.h>
 
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
-#include <src/client/federated_topic/ut/fds_mock/fds_mock.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/ut/fds_mock/fds_mock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

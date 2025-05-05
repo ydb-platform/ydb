@@ -170,7 +170,8 @@ private:
                 .FolderId(Cfg.GetFolderId())
                 .ResourceId(Cfg.GetResourceId())
                 .SourceId(Cfg.GetSourceId())
-                .Tags(ToJsonMap(Cfg.GetTags()));
+                .Tags(ToJsonMap(Cfg.GetTags()))
+                .Labels(ToJsonMap(Cfg.GetLabels()));
 
             LWPROBE(ResourceBillSend,
                 QuoterPath,

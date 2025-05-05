@@ -77,13 +77,13 @@ namespace NKikimr {
 
     public:
         void SetVDiskIncarnationGuid(TVDiskIncarnationGuid g) {
-            Y_DEBUG_ABORT_UNLESS(!VDiskIncarnationGuidSet);
+            Y_VERIFY_DEBUG_S(!VDiskIncarnationGuidSet, VCtx->VDiskLogPrefix);
             VDiskIncarnationGuidSet = true;
             VDiskIncarnationGuid = g;
         }
 
         TVDiskIncarnationGuid GetVDiskIncarnationGuid(bool allowUnset = false) const {
-            Y_DEBUG_ABORT_UNLESS(VDiskIncarnationGuidSet || allowUnset);
+            Y_VERIFY_DEBUG_S(VDiskIncarnationGuidSet || allowUnset, VCtx->VDiskLogPrefix);
             return VDiskIncarnationGuid;
         }
 

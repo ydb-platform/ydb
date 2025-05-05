@@ -1,25 +1,25 @@
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/value_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/value_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/type_switcher.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <src/library/decimal/yql_decimal.h>
-#include <src/library/uuid/uuid.h>
+#include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
+#include <ydb/public/sdk/cpp/src/library/uuid/uuid.h>
 
 #include <util/generic/mapfindptr.h>
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const std::string& method)
 {
@@ -567,9 +567,13 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             out << "Null"sv;
             break;
 
-        default:
-            ThrowFatalError(TStringBuilder()
-                << "Unexpected type kind: " << parser.GetKind());
+        case TTypeParser::ETypeKind::EmptyList:
+            out << "EmptyList"sv;
+            break;
+
+        case TTypeParser::ETypeKind::EmptyDict:
+            out << "EmptyDict"sv;
+            break;
     }
 }
 
@@ -3370,3 +3374,8 @@ TValue TValueBuilder::Build() {
 }
 
 } // namespace NYdb
+
+template<>
+void Out<NYdb::TUuidValue>(IOutputStream& o, const NYdb::TUuidValue& value) {
+    o << value.ToString();
+}

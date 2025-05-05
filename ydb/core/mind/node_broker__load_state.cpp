@@ -1,7 +1,5 @@
 #include "node_broker_impl.h"
-#include "node_broker__scheme.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
 namespace NKikimr {
@@ -20,34 +18,18 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Execute");
 
-        if (!Self->DbLoadState(txc, ctx))
-            return false;
-
-        // Move epoch if required.
-        auto now = ctx.Now();
-        while (now > Self->Epoch.End) {
-            TStateDiff diff;
-            Self->ComputeNextEpochDiff(diff);
-            Self->DbApplyStateDiff(diff, txc);
-            Self->ApplyStateDiff(diff);
-        }
-
-        return true;
+        DbChanges = Self->Dirty.DbLoadState(txc, ctx);
+        return DbChanges.Ready;
     }
 
     void Complete(const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxLoadState Complete");
-
-        Self->Become(&TNodeBroker::StateWork);
-        Self->SubscribeForConfigUpdates(ctx);
-        Self->ScheduleEpochUpdate(ctx);
-        Self->PrepareEpochCache();
-        Self->SignalTabletActive(ctx);
-        Self->TxCompleted(this, ctx);
+        Self->Execute(Self->CreateTxMigrateState(std::move(DbChanges)));
     }
 
 private:
+    TDbChanges DbChanges;
 };
 
 ITransaction *TNodeBroker::CreateTxLoadState()

@@ -21,6 +21,7 @@
 
 - [Установка](install.md)
 - [Аутентификация](auth.md)
+- [{#T}](error_handling.md)
 - [Сравнение возможностей SDK](feature-parity.md)
 - [Параметризованные запросы](parameterized_queries.md)
 - [Работа с топиками](topic.md)

@@ -117,7 +117,7 @@ public:
         {
             block = fail;
             if constexpr (IsStrict) {
-                const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDecimalFromStringWrapper::Throw));
+                const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDecimalFromStringWrapper::Throw>());
                 const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {valType, psType, psType}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
                 CallInst::Create(doFuncType, doFuncPtr, { value, precision, scale }, "", block);
@@ -226,7 +226,7 @@ public:
             BranchInst::Create(fail, last, test, block);
 
             block = fail;
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFromStringWrapper::Throw));
+            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromStringWrapper::Throw>());
             const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {valType, slotType}, false);
             const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
             CallInst::Create(doFuncType, doFuncPtr, { value, slot }, "", block);

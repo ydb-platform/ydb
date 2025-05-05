@@ -139,6 +139,8 @@ BELONGS ya.make
         lib/compress/zstd_ldm_geartab.h [2:3]
         lib/compress/zstd_opt.c [2:3]
         lib/compress/zstd_opt.h [2:3]
+        lib/compress/zstd_preSplit.c [2:3]
+        lib/compress/zstd_preSplit.h [2:3]
         lib/compress/zstdmt_compress.c [2:3]
         lib/compress/zstdmt_compress.h [2:3]
         lib/decompress/huf_decompress.c [4:4]

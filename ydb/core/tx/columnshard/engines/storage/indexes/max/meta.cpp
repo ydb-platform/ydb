@@ -1,8 +1,9 @@
 #include "meta.h"
 
-#include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/program/program.h>
+
+#include <ydb/library/formats/arrow/scalar/serialization.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
@@ -15,7 +16,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
-            auto currentScalar = cReader.GetCurrentAccessor()->GetMaxScalar();
+            auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar();
             AFL_VERIFY(currentScalar);
             if (!result || NArrow::ScalarCompare(*result, *currentScalar) == -1) {
                 result = currentScalar;
@@ -23,10 +24,6 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
         }
     }
     return NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
-}
-
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& /*info*/, const NSchemeShard::TOlapSchema& /*schema*/) const {
 }
 
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
@@ -43,8 +40,7 @@ std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
-    AFL_VERIFY(ColumnIds.size() == 1);
-    auto scalar = GetMaxScalarVerified({ data }, indexInfo.GetColumnFeaturesVerified(*ColumnIds.begin()).GetArrowField()->type());
+    auto scalar = GetMaxScalarVerified({ data }, indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
     return scalar->ToString();
 }
 

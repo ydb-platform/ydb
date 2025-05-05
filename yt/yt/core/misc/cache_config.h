@@ -8,10 +8,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSlruCacheConfig
+struct TSlruCacheConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! The maximum number of weight units cached items are allowed to occupy.
     //! Zero means that no items are cached.
     i64 Capacity;
@@ -45,10 +44,9 @@ DEFINE_REFCOUNTED_TYPE(TSlruCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSlruCacheDynamicConfig
+struct TSlruCacheDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! The maximum number of weight units cached items are allowed to occupy.
     //! Zero means that no items are cached.
     std::optional<i64> Capacity;
@@ -87,10 +85,9 @@ DEFINE_REFCOUNTED_TYPE(TSlruCacheDynamicConfig)
  * If request was unsuccessful, the entry (which contains error response) will be expired
  * after ExpireAfterFailedUpdateTime.
  */
-class TAsyncExpiringCacheConfig
+struct TAsyncExpiringCacheConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Time since last finished Get() after which an entry is removed.
     TDuration ExpireAfterAccessTime;
 
@@ -120,10 +117,9 @@ DEFINE_REFCOUNTED_TYPE(TAsyncExpiringCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAsyncExpiringCacheDynamicConfig
+struct TAsyncExpiringCacheDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     std::optional<TDuration> ExpireAfterAccessTime;
     std::optional<TDuration> ExpireAfterSuccessfulUpdateTime;
     std::optional<TDuration> ExpireAfterFailedUpdateTime;

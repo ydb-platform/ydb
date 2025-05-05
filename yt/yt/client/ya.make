@@ -14,6 +14,7 @@ SRCS(
     api/delegating_client.cpp
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
+    api/distributed_table_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -32,6 +33,8 @@ SRCS(
     api/sticky_transaction_pool.cpp
     api/options.cpp
     api/shuffle_client.cpp
+    api/table_partition_reader.cpp
+    api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp
@@ -95,6 +98,7 @@ SRCS(
 
     scheduler/operation_id_or_alias.cpp
     scheduler/operation_cache.cpp
+    scheduler/spec_patch.cpp
 
     security_client/acl.cpp
     security_client/access_control.cpp
@@ -129,7 +133,6 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
-    table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
@@ -220,6 +223,7 @@ PEERDIR(
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
+    library/cpp/digest/crc32c
     library/cpp/json
     library/cpp/string_utils/base64
     contrib/libs/pfr
@@ -238,6 +242,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    query_client/unittests
     signature/unittests
     table_client/unittests
     unittests

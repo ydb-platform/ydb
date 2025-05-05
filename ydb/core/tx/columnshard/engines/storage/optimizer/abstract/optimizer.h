@@ -7,6 +7,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -80,8 +81,12 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
+
+    virtual bool DoIsOverloaded() const {
+        return false;
+    }
 
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
@@ -103,10 +108,12 @@ protected:
     }
 
 public:
-    IOptimizerPlanner(const ui64 pathId)
+    IOptimizerPlanner(const TInternalPathId pathId)
         : PathId(pathId) {
     }
-
+    bool IsOverloaded() const {
+        return DoIsOverloaded();
+    }
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
     }
@@ -169,12 +176,12 @@ class IOptimizerPlannerConstructor {
 public:
     class TBuildContext {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
 
     public:
-        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema) {

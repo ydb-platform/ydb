@@ -127,6 +127,7 @@ BELONGS ya.make
         include/boost/context/stack_traits.hpp [3:5]
         include/boost/context/windows/protected_fixedsize_stack.hpp [3:5]
         src/continuation.cpp [3:5]
+        src/fcontext.cpp [2:4]
         src/fiber.cpp [3:5]
         src/posix/stack_traits.cpp [3:5]
         src/untested.cpp [3:5]

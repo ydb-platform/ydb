@@ -595,6 +595,27 @@ namespace {
     }
 }
 
+void UpdateWorldLinks(TExprNode& node, TNodeSet& visited, const TNodeMap<TExprNode*>& renames) {
+    if (!visited.emplace(&node).second) {
+        return;
+    }
+
+    auto& links = node.GetWorldLinks();
+    if (!links) {
+        return;
+    }
+
+    for (auto& link : *links) {
+        if (auto it = renames.find(link.Get()); it != renames.end() && it->second) {
+            link = it->second;
+        }
+    }
+
+    for (auto& child : node.Children()) {
+        UpdateWorldLinks(*child, visited, renames);
+    }
+}
+
 IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext&) {
     YQL_PROFILE_SCOPE(DEBUG, "UpdateCompletness");
     output = input;
@@ -622,6 +643,10 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
     const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable);
     YQL_ENSURE(forSubGraph || !newNode);
+    if (!renames.empty()) {
+        TNodeSet visited;
+        UpdateWorldLinks(*output, visited, renames);
+    }
     //Cerr << "OUTPUT\n" << output->Dump() << "\n";
     return IGraphTransformer::TStatus::Ok;
 }

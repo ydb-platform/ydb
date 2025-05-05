@@ -54,7 +54,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 * `String::StartsWith(string:String?, prefix:String) -> Bool` - Устаревшая: используйте встроенную функцию [StartsWith](../../builtins/basic.md#starts_ends_with)
 * `String::HasSuffix(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
 * `String::EndsWith(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
-* `String::Reverse(string:String?) -> String?` - Устаревшая: используйте [Unicode::Reverse](unicode.md)
+* `String::Reverse(string:String?) -> String?` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 
   Устаревшие функции, к использованию не рекомендуются.
 

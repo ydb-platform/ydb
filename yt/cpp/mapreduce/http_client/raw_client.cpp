@@ -4,6 +4,7 @@
 #include "rpc_parameters_serialization.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/common/retry_lib.h>
 
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -18,6 +19,8 @@
 #include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <library/cpp/yson/node/node_io.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
 
@@ -244,7 +247,9 @@ void THttpRawClient::Concatenate(
     THttpHeader header("POST", "concatenate");
     header.AddMutationId();
     header.MergeParameters(NRawClient::SerializeParamsForConcatenate(transactionId, Context_.Config->Prefix, sourcePaths, destinationPath, options));
-    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config)->GetResponse();
 }
 
 TTransactionId THttpRawClient::StartTransaction(
@@ -714,9 +719,7 @@ TNode::TListType THttpRawClient::LookupRows(
             fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
         })
         .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
+        .Item("versioned").Value(options.Versioned_)
         .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("column_names").Value(*options.Columns_);
         })
@@ -773,6 +776,24 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
     header.MergeParameters(NRawClient::SerializeParamsForReadTable(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+    const TString& cookie,
+    const TMaybe<TFormat>& format,
+    const TTablePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_table_partition", /*isApi*/ false);
+    header.SetOutputFormat(format);
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    auto params = NRawClient::SerializeParamsForReadTablePartition(cookie, options);
+    header.MergeParameters(params);
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -929,6 +950,16 @@ ui64 THttpRawClient::GenerateTimestamp()
 IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 {
     return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
+}
+
+IRawClientPtr THttpRawClient::Clone()
+{
+    return ::MakeIntrusive<THttpRawClient>(Context_);
+}
+
+IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
+{
+    return ::MakeIntrusive<THttpRawClient>(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

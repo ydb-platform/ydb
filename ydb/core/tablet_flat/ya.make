@@ -26,6 +26,7 @@ SRCS(
     flat_executor_compaction_logic.h
     flat_executor_counters.cpp
     flat_executor_counters.h
+    flat_executor_data_cleanup_logic.cpp
     flat_executor_db_mon.cpp
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
@@ -82,11 +83,9 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
-
-GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
-
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
-
+GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
+GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
 
 IF (KIKIMR_TABLET_BORROW_WITHOUT_META)
@@ -98,6 +97,8 @@ ENDIF()
 PEERDIR(
     contrib/libs/protobuf
     ydb/library/actors/util
+    ydb/library/actors/core
+    ydb/library/services
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector
@@ -106,7 +107,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos

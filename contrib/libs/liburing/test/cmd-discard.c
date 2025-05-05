@@ -200,6 +200,8 @@ static int basic_cmd_test(struct io_uring *ring, int op)
 
 	fd = open(filename, O_DIRECT | O_RDWR | O_EXCL);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EBUSY)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "open failed %i\n", errno);
 		return T_EXIT_FAIL;
 	}
@@ -247,6 +249,8 @@ static int test_fail_edge_cases(struct io_uring *ring, int op)
 
 	fd = open(filename, O_DIRECT | O_RDWR | O_EXCL);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EBUSY)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "open failed %i\n", errno);
 		return T_EXIT_FAIL;
 	}
@@ -301,6 +305,8 @@ static int test_rdonly(struct io_uring *ring, int op)
 
 	fd = open(filename, O_DIRECT | O_RDONLY | O_EXCL);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EBUSY)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "open failed %i\n", errno);
 		return T_EXIT_FAIL;
 	}
@@ -314,6 +320,8 @@ static int test_rdonly(struct io_uring *ring, int op)
 
 	fd = open(filename, O_DIRECT | O_RDWR | O_EXCL);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EBUSY)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "open failed %i\n", errno);
 		return T_EXIT_FAIL;
 	}
@@ -353,6 +361,8 @@ int main(int argc, char *argv[])
 
 	fd = open(filename, O_DIRECT | O_RDONLY | O_EXCL);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EBUSY)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "open failed %i\n", errno);
 		return T_EXIT_FAIL;
 	}
@@ -395,29 +405,29 @@ int main(int argc, char *argv[])
 		if (!opcodes[cmd_op].test)
 			continue;
 		ret = basic_cmd_test(&ring, cmd_op);
-		if (ret) {
-			if (ret == T_EXIT_SKIP)
-				continue;
-
+		if (ret == T_EXIT_FAIL) {
 			fprintf(stderr, "basic_cmd_test() failed, cmd %i\n",
 					cmd_op);
 			return T_EXIT_FAIL;
 		}
 
 		ret = test_rdonly(&ring, cmd_op);
-		if (ret) {
+		if (ret == T_EXIT_FAIL) {
 			fprintf(stderr, "test_rdonly() failed, cmd %i\n",
 					cmd_op);
 			return T_EXIT_FAIL;
 		}
 
 		ret = test_fail_edge_cases(&ring, cmd_op);
-		if (ret) {
+		if (ret == T_EXIT_FAIL) {
 			fprintf(stderr, "test_fail_edge_cases() failed, cmd %i\n",
 					cmd_op);
 			return T_EXIT_FAIL;
 		}
-		fret = T_EXIT_PASS;
+		if (ret == T_EXIT_SKIP)
+			fret = T_EXIT_SKIP;
+		else
+			fret = T_EXIT_PASS;
 	}
 
 	io_uring_queue_exit(&ring);

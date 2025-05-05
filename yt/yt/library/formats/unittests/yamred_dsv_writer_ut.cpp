@@ -11,7 +11,6 @@
 
 #include <cstdio>
 
-
 namespace NYT::NFormats {
 namespace {
 

@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
@@ -169,4 +169,4 @@ inline bool HasNullCounters(TReaderCounters& counters) {
 
 #undef TOPIC_COUNTERS_HISTOGRAM_SETUP
 
-}  // namespace NYdb::V3::NTopic
+}  // namespace NYdb::NTopic

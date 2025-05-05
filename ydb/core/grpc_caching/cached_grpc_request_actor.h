@@ -158,7 +158,7 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext& ctx) {
                 TActorId actorId = ctx.SelfID;
-                TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+                TActorSystem* actorSystem = ctx.ActorSystem();
 
                 NYdbGrpc::TResponseCallback<TResponse> responseCb =
                         [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {

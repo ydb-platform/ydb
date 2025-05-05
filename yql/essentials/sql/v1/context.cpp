@@ -68,6 +68,10 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverWindow", &TContext::DistinctOverWindow},
     {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
+    {"DistinctOverKeys", &TContext::DistinctOverKeys},
+    {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
+    {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
+    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike}
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -81,11 +85,14 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
+TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+                   const NSQLTranslation::TTranslationSettings& settings,
                    const NSQLTranslation::TSQLHints& hints,
                    TIssues& issues,
                    const TString& query)
-    : ClusterMapping(settings.ClusterMapping)
+    : Lexers(lexers)
+    , Parsers(parsers)
+    , ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , SQLHints(hints)
@@ -97,8 +104,13 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
+    if (settings.LangVer >= MakeLangVersion(2025, 2)) {
+        GroupByExprAfterWhere = true;
+    }
+
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());
     }
@@ -244,7 +256,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         }
 
         if (Settings.MaxErrors <= Issues.Size()) {
-            ythrow NProtoAST::TTooManyErrors() << "Too many issues";
+            ythrow NAST::TTooManyErrors() << "Too many issues";
         }
     }
 
@@ -349,10 +361,6 @@ void TContext::DeclareVariable(const TString& varName, const TPosition& pos, con
 bool TContext::AddExport(TPosition pos, const TString& name) {
     if (IsAnonymousName(name)) {
         Error(pos) << "Can not export anonymous name " << name;
-        return false;
-    }
-    if (Exports.contains(name)) {
-        Error(pos) << "Duplicate export symbol: " << name;
         return false;
     }
     if (!Scoped->LookupNode(name)) {
@@ -656,6 +664,18 @@ TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
+}
+
+void EnumerateSqlFlags(std::function<void(std::string_view)> callback) {
+    for (const auto& x : CTX_PRAGMA_FIELDS) {
+        callback(x.first);
+        callback(TString("Disable") + x.first);
+    }
+
+    for (const auto& x : CTX_PRAGMA_MAYBE_FIELDS) {
+        callback(x.first);
+        callback(TString("Disable") + x.first);
+    }
 }
 
 } // namespace NSQLTranslationV1

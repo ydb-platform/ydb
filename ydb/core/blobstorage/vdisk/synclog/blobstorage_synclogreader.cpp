@@ -29,7 +29,8 @@ namespace NKikimr {
             }
         }
 
-        TWhatsNextOutcome WhatsNext(ui64 syncedLsn,
+        TWhatsNextOutcome WhatsNext(const TString& logPrefix,
+                                    ui64 syncedLsn,
                                     ui64 dbBirthLsn,
                                     const NSyncLog::TLogEssence *e,
                                     std::function<TString()> reportInternals) {
@@ -61,7 +62,7 @@ namespace NKikimr {
                     ui64 firstLogLsn = 0;
 
                     if (!e->MemLogEmpty && !e->DiskLogEmpty) {
-                        Y_ABORT_UNLESS(e->FirstDiskLsn <= e->FirstMemLsn, "%s", reportInternals().data());
+                        Y_VERIFY_S(e->FirstDiskLsn <= e->FirstMemLsn, logPrefix << reportInternals());
                         firstLogLsn = e->FirstDiskLsn;
                     } else if (e->MemLogEmpty) {
                         firstLogLsn = e->FirstDiskLsn;
@@ -69,9 +70,10 @@ namespace NKikimr {
                         firstLogLsn = e->FirstMemLsn;
                     }
 
-                    Y_ABORT_UNLESS(lastLogLsn != 0 && firstLogLsn <= lastLogLsn,
-                             " firstLogLsn# %" PRIu64 " lastLogLsn# %" PRIu64 " %s",
-                             firstLogLsn, lastLogLsn, reportInternals().data());
+                    Y_VERIFY_S(lastLogLsn != 0 && firstLogLsn <= lastLogLsn, logPrefix
+                             << " firstLogLsn# " << firstLogLsn
+                             << " lastLogLsn# " << lastLogLsn
+                             << " " << reportInternals());
 
                     if (!(syncedLsn + 1 >= logStartLsn)) {
                         return TWhatsNextOutcome::Error(2);
@@ -177,7 +179,7 @@ namespace NKikimr {
                     FragmentWriter.Finish(result->Record.MutableData());
                 }
 
-                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx);
+                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx, {});
                 ctx.Send(ParentId, new TEvSyncLogReadFinished(SourceVDisk));
                 Die(ctx);
             }
@@ -262,7 +264,7 @@ namespace NKikimr {
                 TLogEssence e {};
                 SnapPtr->FillInLogEssence(&e);
                 auto ri = std::bind(InternalsToString, Ev->Get(), SnapPtr.Get(), DbBirthLsn);
-                TWhatsNextOutcome wno = WhatsNext(syncedLsn, DbBirthLsn, &e, ri);
+                TWhatsNextOutcome wno = WhatsNext(SlCtx->VCtx->VDiskLogPrefix, syncedLsn, DbBirthLsn, &e, ri);
 
                 // process outcome
                 if (wno.WhatsNext == EWnError) {
@@ -339,21 +341,20 @@ namespace NKikimr {
                 // FIXME: optimize, batch reads; use Db->RecommendedReadSize
                 CHECK_PDISK_RESPONSE_READABLE(SlCtx->VCtx, ev, ctx);
 
-                Y_ABORT_UNLESS(DiskIt.Valid());
+                Y_VERIFY_S(DiskIt.Valid(), SlCtx->VCtx->VDiskLogPrefix);
                 std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get();
                 ui32 chunkIdx = p.first;
                 const TDiskIndexRecord *idxRec = p.second;
                 auto msg = ev->Get();
                 const TBufferWithGaps &readData = ev->Get()->Data;
-                Y_ABORT_UNLESS(chunkIdx == msg->ChunkIdx &&
+                Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
                          idxRec->OffsetInPages * SnapPtr->AppendBlockSize == msg->Offset &&
                          idxRec->PagesNum * SnapPtr->AppendBlockSize == readData.Size(),
-                         "SyncLog read command failed: chunkIdx# %" PRIu32
-                         " msgChunkIdx# %" PRIu32 " OffsetInPages# %" PRIu32
-                         " appendBlockSize# %" PRIu32 " msgOffset# %" PRIu32
-                         " PagesNum# %" PRIu32 " readDataSize# %" PRIu32,
-                         chunkIdx, msg->ChunkIdx, idxRec->OffsetInPages, SnapPtr->AppendBlockSize,
-                         msg->Offset, idxRec->PagesNum, ui32(readData.Size()));
+                    SlCtx->VCtx->VDiskLogPrefix
+                    << "SyncLog read command failed: chunkIdx# " << chunkIdx
+                    <<" msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
+                    << " appendBlockSize# " << SnapPtr->AppendBlockSize << " msgOffset# " << msg->Offset
+                    << " PagesNum# " << idxRec->PagesNum << " readDataSize# " << ui32(readData.Size()));
 
                 // process all pages
                 for (ui32 pi = 0; pi < idxRec->PagesNum; pi++) {
@@ -455,4 +456,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

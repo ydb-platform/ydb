@@ -80,6 +80,8 @@ SET(ORIG_SOURCES
     mkql_mapnext.cpp
     mkql_map_join.cpp
     mkql_match_recognize.cpp
+    mkql_match_recognize_list.cpp
+    mkql_match_recognize_measure_arg.cpp
     mkql_match_recognize_rows_formatter.cpp
     mkql_multihopping.cpp
     mkql_multimap.cpp
@@ -160,6 +162,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/core/sql_types
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils

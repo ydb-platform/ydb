@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/common.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
@@ -14,16 +15,19 @@ private:
     const NActors::TActorId TabletActorId;
     const ui64 Generation;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
+    std::optional<TActorId> LastGCActor;
     std::optional<NKikimrSchemeOp::TS3Settings> CurrentS3Settings;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr InitializationConfig;
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TSpinLock ChangeOperatorLock;
-    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
+    std::shared_ptr<TExternalStorageOperatorHolder> ExternalStorageOperator;
 
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetCurrentOperator() const;
     TAtomicCounter StepCounter;
     void InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager);
     void InitNewExternalOperator();
+    void DoInitNewExternalOperator(
+        const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator, const std::optional<NKikimrSchemeOp::TS3Settings>& settings);
 
     virtual TString DoDebugString() const override {
         return GetCurrentOperator()->DebugString();
@@ -57,7 +61,7 @@ public:
     }
 
     virtual bool IsReady() const override {
-        return !!ExternalStorageOperator;
+        return ExternalStorageOperator && ExternalStorageOperator->Get();
     }
 };
 

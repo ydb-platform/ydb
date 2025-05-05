@@ -1,10 +1,25 @@
 # Grafana дашборды для {{ ydb-short-name }}
 
-На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/manual/monitoring.md#prometheus-grafana).
+На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
 
 ## DB status {#dbstatus}
 
 Общий дашборд базы данных.
+
+## DB overview {#dboverview}
+
+Общий дашборд базы данных по категориям:
+
+- Health
+- API
+- API details
+- CPU
+- CPU pools
+- Memory
+- Storage
+- DataShard
+- DataShard details
+- Latency
 
 ## Actors {#actors}
 

@@ -8,6 +8,8 @@ import itertools
 import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
+import yaml
+import subprocess
 
 from six.moves.queue import Queue
 
@@ -70,7 +72,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
-        if configurator.sqs_service_enabled:
+        if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
         self.__role = role
@@ -88,19 +90,61 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
 
         if configurator.use_log_files:
-            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            # use NamedTemporaryFile only as a unique name generator
+            log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            self.__log_file_name = log_file.name
+            log_file.close()
             kwargs = {
                 "stdout_file": os.path.join(self.__working_dir, "stdout"),
-                "stderr_file": os.path.join(self.__working_dir, "stderr")
+                "stderr_file": os.path.join(self.__working_dir, "stderr"),
+                "aux_file": self.__log_file_name,
                 }
         else:
-            self.__log_file = None
+            self.__log_file_name = None
             kwargs = {
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
+
+    def is_port_listening(self, port):
+        """Check if the port is listening after node startup"""
+        try:
+            cmd = ["netstat", "-tuln"]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = result.stdout.decode()
+            port_lines = [line for line in output.split('\n') if str(port) in line]
+            if port_lines:
+                for line in port_lines:
+                    logger.info("Port %s status: %s" % (str(port), line.strip()))
+                is_listening = True
+            else:
+                logger.info("Port %s is not found in netstat output" % str(port))
+                is_listening = False
+            return is_listening
+        except Exception as e:
+            logger.error("Error checking port %s: %s" % (str(port), str(e)))
+            return False
+
+    def check_ports(self):
+        """Check if all allocated ports are listening"""
+        ports_status = {
+            "grpc_port": self.is_port_listening(self.grpc_port),
+            "mon_port": self.is_port_listening(self.mon_port),
+            "ic_port": self.is_port_listening(self.ic_port)
+        }
+
+        if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
+            ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
+
+        if hasattr(self, 'pgwire_port') and self.pgwire_port:
+            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
+
+        if hasattr(self, 'sqs_port') and self.sqs_port:
+            ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
+
+        return ports_status
 
     @property
     def cwd(self):
@@ -132,6 +176,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
+        if self.__configurator.use_config_store:
+            command.append("--config-dir=%s" % self.__config_path)
+        else:
+            command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -162,14 +211,13 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--node-kind=%s" % self.__configurator.node_kind
             )
 
-        if self.__log_file is not None:
+        if self.__log_file_name is not None:
             command.append(
-                "--log-file-name=%s" % self.__log_file.name,
+                "--log-file-name=%s" % self.__log_file_name,
             )
 
         command.extend(
             [
-                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
@@ -189,6 +237,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--data-center=%s" % self.data_center
             )
+
+        if self.__configurator.breakpad_minidumps_path:
+            command.extend(["--breakpad-minidumps-path", self.__configurator.breakpad_minidumps_path])
+        if self.__configurator.breakpad_minidumps_script:
+            command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
 
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
@@ -228,6 +281,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         finally:
             logger.info("Started node %s", self)
 
+    def read_node_config(self):
+        config_file = os.path.join(self.__config_path, "config.yaml")
+        with open(config_file) as f:
+            return yaml.safe_load(f)
+
+    def get_config_version(self):
+        config = self.read_node_config()
+        return config.get('metadata', {}).get('version', 0)
+
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name='cluster'):
@@ -242,9 +304,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots = {}
         self.__server = 'localhost'
         self.__storage_pool_id_allocator = itertools.count(1)
-        self.__config_path = ensure_path_exists(
-            os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
-        )
+        if self.__configurator.separate_node_configs:
+            self.__config_base_path = ensure_path_exists(
+                os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+            )
+        else:
+            self.__config_path = ensure_path_exists(
+                os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+            )
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
@@ -270,13 +337,41 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
         if connect_to_server:
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
+
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+
+        logger.debug("Executing command = {}".format(full_command))
+        try:
+            return yatest.common.execute(full_command, env=env)
+        except yatest.common.ExecutionError as e:
+            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
+                cmd=" ".join(str(x) for x in full_command),
+                e=str(e),
+                out=e.execution_result.std_out,
+                err=e.execution_result.std_err
+            ))
+            raise
+
+    def __call_ydb_cli(self, cmd, token=None):
+        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
 
         logger.debug("Executing command = {}".format(full_command))
         try:
@@ -321,11 +416,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
 
-        bs_needed = 'blob_storage_config' in self.__configurator.yaml_config
+        if self.__configurator.use_self_management:
+            self.__cluster_bootstrap()
+
+        bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
             self.__wait_for_bs_controller_to_start()
-            self.__add_bs_box()
+            if not self.__configurator.use_self_management:
+                self.__add_bs_box()
 
         pools = {}
 
@@ -347,7 +446,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
 
     def __run_node(self, node_id):
         """
@@ -358,21 +457,30 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes[node_id].start()
         return self._nodes[node_id]
 
-    def __register_node(self):
+    def __register_node(self, configurator=None):
+        configurator = configurator or self.__configurator
         node_index = next(self._node_index_allocator)
+
+        if configurator.separate_node_configs:
+            node_config_path = ensure_path_exists(
+                os.path.join(self.__config_base_path, "node_{}".format(node_index))
+            )
+        else:
+            node_config_path = self.__config_path
+
         data_center = None
-        if isinstance(self.__configurator.dc_mapping, dict):
-            if node_index in self.__configurator.dc_mapping:
-                data_center = self.__configurator.dc_mapping[node_index]
+        if isinstance(configurator.dc_mapping, dict):
+            if node_index in configurator.dc_mapping:
+                data_center = configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
             node_id=node_index,
-            config_path=self.config_path,
+            config_path=node_config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
             cluster_name=self.__cluster_name,
-            configurator=self.__configurator,
+            configurator=configurator,
             udfs_dir=self.__common_udfs_dir,
-            tenant_affiliation=self.__configurator.yq_tenant,
-            binary_path=self.__configurator.get_binary_path(node_index),
+            tenant_affiliation=configurator.yq_tenant,
+            binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
@@ -461,12 +569,59 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
+    def prepare_node(self, configurator=None):
+        try:
+            new_node_object = self.__register_node(configurator)
+            self.__write_node_config(new_node_object.node_id, configurator)
+            logger.info("Successfully registered new node object with ID: %s" % str(new_node_object.node_id))
+            return new_node_object
+        except Exception as e:
+            logger.error("Failed to register new node: %s" % str(e), exc_info=True)
+            raise RuntimeError("Failed to register new node: %s" % str(e))
+
+    def start_node(self, node_id):
+        if node_id not in self._nodes:
+            logger.error("Cannot start node: Node ID %s not found in registered nodes." % str(node_id))
+            raise KeyError("Node ID %s not found." % str(node_id))
+
+        logger.info("Starting registered node %s." % str(node_id))
+        try:
+            self._KiKiMR__run_node(node_id)
+            logger.info("Successfully started node %s." % str(node_id))
+        except Exception as e:
+            raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
+
+    def update_nodes_configurator(self, configurator):
+        for node in self.nodes.values():
+            node.stop()
+        self.__configurator = configurator
+        self.__initialy_prepared = False
+        self._node_index_allocator = itertools.count(1)
+        self.prepare()
+        for node in self.nodes.values():
+            node.start()
+
     @property
     def config_path(self):
+        if self.__configurator.separate_node_configs:
+            return self.__config_base_path
         return self.__config_path
 
+    def __write_node_config(self, node_id, configurator=None):
+        configurator = configurator or self.__configurator
+        node_config_path = ensure_path_exists(
+            os.path.join(self.__config_base_path, "node_{}".format(node_id))
+        )
+        logger.info("Writing node config to %s" % node_config_path)
+        logger.info("Config: %s" % configurator.yaml_config)
+        configurator.write_proto_configs(node_config_path)
+
     def __write_configs(self):
-        self.__configurator.write_proto_configs(self.config_path)
+        if self.__configurator.separate_node_configs:
+            for node_id in self.__configurator.all_node_ids():
+                self.__write_node_config(node_id)
+        else:
+            self.__configurator.write_proto_configs(self.__config_path)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -569,6 +724,30 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
         assert bs_controller_started
+
+    def __cluster_bootstrap(self):
+        timeout = 240
+        sleep = 5
+        retries, success = timeout / sleep, False
+        while retries > 0 and not success:
+            try:
+                self.__call_ydb_cli(
+                    [
+                        "admin",
+                        "cluster",
+                        "bootstrap",
+                        "--uuid", "test-cluster"
+                    ]
+                )
+                success = True
+
+            except Exception as e:
+                logger.error("Failed to execute, %s", str(e))
+                retries -= 1
+                time.sleep(sleep)
+
+                if retries == 0:
+                    raise
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):

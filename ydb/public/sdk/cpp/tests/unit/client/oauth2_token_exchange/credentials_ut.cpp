@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include "jwt_check_helper.h"
 
 #include <library/cpp/string_utils/base64/base64.h>

@@ -224,10 +224,6 @@ ENDIF()
                             f.write(f'#include "{file}"\n')
                             f.write('#include "names.h"')
 
-        # generate temporal proxy for ydb
-        with open(os.path.join(libprotoc_abs_dir, "src/google/protobuf/compiler/cpp/cpp_helpers.h"), "w") as f:
-            f.write('#include "helpers.h"')
-
         with open(f"{libprotoc_abs_dir}/ya.make", "wt") as ymake:
             ymake.write(str(libprotoc))
 

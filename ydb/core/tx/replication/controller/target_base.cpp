@@ -13,14 +13,33 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const TString& dstPath)
-    : Replication(replication)
-    , Id(id)
-    , Kind(kind)
+TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
+    : Kind(kind)
     , SrcPath(srcPath)
     , DstPath(dstPath)
 {
+}
+
+ETargetKind TTargetBase::TConfigBase::GetKind() const {
+    return Kind;
+}
+
+const TString& TTargetBase::TConfigBase::GetSrcPath() const {
+    return SrcPath;
+}
+
+const TString& TTargetBase::TConfigBase::GetDstPath() const {
+    return DstPath;
+}
+
+TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
+        ui64 id, const IConfig::TPtr& config)
+    : Replication(replication)
+    , Id(id)
+    , Kind(kind)
+    , Config(config)
+{
+    Y_ABORT_UNLESS(kind == config->GetKind());
 }
 
 ui64 TTargetBase::GetId() const {
@@ -31,12 +50,16 @@ ETargetKind TTargetBase::GetKind() const {
     return Kind;
 }
 
+const TReplication::ITarget::IConfig::TPtr& TTargetBase::GetConfig() const {
+    return Config;
+}
+
 const TString& TTargetBase::GetSrcPath() const {
-    return SrcPath;
+    return Config->GetSrcPath();
 }
 
 const TString& TTargetBase::GetDstPath() const {
-    return DstPath;
+    return Config->GetDstPath();
 }
 
 EDstState TTargetBase::GetDstState() const {
@@ -47,11 +70,27 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
-        return Replication->AddPendingAlterTarget(Id);
-    case EDstState::Done:
-        return Replication->RemovePendingAlterTarget(Id);
-    default:
+        Replication->AddPendingAlterTarget(Id);
         break;
+    default:
+        Replication->RemovePendingAlterTarget(Id);
+        break;
+    }
+
+    if (DstState != EDstState::Creating) {
+        Reset(DstCreator);
+    }
+    if (DstState != EDstState::Ready) {
+        Reset(WorkerRegistar);
+    }
+    if (DstState != EDstState::Alter) {
+        Reset(DstAlterer);
+    }
+    if (DstState != EDstState::Removing) {
+        Reset(DstRemover);
+    }
+    if (DstState != EDstState::Alter && DstState != EDstState::Removing) {
+        PendingRemoveWorkers = false;
     }
 }
 
@@ -69,6 +108,14 @@ const TString& TTargetBase::GetStreamName() const {
 
 void TTargetBase::SetStreamName(const TString& value) {
     StreamName = value;
+}
+
+const TString& TTargetBase::GetStreamConsumerName() const {
+    return StreamConsumerName;
+}
+
+void TTargetBase::SetStreamConsumerName(const TString& value) {
+    StreamConsumerName = value;
 }
 
 EStreamState TTargetBase::GetStreamState() const {
@@ -153,6 +200,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
         }
         break;
+    case EDstState::Paused:
+        break;
     case EDstState::Error:
         break;
     }
@@ -171,6 +220,15 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
     }
+}
+
+void TTargetBase::Reset(TActorId& id) {
+    if (auto actorId = std::exchange(id, {})) {
+        TlsActivationContext->AsActorContext().Send(actorId, new TEvents::TEvPoison());
+    }
+}
+
+void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
 }
 
 }

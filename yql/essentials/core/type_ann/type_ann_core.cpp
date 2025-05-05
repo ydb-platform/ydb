@@ -22,6 +22,7 @@
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/utf8.h>
 
@@ -37,6 +38,7 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
 
 #include <algorithm>
 #include <functional>
@@ -367,6 +369,17 @@ namespace NTypeAnnImpl {
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp) };
             }
 
+            if (resType->GetTag() == "DateTime2.TM64") {
+                return { ctx.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
+                            .Atom(0, "DateTime2.MakeTzTimestamp64", TNodeFlags::Default)
+                        .Seal()
+                        .Add(1, input)
+                    .Seal()
+                    .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp64) };
+            }
+
             if (resType->GetTag() == "JsonNode") {
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
@@ -474,7 +487,7 @@ namespace NTypeAnnImpl {
             imports.push_back(&x.second);
         }
 
-        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr)) {
+        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel, Types.UserDataStorage->GetHoldingFileStorage())) {
             return false;
         }
 
@@ -589,12 +602,15 @@ namespace NTypeAnnImpl {
         }
 
         auto failureKind = input->Child(0)->Content();
+        Y_ABORT_UNLESS(!TryGetEnv("YQL_DETERMINISTIC_MODE") || failureKind != "crash");
         if (failureKind == "expr") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else if (failureKind == "type") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         } else if (failureKind == "constraint") {
             input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String)));
+        } else if (failureKind == "exception") {
+            ythrow yexception() << "FailMe exception";
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Unknown failure kind: " << failureKind));
             return IGraphTransformer::TStatus::Error;
@@ -3307,7 +3323,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (IsNull(input->Head()) || IsNull(input->Tail())) {
+        const auto ignoreNulls = input->Content().ends_with("IgnoreCase");
+
+        if ((IsNull(input->Head()) || IsNull(input->Tail())) && !ignoreNulls) {
             output = MakeBoolNothing(input->Pos(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -3327,8 +3345,11 @@ namespace NTypeAnnImpl {
             }
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
-            if (!IsDataOrOptionalOfData(type, isOptional, dataType) ||
-                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+            if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8) ||
+                dataType->IsOptionalOrNull()) &&
+                (!IsNull(*type) && ignoreNulls)
+            )
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
                     << "Expected (optional) string/utf8 or corresponding Pg type, but got: " << *child->GetTypeAnn()));
@@ -3336,8 +3357,7 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-
-        if (hasOptionals)
+        if (hasOptionals && !ignoreNulls)
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
         else
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
@@ -7532,7 +7552,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // (4) cached callable type
         const TCallableExprType* cachedType = nullptr;
-        if (input->ChildrenSize() > 4) {
+        if (input->ChildrenSize() > 4 && !input->Child(4)->IsCallable("Void")) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(4), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -7566,12 +7586,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         // (7) settings
+        TExprNode::TPtr settings;
         if (input->ChildrenSize() > 7) {
-            if (!EnsureTuple(*input->Child(7), ctx.Expr)) {
+            settings = input->ChildPtr(7);
+            if (!EnsureTuple(*settings, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            for (const auto& child : input->Child(7)->Children()) {
+            for (const auto& child : settings->Children()) {
                 if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -7589,6 +7611,39 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
+                } else if (settingName == "cpu" || settingName == "extraMem" ||
+                    settingName == "minLang" || settingName == "maxLang") {
+                    if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (!EnsureAtom(child->Tail(), ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (ctx.Types.LangVer != UnknownLangVersion) {
+                        if (settingName == "minLang" && ctx.Types.LangVer < FromString<NYql::TLangVersion>(child->Tail().Content())) {
+                            TLangVersionBuffer buffer;
+                            TStringBuf str;
+                            if (!FormatLangVersion(FromString<NYql::TLangVersion>(child->Tail().Content()), buffer, str)) {
+                                str = "unknown";
+                            }
+
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available before version " << str));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (settingName == "maxLang" && ctx.Types.LangVer > FromString<NYql::TLangVersion>(child->Tail().Content())) {
+                            TLangVersionBuffer buffer;
+                            TStringBuf str;
+                            if (!FormatLangVersion(FromString<NYql::TLangVersion>(child->Tail().Content()), buffer, str)) {
+                                str = "unknown";
+                            }
+
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available after version " << str));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
                 } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Head().Pos()), TStringBuilder() << "Unknown setting: " << settingName));
                     return IGraphTransformer::TStatus::Error;
@@ -7596,7 +7651,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        if (input->ChildrenSize() != 8) {
+        if (input->ChildrenSize() != 8 || !cachedType) {
             YQL_PROFILE_SCOPE(DEBUG, "ResolveUdfs");
             auto& cached = ctx.Types.UdfTypeCache[std::make_tuple(TString(name), TString(typeConfig), userType)];
             if (!cached.FunctionType) {
@@ -7605,6 +7660,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.Name = TString(name);
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
+                description.LangVer = ctx.Types.LangVer;
                 ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
                     description.SecureParams[TString("token:") + name] = cred.Content;
                     if (name.StartsWith("default_")) {
@@ -7636,7 +7692,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return MakeIntrusive<TIssue>(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "At " << input->Head().Content());
                 });
 
-                if (!ctx.LoadUdfMetadata(functions)) {
+                auto success = ctx.LoadUdfMetadata(functions);
+                for (const auto& m : description.Messages) {
+                    TIssue issue;
+                    issue.SetMessage(m);
+                    issue.SetCode(TIssuesIds::CORE_UDF_RESOLVER, TSeverityIds::S_INFO);
+                    ctx.Expr.AddError(issue);
+                }
+
+                if (!success) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -7646,6 +7710,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 cached.NormalizedUserType = description.NormalizedUserType ? description.NormalizedUserType : ctx.Expr.MakeType<TVoidExprType>();
                 cached.SupportsBlocks = description.SupportsBlocks;
                 cached.IsStrict = description.IsStrict;
+                cached.MinLangVer = description.MinLangVer;
+                cached.MaxLangVer = description.MaxLangVer;
 
                 if (name != cached.NormalizedName) {
                     ctx.Types.UdfTypeCache[std::make_tuple(cached.NormalizedName, TString(typeConfig), userType)] = cached;
@@ -7700,6 +7766,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                     .Seal();
                             }
 
+                            if (cached.MinLangVer != UnknownLangVersion) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "minLang")
+                                    .Atom(1, cached.MinLangVer)
+                                    .Seal();
+                            }
+
+                            if (cached.MaxLangVer != UnknownLangVersion) {
+                                parent.List(settingIndex++)
+                                    .Atom(0, "maxLang")
+                                    .Atom(1, cached.MaxLangVer)
+                                    .Seal();
+                            }
+
+                            if (settings) {
+                                if (auto setting = GetSetting(*settings, "cpu")) {
+                                    parent.Add(settingIndex++, setting);
+                                }
+
+                                if (auto setting = GetSetting(*settings, "extraMem")) {
+                                    parent.Add(settingIndex++, setting);
+                                }
+                            }
+
                             return parent;
                         })
                     .Seal()
@@ -7751,7 +7841,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        if (!EnsureMaxArgsCount(*input, 5, ctx.Expr)) {
+        if (!EnsureMaxArgsCount(*input, 6, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7810,6 +7900,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
         auto canonizedModuleName = isCustomPython ? moduleName : NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool foundModule = false;
+        TStringBuf fileAlias = ""_sb;
 
         // resolve script udf from external resources (files / urls)
         // (main usage of CustomPython)
@@ -7820,7 +7911,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            foundModule = ctx.Types.UdfModules.find(canonizedModuleName) != ctx.Types.UdfModules.end();
+            if (auto udfInfo = ctx.Types.UdfModules.FindPtr(canonizedModuleName)) {
+                foundModule = true;
+                fileAlias = udfInfo->FileAlias;
+            }
         }
 
         // fallback for preinstalled CustomPython case
@@ -7840,7 +7934,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->ChildrenSize() == 5) {
+        if (input->ChildrenSize() > 4) {
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -7878,6 +7972,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (input->ChildrenSize() > 5) {
+            if (!EnsureAtom(*input->Child(5), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (fileAlias) {
+            auto children = input->ChildrenList();
+            if (children.size() < 5) {
+                children.push_back(ctx.Expr.NewList(input->Pos(), {}));
+            }
+            children.push_back(ctx.Expr.NewAtom(input->Pos(), fileAlias));
+            YQL_ENSURE(children.size() == 6);
+            output = ctx.Expr.ChangeChildren(*input, std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         input->SetTypeAnn(callableType);
@@ -8271,7 +8380,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 5, ctx.Expr)) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 6, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8331,6 +8440,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
+        TExprNode::TPtr options;
+        if (input->ChildrenSize() > 5) {
+            options = input->Child(5);
+        }
+
         TExprNode::TPtr udf = ctx.Expr.Builder(input->Pos())
             .Callable("Udf")
                 .Add(0, udfName)
@@ -8377,7 +8491,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     if (typeConfig) {
                         parent.Add(3, typeConfig);
+                    } else if (options) {
+                        parent.Atom(3, "");
                     }
+
+                    if (options) {
+                        parent.Callable(4,"Void").Seal();
+                        parent.Callable(5,"VoidType").Seal();
+                        parent.Atom(6,"");
+                        parent.Add(7, options);
+                    }
+
                     return parent;
                 })
             .Seal()
@@ -8706,12 +8830,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto variantType = type->Cast<TVariantExprType>();
 
+        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
+            ctx.Expr.MakeType<TDataExprType>(
+                variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple ?
+                    EDataSlot::Uint32 :
+                    EDataSlot::Utf8));
+
+        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
+        }
+
         const TTypeAnnotationNode* firstType;
         if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
-            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Uint32, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
             firstType = tupleType->GetItems()[0];
             for (size_t i = 1; i < tupleType->GetSize(); ++i) {
@@ -8723,10 +8859,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
         } else {
-            if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::Utf8, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
             firstType = structType->GetItems()[0]->GetItemType();
             for (size_t i = 1; i < structType->GetSize(); ++i) {
@@ -8738,11 +8870,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
-        const auto convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
+        convertStatus = TryConvertTo(input->ChildRef(0), *firstType, ctx.Expr);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Mismatch item type, expected: " << *firstType << ", got: " << *input->Child(0)->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
+        } else if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return convertStatus;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(variantType));
@@ -10977,6 +11111,26 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    IGraphTransformer::TStatus CurrentLanguageVersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TLangVersionBuffer buffer;
+        TStringBuf str;
+        if (!FormatLangVersion(ctx.Types.LangVer, buffer, str)) {
+            str = "";
+        }
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("String")
+                .Atom(0, str)
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12359,6 +12513,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GreaterOrEqual"] = &CompareWrapper<false>;
         Functions["=="] = &CompareWrapper<true>;
         Functions["Equal"] = &CompareWrapper<true>;
+        Functions["EqualsIgnoreCase"] = &WithWrapper;
         Functions["!="] = &CompareWrapper<true>;
         Functions["NotEqual"] = &CompareWrapper<true>;
         Functions["Inc"] = &IncDecWrapper<true>;
@@ -12422,8 +12577,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Find"] = &FindWrapper;
         Functions["RFind"] = &FindWrapper;
         Functions["StartsWith"] = &WithWrapper;
+        Functions["StartsWithIgnoreCase"] = &WithWrapper;
         Functions["EndsWith"] = &WithWrapper;
+        Functions["EndsWithIgnoreCase"] = &WithWrapper;
         Functions["StringContains"] = &WithWrapper;
+        Functions["StringContainsIgnoreCase"] = &WithWrapper;
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;
@@ -12847,6 +13005,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithOptionalArgs"] = &WithOptionalArgsWrapper;
         Functions["WithContext"] = &WithContextWrapper;
         Functions["EmptyFrom"] = &EmptyFromWrapper;
+        Functions["PruneAdjacentKeys"] = &PruneKeysWrapper;
+        Functions["PruneKeys"] = &PruneKeysWrapper;
 
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;
@@ -12913,10 +13073,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NarrowMultiMap"] = &NarrowMultiMapWrapper;
 
         Functions["WideFromBlocks"] = &WideFromBlocksWrapper;
+        Functions["ListFromBlocks"] = &ListFromBlocksWrapper;
         Functions["WideSkipBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["WideTakeBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["BlockCompress"] = &BlockCompressWrapper;
-        Functions["BlockExpandChunked"] = &BlockExpandChunkedWrapper;
         Functions["WideTopBlocks"] = &WideTopBlocksWrapper;
         Functions["WideTopSortBlocks"] = &WideTopBlocksWrapper;
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
@@ -12943,18 +13103,19 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockDecimalMul"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalMod"] = &BlockDecimalBinaryWrapper;
         Functions["BlockDecimalDiv"] = &BlockDecimalBinaryWrapper;
+        Functions["BlockStorage"] = &BlockStorageWrapper;
 
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
-        ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
-
-        Functions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;
+        ExtFunctions["ListToBlocks"] = &ListToBlocksWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
         ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+        ExtFunctions["BlockMapJoinIndex"] = &BlockMapJoinIndexWrapper;
+        ExtFunctions["BlockMapJoinCore"] = &BlockMapJoinCoreWrapper;
 
         ExtFunctions["SqlRename"] = &SqlRenameWrapper;
         ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;
@@ -12975,6 +13136,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NextValue"] = &NextValueWrapper;
 
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
+        Functions["MatchRecognizeMeasuresCallables"] = &MatchRecognizeMeasuresCallablesWrapper;
+        Functions["MatchRecognizeMeasuresCallable"] = &MatchRecognizeMeasuresCallableWrapper;
         Functions["MatchRecognizeParams"] = &MatchRecognizeParamsWrapper;
         Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;
@@ -13029,6 +13192,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["CurrentOperationId"] = &CurrentOperationIdWrapper;
         ExtFunctions["CurrentOperationSharedId"] = &CurrentOperationSharedIdWrapper;
         ExtFunctions["CurrentAuthenticatedUser"] = &CurrentAuthenticatedUserWrapper;
+        ExtFunctions["CurrentLanguageVersion"] = &CurrentLanguageVersionWrapper;
         ExtFunctions["SecureParam"] = &SecureParamWrapper;
         ExtFunctions["UnsafeTimestampCast"] = &UnsafeTimestampCastWrapper;
         ExtFunctions["JsonValue"] = &JsonValueWrapper;

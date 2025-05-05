@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -20,12 +21,15 @@ namespace NKqp {
         }
         if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
             kikimrSettings.SetEnableExternalDataSources(true);
+            kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
 
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());
+
+        NOlap::TSchemaCachesManager::DropCaches();
     }
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
@@ -52,7 +56,7 @@ namespace NKqp {
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
             CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="http://fake.fake/fake",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",

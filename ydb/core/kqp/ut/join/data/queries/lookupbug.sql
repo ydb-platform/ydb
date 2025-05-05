@@ -2,7 +2,13 @@ DECLARE $quotaName as Utf8?;
 DECLARE $browserGroup as Utf8?;
 DECLARE $limit as Uint32;
 DECLARE $offset as Uint32;
-PRAGMA TablePathPrefix ="/Root/";
+
+$quotaName = 'Quota_of_Unicorns';
+$browserGroup = 'Group_of_Wizards';
+$limit = 42;
+$offset = 2228;
+
+PRAGMA TablePathPrefix = "/Root/";
 
 $browsers = (
     SELECT
@@ -21,18 +27,23 @@ $browsers = (
     browsers AS b
         ON qb.browser_id = b.id
         LEFT JOIN
-        browser_groups AS bg
+    browser_groups AS bg
         ON
         b.group = bg.name
         LEFT JOIN
-        quota as q
+    quota as q
         ON
         qb.quota_id = q.id
-        WHERE
-                (
-                    ($quotaName IS NOT NULL AND q.name = $quotaName) OR
-                    $quotaName IS NULL ) AND        
-                    ( ($browserGroup IS NOT NULL AND b.group = $browserGroup) OR  $browserGroup IS NULL
-                           ) AND      (            group IS NOT NULL        ));
-    
-    SELECT * FROM $browsers ORDER BY created_at LIMIT $limit OFFSET $offset;
+    WHERE
+        (
+            ($quotaName IS NOT NULL AND q.name = $quotaName) OR
+            $quotaName IS NULL
+        ) AND
+        (
+            ($browserGroup IS NOT NULL AND b.group = $browserGroup) OR
+            $browserGroup IS NULL
+        ) AND
+        (group IS NOT NULL)
+);
+
+SELECT * FROM $browsers ORDER BY created_at LIMIT $limit OFFSET $offset;

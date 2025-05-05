@@ -48,7 +48,7 @@ void TMvpTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
         node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
         node->MailboxTable.Reset(new NActors::TMailboxTable());
         node->ActorSystem = MakeActorSystem(nodeIndex, node);
-        node->ExecutorThread.Reset(new NActors::TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
+        node->ExecutorThread.Reset(new NActors::TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
     } else {
         node->ActorSystem = MakeActorSystem(nodeIndex, node);
     }

@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
     if (statsMode == "unspecified") {

@@ -45,7 +45,7 @@ public:
         AddHandler({TYtConfigure::CallableName()}, RequireFirst(), Hndl(&TYtDataSourceExecTransformer::HandleConfigure));
     }
 
-protected:
+private:
     TString WriteTableScheme(TYtReadTableScheme readScheme, NYson::EYsonFormat ysonFormat, bool withType) {
         TStringStream out;
         NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
@@ -114,9 +114,17 @@ protected:
 
         TString usedCluster;
         TSyncMap syncList;
-        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false)) {
+        ERuntimeClusterSelectionMode mode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        if (mode == ERuntimeClusterSelectionMode::Force) {
+            mode = ERuntimeClusterSelectionMode::Auto;
+        }
+        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false, mode)) {
             ctx.AddError(TIssue(ctx.GetPosition(data.Pos()), TStringBuilder() << "Failed to execute node due to bad graph: " << input->Content()));
             return SyncError();
+        }
+        if (usedCluster == YtUnspecifiedCluster) {
+            usedCluster = GetRuntimeCluster(*input, State_);
+            YQL_CLOG(DEBUG, ProviderYt) << "Assigning runtime cluster " << usedCluster << " for node " << input->Content();
         }
         if (usedCluster.empty()) {
             usedCluster = State_->Configuration->DefaultCluster.Get().GetOrElse(State_->Gateway->GetDefaultClusterName());
@@ -191,6 +199,8 @@ protected:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
             );
 
         return WrapFuture(future, [](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -232,7 +242,6 @@ protected:
         TExecTransformerBase::Rewind();
     }
 
-private:
     const TYtState::TPtr State_;
 };
 

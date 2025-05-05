@@ -19,7 +19,7 @@ namespace NTabletFlatExecutor {
     };
 
     struct TIdEmitter : public TSimpleRefCount<TIdEmitter> {
-        ui64 Do() noexcept
+        ui64 Do()
         {
             return ++Serial;
         }

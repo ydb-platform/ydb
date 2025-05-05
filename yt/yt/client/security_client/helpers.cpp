@@ -15,12 +15,12 @@ TYPath GetUserPath(const std::string& name)
     return "//sys/users/" + ToYPathLiteral(name);
 }
 
-TYPath GetGroupPath(const TString& name)
+TYPath GetGroupPath(const std::string& name)
 {
     return "//sys/groups/" + ToYPathLiteral(name);
 }
 
-TYPath GetAccountPath(const TString& name)
+TYPath GetAccountPath(const std::string& name)
 {
     return "//sys/accounts/" + ToYPathLiteral(name);
 }
@@ -29,7 +29,7 @@ TYPath GetAccountPath(const TString& name)
 
 ESecurityAction CheckPermissionsByAclAndSubjectClosure(
     const TSerializableAccessControlList& acl,
-    const THashSet<TString>& subjectClosure,
+    const THashSet<std::string>& subjectClosure,
     NYTree::EPermissionSet permissions)
 {
     NYTree::EPermissionSet allowedPermissions = {};
@@ -37,7 +37,7 @@ ESecurityAction CheckPermissionsByAclAndSubjectClosure(
 
     for (const auto& ace : acl.Entries) {
         if (ace.Action != NSecurityClient::ESecurityAction::Allow && ace.Action != NSecurityClient::ESecurityAction::Deny) {
-            THROW_ERROR_EXCEPTION("Action %Qv is not supported", FormatEnum(ace.Action));
+            THROW_ERROR_EXCEPTION("Action %Qlv is not supported", ace.Action);
         }
         for (const auto& aceSubject : ace.Subjects) {
             if (subjectClosure.contains(aceSubject)) {

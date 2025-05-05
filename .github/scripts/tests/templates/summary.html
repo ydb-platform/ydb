@@ -1,5 +1,10 @@
 <html>
 <head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
     <style>
         body {
             font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
@@ -92,7 +97,7 @@
         .button svg {
             fill: #4b535c;
             fill-rule: evenodd;
-         }
+        }
 
         .button svg:hover {
             fill: #0366d6;
@@ -119,12 +124,13 @@
         .button-group > button svg {
             fill: #4b535c;
             fill-rule: evenodd;
-         }
+        }
 
         .button-group > button svg:hover {
             fill: #0366d6;
             fill-rule: evenodd;
         }
+
         .button-group  .icon-container .show_history_svg {
             fill: #ffffff;
             stroke: #000;
@@ -232,7 +238,6 @@
             visibility: visible;
             opacity: 1;
         }
-    
   
         table > tbody > tr > td:nth-child(2),
         table > tbody > tr > td:nth-child(3),
@@ -255,7 +260,7 @@
             left: 5;
             height: auto;
         }
-    
+
         .collapsible-header {
             cursor: pointer;
             background-color: #f2f2f2;
@@ -263,14 +268,114 @@
             border: 1px solid #ddd;
             margin-bottom: 5px;
         }
-    
-       
+
         .toggle-visibility-buttons {
             margin-bottom: 10px;
             overflow:hidden;
             float: right;
         }
-    </style>
+
+        .error-button {
+            border: none;
+            cursor: pointer;
+            background: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50% / 1em 1em;
+            width: 1em;
+            height: 1em;  
+            content: "";
+            transition: transform .5s;
+        }
+
+        pre>code[class*=language-] {
+            font-size: x-small;
+        }
+
+        .console-frame {
+            font-size: x-small;
+            display: grid;
+            border-radius: 4px;
+            overscroll-behavior: none;
+            background: #ddd;
+            padding: 5px;
+            color: #f1f2f3;
+            overflow-y: auto;
+            font-family: monospace;
+            word-break: keep-all;
+            font-size: x-small;
+        }
+
+        .console-frame::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .console-frame::-webkit-scrollbar-track {
+            background: #c5c6c8;
+        }
+
+        .console-frame::-webkit-scrollbar-thumb {
+            background: #838485;
+            border-radius: 4px;
+        }
+        pre[class*=language-] {
+            padding: 1em;
+            margin: 0;
+            overflow: auto;
+        }
+
+        /* Стили для модального окна */
+        #errorModal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+    
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            border-radius: 5px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .modal-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: smaller;
+        }
+        
+        .modal-info {
+            font-size: small;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .modal-info-item {
+            margin-bottom: 5px;
+        }
+        
+        .modal-info-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 80px;
+        }
+</style>
 <script>
     function findParentBySelector(elm, selector) {
         var all = document.querySelectorAll(selector);
@@ -313,7 +418,7 @@
             testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
 
-        const cmdArg = `./ya make -ttt {{ build_preset }} -F '${testName}' ${path}`;
+        const cmdArg = `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
 
         console.log(cmdArg);
 
@@ -364,11 +469,11 @@
         let [path, testName] = [pieces[1], pieces[2]];
         
         if (success_count + fail_count != 0){
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
             window.open(url, '_blank');
         }
         else {
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/main/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
             window.open(url, '_blank');
         }
          
@@ -376,35 +481,64 @@
 
     function openHistory(test) {
         const full_name = test.trim();
-        let url = "https://datalens.yandex/34xnbsom67hcq?full_name="+full_name
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name="+full_name
         window.open(url, '_blank');
     }
 
-    
-    let lastOpenedTooltip = null;
+    // Функция для отображения информации о тесте в модальном окне
+    function showTestInfo(testInfo) {
+        const modal = document.getElementById('errorModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalStatus = document.getElementById('modalStatus');
+        const modalDate = document.getElementById('modalDate');
+        const modalSha = document.getElementById('modalSha');
+        const modalJob = document.getElementById('modalJob');
+        const modalErrorContent = document.getElementById('modalErrorContent');
 
-    function toggleTooltip(event) {
-        event.stopPropagation();
-        const tooltip = event.currentTarget.querySelector('.tooltip');
-
-        if (tooltip.classList.contains('visible')) {
-            tooltip.classList.remove('visible');
-            lastOpenedTooltip = null;
+        // Заполняем информацию
+        modalTitle.textContent = 'Test details: ' + testInfo.testName;
+        modalStatus.textContent = testInfo.status;
+        modalDate.textContent = testInfo.date;
+        
+        // Обновляем ссылку на запуск
+        const jobLink = document.getElementById('modalJobLink');
+        jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
+        jobLink.textContent = testInfo.job_name;
+        // Обновляем ссылку на коммит
+        const shaLink = document.getElementById('modalShaLink');
+        shaLink.href = `https://github.com/ydb-platform/ydb//commit/${testInfo.commit}`;
+        shaLink.textContent = testInfo.commit.substring(0, 8);
+        
+        // Класс для статуса
+        modalStatus.className = '';
+        if (testInfo.status === 'passed') {
+            modalStatus.classList.add('test_pass');
+        } else if (testInfo.status === 'failure') {
+            modalStatus.classList.add('test_fail');
+        } else if (testInfo.status === 'mute') {
+            modalStatus.classList.add('test_mute');
+        }
+        
+        // Обработка текста ошибки
+        if (testInfo.errorText && testInfo.errorText.trim() !== "") {
+            document.getElementById('modalErrorSection').style.display = 'block';
+            modalErrorContent.textContent = testInfo.errorText;
+            
+            // Определяем язык для подсветки синтаксиса
+            modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
+            
+            // Активируем подсветку синтаксиса
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightElement(modalErrorContent);
+            }
         } else {
-            hideTooltips();
-            tooltip.classList.add('visible');
-            lastOpenedTooltip = tooltip;
+            document.getElementById('modalErrorSection').style.display = 'none';
         }
+        
+        // Показываем модальное окно
+        modal.style.display = 'block';
     }
-
-    function hideTooltips() {
-        if (lastOpenedTooltip) {
-            lastOpenedTooltip.classList.remove('visible');
-            lastOpenedTooltip = null;
-        }
-    }
-
-
+    
     function toggleAllTables(action) {
         const contents = document.querySelectorAll('.collapsible-content');
         if (action === 'expand') {
@@ -430,6 +564,7 @@
             });
          
     }
+    
     document.addEventListener("DOMContentLoaded", function() {
         let openDropdown = null; // Track the currently open dropdown
 
@@ -474,15 +609,33 @@
             }    
         });
 
-        document.addEventListener('click', function(event) {
-            if (!event.target.closest('.svg-icon') && !event.target.classList.contains('copy')) {
-                hideTooltips();
-            }
-        });
         const svgIcons = document.querySelectorAll('.svg-icon');
         svgIcons.forEach(icon => {
-            icon.addEventListener('click', toggleTooltip);
+            icon.addEventListener('click', function(event) {
+                event.stopPropagation();
+                
+                // Получаем данные для модального окна
+                const testName = icon.getAttribute('data-test-name');
+                const status = icon.getAttribute('data-status');
+                const date = icon.getAttribute('data-date');
+                const errorText = icon.getAttribute('data-error');
+                const commit = icon.getAttribute('data-commit');
+                const job_name = icon.getAttribute('data-job-name');
+                const job_id = icon.getAttribute('data-job-id');
+                
+                // Открываем модальное окно с данными
+                showTestInfo({
+                    testName: testName,
+                    status: status,
+                    date: date,
+                    errorText: errorText,
+                    commit: commit,
+                    job_name: job_name,
+                    job_id: job_id
+                });
+            });
         });
+        
         const copyButtons = document.querySelectorAll(".copy");
         copyButtons.forEach(button => {
             button.addEventListener('click', function(event) {
@@ -537,7 +690,33 @@
         document.getElementById('collapse-all').addEventListener('click',  function(event) {
             toggleAllTables('collapse');
         });
+        
+        // Обработчик для закрытия модального окна
+        document.querySelector('.close-modal').onclick = function() {
+            document.getElementById('errorModal').style.display = 'none';
+        }
+        
+        // Закрытие при клике вне модального окна
+        window.onclick = function(event) {
+            const modal = document.getElementById('errorModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
     });
+    function toggleError(button) {
+    const errorContent = button.nextElementSibling;
+    const consoleFrame = errorContent.querySelector('.console-frame');
+    if (errorContent.style.display === 'none') {
+        errorContent.style.display = 'block';
+        consoleFrame.style.display = 'block';
+        button.style.transform = "rotate(90deg)"
+    } else {
+        errorContent.style.display = 'none';
+        consoleFrame.style.display = 'none';
+        button.style.transform = "rotate(0deg)"
+    }
+  }
 </script>
 </head>
 <body>
@@ -576,7 +755,7 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %} 
+            {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">
                     <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
@@ -645,6 +824,14 @@
                         <span class="button-text">Open test history</span>
                     </button>
            
+                    </div>
+                </div>
+            {% endif %}
+            {% if t.status_description %}
+            <button class="error-button" onclick="toggleError(this)"></button>
+            <div style="display: none;" class="error-content">
+                <div class="console-frame" style="display: none;">
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
                 </div>
             </div>
             {% endif %}
@@ -652,7 +839,14 @@
         {% if (status.is_error and t.full_name in history) %}
         <td>
             {% for h in history[t.full_name] %}
-                <span class="svg-icon">
+                <span class="svg-icon" 
+                      data-test-name="{{ t.full_name }}" 
+                      data-status="{{ history[t.full_name][h].status }}" 
+                      data-date="{{ history[t.full_name][h].datetime }}" 
+                      data-error="{{ history[t.full_name][h].status_description }}" 
+                      data-commit="{{ history[t.full_name][h].commit }}"
+                      data-job-name="{{ history[t.full_name][h].job_name }}[{{ history[t.full_name][h].branch}}:{{ build_preset }}]"
+                      data-job-id="{{ history[t.full_name][h].job_id }}">
                     {% if history[t.full_name][h].status == 'failure' %}
                     <svg class="svg_failure" viewBox="0 0 16 16" >
                         <path  fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
@@ -666,15 +860,6 @@
                         <path  fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>                    </svg>
                     </svg>
                     {% endif %}
-                    <span class="tooltip">
-                        Status: {{history[t.full_name][h].status}}<br>
-                        Date: {{ history[t.full_name][h].datetime }}<br>
-                        {% if history[t.full_name][h].status_description != "" %}
-                        Info: {{ history[t.full_name][h].status_description.split(';')[0][0:100] }}<br>
-                        {% endif %}
-                        SHA: <a href="https://github.com/ydb-platform/ydb//commit/{{ history[t.full_name][h].commit }}" style="color: #00f;" target="_blank">{{history[t.full_name][h].commit[0:8]}}</a>
-                    </span>
-
                 </span>
             {% endfor %}
         </td> 
@@ -703,5 +888,39 @@
     </tbody>
 </table>
 {% endfor %}
+
+<!-- Модальное окно для детального отображения ошибок -->
+<div id="errorModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <div class="modal-header">
+            <h3 id="modalTitle">Test Details</h3>
+        </div>
+        <div class="modal-info">
+            <div class="modal-info-item">
+                <span class="modal-info-label">Run:</span>
+                <a id="modalJobLink" href="#" target="_blank"></a>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Status:</span>
+                <span id="modalStatus"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Date:</span>
+                <span id="modalDate"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">Commit:</span>
+                <a id="modalShaLink" href="#" target="_blank"></a>
+            </div>
+        </div>
+        <div id="modalErrorSection">
+            <div class="console-frame">
+                <pre><code id="modalErrorContent"></code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

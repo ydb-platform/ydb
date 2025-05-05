@@ -29,7 +29,6 @@ TClientWriter::TClientWriter(
         RawWriter_.Reset(new TRetrylessWriter(
             context,
             transactionId,
-            GetWriteTableCommand(context.Config->ApiVersion),
             format,
             path,
             BufferSize_,
@@ -58,7 +57,6 @@ TClientWriter::TClientWriter(
                 std::move(transactionPinger),
                 context,
                 transactionId,
-                GetWriteTableCommand(context.Config->ApiVersion),
                 format,
                 path,
                 options));

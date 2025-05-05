@@ -30,4 +30,37 @@ Y_UNIT_TEST_SUITE(TestS3UrlEscape) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TestUrlBuilder) {
+    Y_UNIT_TEST(UriOnly) {
+        TUrlBuilder builder("https://localhost/abc");
+        UNIT_ASSERT_VALUES_EQUAL(builder.Build(), "https://localhost/abc");
+    }
+
+    Y_UNIT_TEST(Basic) {
+        TUrlBuilder builder("https://localhost/abc");
+        builder.AddUrlParam("param1", "val1");
+        builder.AddUrlParam("param2", "val2");
+
+        UNIT_ASSERT_VALUES_EQUAL(builder.Build(), "https://localhost/abc?param1=val1&param2=val2");
+    }
+
+    Y_UNIT_TEST(BasicWithEncoding) {
+        auto url = TUrlBuilder("https://localhost/abc")
+                        .AddUrlParam("param1", "=!@#$%^&*(){}[]\" ")
+                        .AddUrlParam("param2", "val2")
+                        .Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3D%21%40%23%24%25%5E%26%2A%28%29%7B%7D%5B%5D%22+&param2=val2");
+    }
+
+    Y_UNIT_TEST(BasicWithAdditionalEncoding) {
+        auto url = TUrlBuilder("https://localhost/abc")
+                        .AddUrlParam("param1", ":/?#[]@!$&\'()*+,;=")
+                        .AddUrlParam("param2", "val2")
+                        .Build();
+
+        UNIT_ASSERT_VALUES_EQUAL(url, "https://localhost/abc?param1=%3A%2F%3F%23%5B%5D%40%21%24%26%27%28%29%2A%2B%2C%3B%3D&param2=val2");
+    }
+}
+
 }  // namespace NYql::NS3Util

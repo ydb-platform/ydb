@@ -17,12 +17,24 @@ NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode
 
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, int& joinCounter, const TOptimizerHints& hints = {});
 
-NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap);
+NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true);
 
-NNodes::TExprBase DqBuildJoin(const NNodes::TExprBase& node, TExprContext& ctx,
-    IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin = EHashJoinMode::Off, bool shuffleMapJoin = true, bool useGraceCoreForMap = false);
+NNodes::TExprBase DqBuildJoin(
+    const NNodes::TExprBase& node, 
+    TExprContext& ctx,
+    IOptimizationContext& optCtx, 
+    const TParentsMap& parentsMap, 
+    bool allowStageMultiUsage, 
+    bool pushLeftStage, 
+    EHashJoinMode hashJoin = EHashJoinMode::Off, 
+    bool shuffleMapJoin = true, 
+    bool useGraceCoreForMap = false,
+    bool shuffleElimination = false,
+    bool shuffleEliminationWithMap = false,
+    bool buildCollectStage=true
+);
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx);
+NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap);
 
 NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx);
 

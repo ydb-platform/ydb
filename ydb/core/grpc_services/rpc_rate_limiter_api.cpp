@@ -178,7 +178,7 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         THolder<NSchemeCache::TSchemeCacheNavigate> navigate = std::move(ev->Get()->Request);
         if (navigate->ResultSet.size() != 1 || navigate->ErrorCount > 0) {
-            this->Reply(StatusIds::INTERNAL_ERROR, this->ActorContext());
+            this->Reply(StatusIds::SCHEME_ERROR, this->ActorContext());
             return;
         }
 
@@ -277,6 +277,7 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
         auto copyMetric = [] (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, NKikimrKesus::TAccountingConfig::TMetric& metric) {
             metric.SetEnabled(srcMetric.enabled());
             metric.SetBillingPeriodSec(srcMetric.billing_period_sec());
+            *metric.MutableLabels() = srcMetric.labels();
 
             /* overwrite if we have new fields */
             /* TODO: support arbitrary fields in metering core */
@@ -345,6 +346,7 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
         auto copyMetric = [] (const NKikimrKesus::TAccountingConfig::TMetric& srcMetric, Ydb::RateLimiter::MeteringConfig::Metric& metric) {
             metric.set_enabled(srcMetric.GetEnabled());
             metric.set_billing_period_sec(srcMetric.GetBillingPeriodSec());
+            *metric.mutable_labels() = srcMetric.GetLabels();
 
             /* TODO: support arbitrary fields in metering core */
             auto& metricFields = *metric.mutable_metric_fields()->mutable_fields();
@@ -546,7 +548,7 @@ public:
         if (kesusError.GetStatus() == Ydb::StatusIds::SUCCESS) {
             Ydb::RateLimiter::DescribeResourceResult result;
             if (ev->Get()->Record.ResourcesSize() == 0) {
-                this->Reply(StatusIds::INTERNAL_ERROR, "No resource properties found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+                this->Reply(StatusIds::SCHEME_ERROR, "No resource properties found.", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
                 return;
             }
             CopyProps(ev->Get()->Record.GetResources(0), *result.mutable_resource());

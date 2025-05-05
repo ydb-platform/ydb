@@ -13,10 +13,10 @@ namespace NKikimr {
             // TChainLayoutBuilder
             // Builds a map of slots in term of blocks (block=AppendBlockSize).
             ////////////////////////////////////////////////////////////////////////
-            TChainLayoutBuilder::TChainLayoutBuilder(ui32 left, ui32 milestone, ui32 right, ui32 overhead) {
+            TChainLayoutBuilder::TChainLayoutBuilder(const TString& prefix, ui32 left, ui32 milestone, ui32 right, ui32 overhead) {
                 BuildDownward(left, milestone, overhead);
                 BuildUpward(milestone, right, overhead);
-                Check(left, right);
+                Check(prefix, left, right);
             }
 
             TString TChainLayoutBuilder::ToString(ui32 appendBlockSize) const {
@@ -37,13 +37,13 @@ namespace NKikimr {
                 }
             }
 
-            void TChainLayoutBuilder::Check(ui32 left, ui32 right) {
+            void TChainLayoutBuilder::Check(const TString& prefix, ui32 left, ui32 right) {
                 // check integrity of the built layout
-                Y_ABORT_UNLESS(Layout.size() > 1);
-                Y_ABORT_UNLESS(Layout.begin()->Left <= left);
-                Y_ABORT_UNLESS((Layout.end() - 1)->Right >= right);
+                Y_VERIFY_S(Layout.size() > 1, prefix);
+                Y_VERIFY_S(Layout.begin()->Left <= left, prefix);
+                Y_VERIFY_S((Layout.end() - 1)->Right >= right, prefix);
                 for (size_t i = 1, s = Layout.size(); i < s; ++i) {
-                    Y_ABORT_UNLESS(Layout[i - 1].Right == Layout[i].Left);
+                    Y_VERIFY_S(Layout[i - 1].Right == Layout[i].Left, prefix);
                 }
             }
 
@@ -173,13 +173,13 @@ namespace NKikimr {
                 << " State# " << ToString());
 
             if (item.FreeSlots.Set(slotId); ++item.NumFreeSlots == SlotsInChunk) {
-                Y_DEBUG_ABORT_UNLESS(item.FreeSlots == ConstMask);
+                Y_VERIFY_DEBUG_S(item.FreeSlots == ConstMask, VDiskLogPrefix);
                 container->erase(it);
                 FreeSlotsInFreeSpace -= SlotsInChunk;
                 return {chunkId, container == &LockedChunks};
             }
 
-            Y_DEBUG_ABORT_UNLESS(item.FreeSlots != ConstMask);
+            Y_VERIFY_DEBUG_S(item.FreeSlots != ConstMask, VDiskLogPrefix);
             return {0u, false}; // no chunk freed
         }
 
@@ -188,13 +188,8 @@ namespace NKikimr {
                 LockedChunks.insert(std::move(nh));
                 return true;
             } else {
-                // chunk is already freed
-                return false;
+                return LockedChunks.contains(chunkId);
             }
-        }
-
-        void TChain::UnlockChunk(TChunkID chunkId) {
-            FreeSpace.insert(LockedChunks.extract(chunkId));
         }
 
         THeapStat TChain::GetStat() const {
@@ -206,7 +201,7 @@ namespace NKikimr {
             ui32 usedChunksInFreeSpace = FreeSpace.size() + LockedChunks.size();
             ui32 usedSlotsInFreeSpace = usedChunksInFreeSpace * SlotsInChunk - FreeSlotsInFreeSpace;
             ui32 chunksToStoreDefragmentedSlots = slotsToChunks(usedSlotsInFreeSpace, SlotsInChunk);
-            Y_ABORT_UNLESS(usedChunksInFreeSpace - chunksToStoreDefragmentedSlots >= 0);
+            Y_VERIFY_S(usedChunksInFreeSpace - chunksToStoreDefragmentedSlots >= 0, VDiskLogPrefix);
             ui32 canBeFreedChunks = usedChunksInFreeSpace - chunksToStoreDefragmentedSlots;
             ui32 fullyFilledChunks = slotsToChunks(AllocatedSlots - usedSlotsInFreeSpace, SlotsInChunk);
             ui32 currentlyUsedChunks = usedChunksInFreeSpace + fullyFilledChunks;
@@ -274,7 +269,7 @@ namespace NKikimr {
             // calculate optimal slot size for this number of slots per chunk; it may differ from builder's one,
             // this will be fixed in caller function
             const ui32 slotSizeInBlocks = blocksInChunk / slotsInChunk;
-            Y_ABORT_UNLESS(slotSizeInBlocks);
+            Y_VERIFY_S(slotSizeInBlocks, vdiskLogPrefix);
             ui32 slotSize = slotSizeInBlocks * appendBlockSize;
 
             TChain res{
@@ -378,6 +373,31 @@ namespace NKikimr {
             traverse(LockedChunks);
         }
 
+        void TChain::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            auto chunksIt = chunksToShred.begin();
+            for (auto it = FreeSpace.begin(); it != FreeSpace.end(); ) {
+                const TChunkIdx chunkId = it->first;
+                while (chunksIt != chunksToShred.end() && *chunksIt < chunkId) {
+                    ++chunksIt;
+                }
+                if (chunksIt != chunksToShred.end() && *chunksIt == chunkId) {
+                    LockedChunks.insert(FreeSpace.extract(it++));
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void TChain::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (auto& map : {FreeSpace, LockedChunks}) {
+                for (const auto& [chunkIdx, freeSpace] : map) {
+                    if (chunksOfInterest.contains(chunkIdx)) {
+                        chunks.insert(chunkIdx);
+                    }
+                }
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains
         ////////////////////////////////////////////////////////////////////////////
@@ -400,7 +420,8 @@ namespace NKikimr {
         {
             Y_VERIFY_S(MinHugeBlobInBytes &&
                     MinHugeBlobInBytes <= MilestoneBlobInBytes &&
-                    MilestoneBlobInBytes < maxBlobInBytes, "INVALID CONFIGURATION! (SETTINGS ARE:"
+                    MilestoneBlobInBytes < maxBlobInBytes,
+                            VDiskLogPrefix << "INVALID CONFIGURATION! (SETTINGS ARE:"
                             << " MaxBlobInBytes# " << maxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
                             << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
@@ -413,9 +434,9 @@ namespace NKikimr {
                 return nullptr;
             }
             const size_t index = SizeToBlocks(size) - MinHugeBlobInBlocks;
-            Y_DEBUG_ABORT_UNLESS(index < SearchTable.size());
+            Y_VERIFY_DEBUG_S(index < SearchTable.size(), VDiskLogPrefix);
             const size_t chainIndex = SearchTable[index];
-            Y_DEBUG_ABORT_UNLESS(chainIndex < Chains.size());
+            Y_VERIFY_DEBUG_S(chainIndex < Chains.size(), VDiskLogPrefix);
             return &Chains[chainIndex];
         }
 
@@ -423,11 +444,11 @@ namespace NKikimr {
             if (size < MinHugeBlobInBytes || MaxHugeBlobInBlocks * AppendBlockSize < size) {
                 return nullptr;
             }
-            Y_ABORT_UNLESS(MinHugeBlobInBytes <= size);
+            Y_VERIFY_S(MinHugeBlobInBytes <= size, VDiskLogPrefix);
             const size_t index = SizeToBlocks(size) - MinHugeBlobInBlocks;
-            Y_DEBUG_ABORT_UNLESS(index < SearchTable.size());
+            Y_VERIFY_DEBUG_S(index < SearchTable.size(), VDiskLogPrefix);
             const size_t chainIndex = SearchTable[index];
-            Y_DEBUG_ABORT_UNLESS(chainIndex < Chains.size());
+            Y_VERIFY_DEBUG_S(chainIndex < Chains.size(), VDiskLogPrefix);
             return &Chains[chainIndex];
         }
 
@@ -473,8 +494,8 @@ namespace NKikimr {
             std::vector<TChain> newChains;
             newChains.reserve(Chains.size());
 
-            Y_DEBUG_ABORT_UNLESS(ChunkSize % AppendBlockSize == 0);
-            Y_DEBUG_ABORT_UNLESS(AppendBlockSize <= ChunkSize);
+            Y_VERIFY_DEBUG_S(ChunkSize % AppendBlockSize == 0, VDiskLogPrefix);
+            Y_VERIFY_DEBUG_S(AppendBlockSize <= ChunkSize, VDiskLogPrefix);
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
             auto chainsIt = Chains.begin();
@@ -497,7 +518,7 @@ namespace NKikimr {
                 }
 
                 // assert SlotSize-s are coming in strictly increasing order
-                Y_ABORT_UNLESS(std::exchange(prevSlotSize, chain.SlotSize) < chain.SlotSize);
+                Y_VERIFY_S(std::exchange(prevSlotSize, chain.SlotSize) < chain.SlotSize, VDiskLogPrefix);
 
                 DeserializedChains.Set(newChains.size());
                 newChains.push_back(std::move(chain));
@@ -597,7 +618,7 @@ namespace NKikimr {
             const ui32 milestoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
             const ui32 endBlocks = MaxHugeBlobInBlocks;
 
-            NPrivate::TChainLayoutBuilder builder(startBlocks, milestoneBlocks, endBlocks, Overhead);
+            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix, startBlocks, milestoneBlocks, endBlocks, Overhead);
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
             for (auto x : builder.GetLayout()) {
@@ -607,12 +628,12 @@ namespace NKikimr {
                 Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
             }
 
-            Y_ABORT_UNLESS(!Chains.empty());
+            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
         }
 
         void TAllChains::BuildSearchTable() {
-            Y_ABORT_UNLESS(SearchTable.empty());
-            Y_ABORT_UNLESS(!Chains.empty());
+            Y_VERIFY_S(SearchTable.empty(), VDiskLogPrefix);
+            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
 
             const ui32 startBlocks = MinHugeBlobInBlocks;
             const ui32 minSize = startBlocks * AppendBlockSize;
@@ -624,9 +645,9 @@ namespace NKikimr {
             for (ui32 i = startBlocks, size = minSize; i <= endBlocks; ++i, size += AppendBlockSize) {
                 if (it->SlotSize < size) { // size doesn't fit in current chain, but it must fit into next one
                     ++it;
-                    Y_ABORT_UNLESS(it != Chains.end());
-                    Y_ABORT_UNLESS(size <= it->SlotSize);
-                    Y_ABORT_UNLESS(index != Max<ui16>());
+                    Y_VERIFY_S(it != Chains.end(), VDiskLogPrefix);
+                    Y_VERIFY_S(size <= it->SlotSize, VDiskLogPrefix);
+                    Y_VERIFY_S(index != Max<ui16>(), VDiskLogPrefix);
                     ++index;
                 }
                 SearchTable.push_back(index);
@@ -640,10 +661,22 @@ namespace NKikimr {
         void TAllChains::FinishRecovery() {
             ui32 prevSlotSize = 0;
             for (const TChain& chain : Chains) {
-                Y_ABORT_UNLESS(prevSlotSize < chain.SlotSize);
+                Y_VERIFY_S(prevSlotSize < chain.SlotSize, VDiskLogPrefix);
                 prevSlotSize = chain.SlotSize;
             }
             BuildSearchTable();
+        }
+
+        void TAllChains::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            for (TChain& chain : Chains) {
+                chain.ShredNotify(chunksToShred);
+            }
+        }
+
+        void TAllChains::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (TChain& chain : Chains) {
+                chain.ListChunks(chunksOfInterest, chunks);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -671,7 +704,7 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////////
         THugeSlot THeap::ConvertDiskPartToHugeSlot(const TDiskPart& addr) const {
             const TChain *chain = Chains.GetChain(addr.Size);
-            Y_ABORT_UNLESS(chain);
+            Y_VERIFY_S(chain, VDiskLogPrefix);
             return chain->Convert(chain->Convert(addr));
         }
 
@@ -694,7 +727,7 @@ namespace NKikimr {
         TFreeRes THeap::Free(const TDiskPart &addr) {
             ui32 size = addr.Size;
             TChain *chain = Chains.GetChain(size);
-            Y_ABORT_UNLESS(chain);
+            Y_VERIFY_S(chain, VDiskLogPrefix);
 
             TFreeRes res = chain->Free(chain->Convert(addr));
             if (res.ChunkId) {
@@ -704,11 +737,16 @@ namespace NKikimr {
         }
 
         void THeap::AddChunk(ui32 chunkId) {
+            ForbiddenChunks.erase(chunkId); // may be this was forbidden chunk from other subsystem, but now it is clean
             PutChunkIdToFreeChunks(chunkId);
         }
 
         ui32 THeap::RemoveChunk() {
-            if (FreeChunks.size() > FreeChunksReservation) {
+            if (!ForceFreeChunks.empty()) {
+                const ui32 chunkId = ForceFreeChunks.front();
+                ForceFreeChunks.pop_front();
+                return chunkId;
+            } else if (FreeChunks.size() > FreeChunksReservation) {
                 ui32 chunkId = GetChunkIdFromFreeChunks();
                 Y_VERIFY_S(chunkId, VDiskLogPrefix << "State# " << ToString());
                 return chunkId;
@@ -719,14 +757,8 @@ namespace NKikimr {
 
         bool THeap::LockChunkForAllocation(ui32 chunkId, ui32 slotSize) {
             TChain *chain = Chains.GetChain(slotSize);
-            Y_ABORT_UNLESS(chain);
+            Y_VERIFY_S(chain, VDiskLogPrefix);
             return chain->LockChunkForAllocation(chunkId);
-        }
-
-        void THeap::UnlockChunk(ui32 chunkId, ui32 slotSize) {
-            TChain *chain = Chains.GetChain(slotSize);
-            Y_ABORT_UNLESS(chain);
-            chain->UnlockChunk(chunkId);
         }
 
         void THeap::FinishRecovery() {
@@ -735,6 +767,30 @@ namespace NKikimr {
 
         THeapStat THeap::GetStat() const {
             return Chains.GetStat();
+        }
+
+        void THeap::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            Chains.ShredNotify(chunksToShred);
+
+            ForbiddenChunks.insert(chunksToShred.begin(), chunksToShred.end());
+
+            for (auto it = FreeChunks.begin(); it != FreeChunks.end(); ) {
+                if (ForbiddenChunks.erase(*it)) {
+                    ForceFreeChunks.push_back(*it);
+                    FreeChunks.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void THeap::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (const TChunkIdx chunkIdx : FreeChunks) {
+                if (chunksOfInterest.contains(chunkIdx)) {
+                    chunks.insert(chunkIdx);
+                }
+            }
+            Chains.ListChunks(chunksOfInterest, chunks);
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -824,7 +880,7 @@ namespace NKikimr {
         void THeap::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunk : FreeChunks) {
                 const bool inserted = chunks.insert(chunk).second;
-                Y_ABORT_UNLESS(inserted); // this chunk should be unique to the set
+                Y_VERIFY_S(inserted, VDiskLogPrefix); // this chunk should be unique to the set
             }
             Chains.GetOwnedChunks(chunks);
         }
@@ -874,10 +930,13 @@ namespace NKikimr {
         }
 
         inline void THeap::PutChunkIdToFreeChunks(ui32 chunkId) {
-            bool res = FreeChunks.insert(chunkId).second;
-            Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString());
+            if (ForbiddenChunks.erase(chunkId)) {
+                ForceFreeChunks.push_back(chunkId);
+            } else {
+                bool res = FreeChunks.insert(chunkId).second;
+                Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString());
+            }
         }
 
     } // NHuge
 } // NKikimr
-

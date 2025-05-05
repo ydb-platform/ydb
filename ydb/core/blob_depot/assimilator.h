@@ -29,9 +29,14 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr ui32 MaxSizeToQuery = 16'000'000;
 
+        struct TGetBatch {
+            ui32 PutsPending = 0;
+            std::vector<TData::TAssimilatedBlobInfo> AssimilatedBlobs;
+            std::vector<TLogoBlobID> BlobIds;
+        };
         static constexpr ui32 MaxGetsUnprocessed = 5;
         ui64 NextGetId = 1;
-        std::unordered_map<ui64, ui32> GetIdToUnprocessedPuts;
+        THashMap<ui64, TGetBatch> Gets;
 
         std::deque<TLogoBlobID> ScanQ;
         ui32 TotalSize = 0;
@@ -39,7 +44,7 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
 
         ui64 NextPutId = 1;
-        THashMap<ui64, std::tuple<TData::TKey, ui64>> PutIdToKey;
+        THashMap<ui64, std::tuple<TData::TKey, ui64>> Puts;
 
         bool ActionInProgress = false;
         bool ResumeScanDataForCopyingInFlight = false;
@@ -49,6 +54,11 @@ namespace NKikimr::NBlobDepot {
         bool ResumeScanDataForPlanningInFlight = false;
 
         std::deque<std::tuple<TMonotonic, ui64>> BytesCopiedQ;
+
+        ui32 ExpectedPerGenerationCounter = 0;
+        THashMap<std::tuple<ui64, ui8>, std::deque<std::tuple<TGenStep, ui32, ui32>>> LeastBlobQueue;
+        std::map<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> CollectGarbageQ;
+        ui32 CollectGarbageInFlight = 0;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -77,6 +87,9 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void HandleTxComplete(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
+        void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr ev);
+        void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
+        void ProcessCollectGarbageQ();
         void OnCopyDone();
         void CreatePipe();
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);

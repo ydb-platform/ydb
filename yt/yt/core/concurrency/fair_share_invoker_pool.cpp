@@ -153,8 +153,8 @@ public:
     };
 
     static TObject Create(
-        const TString& /*poolName*/,
-        std::vector<TString> /*bucketNames*/,
+        const std::string& /*poolName*/,
+        std::vector<std::string> /*bucketNames*/,
         IRegistryPtr /*registry*/)
     {
         return {};
@@ -204,8 +204,8 @@ public:
     };
 
     static TObject Create(
-        const TString& poolName,
-        std::vector<TString> bucketNames,
+        const std::string& poolName,
+        std::vector<std::string> bucketNames,
         IRegistryPtr registry)
     {
         return New<TFairShareInvokerPoolProfiler>(poolName, std::move(bucketNames), std::move(registry));
@@ -239,8 +239,8 @@ private:
     std::vector<TCountersPtr> Counters_;
 
     TFairShareInvokerPoolProfiler(
-        const TString& poolName,
-        std::vector<TString> bucketNames,
+        const std::string& poolName,
+        std::vector<std::string> bucketNames,
         IRegistryPtr registry)
     {
         Counters_.reserve(std::ssize(bucketNames));
@@ -322,8 +322,8 @@ public:
         int invokerCount,
         TFairShareCallbackQueueFactory callbackQueueFactory,
         TDuration actionTimeRelevancyHalflife,
-        const TString& poolName = "",
-        std::vector<TString> bucketNames = {},
+        const std::string& poolName = "",
+        std::vector<std::string> bucketNames = {},
         IRegistryPtr registry = nullptr)
         : UnderlyingInvoker_(std::move(underlyingInvoker))
         , Queue_(callbackQueueFactory(invokerCount))
@@ -637,8 +637,8 @@ TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     TFairShareCallbackQueueFactory callbackQueueFactory,
     TDuration actionTimeRelevancyHalflife,
-    const TString& poolName,
-    std::vector<TString> bucketNames,
+    const std::string& poolName,
+    std::vector<std::string> bucketNames,
     IRegistryPtr registry)
 {
     YT_VERIFY(0 < std::ssize(bucketNames) && std::ssize(bucketNames) < 100);

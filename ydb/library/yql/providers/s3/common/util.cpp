@@ -30,7 +30,7 @@ char* UrlEscape(char* to, const char* from) {
 
 }
 
-TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
+TIssues AddParentIssue(const TString& prefix, TIssues&& issues) {
     if (!issues) {
         return TIssues{};
     }
@@ -39,6 +39,10 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
         result.AddSubIssue(MakeIntrusive<TIssue>(issue));
     }
     return TIssues{result};
+}
+
+TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
+    return AddParentIssue(TString(prefix), std::move(issues));
 }
 
 TString UrlEscapeRet(const TStringBuf from) {
@@ -62,6 +66,36 @@ bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExpr
         }
     }
     return true;
+}
+
+TUrlBuilder::TUrlBuilder(const TString& uri)
+    : MainUri(uri)
+{}
+
+TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
+    Params.emplace_back(name, value);
+    return *this;
+}
+
+TString TUrlBuilder::Build() const {
+    if (Params.empty()) {
+        return MainUri;
+    }
+
+    TStringBuilder result;
+    result << MainUri << "?";
+
+    TStringBuf separator = ""sv;
+    for (const auto& p : Params) {
+        result << separator << p.Name;
+        if (auto value = p.Value) {
+            Quote(value, "");
+            result << "=" << value;
+        }
+        separator = "&"sv;
+    }
+
+    return std::move(result);
 }
 
 }

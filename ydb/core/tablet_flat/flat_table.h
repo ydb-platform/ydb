@@ -77,31 +77,32 @@ public:
 
     TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept;
 
-    TEpoch Snapshot() noexcept;
+    TEpoch Snapshot();
 
     TEpoch Head() const noexcept
     {
         return Epoch;
     }
 
-    TAutoPtr<TSubset> Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch edge);
-    TAutoPtr<TSubset> Subset(TEpoch edge) const noexcept;
-    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept;
-    TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */
+    TAutoPtr<TSubset> CompactionSubset(TEpoch edge, TArrayRef<const TLogoBlobID> bundle);
+    TAutoPtr<TSubset> PartSwitchSubset(TEpoch edge, TArrayRef<const TLogoBlobID> bundle, TArrayRef<const TLogoBlobID> txStatus);
+    TAutoPtr<TSubset> Subset(TEpoch edge) const;
+    TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max());
+    TAutoPtr<TSubset> Unwrap(); /* full Subset(..) + final Replace(..) */
 
-    bool HasBorrowed(ui64 selfTabletId) const noexcept;
+    bool HasBorrowed(ui64 selfTabletId) const;
 
     /**
      * Returns current slices for bundles
      *
      * Map will only contain bundles that currently exist in the table
      */
-    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const noexcept;
+    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const;
 
     /**
      * Replaces slices for bundles in the slices map
      */
-    void ReplaceSlices(TBundleSlicesMap slices) noexcept;
+    void ReplaceSlices(TBundleSlicesMap slices);
 
     /* Interface for redistributing data layout within the table. Take some
         subset with Subset(...) call, do some work and then return result
@@ -110,58 +111,57 @@ public:
         be displaced from table with Clean() method eventually.
     */
 
-    void Replace(TArrayRef<const TPartView>, const TSubset&) noexcept;
-    void ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>, const TSubset&) noexcept;
+    void Replace(const TSubset&, TArrayRef<const TPartView>, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>);
 
     /*_ Special interface for clonig flatten part of table for outer usage.
         Cook some TPartView with Subset(...) method and/or TShrink tool first and
         then merge produced TPartView to outer table.
     */
 
-    void Merge(TPartView partView) noexcept;
-    void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
-    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
-    void ProcessCheckTransactions() noexcept;
+    void Merge(TPartView partView);
+    void Merge(TIntrusiveConstPtr<TColdPart> part);
+    void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus);
+    void MergeDone();
 
     /**
      * Returns constructed levels for slices
      */
-    const TLevels& GetLevels() const noexcept;
+    const TLevels& GetLevels() const;
 
     /**
      * Returns search height if there are no cold parts, 0 otherwise
      */
-    ui64 GetSearchHeight() const noexcept;
+    ui64 GetSearchHeight() const;
 
     /* Hack for filling external blobs in TMemTable tables with data */
 
-    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
+    TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const;
 
     TAutoPtr<TTableIter> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     EReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
                   ui64 flg, TRowVersion snapshot, TDeque<TPartIter>& tempIterators,
                   TSelectStats& stats,
                   const ITransactionMapPtr& visible = nullptr,
-                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
+                  const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             TRawVals key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             TArrayRef<const TCell> key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             const TCelled& key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
 
     EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,
@@ -329,7 +329,7 @@ public:
 
     TCompactionStats GetCompactionStats() const;
 
-    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept;
+    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr);
 
 private:
     TMemTable& MemTable();
@@ -339,7 +339,10 @@ private:
     void RemoveStat(const TPartView& partView);
 
 private:
-    void AddTxRef(ui64 txId);
+    void AddTxDataRef(ui64 txId);
+    void RemoveTxDataRef(ui64 txId);
+    void AddTxStatusRef(ui64 txId);
+    void RemoveTxStatusRef(ui64 txId);
 
 private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
@@ -361,18 +364,35 @@ private:
 
     TRowVersionRanges RemovedRowVersions;
 
-    absl::flat_hash_map<ui64, size_t> TxRefs;
+    // The number of entities (memtable/sst) that have rows with a TxId. As
+    // long as there is at least one row with a TxId its commit/remove status
+    // must be preserved.
+    absl::flat_hash_map<ui64, size_t> TxDataRefs;
+
+    // The number of entities (memtable/txstatus) that have a commit/remove
+    // status for a TxId. As long as there is at least one such entity the
+    // transaction cannot be used again without artifacts, and must stay
+    // in committed/removed set.
+    absl::flat_hash_map<ui64, size_t> TxStatusRefs;
+
+    // A set of open transactions, i.e. transactions that have rows with the
+    // specified TxId and that have not been committed or removed yet.
     absl::flat_hash_set<ui64> OpenTxs;
-    absl::flat_hash_set<ui64> CheckTransactions;
+
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
     TTransactionSet DecidedTransactions;
+    TTransactionSet GarbageTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
 
     ui64 RemovedCommittedTxs = 0;
 
 private:
-    struct TRollbackRemoveTxRef {
+    struct TRollbackRemoveTxDataRef {
+        ui64 TxId;
+    };
+
+    struct TRollbackRemoveTxStatusRef {
         ui64 TxId;
     };
 
@@ -393,22 +413,13 @@ private:
         ui64 TxId;
     };
 
-    struct TRollbackAddOpenTx {
-        ui64 TxId;
-    };
-
-    struct TRollbackRemoveOpenTx {
-        ui64 TxId;
-    };
-
     using TRollbackOp = std::variant<
-        TRollbackRemoveTxRef,
+        TRollbackRemoveTxDataRef,
+        TRollbackRemoveTxStatusRef,
         TRollbackAddCommittedTx,
         TRollbackRemoveCommittedTx,
         TRollbackAddRemovedTx,
-        TRollbackRemoveRemovedTx,
-        TRollbackAddOpenTx,
-        TRollbackRemoveOpenTx>;
+        TRollbackRemoveRemovedTx>;
 
     struct TCommitAddDecidedTx {
         ui64 TxId;

@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 struct TConnectionInfo {
     std::string Endpoint = "";

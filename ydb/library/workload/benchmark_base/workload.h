@@ -32,6 +32,7 @@ public:
     YDB_READONLY(TString, StringType, "Utf8");
     YDB_READONLY(TString, DateType, "Date32");
     YDB_READONLY(TString, TimestampType, "Timestamp64");
+    YDB_READONLY(ui64, PartitionSizeMb, 2000);
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {
@@ -52,6 +53,7 @@ protected:
     virtual TString GetTablesYaml() const = 0;
     virtual TSpecialDataTypes GetSpecialDataTypes() const = 0;
     NJson::TJsonValue GetTablesJson() const;
+    virtual ui32 GetDefaultPartitionsCount(const TString& tableName) const;
 
     THolder<TGeneratorStateProcessor> StateProcessor;
 private:

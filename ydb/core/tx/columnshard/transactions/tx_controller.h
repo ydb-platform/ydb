@@ -50,7 +50,7 @@ public:
 
 public:
     static TFullTxInfo BuildFake(const NKikimrTxColumnShard::ETransactionKind kind) {
-        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, {});
+        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, 0, {});
     }
 
     bool operator==(const TFullTxInfo& item) const = default;
@@ -86,9 +86,10 @@ public:
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie,
-        const std::optional<TMessageSeqNo>& seqNo)
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep, 
+        const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
+        , MinStep(minAllowedPlanStep)
         , Source(source)
         , Cookie(cookie)
         , SeqNo(seqNo) {
@@ -266,10 +267,13 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", GetTxId());
             if (!IsInProgress()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "not_in_progress");
                 return nullptr;
             }
             if (PreparationsStarted.Val()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepared_already");
                 return nullptr;
             }
             PreparationsStarted.Inc();
@@ -411,7 +415,6 @@ private:
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
 private:
-    ui64 GetAllowedStep() const;
     bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
@@ -422,6 +425,8 @@ private:
 
 public:
     TTxController(TColumnShard& owner);
+
+    ui64 GetAllowedStep() const;
 
     ITransactionOperator::TPtr GetTxOperatorOptional(const ui64 txId) const {
         auto it = Operators.find(txId);
@@ -439,9 +444,9 @@ public:
         if (optionalExists && !result) {
             return nullptr;
         }
-        AFL_VERIFY(result);
+        AFL_VERIFY(result)("tx_id", txId);
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
-        AFL_VERIFY(resultClass);
+        AFL_VERIFY(resultClass)("tx_id", txId);
         return resultClass;
     }
 

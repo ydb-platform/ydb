@@ -15,6 +15,8 @@
 #include <util/stream/file.h>
 #include <util/generic/guid.h>
 #include <util/string/split.h>
+#include <util/system/yassert.h>
+#include <util/random/random.h>
 
 using namespace NYdbGrpc;
 using namespace Yql::DqsProto;
@@ -41,22 +43,36 @@ int SvnRevision(TServiceConnection<DqService>& service, const TVector<TString>& 
     return promise.GetFuture().GetValueSync();
 }
 
-ClusterStatusResponse Info(TServiceConnection<DqService>& service) {
-    auto promise = NThreading::NewPromise<ClusterStatusResponse>();
-    auto callback = [&](TGrpcStatus&& status, ClusterStatusResponse&& resp) {
-        if (status.Ok()) {
-            promise.SetValue(resp);
-        } else {
-            Cerr << "Error " << status.GRpcStatusCode << " message: " << status.Msg << Endl;
-            promise.SetException("Error");
-        }
-    };
+ClusterStatusResponse InfoWithReties(TServiceConnection<DqService>& service, ui32 retries) {
+    Y_ENSURE(retries > 0);
+    NThreading::TFuture<ClusterStatusResponse> future;
+    for (ui32 i = 0; i < retries; ++i) {
+        auto promise = NThreading::NewPromise<ClusterStatusResponse>();
+        future = promise.GetFuture();
+        auto callback = [&](TGrpcStatus&& status, ClusterStatusResponse&& resp) {
+            if (status.Ok()) {
+                promise.SetValue(resp);
+            } else {
+                Cerr << "Error getting DQ info: code=" << status.GRpcStatusCode << ", message: " << status.Msg << ", details: " << status.Details << Endl;
+                promise.SetException("Error getting DQ info");
+            }
+        };
 
-    service.DoRequest<ClusterStatusRequest, ClusterStatusResponse>(
-        ClusterStatusRequest(),
-        callback,
-        &DqService::Stub::AsyncClusterStatus);
-    return promise.GetFuture().GetValueSync();
+        service.DoRequest<ClusterStatusRequest, ClusterStatusResponse>(
+            ClusterStatusRequest(),
+            callback,
+            &DqService::Stub::AsyncClusterStatus);
+        future.Wait();
+        if (!future.HasException()) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(2000ul + RandomNumber(1000ul)));
+    }
+    return future.GetValue();
+}
+
+ClusterStatusResponse Info(TServiceConnection<DqService>& service) {
+    return InfoWithReties(service, 5);
 }
 
 void Stop(TServiceConnection<DqService>& service, const JobStopRequest& request)

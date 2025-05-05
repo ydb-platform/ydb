@@ -55,6 +55,7 @@ using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Netwo
 using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
+using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -145,12 +146,12 @@ struct TCompleteNotifications {
         return Notifications.size();
     }
 
-    void Send(const TActorContext& ctx) {
+    void Send(const TActorContext&) {
         for (auto& [notification, duration] : Notifications) {
             if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+                TActivationContext::Schedule(duration, std::move(notification));
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                TActivationContext::Send(std::move(notification));
             }
         }
         Notifications.clear();
@@ -383,7 +384,7 @@ inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const 
             if (it != n.Notifications.begin()) {
                 o << ',';
             }
-            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient;
+            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient << " " << it->first->ToString();
         }
     }
 }

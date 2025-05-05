@@ -178,10 +178,11 @@ namespace NKikimr::NStorage {
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
-        TString StorageConfigYaml; // the part we have to push (unless this is storage-only) to console
-        TString StorageConfigFetchYaml; // the part we would get is we fetch from console
-        ui64 StorageConfigFetchYamlHash = 0;
-        std::optional<ui32> StorageConfigYamlVersion;
+        TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
+        std::optional<ui64> MainConfigYamlVersion;
+        TString MainConfigFetchYaml; // the part we would get is we fetch from console
+        ui64 MainConfigFetchYamlHash = 0;
+        std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
         NKikimrBlobStorage::TStorageConfig BaseConfig;
@@ -226,6 +227,7 @@ namespace NKikimr::NStorage {
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
+        THashSet<ui32> NodeIdsSet;
         TNodeIdentifier SelfNode;
 
         // scatter tasks
@@ -350,8 +352,13 @@ namespace NKikimr::NStorage {
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
 
-        using TProcessCollectConfigsResult = std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig>;
-        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res, const TString *selfAssemblyUUID);
+        struct TProcessCollectConfigsResult {
+            std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig> Outcome;
+            bool IsDistconfDisabledQuorum = false;
+        };
+        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
+            std::optional<TStringBuf> selfAssemblyUUID);
+
         std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};
@@ -736,6 +743,9 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
+
+    std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
+        ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 
 } // NKikimr::NStorage
 

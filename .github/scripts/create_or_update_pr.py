@@ -49,8 +49,9 @@ def create_or_update_pr(args, repo):
             raise
 
     pr_number = current_pr.number
-    if 'GITHUB_OUTPUT' in os.environ and os.environ['GITHUB_OUTPUT']:
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
+    github_output = os.environ.get('GITHUB_OUTPUT')
+    if github_output:
+        with open(github_output, 'a') as gh_out:
             print(f"pr_number={pr_number}", file=gh_out)
 
     print(f"PR operation completed. PR number: {pr_number}")

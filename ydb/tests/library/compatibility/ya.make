@@ -5,6 +5,11 @@ RUN_PROGRAM(
     OUT_NOAUTO ydbd-last-stable
 )
 
+RUN_PROGRAM(
+    ydb/tests/library/compatibility/downloader stable-24-4/release/ydbd ydbd-prelast-stable
+    OUT_NOAUTO ydbd-prelast-stable
+)
+
 END()
 
 RECURSE(downloader)

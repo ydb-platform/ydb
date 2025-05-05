@@ -63,6 +63,7 @@ public:
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
+    class TTxDescribeCmd;
     class TTxCommitConfig;
     class TTxProposeGroupKey;
     class TTxRegisterNode;
@@ -1874,6 +1875,7 @@ private:
     void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvControllerDescribeRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
@@ -2149,6 +2151,7 @@ public:
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
+            hFunc(TEvBlobStorage::TEvControllerDescribeRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
             hFunc(TEvPrivate::TEvUpdateSystemViews, Handle);
             cFunc(TEvPrivate::EvUpdateSelfHealCounters, UpdateSelfHealCounters);

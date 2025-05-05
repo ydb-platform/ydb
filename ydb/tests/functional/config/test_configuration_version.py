@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
 import time
-import random
 from hamcrest import assert_that
 
 from ydb.tests.library.common.types import Erasure
@@ -16,8 +15,8 @@ import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 logger = logging.getLogger(__name__)
 
 
-def get_configuration_version(dynamic_client):
-    response = dynamic_client.get_configuration_version()
+def get_configuration_version(dynamic_client, v1=False, v2=False, unknown=False):
+    response = dynamic_client.get_configuration_version(v1, v2, unknown)
     assert_that(response.operation.status == StatusIds.SUCCESS)
     result = dynconfig.GetConfigurationVersionResult()
     response.operation.result.Unpack(result)
@@ -56,19 +55,24 @@ class TestConfigurationVersion(object):
         assert_that(result.V2_nodes == 0)
         assert_that(result.unknown_nodes == 0)
 
-        self.cluster.enable_config_dir(random.sample(list(self.cluster.nodes.keys()), 3))
+        self.cluster.enable_config_dir([1, 3, 5])
         self.cluster.restart_nodes()
         time.sleep(5)
 
-        result = get_configuration_version(self.dynconfig_client)
+        result = get_configuration_version(self.dynconfig_client, v1=True, v2=True)
         logger.debug(f"result: {result}")
         assert_that(result.V1_nodes == 5)
         assert_that(result.V2_nodes == 3)
         assert_that(result.unknown_nodes == 0)
+        assert_that(sorted(result.V2_nodes_list) == [1, 3, 5])
+        assert_that(sorted(result.V1_nodes_list) == [2, 4, 6, 7, 8])
 
         self.cluster.nodes[2].stop()
 
-        result = get_configuration_version(self.dynconfig_client)
+        result = get_configuration_version(self.dynconfig_client, v1=True, v2=True, unknown=True)
         logger.debug(f"result: {result}")
         assert_that(result.V1_nodes + result.V2_nodes == 7)
         assert_that(result.unknown_nodes == 1)
+        assert_that(sorted(result.V1_nodes_list) == [4, 6, 7, 8])
+        assert_that(sorted(result.V2_nodes_list) == [1, 3, 5])
+        assert_that(sorted(result.unknown_nodes_list) == [2])

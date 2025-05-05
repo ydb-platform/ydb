@@ -2,6 +2,7 @@
 import pytest
 import yatest
 import os
+import time
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
@@ -72,6 +73,10 @@ class TestCompatibility(object):
             )
         )
         self.driver.wait()
+        # TODO: remove sleep
+        # without sleep there are errors like
+        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
+        time.sleep(60)
 
     def execute_scan_query(self, query_body):
         query = ydb.ScanQuery(query_body, {})

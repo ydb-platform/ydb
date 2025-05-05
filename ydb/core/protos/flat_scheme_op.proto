@@ -1814,6 +1814,7 @@ enum EPathType {
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
+    EPathTypeSysView = 24;
 }
 
 enum EPathSubType {

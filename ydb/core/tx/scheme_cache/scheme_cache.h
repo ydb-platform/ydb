@@ -194,6 +194,7 @@ struct TSchemeCacheNavigate {
         KindResourcePool = 22,
         KindBackupCollection = 23,
         KindTransfer = 24,
+        KindSysView = 25,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {

@@ -609,7 +609,7 @@ public:
     }
 };
 
-class TStateStorageRingGroupProxyRequest : public TActor<TStateStorageRingGroupProxyRequest> {
+class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStorageRingGroupProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
     THashMap<TActorId, ui32> RingGroupActors;
 
@@ -739,15 +739,18 @@ public:
     }
 
     TStateStorageRingGroupProxyRequest(TIntrusivePtr<TStateStorageInfo> info)
-        : TActor<TStateStorageRingGroupProxyRequest>(&TThis::StateInit)
-        , Info(info)
+        : Info(info)
         , Replies(0)
         , RingGroupPassAwayCounter(0)
         , SignatureSz(info->RingGroupsSelectionSize())
         , Signature(new ui64[SignatureSz])
     {
         Fill(Signature.Get(), Signature.Get() + SignatureSz, 0);
+    }
+
+    void Bootstrap() {
         Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        Become(&TThis::StateInit);
     }
 
     STRICT_STFUNC(StateInit,

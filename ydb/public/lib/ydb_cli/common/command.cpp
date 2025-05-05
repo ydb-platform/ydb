@@ -236,6 +236,7 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
+    Cerr << "ParseResult called\n";
     ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV, config.ThrowOnOptsParseError);
 
     // Parse options from env and apply default parameters.

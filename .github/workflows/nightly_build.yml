@@ -1,27 +1,43 @@
 name: Nightly-Build  # workflow used to upload built binaries to s3
 on:
+  schedule:
+    - cron: "0 3 * * *"  # At 03:00 every day
   workflow_dispatch:
     inputs:
-      runner_label:
-        type: string
-        default: "auto-provisioned"
-        description: "runner label"
-      commit_sha:
-        type: string
-        default: ""
+      use_default_branches:
+        description: 'If true, run on main and all current stable branches. If false, run only on the current branch.'
+        type: boolean
+        required: false
+        default: true
+
 jobs:
+  determine_branches:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.set-branches.outputs.branches }}
+    steps:
+      - id: set-branches
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_default_branches }}" == "true" ]]; then
+            echo "branches=['main', 'stable-25-1', 'stable-24-4', 'stable-25-1-1', 'stable-25-1-analytics']" >> $GITHUB_OUTPUT
+          else
+            echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
+          fi
+
   build_and_test:
+    needs: determine_branches
     strategy:
       fail-fast: false
       matrix:
         build_preset: ["release", "relwithdebinfo", "release-asan"]
+        branch: ${{ fromJSON(needs.determine_branches.outputs.branches) }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
-    name: Build and test ${{ matrix.build_preset }}
+    name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
+        ref: ${{ matrix.branch }}
         fetch-depth: 2
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -51,4 +67,4 @@ jobs:
       shell: bash
       run: |
         set -x
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ github.ref_name }}/${{ matrix.build_preset }}/ydbd" -d
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d

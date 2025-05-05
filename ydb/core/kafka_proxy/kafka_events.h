@@ -225,8 +225,8 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
-struct PartitionGroupOffset {
-    ui32 Offset;
+struct PartitionConsumerOffset {
+    ui64 Offset;
     TString Metadata;
 };
 
@@ -239,8 +239,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
     TString TopicName;
     EKafkaErrors Status;
 
-    // std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
-    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, PartitionGroupOffset>>> PartitionIdToOffsets;
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, PartitionConsumerOffset>>> PartitionIdToOffsets;
 };
 
 struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>

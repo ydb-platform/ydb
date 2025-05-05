@@ -93,11 +93,10 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Y_UNUSED(tabletInfo);
         Y_UNUSED(ctx);
         for (auto& partResult : ev->Get()->Record.GetPartResult()) {
-            std::unordered_map<TString, TEvKafka::PartitionGroupOffset> consumerToOffset;
+            std::unordered_map<TString, TEvKafka::PartitionConsumerOffset> consumerToOffset;
             for (auto& consumerResult : partResult.GetConsumerResult()) {
                 if (consumerResult.GetErrorCode() == NPersQueue::NErrorCode::OK) {
-                    consumerToOffset[consumerResult.GetConsumer()].Offset = consumerResult.GetCommitedOffset();
-                    consumerToOffset[consumerResult.GetConsumer()].Metadata = consumerResult.GetCommittedMetadata();
+                    consumerToOffset.emplace(consumerResult.GetConsumer(), TEvKafka::PartitionConsumerOffset{static_cast<ui64>(consumerResult.GetCommitedOffset()), consumerResult.GetCommittedMetadata()});
                 }
             }
             (*PartitionIdToOffsets)[partResult.GetPartition()] = consumerToOffset;
@@ -145,7 +144,6 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         response->TopicName = OriginalTopicName;
         response->Status = NONE_ERROR;
         response->PartitionIdToOffsets = PartitionIdToOffsets;
-        // no need to add CommittedMetadata here, because it is in PartitionIdToOffsets
 
         Send(Requester, response.Release());
         Die(ctx);
@@ -155,8 +153,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         const TActorId Requester;
         const TString OriginalTopicName;
         const TString UserSID;
-        std::unordered_map<ui32, TEvKafka::PartitionGroupOffset> PartitionIdToOffset {};
-        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionGroupOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionGroupOffset>>>();
+        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>>();
 };
 
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message) {
@@ -178,12 +175,15 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                     TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
                     partition.PartitionIndex = requestPartition;
                     if (partitionsToOffsets.get() != nullptr
-                            && partitionsToOffsets->contains(requestPartition)
-                            && (*partitionsToOffsets)[requestPartition].contains(requestGroup.GroupId.value())) {
-                        partition.CommittedOffset = (*partitionsToOffsets)[requestPartition][requestGroup.GroupId.value()].Offset;
-                        // сюда добавить Metadata
-                        partition.Metadata = (*partitionsToOffsets)[requestPartition][requestGroup.GroupId.value()].Metadata;
-                        partition.ErrorCode = NONE_ERROR;
+                            && partitionsToOffsets->contains(requestPartition)) {
+                        auto groupPartitionToOffset = (*partitionsToOffsets)[requestPartition].find(requestGroup.GroupId.value());
+                        if (groupPartitionToOffset != (*partitionsToOffsets)[requestPartition].end()) {
+                            partition.CommittedOffset = groupPartitionToOffset->second.Offset;
+                            partition.Metadata = groupPartitionToOffset->second.Metadata;
+                            partition.ErrorCode = NONE_ERROR;
+                        } else {
+                            partition.ErrorCode = RESOURCE_NOT_FOUND;
+                        }
                     } else {
                         partition.ErrorCode = RESOURCE_NOT_FOUND;
                     }
@@ -209,7 +209,7 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                 NKafka::TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition partition;
                 partition.CommittedOffset = sourcePartition.CommittedOffset;
                 partition.PartitionIndex = sourcePartition.PartitionIndex;
-                // сюда тоже добавить Metadata
+                partition.Metadata = sourcePartition.Metadata;
                 partition.ErrorCode = sourcePartition.ErrorCode;
                 topic.Partitions.push_back(partition);
             }
@@ -230,7 +230,6 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
             TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
             topic.Name = sourceTopic.Name;
             topic.PartitionIndexes = sourceTopic.PartitionIndexes;
-            // тут не надо метадату, ее нет
             group.Topics.push_back(topic);
         }
         Message->Groups.push_back(group);

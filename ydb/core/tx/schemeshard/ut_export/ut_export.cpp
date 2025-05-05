@@ -1153,8 +1153,8 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
-        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
-        Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
             }
@@ -1246,8 +1246,8 @@ partitioning_settings {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
-        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(Runtime(), [](auto&& ev) {
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(runtime, [](auto&& ev) {
             return ev->Get()->Request.GetKey() == "/data_01.csv";
         });
 
@@ -2724,6 +2724,7 @@ attributes {
 
     Y_UNIT_TEST(AutoDropping) {
         TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -2743,10 +2744,9 @@ attributes {
             }
         )", port);
 
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
 
-        Run(Runtime(), Env(), TVector<TString>{
+        Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -2757,6 +2757,15 @@ attributes {
     }
 
     Y_UNIT_TEST(DisableAutoDropping) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
         auto request = Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
@@ -2766,12 +2775,11 @@ attributes {
                 destination_prefix: ""
               }
             }
-        )", S3Port());
+        )", port);
         
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
 
-        Run(Runtime(), Env(), TVector<TString>{
+        Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }

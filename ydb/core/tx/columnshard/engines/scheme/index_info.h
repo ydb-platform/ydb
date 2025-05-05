@@ -402,7 +402,7 @@ public:
         return Version;
     }
 
-    bool CheckCompatible(const TIndexInfo& other) const;
+    TConclusionStatus CheckCompatible(const TIndexInfo& other) const;
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }

@@ -18,4 +18,6 @@ IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
     TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
     NActors::TActorSystem* actorSystem);
 
+void InitializeGlobalCounters(::NMonitoring::TDynamicCounterPtr root);
+
 } // namespace NYql::NDq

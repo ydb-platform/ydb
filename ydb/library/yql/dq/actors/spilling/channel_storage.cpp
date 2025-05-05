@@ -18,8 +18,16 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-namespace {
+NMonitoring::TDynamicCounters::TCounterPtr AliveChannelsCount;
 
+void InitializeGlobalCounters(NMonitoring::TDynamicCounterPtr root) {
+    NMonitoring::TDynamicCounterPtr subGroup = root->GetSubgroup("counters", "kqp")->GetSubgroup("subsystem", "MISHA");
+
+    AliveChannelsCount = subGroup->GetCounter("AliveChannelsCount", false);
+}
+
+
+namespace {
 
 constexpr ui32 MAX_INFLIGHT_BLOBS_COUNT = 10;
 constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
@@ -36,10 +44,12 @@ public:
     {
         ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
         ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
+        AliveChannelsCount->Inc();
     }
 
     ~TDqChannelStorage() {
         ActorSystem_->Send(ChannelStorageActorId_, new TEvents::TEvPoison);
+        AliveChannelsCount->Dec();
     }
 
     bool IsEmpty() override {

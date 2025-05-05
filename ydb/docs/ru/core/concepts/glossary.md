@@ -336,7 +336,7 @@
 
 ### Владелец {#access-owner}
 
-**[Владелец](../security/authorization.md#owner)** - [субъект доступа](#access-subject) ([пользователь](#access-user) или [группа](#access-group)) имеющий полный объем прав на конкретный [объект доступа](#access-object).
+**[Владелец](../security/authorization.md#owner)** - [субъект доступа](#access-subject) ([пользователь](#access-user) или [группа](#access-group)), являющийся владельцем конкретного [объект доступа](#access-object) и потому имеющий полный объем прав на него.
 
 ### Пользователь {#access-user}
 

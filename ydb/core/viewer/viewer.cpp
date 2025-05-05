@@ -101,6 +101,12 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
+                .Title = "Viewer",
+                .RelPath = "viewer/v2",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+            });
+            mon->RegisterActorPage({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
                 .ActorSystem = ctx.ActorSystem(),

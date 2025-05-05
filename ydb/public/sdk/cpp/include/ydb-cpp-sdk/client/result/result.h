@@ -49,6 +49,8 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
+    EResultSetType GetResultSetType() const;
+
     const TString& GetArrowBatch() const;
     const TString& GetArrowSchema() const;
 

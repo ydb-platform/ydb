@@ -213,6 +213,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     *resultSet.mutable_rows()->Add() = row;
                 }
 
+                resultSet.set_result_set_type(inRsProto.result_set_type());
+
                 resultSet.set_data(inRsProto.data());
                 resultSet.mutable_arrow_batch_settings()->set_schema(inRsProto.arrow_batch_settings().schema());
             }

@@ -36,12 +36,6 @@ enum class EStatsMode {
     Profile = 40,
 };
 
-enum class EResultSetType {
-    Unspecified = 0,
-    Message = 1,
-    Arrow = 2,
-};
-
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 

@@ -84,6 +84,10 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
+EResultSetType TResultSet::GetResultSetType() const {
+    return EResultSetType(Impl_->ProtoResultSet_.result_set_type());
+}
+
 const TString& TResultSet::GetArrowBatch() const {
     return Impl_->ProtoResultSet_.data();
 }

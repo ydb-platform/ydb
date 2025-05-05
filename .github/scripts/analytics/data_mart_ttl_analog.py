@@ -30,6 +30,7 @@ def delete_old_records(session, full_table_path, timestamp_field, delete_interva
     SELECT COUNT(*) as count
     FROM `{full_table_path}`
     WHERE `{timestamp_field}` < CurrentUtcDate() - Interval("P{delete_interval}")
+
     """
     
     print(f"Counting records to delete...")

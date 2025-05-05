@@ -1,7 +1,7 @@
 {
   "__inputs": [
     {
-      "name": "DS_PROMETHEUS",
+      "name": "ds",
       "label": "prometheus",
       "description": "",
       "type": "datasource",
@@ -63,6 +63,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -120,7 +121,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 12,
         "x": 0,
         "y": 0
@@ -130,8 +131,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "right",
-          "showLegend": false
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -170,7 +171,7 @@
           "refId": "B"
         }
       ],
-      "title": "hive+balancer",
+      "title": "CPU usage by HIVE_ACTOR, HIVE_BALANCER_ACTOR",
       "type": "timeseries"
     },
     {
@@ -178,6 +179,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Total number of tablets in the database",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -233,7 +235,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 12,
         "x": 12,
         "y": 0
@@ -244,7 +246,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -264,7 +266,7 @@
           "exemplar": false,
           "expr": "max(tablets_MAX_Hive_TabletsTotal_{type=\"Hive\", category=\"app\", database=\"$database\"})",
           "interval": "",
-          "legendFormat": "MAX(Hive/TabletsTotal)",
+          "legendFormat": "TabletsTotal",
           "range": true,
           "refId": "A"
         },
@@ -277,7 +279,7 @@
           "expr": "max(tablets_MAX_Hive_TabletsAlive_{type=\"Hive\", category=\"app\", database=\"$database\"})",
           "hide": false,
           "instant": false,
-          "legendFormat": "MAX(Hive/TabletsAlive)",
+          "legendFormat": "TabletsAlive",
           "range": true,
           "refId": "B"
         },
@@ -290,12 +292,12 @@
           "expr": "max(tablets_SUM_Hive_TabletsStarting_{type=\"Hive\", category=\"app\", database=\"$database\"})",
           "hide": false,
           "instant": false,
-          "legendFormat": "SUM(Hive/TabletsStarting)",
+          "legendFormat": "TabletsStarting",
           "range": true,
           "refId": "C"
         }
       ],
-      "title": "tablet count",
+      "title": "Tablet count",
       "type": "timeseries"
     },
     {
@@ -303,6 +305,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -360,10 +363,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 7
       },
       "id": 67,
       "options": {
@@ -397,7 +400,7 @@
           "refId": "A"
         }
       ],
-      "title": "hive self-ping time",
+      "title": "Self-ping time",
       "type": "timeseries"
     },
     {
@@ -405,6 +408,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -460,10 +464,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 7
       },
       "id": 69,
       "options": {
@@ -496,7 +500,7 @@
           "refId": "A"
         }
       ],
-      "title": "event queue size",
+      "title": "Event queue size",
       "type": "timeseries"
     },
     {
@@ -504,6 +508,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
+      "description": "CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -557,13 +562,34 @@
           },
           "unit": "µs"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byValue",
+              "options": {
+                "op": "gte",
+                "reducer": "allIsZero",
+                "value": 0
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 14
       },
       "id": 72,
       "interval": "15s",
@@ -589,7 +615,7 @@
             "uid": "${ds}"
           },
           "editorMode": "code",
-          "expr": "((label_replace(max({database=\"$database\",category=\"app\", type = \"Hive\", __name__=~\"tablets_MAX_Hive_Tx.*_ExecuteCPUTime_\"}), \"name_label\", \"$1\", \"__name__\", \"tablets_MAX_Hive_(.*)_ExecuteCPUTime_\")))",
+          "expr": "((label_replace({database=\"$database\",category=\"app\", type = \"Hive\", __name__=~\"tablets_MAX_Hive_Tx.*_ExecuteCPUTime_\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_MAX_Hive_Tx(.*)_ExecuteCPUTime_\")))",
           "hide": false,
           "instant": false,
           "legendFormat": "{{name_label}}",
@@ -610,7 +636,7 @@
           "refId": "A"
         }
       ],
-      "title": "hive local transaction times",
+      "title": "Local transaction times",
       "type": "timeseries"
     },
     {
@@ -618,204 +644,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 12
-      },
-      "id": 70,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "maxHeight": 600,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.6.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "count by (revision) (utils_version{database=\"$database\"})",
-          "interval": "",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "versions",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 12,
-        "x": 12,
-        "y": 18
-      },
-      "id": 71,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "maxHeight": 600,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.6.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "utils_ActorsAliveByActivity{activity=\"HIVE_ACTOR\", execpool=\"System\", database=\"$database\"}",
-          "interval": "",
-          "legendFormat": "{{host}} {{instance}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "hive node",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
+      "description": "Average execution time of a single local transaction for the type specified in the `local-tx` parameter selector on the dashboard.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -953,10 +782,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 12,
-        "x": 0,
-        "y": 20
+        "x": 12,
+        "y": 14
       },
       "id": 68,
       "options": {
@@ -1059,6 +888,231 @@
       ],
       "title": "$localtx avg time",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "description": "Versions of YDB running on cluster nodes",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "24.4.4.2.fd1e65b"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 70,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "maxHeight": 600,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "count by (revision) (utils_version{database=\"$database\"})",
+          "interval": "",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Versions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "description": "Node where the database Hive is running",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 71,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "maxHeight": 600,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "utils_ActorsAliveByActivity{activity=\"HIVE_ACTOR\", execpool=\"System\", database=\"$database\"}",
+          "interval": "",
+          "legendFormat": "{{instance}} ({{host}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Hive node",
+      "type": "timeseries"
     }
   ],
   "refresh": "",
@@ -1126,5 +1180,6 @@
   "timezone": "",
   "title": "Database hive",
   "uid": "database-hive-detailed",
+  "version": 1,
   "weekStart": ""
 }

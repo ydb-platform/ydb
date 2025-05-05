@@ -82,6 +82,7 @@ message TDqPqTopicSource {
     string RowType = 20; // Final row type with metadata columns
     repeated TDqPqFederatedCluster FederatedClusters = 21;
     StreamingDisposition Disposition = 22;
+    bool UseReducedMetrics = 23;
 }
 
 message TDqPqTopicSink {

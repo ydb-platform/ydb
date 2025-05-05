@@ -72,6 +72,8 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -81,6 +83,9 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
     funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
+    funcRegistry->AddModule("", "Math", CreateMathModule());
+    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
+    
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -1691,7 +1696,7 @@ NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue&
     if (!opt.IsMap()) {
         return {};
     }
-    
+
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();

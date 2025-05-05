@@ -1,4 +1,4 @@
-#include <ydb/library/yql/udfs/common/math/math_udf.cpp>
+#include <yql/essentials/udfs/common/math/math_udf.cpp>
 
 namespace NKikimr::NKqp {
 
